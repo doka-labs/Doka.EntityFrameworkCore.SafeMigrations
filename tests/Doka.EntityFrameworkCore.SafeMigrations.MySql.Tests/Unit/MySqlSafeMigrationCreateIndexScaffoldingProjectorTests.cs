@@ -8,7 +8,7 @@ public sealed class MySqlSafeMigrationCreateIndexScaffoldingProjectorTests
     public void PrefixMetadata_IsProjectedAndRemovedFromTheGeneratedOperation()
     {
         var operation = CreateIndex(["tenant_id", "slug"]);
-        operation["Doka:MySql:IndexPrefixLength"] = new[] { 0, 64, };
+        operation["Doka:MySql:IndexPrefixLength"] = new[] { 0, 64 };
 
         var projection = _projector.Project(operation);
 
@@ -33,7 +33,7 @@ public sealed class MySqlSafeMigrationCreateIndexScaffoldingProjectorTests
     public void UnknownMetadataAlongsidePrefixes_FailsClosed()
     {
         var operation = CreateIndex(["slug"]);
-        operation["Doka:MySql:IndexPrefixLength"] = new[] { 32, };
+        operation["Doka:MySql:IndexPrefixLength"] = new[] { 32 };
         operation["Test:Unknown"] = true;
 
         var exception = Assert.Throws<InvalidOperationException>(() => _projector.Project(operation));

@@ -37,18 +37,25 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 expectedUniqueIndexes,
                 expectedTableConstraints: null);
 
-        if (nativeAlternative is not null && intent.Mode == SafeMigrationTableMode.StrictDefinition)
+        if (nativeAlternative is not null
+            && intent.Mode == SafeMigrationTableMode.StrictDefinition)
         {
             // WHY: The generated script has no proven server profile. Never
             // merge owners in C#; select the independently built contract at
             // execution, and keep unsupported native modes fail-closed.
             var foldedMatching = nativeAlternative.IsValid
-                ? BuildTableMatches(definition, isMariaDb, nativeAlternative.UniqueIndexes,
+                ? BuildTableMatches(
+                    definition,
+                    isMariaDb,
+                    nativeAlternative.UniqueIndexes,
                     nativeAlternative.Constraints)
                 : "FALSE";
 
             var foldedPostcondition = nativeAlternative.IsValid
-                ? BuildTableMatches(definition, isMariaDb, nativeAlternative.UniqueIndexes,
+                ? BuildTableMatches(
+                    definition,
+                    isMariaDb,
+                    nativeAlternative.UniqueIndexes,
                     expectedTableConstraints: null)
                 : "FALSE";
 
@@ -163,6 +170,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         conditions.AddRange(
             requiredCheckConstraints.Select(checkConstraint =>
                 CheckConstraintSatisfied(checkConstraint, isMariaDb)));
+
         conditions.AddRange(requiredForeignKeys.Select(ForeignKeySatisfied));
 
         return $"({string.Join(" AND ", conditions)})";
@@ -184,7 +192,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     "PRIMARY KEY");
         }
 
-        var allowed = expectedTableConstraints.AllowedPrimaryKeys
+        var allowed = expectedTableConstraints
+            .AllowedPrimaryKeys
             .Select(primaryKey => ConstraintColumnsMatch(
                 definition.Table,
                 "PRIMARY",
@@ -222,14 +231,16 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             .Concat(expectedIndexShapes)
             .ToArray();
 
-        var modeled = modeledShapes.Length == 0 ? "FALSE" : $"({string.Join(" OR ", modeledShapes)})";
+        var modeled = modeledShapes.Length == 0
+            ? "FALSE"
+            : $"({string.Join(" OR ", modeledShapes)})";
 
         // MySQL exposes unique constraints and unique indexes through the same
         // physical index catalog. Check each live object against the complete
         // target definitions: a later EnsureIndex may still be absent here,
         // while any number of semantically equivalent aliases is legitimate.
         return "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS candidate_unique "
-            + $"WHERE candidate_unique.TABLE_SCHEMA = DATABASE() "
+            + "WHERE candidate_unique.TABLE_SCHEMA = DATABASE() "
             + $"AND candidate_unique.TABLE_NAME = {Literal(table)} "
             + "AND candidate_unique.NON_UNIQUE = 0 "
             + "AND candidate_unique.INDEX_NAME <> 'PRIMARY' "
@@ -302,10 +313,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + (implicitJsonChecks.Length == 0
                 ? string.Empty
                 : "JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc "
-                    + "ON cc.CONSTRAINT_SCHEMA = candidate_tc.CONSTRAINT_SCHEMA "
-                    + "AND cc.TABLE_NAME = candidate_tc.TABLE_NAME "
-                    + "AND cc.CONSTRAINT_NAME = candidate_tc.CONSTRAINT_NAME ")
-            + $"WHERE candidate_tc.CONSTRAINT_SCHEMA = DATABASE() "
+                + "ON cc.CONSTRAINT_SCHEMA = candidate_tc.CONSTRAINT_SCHEMA "
+                + "AND cc.TABLE_NAME = candidate_tc.TABLE_NAME "
+                + "AND cc.CONSTRAINT_NAME = candidate_tc.CONSTRAINT_NAME ")
+            + "WHERE candidate_tc.CONSTRAINT_SCHEMA = DATABASE() "
             + $"AND candidate_tc.TABLE_NAME = {Literal(table)} "
             + "AND candidate_tc.CONSTRAINT_TYPE = 'CHECK' "
             + providerGeneratedFilter
@@ -328,7 +339,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             : $"({string.Join(" OR ", expectedMatches)})";
 
         return "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS candidate_rc "
-            + $"WHERE candidate_rc.CONSTRAINT_SCHEMA = DATABASE() "
+            + "WHERE candidate_rc.CONSTRAINT_SCHEMA = DATABASE() "
             + $"AND candidate_rc.TABLE_NAME = {Literal(table)} "
             + $"AND NOT ({modeled}))";
     }

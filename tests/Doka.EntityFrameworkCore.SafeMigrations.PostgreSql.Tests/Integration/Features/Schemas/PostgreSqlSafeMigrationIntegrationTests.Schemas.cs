@@ -16,25 +16,27 @@ public sealed class PostgreSqlSchemasIntegrationTests : PostgreSqlSafeMigrationI
         await using var context = CreateContext(connectionString);
         var create = new MigrationBuilder(context.Database.ProviderName!);
         create.EnsureSchemaExists("module");
-        await ExecuteOperationsAsync(context, create.Operations);
-        await ExecuteOperationsAsync(context, create.Operations);
+        await ExecuteOperationsAsync(context, create.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, create.Operations, CancellationToken.None);
 
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_namespace WHERE nspname = 'module';"));
+                "SELECT COUNT(*) FROM pg_catalog.pg_namespace WHERE nspname = 'module';",
+                cancellationToken: CancellationToken.None));
 
         var drop = new MigrationBuilder(context.Database.ProviderName!);
         drop.DropSchemaIfExists("module");
-        await ExecuteOperationsAsync(context, drop.Operations);
-        await ExecuteOperationsAsync(context, drop.Operations);
+        await ExecuteOperationsAsync(context, drop.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, drop.Operations, CancellationToken.None);
 
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_namespace WHERE nspname = 'module';"));
+                "SELECT COUNT(*) FROM pg_catalog.pg_namespace WHERE nspname = 'module';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -44,7 +46,9 @@ public sealed class PostgreSqlSchemasIntegrationTests : PostgreSqlSafeMigrationI
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE public.qualified_parent (id integer NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE public.qualified_child (id integer NOT NULL PRIMARY KEY);");
+            + "CREATE TABLE public.qualified_child (id integer NOT NULL PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
 
         const string parentSchema = "tenant_reference";
@@ -77,7 +81,7 @@ public sealed class PostgreSqlSchemasIntegrationTests : PostgreSqlSafeMigrationI
             childSchema,
             primaryKey: new ExpectedPrimaryKeyDefinition("pk_qualified_child", childTable, ["id"], childSchema),
             uniqueConstraints
-            : [new ExpectedUniqueConstraintDefinition("uq_qualified_child_code", childTable, ["code"], childSchema),],
+            : [new ExpectedUniqueConstraintDefinition("uq_qualified_child_code", childTable, ["code"], childSchema)],
             checkConstraints:
             [
                 ExpectedCheckConstraintDefinition.FromExpression(
@@ -119,17 +123,22 @@ public sealed class PostgreSqlSchemasIntegrationTests : PostgreSqlSafeMigrationI
                     childSchema),
             ]);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("cross-schema-convergence"));
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("cross-schema-convergence"),
+                CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(
             report.Assessments,
             assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -141,13 +150,16 @@ public sealed class PostgreSqlSchemasIntegrationTests : PostgreSqlSafeMigrationI
                 + "JOIN pg_catalog.pg_namespace parent_ns ON parent_ns.oid = parent.relnamespace "
                 + "WHERE co.conname = 'fk_qualified_child_parent' "
                 + "AND child_ns.nspname = 'tenant_core' "
-                + "AND parent_ns.nspname = 'tenant_reference';"));
+                + "AND parent_ns.nspname = 'tenant_reference';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             2,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' "
-                + "AND table_name IN ('qualified_parent', 'qualified_child');"));
+                + "AND table_name IN ('qualified_parent', 'qualified_child');",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -174,7 +186,9 @@ public sealed class PostgreSqlSchemasIntegrationTests : PostgreSqlSafeMigrationI
             + "CREATE TABLE lifecycle_module.move_source (id integer NOT NULL); "
             + "CREATE TABLE public.lifecycle_target (id integer NOT NULL); "
             + "CREATE TABLE public.renamed_source (id integer NOT NULL); "
-            + "CREATE TABLE public.moved_table (id integer NOT NULL);");
+            + "CREATE TABLE public.moved_table (id integer NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
 
@@ -184,6 +198,7 @@ public sealed class PostgreSqlSchemasIntegrationTests : PostgreSqlSafeMigrationI
             "rename_source",
             "ix_rename_source_new",
             "lifecycle_module");
+
         builder.RenameTableIfExists("rename_source", "renamed_source", "lifecycle_module");
         builder.RenameTableIfExists("move_source", "moved_table", "lifecycle_module", "lifecycle_archive");
         builder.DropForeignKeyIfExists("fk_lifecycle_target_parent", "lifecycle_target", "lifecycle_module");
@@ -199,21 +214,23 @@ public sealed class PostgreSqlSchemasIntegrationTests : PostgreSqlSafeMigrationI
         builder.DropSchemaIfExists("lifecycle_module");
         builder.DropSchemaIfExists("lifecycle_archive");
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_namespace "
-                + "WHERE nspname IN ('lifecycle_module', 'lifecycle_archive');"));
+                + "WHERE nspname IN ('lifecycle_module', 'lifecycle_archive');",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             3,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' "
-                + "AND table_name IN ('lifecycle_target', 'renamed_source', 'moved_table');"));
+                + "AND table_name IN ('lifecycle_target', 'renamed_source', 'moved_table');",
+                cancellationToken: CancellationToken.None));
     }
-
 }

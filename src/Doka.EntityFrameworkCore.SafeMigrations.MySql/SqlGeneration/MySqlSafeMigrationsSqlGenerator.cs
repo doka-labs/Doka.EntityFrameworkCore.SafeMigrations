@@ -6,9 +6,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 /// </summary>
 internal sealed class MySqlSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
 {
-    private readonly IMigrationsSqlGenerator _providerGenerator;
-    private readonly MySqlSafeMigrationPlanCapture _planCapture;
     private readonly MigrationsSqlGeneratorDependencies? _dependencies;
+    private readonly MySqlSafeMigrationPlanCapture _planCapture;
+    private readonly IMigrationsSqlGenerator _providerGenerator;
 
     public MySqlSafeMigrationsSqlGenerator(
         IMigrationsSqlGenerator providerGenerator,
@@ -53,6 +53,7 @@ internal sealed class MySqlSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
 
         MigrationCommand[]? decorated = null;
         IRelationalCommand? metadataCommand = null;
+
         // WHY: Keep execution wrappers and provider command slots in the original command order.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery

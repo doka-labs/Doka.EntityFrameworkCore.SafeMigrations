@@ -20,7 +20,9 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
     [InlineData("cast")]
     [InlineData("collate")]
     [InlineData("null_test")]
-    public void DeepPublicTreesPreserveExactSqlAndSupportedStatus(string shape)
+    public void DeepPublicTreesPreserveExactSqlAndSupportedStatus(
+        string shape
+    )
     {
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = new SqliteSafeMigrationTestContext(connection, registerSafeMigrations: false);
@@ -60,7 +62,9 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
     [InlineData("in_operand")]
     [InlineData("in_value")]
     [InlineData("function")]
-    public void DeepPublicTreesRetainUnsupportedLeafClassification(string shape)
+    public void DeepPublicTreesRetainUnsupportedLeafClassification(
+        string shape
+    )
     {
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = new SqliteSafeMigrationTestContext(connection, registerSafeMigrations: false);
@@ -89,7 +93,9 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
     [InlineData("case_else")]
     [InlineData("cast")]
     [InlineData("collate")]
-    public void UnsupportedPrefixShortCircuitsUnknownLaterNodes(string shape)
+    public void UnsupportedPrefixShortCircuitsUnknownLaterNodes(
+        string shape
+    )
     {
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = new SqliteSafeMigrationTestContext(connection, registerSafeMigrations: false);
@@ -133,15 +139,23 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
         using var context = new SqliteSafeMigrationTestContext(connection, registerSafeMigrations: false);
         var renderer = CreateRenderer(context);
         var expression = SafeMigrationSql.Case(
-            [new(
-                SafeMigrationSql.In(SafeMigrationSql.Literal("operand"),
-                    [SafeMigrationSql.Literal("first"), SafeMigrationSql.Literal("second")]),
-                SafeMigrationSql.Function("COALESCE",
-                    SafeMigrationSql.Literal("then"), SafeMigrationSql.Literal(null))),
-                new(SafeMigrationSql.IsNull(SafeMigrationSql.Literal("condition")),
-                    SafeMigrationSql.Literal("result"))],
-            SafeMigrationSql.Between(SafeMigrationSql.Literal("else"),
-                SafeMigrationSql.Literal("lower"), SafeMigrationSql.Literal("upper")));
+            [
+                new SafeMigrationSqlCaseWhenClause(
+                    SafeMigrationSql.In(
+                        SafeMigrationSql.Literal("operand"),
+                        [SafeMigrationSql.Literal("first"), SafeMigrationSql.Literal("second")]),
+                    SafeMigrationSql.Function(
+                        "COALESCE",
+                        SafeMigrationSql.Literal("then"),
+                        SafeMigrationSql.Literal(null))),
+                new SafeMigrationSqlCaseWhenClause(
+                    SafeMigrationSql.IsNull(SafeMigrationSql.Literal("condition")),
+                    SafeMigrationSql.Literal("result")),
+            ],
+            SafeMigrationSql.Between(
+                SafeMigrationSql.Literal("else"),
+                SafeMigrationSql.Literal("lower"),
+                SafeMigrationSql.Literal("upper")));
 
         var sql = renderer.Render(expression);
 
@@ -170,9 +184,9 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
                 "left" => SafeMigrationSql.Binary(expression, SafeMigrationSqlBinaryOperator.Add, one),
                 "right" => SafeMigrationSql.Binary(one, SafeMigrationSqlBinaryOperator.Add, expression),
                 "unary" => SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Not, expression),
-                "case_condition" => SafeMigrationSql.Case([new(expression, two)], three),
-                "case_result" => SafeMigrationSql.Case([new(one, expression)], three),
-                "case_else" => SafeMigrationSql.Case([new(one, two)], expression),
+                "case_condition" => SafeMigrationSql.Case([new SafeMigrationSqlCaseWhenClause(expression, two)], three),
+                "case_result" => SafeMigrationSql.Case([new SafeMigrationSqlCaseWhenClause(one, expression)], three),
+                "case_else" => SafeMigrationSql.Case([new SafeMigrationSqlCaseWhenClause(one, two)], expression),
                 "in_operand" => SafeMigrationSql.In(expression, [two, three]),
                 "in_value" => SafeMigrationSql.In(one, [expression, three]),
                 "function" => SafeMigrationSql.Function("COALESCE", expression, two),
@@ -190,7 +204,9 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
     }
 
     /// <summary>Defines the independently concatenated SQL shell for each recursive operand role.</summary>
-    private static (string Prefix, string Suffix) DeepExpressionSql(string shape) => shape switch
+    private static (string Prefix, string Suffix) DeepExpressionSql(
+        string shape
+    ) => shape switch
     {
         "left" => ("(", " + 1)"),
         "right" => ("(1 + ", ")"),
@@ -211,7 +227,9 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
     };
 
     /// <summary>Places an unsupported prefix before an unknown node that must not be inspected.</summary>
-    private static SafeMigrationSqlExpression CreateUnsupportedPrefix(string shape)
+    private static SafeMigrationSqlExpression CreateUnsupportedPrefix(
+        string shape
+    )
     {
         var unsupported = SafeMigrationSql.ProviderFragment("another_provider", "unsupported");
         var unknown = new UnknownExpression();
@@ -223,9 +241,12 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
             "between" => SafeMigrationSql.Between(one, unsupported, unknown),
             "in" => SafeMigrationSql.In(one, [unsupported, unknown]),
             "function" => SafeMigrationSql.Function("COALESCE", unsupported, unknown),
-            "case_condition" => SafeMigrationSql.Case([new(unsupported, unknown)]),
-            "case_result" => SafeMigrationSql.Case([new(one, unsupported)], unknown),
-            "case_else" => SafeMigrationSql.Case([new(one, unsupported), new(unknown, one)]),
+            "case_condition" => SafeMigrationSql.Case([new SafeMigrationSqlCaseWhenClause(unsupported, unknown)]),
+            "case_result" => SafeMigrationSql.Case([new SafeMigrationSqlCaseWhenClause(one, unsupported)], unknown),
+            "case_else" => SafeMigrationSql.Case(
+            [
+                new SafeMigrationSqlCaseWhenClause(one, unsupported), new SafeMigrationSqlCaseWhenClause(unknown, one)
+            ]),
             "cast" => SafeMigrationSql.Cast(unknown, "INTEGER; unsafe"),
             "collate" => SafeMigrationSql.Collate(unknown, "NOCASE", "main"),
             _ => throw new ArgumentOutOfRangeException(nameof(shape)),

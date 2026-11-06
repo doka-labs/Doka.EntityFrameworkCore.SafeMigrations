@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore.Migrations.Design;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 public sealed partial class MySqlIndependentColumnDropIntegrationTests
@@ -13,11 +15,17 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
     [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence, false)]
     [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence, true)]
     public async Task PublishedDokaScaffoldedExistingKeyReplacementAppliesAndReplays(
-        SafeMigrationScaffoldingMode mode, bool script)
+        SafeMigrationScaffoldingMode mode,
+        bool script
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)"));
+        await ExecuteSqlAsync(
+            connectionString,
+            ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)"),
+            cancellationToken: CancellationToken.None);
+
         using var services = CreateScaffoldingServices();
         await using var source = new ReplacementSourceContext(ScaffoldingOptions(connectionString, services, mode));
         await using var target = new ReplacementExistingContext(ScaffoldingOptions(connectionString, services, mode));
@@ -25,21 +33,46 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
         var runner = target.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(target, generated.Operations,
-            new SafeMigrationRunOptions("published-doka-existing-key"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            target,
+            generated.Operations,
+            new SafeMigrationRunOptions("published-doka-existing-key"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
-        await ExecuteIndependentDropAsync(target, connectionString, generated.Operations, script);
-        var final = await runner.VerifyAsync(target, generated.Operations,
-            new SafeMigrationRunOptions("published-doka-existing-final"), CancellationToken.None);
+        await ExecuteIndependentDropAsync(
+            target,
+            connectionString,
+            generated.Operations,
+            script,
+            cancellationToken: CancellationToken.None);
 
-        var replay = await runner.AnalyzeAsync(target, generated.Operations,
-            new SafeMigrationRunOptions("published-doka-existing-replay"), CancellationToken.None);
+        var final = await runner.VerifyAsync(
+            target,
+            generated.Operations,
+            new SafeMigrationRunOptions("published-doka-existing-final"),
+            CancellationToken.None);
+
+        var replay = await runner.AnalyzeAsync(
+            target,
+            generated.Operations,
+            new SafeMigrationRunOptions("published-doka-existing-replay"),
+            CancellationToken.None);
 
         replay.ThrowIfBlocked();
-        await ExecuteIndependentDropAsync(target, connectionString, generated.Operations, script);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `replacement_items`;");
-        var primary = await ReadReplacementPrimaryAsync(connectionString);
+        await ExecuteIndependentDropAsync(
+            target,
+            connectionString,
+            generated.Operations,
+            script,
+            cancellationToken: CancellationToken.None);
+
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `replacement_items`;",
+            cancellationToken: CancellationToken.None);
+
+        var primary = await ReadReplacementPrimaryAsync(connectionString, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -61,22 +94,32 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
     [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence, "(1, 'a', 10), (1, 'b', 10)")]
     [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence, "(1, 'a', NULL), (2, 'b', 20)")]
     public async Task PublishedDokaScaffoldedKeyReplacementRejectsInvalidRows(
-        SafeMigrationScaffoldingMode mode, string rows)
+        SafeMigrationScaffoldingMode mode,
+        string rows
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExistingKeyFixture(rows));
+        await ExecuteSqlAsync(connectionString, ExistingKeyFixture(rows), cancellationToken: CancellationToken.None);
         using var services = CreateScaffoldingServices();
         await using var source = new ReplacementSourceContext(ScaffoldingOptions(connectionString, services, mode));
         await using var target = new ReplacementExistingContext(ScaffoldingOptions(connectionString, services, mode));
         var generated = ScaffoldReplacement(source, target);
 
         // Act
-        var report = await target.GetService<ISafeMigrationRunner>().AnalyzeAsync(target, generated.Operations,
-            new SafeMigrationRunOptions("published-doka-invalid-key"), CancellationToken.None);
+        var report = await target
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                target,
+                generated.Operations,
+                new SafeMigrationRunOptions("published-doka-invalid-key"),
+                CancellationToken.None);
 
-        var oldPrimary = await ReadReplacementPrimaryAsync(connectionString);
-        var retained = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `replacement_items`;");
+        var oldPrimary = await ReadReplacementPrimaryAsync(connectionString, cancellationToken: CancellationToken.None);
+        var retained = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `replacement_items`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -94,11 +137,17 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
     [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence, false)]
     [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence, true)]
     public async Task PublishedDokaScaffoldedUuidKeyPreservesNativeDefaultAndReplicationBoundary(
-        SafeMigrationScaffoldingMode mode, bool script)
+        SafeMigrationScaffoldingMode mode,
+        bool script
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)"));
+        await ExecuteSqlAsync(
+            connectionString,
+            ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)"),
+            cancellationToken: CancellationToken.None);
+
         using var services = CreateScaffoldingServices();
         await using var source = new ReplacementSourceContext(ScaffoldingOptions(connectionString, services, mode));
         await using var target = new ReplacementUuidContext(ScaffoldingOptions(connectionString, services, mode));
@@ -106,31 +155,55 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
         var runner = target.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(target, generated.Operations,
-            new SafeMigrationRunOptions("published-doka-uuid-key"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            target,
+            generated.Operations,
+            new SafeMigrationRunOptions("published-doka-uuid-key"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         var failure = await Record.ExceptionAsync(() =>
-            ExecuteIndependentDropAsync(target, connectionString, generated.Operations, script));
+            ExecuteIndependentDropAsync(
+                target,
+                connectionString,
+                generated.Operations,
+                script,
+                cancellationToken: CancellationToken.None));
 
         SafeMigrationRunReport? replay = null;
         if (Fixture.IsMariaDb)
         {
-            replay = await runner.AnalyzeAsync(target, generated.Operations,
-                new SafeMigrationRunOptions("published-doka-uuid-replay"), CancellationToken.None);
+            replay = await runner.AnalyzeAsync(
+                target,
+                generated.Operations,
+                new SafeMigrationRunOptions("published-doka-uuid-replay"),
+                CancellationToken.None);
 
             replay.ThrowIfBlocked();
-            await ExecuteIndependentDropAsync(target, connectionString, generated.Operations, script);
+            await ExecuteIndependentDropAsync(
+                target,
+                connectionString,
+                generated.Operations,
+                script,
+                cancellationToken: CancellationToken.None);
         }
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `replacement_items`;");
-        var identifierColumns = await ScalarIntAsync(connectionString,
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `replacement_items`;",
+            cancellationToken: CancellationToken.None);
+
+        var identifierColumns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND COLUMN_NAME = 'id';");
+            + "AND TABLE_NAME = 'replacement_items' AND COLUMN_NAME = 'id';",
+            cancellationToken: CancellationToken.None);
 
         var identifiers = Fixture.IsMariaDb
-            ? await ScalarIntAsync(connectionString,
-                "SELECT COUNT(DISTINCT `id`) FROM `replacement_items` WHERE CHAR_LENGTH(`id`) = 36;")
+            ? await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(DISTINCT `id`) FROM `replacement_items` WHERE CHAR_LENGTH(`id`) = 36;",
+                cancellationToken: CancellationToken.None)
             : 0;
 
         // Assert
@@ -139,17 +212,26 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
         Assert.Contains("UUID()", generated.Source, StringComparison.Ordinal);
         Assert.DoesNotContain("MySqlValueGenerationStrategy.ClientGuid", generated.Source, StringComparison.Ordinal);
         Assert.DoesNotContain("Doka:MySql:RequiresExplicitBackfill", generated.Source, StringComparison.Ordinal);
-        var added = Assert.Single(generated.Operations.OfType<SafeMigrationOperation>(),
+        var added = Assert.Single(
+            generated.Operations.OfType<SafeMigrationOperation>(),
             static operation => operation.Intent is EnsureColumnIntent { Definition.Name: "id" });
 
-        var definition = Assert.IsType<EnsureColumnIntent>(added.Intent).Definition;
+        var definition = Assert.IsType<EnsureColumnIntent>(added.Intent)
+            .Definition;
+
         Assert.True(MySqlSafeMigrationColumnMetadata.TryCreate(definition, out var metadata));
+
         // WHY: An implicit SQL-default GUID retains EF's store-generated OnAdd
         // contract without inventing an explicit None or ClientGuid strategy.
         Assert.Null(metadata.ValueGenerationStrategy);
-        Assert.Equal(ValueGenerated.OnAdd,
-            target.GetService<IDesignTimeModel>().Model.FindEntityType("ReplacementRow")!
+        Assert.Equal(
+            ValueGenerated.OnAdd,
+            target
+                .GetService<IDesignTimeModel>()
+                .Model
+                .FindEntityType("ReplacementRow")!
                 .FindProperty("id")!.ValueGenerated);
+
         Assert.Equal(DokaMySqlGuidFormat.Char36, metadata.GuidFormat);
         var defaultFunction = Assert.IsType<SafeMigrationSqlFunctionExpression>(
             definition.DefaultValue.StructuredExpression);
@@ -167,7 +249,10 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
         {
             // WHY: MySQL forbids nondeterministic ALTER defaults under the unchanged
             // ROW/MIXED binlog. The integration test must not weaken that native boundary.
-            Assert.Equal(1674, Assert.IsType<MySqlException>(failure).Number);
+            Assert.Equal(1674,
+                Assert.IsType<MySqlException>(failure)
+                    .Number);
+
             Assert.Equal(0, identifierColumns);
         }
     }
@@ -193,70 +278,116 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
     [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence, "(1, 'a', 10), (1, 'b', 10)", true, true)]
     [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence, "(1, 'a', NULL), (2, 'b', 20)", true, true)]
     public async Task PublishedDokaScaffoldedKeyReplacementRecoversAfterIndependentDrop(
-        SafeMigrationScaffoldingMode mode, string rows, bool blocked, bool ensure)
+        SafeMigrationScaffoldingMode mode,
+        string rows,
+        bool blocked,
+        bool ensure
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExistingKeyFixture(rows));
+        await ExecuteSqlAsync(connectionString, ExistingKeyFixture(rows), cancellationToken: CancellationToken.None);
         using var services = CreateScaffoldingServices();
         await using var source = new ReplacementSourceContext(ScaffoldingOptions(connectionString, services, mode));
         await using var target = new ReplacementExistingContext(ScaffoldingOptions(connectionString, services, mode));
         var generated = ScaffoldReplacement(source, target);
+
         // WHY: This explicit compatibility variant probes Ensure's independent hook;
         // it is not claimed as output produced by Doka's model differ or scaffolder.
-        var operations = generated.Operations.Select(operation => ensure
-            && operation is SafeMigrationOperation { Intent: AlterColumnIntent alter }
-                ? new SafeMigrationOperation(new EnsureColumnIntent(alter.Table, alter.Definition, alter.Schema),
-                    SafeMigrationPolicy.RepairIfSafe)
-                : operation).ToArray();
+        var operations = generated
+            .Operations
+            .Select(operation => ensure
+                && operation is SafeMigrationOperation { Intent: AlterColumnIntent alter }
+                    ? new SafeMigrationOperation(
+                        new EnsureColumnIntent(alter.Table, alter.Definition, alter.Schema),
+                        SafeMigrationPolicy.RepairIfSafe)
+                    : operation)
+            .ToArray();
 
-        var dropOrdinal = Array.FindIndex(operations, static operation =>
-            operation is SafeMigrationOperation { Intent: DropColumnIntent });
+        var dropOrdinal = Array.FindIndex(
+            operations,
+            static operation =>
+                operation is SafeMigrationOperation { Intent: DropColumnIntent });
 
-        await ExecuteOperationsAsync(target, operations.Take(dropOrdinal + 1).ToArray());
+        await ExecuteOperationsAsync(target,
+            operations
+                .Take(dropOrdinal + 1)
+                .ToArray(),
+            CancellationToken.None);
 
         // Act
-        var report = await target.GetService<ISafeMigrationRunner>().AnalyzeAsync(target, operations,
-            new SafeMigrationRunOptions("published-doka-interrupted-key"), CancellationToken.None);
+        var report = await target
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                target,
+                operations,
+                new SafeMigrationRunOptions("published-doka-interrupted-key"),
+                CancellationToken.None);
 
         if (!blocked)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(target, operations);
+            await ExecuteOperationsAsync(target, operations, CancellationToken.None);
         }
 
-        var primaryCount = await ScalarIntAsync(connectionString,
+        var primaryCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND CONSTRAINT_TYPE = 'PRIMARY KEY';");
+            + "AND TABLE_NAME = 'replacement_items' AND CONSTRAINT_TYPE = 'PRIMARY KEY';",
+            cancellationToken: CancellationToken.None);
 
-        var legacyColumns = await ScalarIntAsync(connectionString,
+        var legacyColumns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND COLUMN_NAME = 'legacy_value';");
+            + "AND TABLE_NAME = 'replacement_items' AND COLUMN_NAME = 'legacy_value';",
+            cancellationToken: CancellationToken.None);
 
-        var retained = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `replacement_items`;");
+        var retained = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `replacement_items`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.True(dropOrdinal > 0);
-        Assert.Single(operations.OfType<SafeMigrationOperation>(), operation => ensure
-            ? operation.Intent is EnsureColumnIntent
-            : operation.Intent is AlterColumnIntent);
-        Assert.Equal(blocked ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(blocked ? 0 : 1, primaryCount);
+        Assert.Single(
+            operations.OfType<SafeMigrationOperation>(),
+            operation => ensure
+                ? operation.Intent is EnsureColumnIntent
+                : operation.Intent is AlterColumnIntent);
+
+        Assert.Equal(
+            blocked
+                ? SafeMigrationReportStatus.Blocked
+                : SafeMigrationReportStatus.Ready,
+            report.Status);
+
+        Assert.Equal(
+            blocked
+                ? 0
+                : 1,
+            primaryCount);
+
         Assert.Equal(0, legacyColumns);
         Assert.Equal(2, retained);
         if (blocked)
         {
-            Assert.Contains(report.Assessments,
+            Assert.Contains(
+                report.Assessments,
                 static assessment => assessment.Action == SafeMigrationAction.RejectDataBlocked);
         }
     }
 
     /// <summary>Reads the physical key's ordered members without relying on the provider's generated name.</summary>
-    private static Task<string> ReadReplacementPrimaryAsync(string connectionString) => ScalarStringAsync(
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static Task<string> ReadReplacementPrimaryAsync(
+        string connectionString,
+        CancellationToken cancellationToken
+    ) => ScalarStringAsync(
         connectionString,
         "SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY ORDINAL_POSITION) "
         + "FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() "
-        + "AND TABLE_NAME = 'replacement_items' AND CONSTRAINT_NAME = 'PRIMARY';");
+        + "AND TABLE_NAME = 'replacement_items' AND CONSTRAINT_NAME = 'PRIMARY';",
+        cancellationToken: cancellationToken);
 
     /// <summary>
     /// Owns the exact provider services rather than retaining dynamic model roots in EF's global cache.
@@ -267,8 +398,11 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
         .BuildServiceProvider();
 
     /// <summary>Uses the active native engine and the real SafeMigrations design-time configuration.</summary>
-    private DbContextOptions ScaffoldingOptions(string connectionString, ServiceProvider services,
-        SafeMigrationScaffoldingMode mode)
+    private DbContextOptions ScaffoldingOptions(
+        string connectionString,
+        ServiceProvider services,
+        SafeMigrationScaffoldingMode mode
+    )
     {
         var options = new DbContextOptionsBuilder()
             .UseInternalServiceProvider(services)
@@ -282,11 +416,19 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
     /// <summary>
     /// Compiles both real migration bodies and historical target metadata from actual model differences.
     /// </summary>
-    private static GeneratedReplacement ScaffoldReplacement(DbContext source, DbContext target)
+    private static GeneratedReplacement ScaffoldReplacement(
+        DbContext source,
+        DbContext target
+    )
     {
-        var sourceModel = source.GetService<IDesignTimeModel>().Model;
-        var targetModel = target.GetService<IDesignTimeModel>().Model;
-        var differences = target.GetService<IMigrationsModelDiffer>()
+        var sourceModel = source.GetService<IDesignTimeModel>()
+            .Model;
+
+        var targetModel = target.GetService<IDesignTimeModel>()
+            .Model;
+
+        var differences = target
+            .GetService<IMigrationsModelDiffer>()
             .GetDifferences(sourceModel.GetRelationalModel(), targetModel.GetRelationalModel());
 
         var services = new ServiceCollection();
@@ -295,43 +437,118 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
         new MySqlDesignTimeServices().ConfigureDesignTimeServices(services);
         new MySqlSafeMigrationDesignTimeServices().ConfigureDesignTimeServices(services);
         using var provider = services.BuildServiceProvider();
-        var generator = provider.GetRequiredService<
-            Microsoft.EntityFrameworkCore.Migrations.Design.IMigrationsCodeGeneratorSelector>().Select("C#");
+        var generator = provider
+            .GetRequiredService<
+                IMigrationsCodeGeneratorSelector>()
+            .Select("C#");
 
         const string generatedNamespace = "Doka.GeneratedReplacementTests";
         const string migrationName = "PublishedDokaReplacement";
         var migration = generator.GenerateMigration(generatedNamespace, migrationName, differences, []);
-        var metadata = generator.GenerateMetadata(generatedNamespace, target.GetType(), migrationName,
-            "20261022000000_PublishedDokaReplacement", targetModel);
+        var metadata = generator.GenerateMetadata(
+            generatedNamespace,
+            target.GetType(),
+            migrationName,
+            "20261022000000_PublishedDokaReplacement",
+            targetModel);
 
-        var snapshot = generator.GenerateSnapshot(generatedNamespace, target.GetType(), "ReplacementSnapshot",
+        var snapshot = generator.GenerateSnapshot(
+            generatedNamespace,
+            target.GetType(),
+            "ReplacementSnapshot",
             targetModel);
 
         var assembly = MySqlGeneratedMigrationCompiler.Compile(migration, metadata, snapshot);
-        var reconstructed = (Migration)Activator.CreateInstance(assembly.GetType(
-            generatedNamespace + "." + migrationName, throwOnError: true)!)!;
+        var reconstructed = (Migration)Activator.CreateInstance(
+            assembly.GetType(
+                generatedNamespace + "." + migrationName,
+                throwOnError: true)!)!;
 
         reconstructed.ActiveProvider = target.Database.ProviderName
             ?? throw new InvalidOperationException("The generated migration requires a configured provider.");
 
         // WHY: Force historical target construction too; compiling only the operation
         // body would miss the GUID/default metadata seam that originally hid this gap.
-        _ = target.GetService<IModelRuntimeInitializer>()
-            .Initialize(reconstructed.TargetModel, designTime: true).GetRelationalModel();
+        _ = target
+            .GetService<IModelRuntimeInitializer>()
+            .Initialize(reconstructed.TargetModel, designTime: true)
+            .GetRelationalModel();
 
         return new GeneratedReplacement(migration + metadata + snapshot, reconstructed.UpOperations);
     }
 
+    /// <summary>Shares stable model identity while letting the real provider infer each generation strategy.</summary>
+    private static void ConfigureReplacementModel(
+        ModelBuilder modelBuilder,
+        bool source,
+        bool uuid
+    )
+    {
+        modelBuilder.UseCollation("utf8mb4_unicode_ci");
+        modelBuilder.Entity(
+            "ReplacementRow",
+            entity =>
+            {
+                entity.ToTable("replacement_items");
+                entity
+                    .Property<int>("event_id")
+                    .HasColumnType("int")
+                    .ValueGeneratedNever();
+
+                entity
+                    .Property<int?>("tag_id")
+                    .HasColumnType("int")
+                    .IsRequired(!source && !uuid);
+
+                if (source)
+                {
+                    entity
+                        .Property<string>("legacy_value")
+                        .HasColumnType("varchar(20)")
+                        .HasMaxLength(20)
+                        .IsRequired();
+
+                    entity
+                        .HasKey("event_id", "legacy_value")
+                        .HasName("pk_replacement_items");
+                }
+                else if (uuid)
+                {
+                    entity
+                        .Property<Guid>("id")
+                        .HasMySqlGuidFormat(DokaMySqlGuidFormat.Char36)
+                        .HasDefaultValueSql("UUID()");
+
+                    entity
+                        .HasKey("id")
+                        .HasName("pk_replacement_items");
+                }
+                else
+                {
+                    entity
+                        .HasKey("event_id", "tag_id")
+                        .HasName("pk_replacement_items");
+                }
+            });
+    }
+
     /// <summary>Retains complete rendered sources and operations reconstructed from the consumer assembly.</summary>
-    private sealed record GeneratedReplacement(string Source, IReadOnlyList<MigrationOperation> Operations);
+    private sealed record GeneratedReplacement(
+        string Source,
+        IReadOnlyList<MigrationOperation> Operations
+    );
 
     /// <summary>Defines the old two-member key without injecting provider migration annotations.</summary>
     /// <param name="options">The owned service root and active native engine.</param>
     public sealed class ReplacementSourceContext(DbContextOptions options) : DbContext(options)
     {
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder) => ConfigureReplacementModel(modelBuilder,
-            source: true, uuid: false);
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        ) => ConfigureReplacementModel(
+            modelBuilder,
+            source: true,
+            uuid: false);
     }
 
     /// <summary>Requests the surviving existing-member replacement key through ordinary fluent configuration.</summary>
@@ -339,8 +556,12 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
     public sealed class ReplacementExistingContext(DbContextOptions options) : DbContext(options)
     {
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder) => ConfigureReplacementModel(modelBuilder,
-            source: false, uuid: false);
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        ) => ConfigureReplacementModel(
+            modelBuilder,
+            source: false,
+            uuid: false);
     }
 
     /// <summary>Requests a new server-default GUID key through ordinary fluent configuration.</summary>
@@ -348,34 +569,11 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
     public sealed class ReplacementUuidContext(DbContextOptions options) : DbContext(options)
     {
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder) => ConfigureReplacementModel(modelBuilder,
-            source: false, uuid: true);
-    }
-
-    /// <summary>Shares stable model identity while letting the real provider infer each generation strategy.</summary>
-    private static void ConfigureReplacementModel(ModelBuilder modelBuilder, bool source, bool uuid)
-    {
-        modelBuilder.UseCollation("utf8mb4_unicode_ci");
-        modelBuilder.Entity("ReplacementRow", entity =>
-        {
-            entity.ToTable("replacement_items");
-            entity.Property<int>("event_id").HasColumnType("int").ValueGeneratedNever();
-            entity.Property<int?>("tag_id").HasColumnType("int").IsRequired(!source && !uuid);
-            if (source)
-            {
-                entity.Property<string>("legacy_value").HasColumnType("varchar(20)").HasMaxLength(20).IsRequired();
-                entity.HasKey("event_id", "legacy_value").HasName("pk_replacement_items");
-            }
-            else if (uuid)
-            {
-                entity.Property<Guid>("id").HasMySqlGuidFormat(DokaMySqlGuidFormat.Char36)
-                    .HasDefaultValueSql("UUID()");
-                entity.HasKey("id").HasName("pk_replacement_items");
-            }
-            else
-            {
-                entity.HasKey("event_id", "tag_id").HasName("pk_replacement_items");
-            }
-        });
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        ) => ConfigureReplacementModel(
+            modelBuilder,
+            source: false,
+            uuid: true);
     }
 }

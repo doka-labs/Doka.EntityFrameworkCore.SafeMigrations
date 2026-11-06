@@ -2,7 +2,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>Provides helpers shared by independently scheduled SQL Server feature suites.</summary>
 /// <remarks>WHY: The abstract base owns no test cases, so leaf classes cannot inherit duplicate discoveries.</remarks>
-public abstract partial class SqlServerSafeMigrationIntegrationTests : SqlServerIntegrationTestBase
+public abstract class SqlServerSafeMigrationIntegrationTests : SqlServerIntegrationTestBase
 {
     /// <summary>Bounds SQL Server fixture setup and large-operation command execution.</summary>
     protected const int PerformanceFixtureCommandTimeoutSeconds = 180;
@@ -16,27 +16,46 @@ public abstract partial class SqlServerSafeMigrationIntegrationTests : SqlServer
     /// <summary>
     /// Creates a disabled DDL audit so read-only layout analysis keeps its original proof environment.
     /// </summary>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     /// <param name="connectionString">The isolated test database that owns the audit table and trigger.</param>
     protected static async Task CreateColumnLayoutAuditAsync(
-        string connectionString
+        string connectionString,
+        CancellationToken cancellationToken
     )
     {
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.layout_ddl_events (Id int NOT NULL);");
-        await ExecuteSqlAsync(connectionString, "CREATE TRIGGER layout_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS "
-            + "AS INSERT dbo.layout_ddl_events VALUES(1);");
+        cancellationToken.ThrowIfCancellationRequested();
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.layout_ddl_events (Id int NOT NULL);",
+            cancellationToken: cancellationToken);
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TRIGGER layout_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS "
+            + "AS INSERT dbo.layout_ddl_events VALUES(1);",
+            cancellationToken: cancellationToken);
 
         // WHY: Even an insert-only observer is an enabled DDL trigger. Keeping
         // it active during analysis invalidates subsequent ordered layout proofs.
-        await ExecuteSqlAsync(connectionString, "DISABLE TRIGGER layout_ddl_audit ON DATABASE;");
+        await ExecuteSqlAsync(
+            connectionString,
+            "DISABLE TRIGGER layout_ddl_audit ON DATABASE;",
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>
     /// Arms the observer immediately before runtime DDL whose accepted or rejected events are asserted.
     /// </summary>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     /// <param name="connectionString">The isolated test database containing the disabled layout audit.</param>
     protected static Task EnableColumnLayoutAuditAsync(
-        string connectionString
-    ) => ExecuteSqlAsync(connectionString, "ENABLE TRIGGER layout_ddl_audit ON DATABASE;");
+        string connectionString,
+        CancellationToken cancellationToken
+    ) => ExecuteSqlAsync(
+        connectionString,
+        "ENABLE TRIGGER layout_ddl_audit ON DATABASE;",
+        cancellationToken: cancellationToken);
 
     /// <summary>Builds the shared requested-column contract for layout and audit probes.</summary>
     /// <param name="name">The requested column's physical name.</param>
@@ -47,8 +66,15 @@ public abstract partial class SqlServerSafeMigrationIntegrationTests : SqlServer
         string name,
         string storeType,
         Type? clrType = null
-    ) => new(new EnsureColumnIntent("layout_probe", new ExpectedColumnDefinition(
-        name, clrType ?? typeof(string), true, storeType)), SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(
+        new EnsureColumnIntent(
+            "layout_probe",
+            new ExpectedColumnDefinition(
+                name,
+                clrType ?? typeof(string),
+                true,
+                storeType)),
+        SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Checks the complete deferred-origin contract rather than only its aggregate report status.</summary>
     /// <param name="assessment">The deferred operation assessment.</param>
@@ -85,12 +111,13 @@ public abstract partial class SqlServerSafeMigrationIntegrationTests : SqlServer
     )
     {
         SafeMigrationIntent intent = inlineTable
-            ? new EnsureTableIntent(new ExpectedTableDefinition("new_default_items",
-                [new ExpectedColumnDefinition("Id", typeof(int), false, "int"), definition]),
+            ? new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "new_default_items",
+                    [new ExpectedColumnDefinition("Id", typeof(int), false, "int"), definition]),
                 SafeMigrationTableMode.StrictDefinition)
             : new EnsureColumnIntent("default_items", definition);
 
         return new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
     }
-
 }

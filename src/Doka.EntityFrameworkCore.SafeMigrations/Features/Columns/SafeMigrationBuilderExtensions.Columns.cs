@@ -110,7 +110,7 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="policy">The conflict policy for the operation.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="migrationBuilder"/> or <paramref name="operationFactory"/> is null.
+    /// <paramref name="migrationBuilder" /> or <paramref name="operationFactory" /> is null.
     /// </exception>
     /// <exception cref="InvalidOperationException">
     /// The callback does not append exactly one add-column operation.
@@ -190,7 +190,7 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="policy">The conflict policy for the reviewed transition.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="migrationBuilder"/> or <paramref name="operationFactory"/> is null.
+    /// <paramref name="migrationBuilder" /> or <paramref name="operationFactory" /> is null.
     /// </exception>
     /// <exception cref="InvalidOperationException">
     /// The callback does not append exactly one alter-column operation.

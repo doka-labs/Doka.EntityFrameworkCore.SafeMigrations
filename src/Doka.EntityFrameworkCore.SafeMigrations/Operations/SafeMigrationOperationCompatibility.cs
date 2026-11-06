@@ -93,7 +93,10 @@ internal static class SafeMigrationOperationCompatibility
             : $"Owner: {SafeMigrationDiagnosticMessages.FormatIdentity(identity)}. ";
 
         var operationType = SafeMigrationDiagnosticMessages.BoundForDisplay(
-            operation.GetType().FullName ?? operation.GetType().Name);
+            operation.GetType()
+                .FullName
+            ?? operation.GetType()
+                .Name);
 
         return new NotSupportedException(
             $"Migration operation '{operationType}' has no complete SafeMigrations contract. "
@@ -140,6 +143,7 @@ internal static class SafeMigrationOperationCompatibility
                         SafeMigrationExpectedDefinitionFactory.From(value),
                         SafeMigrationExpectedDefinitionFactory.From(value.OldColumn, value.Name),
                         value.Schema),
+
                     // WHY: This design-time classification must agree with the
                     // policy emitted by the generated alter-column source.
                     SafeMigrationPolicy.RepairIfSafe),
@@ -216,5 +220,7 @@ internal static class SafeMigrationOperationCompatibility
 
     private static bool HasNoAnnotations(
         MigrationOperation operation
-    ) => !operation.GetAnnotations().Any();
+    ) => !operation
+        .GetAnnotations()
+        .Any();
 }

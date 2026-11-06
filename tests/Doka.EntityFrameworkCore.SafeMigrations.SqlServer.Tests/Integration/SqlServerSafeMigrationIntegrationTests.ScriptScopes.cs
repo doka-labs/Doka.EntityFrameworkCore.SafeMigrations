@@ -14,10 +14,12 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
     public async Task ContinuationNamesPreserveCompilerProvenanceAnalysisAndReplay()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
 
         // Act
-        var actual = await ObserveContinuationContractsAsync(connectionString);
+        var actual = await ObserveContinuationContractsAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.True(actual.Matching);
@@ -31,10 +33,10 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
     public async Task ContinuationRenamesPreserveIdentitiesAndReplay()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
 
         // Act
-        var actual = await ObserveContinuationRenamesAsync(connectionString);
+        var actual = await ObserveContinuationRenamesAsync(connectionString, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(3, actual);
@@ -42,9 +44,15 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
 
     /// <summary>Runs all three guarded rename forms plus schema-only transfer against one owned database.</summary>
     /// <param name="connectionString">The initially empty disposable database.</param>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     /// <returns>The independent physical table, column and index witness count.</returns>
-    internal static async Task<int> ObserveContinuationRenamesAsync(string connectionString)
+    internal static async Task<int> ObserveContinuationRenamesAsync(
+        string connectionString,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         const string schema = "rename\\\nsource";
         const string targetSchema = "rename\\\rtarget";
         const string table = "old\\\ntable";
@@ -57,13 +65,21 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
         var setup = new MigrationBuilder(context.Database.ProviderName!);
         setup.EnsureSchemaExists(schema);
         setup.EnsureSchemaExists(targetSchema);
-        setup.Operations.Add(new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition(table,
-        [
-            new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
-            new ExpectedColumnDefinition(column, typeof(int), true, "int"),
-        ], schema), SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent));
+        setup.Operations.Add(
+            new SafeMigrationOperation(
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition(
+                        table,
+                        [
+                            new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
+                            new ExpectedColumnDefinition(column, typeof(int), true, "int"),
+                        ],
+                        schema),
+                    SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationPolicy.ThrowIfDifferent));
+
         setup.CreateIndexIfNotExists(index, table, ["Id"], schema: schema);
-        await ExecuteOperationsAsync(context, setup.Operations);
+        await ExecuteOperationsAsync(context, setup.Operations, cancellationToken: cancellationToken);
         var renames = new MigrationBuilder(context.Database.ProviderName!);
         renames.RenameColumnIfExists(column, table, newColumn, schema);
         renames.RenameIndexIfExists(index, table, newIndex, schema);
@@ -71,33 +87,48 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
         renames.RenameTableIfExists(newTable, newTable, targetSchema, schema);
         foreach (var operation in renames.Operations)
         {
-            await ExecuteOperationsAsync(context, [operation]);
-            await ExecuteOperationsAsync(context, [operation]);
+            await ExecuteOperationsAsync(context, [operation], cancellationToken: cancellationToken);
+            await ExecuteOperationsAsync(context, [operation], cancellationToken: cancellationToken);
         }
 
         await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(cancellationToken: cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandTimeout = SafeMigrationDbContext.CommandTimeoutSeconds;
         command.CommandText = "SELECT (SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(@table)), "
             + "(SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(@table) AND name=@column), "
             + "(SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(@table) AND name=@index);";
-        command.Parameters.Add("@table", SqlDbType.NVarChar, 512).Value =
-            context.GetService<ISqlGenerationHelper>().DelimitIdentifier(newTable, schema);
-        command.Parameters.Add("@column", SqlDbType.NVarChar, 128).Value = newColumn;
-        command.Parameters.Add("@index", SqlDbType.NVarChar, 128).Value = newIndex;
-        await using var reader = await command.ExecuteReaderAsync();
-        await reader.ReadAsync();
+
+        command.Parameters.Add("@table", SqlDbType.NVarChar, 512)
+                .Value =
+            context
+                .GetService<ISqlGenerationHelper>()
+                .DelimitIdentifier(newTable, schema);
+
+        command.Parameters.Add("@column", SqlDbType.NVarChar, 128)
+            .Value = newColumn;
+
+        command.Parameters.Add("@index", SqlDbType.NVarChar, 128)
+            .Value = newIndex;
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken: cancellationToken);
+        await reader.ReadAsync(cancellationToken: cancellationToken);
 
         return reader.GetInt32(0) + reader.GetInt32(1) + reader.GetInt32(2);
     }
 
     /// <summary>Runs the same provider contracts on one independently owned native diagnostic database.</summary>
     /// <param name="connectionString">The explicit connection to a disposable, initially empty database.</param>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     /// <returns>Fresh classification and independent parameterized physical metadata observations.</returns>
     internal static async Task<(bool Matching, SafeMigrationObservedState? Drift, int Columns, int Stamps)>
-        ObserveContinuationContractsAsync(string connectionString)
+        ObserveContinuationContractsAsync(
+            string connectionString,
+            CancellationToken cancellationToken
+        )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         const string schema = "schema\\\nline";
         const string table = "table\\\r\nline";
         const string first = "constant\\\nfirst";
@@ -105,43 +136,93 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureSchemaExists(schema);
-        builder.Operations.Add(new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition(table,
-        [
-            new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
-            new ExpectedColumnDefinition("Value", typeof(int), true, "int",
-                defaultValue: SafeMigrationDefaultValue.Sql("1")),
-            new ExpectedColumnDefinition(first, typeof(int), false, "int", computedColumnSql: "1", isStored: false),
-            new ExpectedColumnDefinition(second, typeof(int), false, "int", computedColumnSql: "2", isStored: false),
-        ], schema), SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent));
+        builder.Operations.Add(
+            new SafeMigrationOperation(
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition(
+                        table,
+                        [
+                            new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
+                            new ExpectedColumnDefinition(
+                                "Value",
+                                typeof(int),
+                                true,
+                                "int",
+                                defaultValue: SafeMigrationDefaultValue.Sql("1")),
+                            new ExpectedColumnDefinition(
+                                first,
+                                typeof(int),
+                                false,
+                                "int",
+                                computedColumnSql: "1",
+                                isStored: false),
+                            new ExpectedColumnDefinition(
+                                second,
+                                typeof(int),
+                                false,
+                                "int",
+                                computedColumnSql: "2",
+                                isStored: false),
+                        ],
+                        schema),
+                    SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationPolicy.ThrowIfDifferent));
+
         builder.AddCheckConstraintIfNotExists("check\\\nfirst", table, "[Id] >= 0", schema: schema);
         builder.AddCheckConstraintIfNotExists("check\\\r\nsecond", table, "[Id] <= 100", schema: schema);
         builder.CreateIndexIfNotExists("index\\\nfirst", table, ["Id"], schema: schema, filter: "[Id] >= 0");
         builder.CreateIndexIfNotExists("index\\\r\nsecond", table, [first], schema: schema, filter: "[Id] >= 0");
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: cancellationToken);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: cancellationToken);
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
-        var matching = await analyzer.AnalyzeAsync(context,
-            builder.Operations.OfType<SafeMigrationOperation>().ToArray());
-        var drift = await analyzer.AnalyzeAsync(context,
-        [
-            new SafeMigrationOperation(new EnsureColumnIntent(table,
-                new ExpectedColumnDefinition("Value", typeof(int), true, "int",
-                    defaultValue: SafeMigrationDefaultValue.Sql("2")), schema), SafeMigrationPolicy.ThrowIfDifferent),
-        ]);
+        var matching = await analyzer.AnalyzeAsync(
+            context,
+            builder
+                .Operations
+                .OfType<SafeMigrationOperation>()
+                .ToArray(),
+            cancellationToken: cancellationToken);
+
+        var drift = await analyzer.AnalyzeAsync(
+            context,
+            [
+                new SafeMigrationOperation(
+                    new EnsureColumnIntent(
+                        table,
+                        new ExpectedColumnDefinition(
+                            "Value",
+                            typeof(int),
+                            true,
+                            "int",
+                            defaultValue: SafeMigrationDefaultValue.Sql("2")),
+                        schema),
+                    SafeMigrationPolicy.ThrowIfDifferent),
+            ],
+            cancellationToken: cancellationToken);
+
         await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(cancellationToken: cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandTimeout = SafeMigrationDbContext.CommandTimeoutSeconds;
         command.CommandText = "SELECT (SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(@table) "
             + "AND name IN (@first,@second)), (SELECT COUNT(*) FROM sys.extended_properties ep "
             + "WHERE ep.name=N'Doka:SafeMigrations:Contract' AND (ep.major_id=OBJECT_ID(@table) "
             + "OR ep.major_id IN (SELECT object_id FROM sys.objects WHERE parent_object_id=OBJECT_ID(@table))));";
-        command.Parameters.Add("@table", SqlDbType.NVarChar, 512).Value =
-            context.GetService<ISqlGenerationHelper>().DelimitIdentifier(table, schema);
-        command.Parameters.Add("@first", SqlDbType.NVarChar, 128).Value = first;
-        command.Parameters.Add("@second", SqlDbType.NVarChar, 128).Value = second;
-        await using var reader = await command.ExecuteReaderAsync();
-        await reader.ReadAsync();
+
+        command.Parameters.Add("@table", SqlDbType.NVarChar, 512)
+                .Value =
+            context
+                .GetService<ISqlGenerationHelper>()
+                .DelimitIdentifier(table, schema);
+
+        command.Parameters.Add("@first", SqlDbType.NVarChar, 128)
+            .Value = first;
+
+        command.Parameters.Add("@second", SqlDbType.NVarChar, 128)
+            .Value = second;
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken: cancellationToken);
+        await reader.ReadAsync(cancellationToken: cancellationToken);
 
         return (matching.All(static result => result.ObservedState == SafeMigrationObservedState.Matching),
             drift[0].ObservedState, reader.GetInt32(0), reader.GetInt32(1));
@@ -161,23 +242,35 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = new SqlServerMultilineScriptContext(connectionString);
-        var options = (idempotent ? MigrationsSqlGenerationOptions.Idempotent : MigrationsSqlGenerationOptions.Default)
-            | (noTransactions ? MigrationsSqlGenerationOptions.NoTransactions : MigrationsSqlGenerationOptions.Default);
+        var options = (idempotent
+                ? MigrationsSqlGenerationOptions.Idempotent
+                : MigrationsSqlGenerationOptions.Default)
+            | (noTransactions
+                ? MigrationsSqlGenerationOptions.NoTransactions
+                : MigrationsSqlGenerationOptions.Default);
 
-        var script = context.GetService<IMigrator>().GenerateScript(
-            Migration.InitialDatabase, SqlServerMultilineUpgradeMigration.MigrationIdentifier, options);
+        var script = context
+            .GetService<IMigrator>()
+            .GenerateScript(
+                Migration.InitialDatabase,
+                SqlServerMultilineUpgradeMigration.MigrationIdentifier,
+                options);
 
         // Act
-        await ExecuteGeneratedScriptAsync(connectionString, script);
+        await ExecuteGeneratedScriptAsync(connectionString, script, cancellationToken: CancellationToken.None);
         if (idempotent)
         {
-            await ExecuteGeneratedScriptAsync(connectionString, script);
+            await ExecuteGeneratedScriptAsync(connectionString, script, cancellationToken: CancellationToken.None);
         }
 
-        await ExecuteSqlAsync(connectionString, "INSERT dbo.multiline_payload_items (Id) VALUES (7);");
-        var actual = await ReadMultilineScriptStateAsync(connectionString);
+        await ExecuteSqlAsync(
+            connectionString,
+            "INSERT dbo.multiline_payload_items (Id) VALUES (7);",
+            cancellationToken: CancellationToken.None);
+
+        var actual = await ReadMultilineScriptStateAsync(connectionString, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SqlServerMultilineInitialMigration.Payload, actual.Initial);
@@ -190,15 +283,19 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
     public async Task RuntimeMigrationPreservesMultilineDefaultsAndReplay()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = new SqlServerMultilineScriptContext(connectionString);
         var migrator = context.GetService<IMigrator>();
 
         // Act
         await migrator.MigrateAsync(SqlServerMultilineUpgradeMigration.MigrationIdentifier);
         await migrator.MigrateAsync(SqlServerMultilineUpgradeMigration.MigrationIdentifier);
-        await ExecuteSqlAsync(connectionString, "INSERT dbo.multiline_payload_items (Id) VALUES (7);");
-        var actual = await ReadMultilineScriptStateAsync(connectionString);
+        await ExecuteSqlAsync(
+            connectionString,
+            "INSERT dbo.multiline_payload_items (Id) VALUES (7);",
+            cancellationToken: CancellationToken.None);
+
+        var actual = await ReadMultilineScriptStateAsync(connectionString, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SqlServerMultilineInitialMigration.Payload, actual.Initial);
@@ -211,22 +308,35 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
     public async Task IdempotentHistoryScriptRetainsDefaultDriftRejection()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = new SqlServerMultilineScriptContext(connectionString);
-        var initial = context.GetService<IMigrator>().GenerateScript(
-            Migration.InitialDatabase, SqlServerMultilineInitialMigration.MigrationIdentifier,
-            MigrationsSqlGenerationOptions.Idempotent);
-        await ExecuteGeneratedScriptAsync(connectionString, initial);
-        await ExecuteSqlAsync(connectionString,
-            "ALTER TABLE dbo.multiline_payload_items ADD [" + SqlServerMultilineUpgradeMigration.ColumnName
-            + "] nvarchar(80) NULL DEFAULT 'wrong';");
-        var script = context.GetService<IMigrator>().GenerateScript(
-            SqlServerMultilineInitialMigration.MigrationIdentifier,
-            SqlServerMultilineUpgradeMigration.MigrationIdentifier,
-            MigrationsSqlGenerationOptions.Idempotent);
+        var initial = context
+            .GetService<IMigrator>()
+            .GenerateScript(
+                Migration.InitialDatabase,
+                SqlServerMultilineInitialMigration.MigrationIdentifier,
+                MigrationsSqlGenerationOptions.Idempotent);
+
+        await ExecuteGeneratedScriptAsync(connectionString, initial, cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "ALTER TABLE dbo.multiline_payload_items ADD ["
+            + SqlServerMultilineUpgradeMigration.ColumnName
+            + "] nvarchar(80) NULL DEFAULT 'wrong';",
+            cancellationToken: CancellationToken.None);
+
+        var script = context
+            .GetService<IMigrator>()
+            .GenerateScript(
+                SqlServerMultilineInitialMigration.MigrationIdentifier,
+                SqlServerMultilineUpgradeMigration.MigrationIdentifier,
+                MigrationsSqlGenerationOptions.Idempotent);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteGeneratedScriptAsync(connectionString, script));
+        var failure = await Record.ExceptionAsync(() => ExecuteGeneratedScriptAsync(
+            connectionString,
+            script,
+            cancellationToken: CancellationToken.None));
 
         // Assert
         var actual = Assert.IsType<SqlException>(failure);
@@ -237,23 +347,34 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
 
     /// <summary>Observes exact authored values and both actual migration identities from one synthetic row.</summary>
     /// <param name="connectionString">The independently owned fixture database.</param>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     /// <returns>The persisted default results and matching migration-history count.</returns>
     private static async Task<(string? Initial, string? Later, int History)> ReadMultilineScriptStateAsync(
-        string connectionString
+        string connectionString,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(cancellationToken: cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandTimeout = SafeMigrationDbContext.CommandTimeoutSeconds;
-        command.CommandText = "SELECT Payload, [" + SqlServerMultilineUpgradeMigration.ColumnName
+        command.CommandText = "SELECT Payload, ["
+            + SqlServerMultilineUpgradeMigration.ColumnName
             + "], (SELECT COUNT(*) FROM dbo.__EFMigrationsHistory WHERE MigrationId IN (N'"
-            + SqlServerMultilineInitialMigration.MigrationIdentifier + "', N'"
-            + SqlServerMultilineUpgradeMigration.MigrationIdentifier + "')) "
+            + SqlServerMultilineInitialMigration.MigrationIdentifier
+            + "', N'"
+            + SqlServerMultilineUpgradeMigration.MigrationIdentifier
+            + "')) "
             + "FROM dbo.multiline_payload_items WHERE Id = 7;";
-        await using var reader = await command.ExecuteReaderAsync();
 
-        return await reader.ReadAsync() ? (reader.GetString(0), reader.GetString(1), reader.GetInt32(2)) : default;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken: cancellationToken);
+
+        return await reader.ReadAsync(
+            cancellationToken: cancellationToken)
+            ? (reader.GetString(0), reader.GetString(1), reader.GetInt32(2))
+            : default;
     }
 
     /// <summary>Concatenated guard batches preserve caller variables and safely bind earlier-created objects.</summary>
@@ -276,18 +397,31 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.CreateTableIfNotExists("scope'items",
+        builder.CreateTableIfNotExists(
+            "scope'items",
             table => new { Id = table.Column<int>(type: "int", nullable: false) },
             constraints: table => table.PrimaryKey("PK_scope'items", row => row.Id));
-        builder.AddColumnIfNotExists<string>("Caption", "scope'items", type: "varchar(80)", maxLength: 80,
-            nullable: false, defaultValue: "O'Brien",
+
+        builder.AddColumnIfNotExists<string>(
+            "Caption",
+            "scope'items",
+            type: "varchar(80)",
+            maxLength: 80,
+            nullable: false,
+            defaultValue: "O'Brien",
             collation: new SafeMigrationCollationIdentifier("Latin1_General_100_CI_AS"));
 
-        builder.EnsureModelManagedDataFromModel("scope'items", ["Id"], ["int"], ["Id", "Caption"],
-            ["int", "varchar(80)"], new object?[,] { { 7, "O'Brien" } });
+        builder.EnsureModelManagedDataFromModel(
+            "scope'items",
+            ["Id"],
+            ["int"],
+            ["Id", "Caption"],
+            ["int", "varchar(80)"],
+            new object?[,] { { 7, "O'Brien" } });
+
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var options = idempotent
             ? MigrationsSqlGenerationOptions.Script | MigrationsSqlGenerationOptions.Idempotent
@@ -295,13 +429,19 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
 
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync();
-        await using var transaction = callerTransaction ? connection.BeginTransaction() : null;
+        await using var transaction = callerTransaction
+            ? connection.BeginTransaction()
+            : null;
 
         // Act
         var commands = separateGeneration
-            ? builder.Operations.SelectMany(operation => generator.Generate([operation], context.Model, options))
+            ? builder
+                .Operations
+                .SelectMany(operation => generator.Generate([operation], context.Model, options))
                 .ToArray()
-            : generator.Generate(builder.Operations, context.Model, options).ToArray();
+            : generator
+                .Generate(builder.Operations, context.Model, options)
+                .ToArray();
 
         await using var batch = connection.CreateCommand();
         batch.Transaction = transaction;
@@ -328,12 +468,19 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
             await transaction.RollbackAsync();
         }
 
-        var remainingTables = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'[dbo].[scope''items]', N'U');");
+        var remainingTables = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'[dbo].[scope''items]', N'U');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, seedCount);
-        Assert.Equal(callerTransaction ? 0 : 1, remainingTables);
+        Assert.Equal(
+            callerTransaction
+                ? 0
+                : 1,
+            remainingTables);
+
         Assert.All(commands, static command => Assert.False(command.TransactionSuppressed));
     }
 
@@ -346,32 +493,42 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var migrator = context.GetService<IMigrator>();
-        var options = idempotent ? MigrationsSqlGenerationOptions.Idempotent : MigrationsSqlGenerationOptions.Default;
+        var options = idempotent
+            ? MigrationsSqlGenerationOptions.Idempotent
+            : MigrationsSqlGenerationOptions.Default;
 
         // Act
-        var script = migrator.GenerateScript(Migration.InitialDatabase,
-            SqlServerHistoryMigration.MigrationIdentifier, options);
+        var script = migrator.GenerateScript(
+            Migration.InitialDatabase,
+            SqlServerHistoryMigration.MigrationIdentifier,
+            options);
 
-        await ExecuteGeneratedScriptAsync(connectionString, script);
+        await ExecuteGeneratedScriptAsync(connectionString, script, cancellationToken: CancellationToken.None);
         if (idempotent)
         {
-            await ExecuteGeneratedScriptAsync(connectionString, script);
+            await ExecuteGeneratedScriptAsync(connectionString, script, cancellationToken: CancellationToken.None);
         }
 
-        var historyCount = await ScalarIntAsync(connectionString,
+        var historyCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM dbo.__EFMigrationsHistory "
-            + $"WHERE MigrationId = N'{SqlServerHistoryMigration.MigrationIdentifier}';");
+            + $"WHERE MigrationId = N'{SqlServerHistoryMigration.MigrationIdentifier}';",
+            cancellationToken: CancellationToken.None);
 
-        var columnCount = await ScalarIntAsync(connectionString,
+        var columnCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.safe_history_probe') "
-            + "AND name = N'Caption' AND is_nullable = 0;");
+            + "AND name = N'Caption' AND is_nullable = 0;",
+            cancellationToken: CancellationToken.None);
 
-        var checkCount = await ScalarIntAsync(connectionString,
+        var checkCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.check_constraints WHERE parent_object_id = OBJECT_ID(N'dbo.safe_history_probe') "
-            + "AND name = N'CK_safe_history_probe_Id';");
+            + "AND name = N'CK_safe_history_probe_Id';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, historyCount);
@@ -390,23 +547,40 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.safe_history_probe (Id bigint NOT NULL);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.safe_history_probe (Id bigint NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var migrator = context.GetService<IMigrator>();
-        var options = idempotent ? MigrationsSqlGenerationOptions.Idempotent : MigrationsSqlGenerationOptions.Default;
-        var script = migrator.GenerateScript(Migration.InitialDatabase,
-            SqlServerHistoryMigration.MigrationIdentifier, options);
+        var options = idempotent
+            ? MigrationsSqlGenerationOptions.Idempotent
+            : MigrationsSqlGenerationOptions.Default;
+
+        var script = migrator.GenerateScript(
+            Migration.InitialDatabase,
+            SqlServerHistoryMigration.MigrationIdentifier,
+            options);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteGeneratedScriptAsync(connectionString, script));
-        var ordinaryTables = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.ordinary_pipeline_probe', N'U');");
+        var failure = await Record.ExceptionAsync(() => ExecuteGeneratedScriptAsync(
+            connectionString,
+            script,
+            cancellationToken: CancellationToken.None));
 
-        var historyCount = await ScalarIntAsync(connectionString,
+        var ordinaryTables = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.ordinary_pipeline_probe', N'U');",
+            cancellationToken: CancellationToken.None);
+
+        var historyCount = await ScalarIntAsync(
+            connectionString,
             "IF OBJECT_ID(N'dbo.__EFMigrationsHistory', N'U') IS NULL SELECT 0; "
             + "ELSE SELECT COUNT(*) FROM dbo.__EFMigrationsHistory "
-            + $"WHERE MigrationId = N'{SqlServerHistoryMigration.MigrationIdentifier}';");
+            + $"WHERE MigrationId = N'{SqlServerHistoryMigration.MigrationIdentifier}';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var sqlFailure = Assert.IsType<SqlException>(failure);
@@ -418,13 +592,17 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
     }
 
     /// <summary>Executes generated fixture scripts with GO batch boundaries on one client session.</summary>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task ExecuteGeneratedScriptAsync(
         string connectionString,
-        string script
+        string script,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(cancellationToken: cancellationToken);
         using var reader = new StringReader(script);
         var batch = new StringBuilder();
 
@@ -433,25 +611,31 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
         // retaining one connection preserves the script's transaction/history.
         while (reader.ReadLine() is { } line)
         {
-            if (!line.Trim().Equals("GO", StringComparison.OrdinalIgnoreCase))
+            if (!line
+                .Trim()
+                .Equals("GO", StringComparison.OrdinalIgnoreCase))
             {
                 batch.AppendLine(line);
 
                 continue;
             }
 
-            await ExecuteScriptBatchAsync(connection, batch);
+            await ExecuteScriptBatchAsync(connection, batch, cancellationToken: cancellationToken);
         }
 
-        await ExecuteScriptBatchAsync(connection, batch);
+        await ExecuteScriptBatchAsync(connection, batch, cancellationToken: cancellationToken);
     }
 
     /// <summary>Executes a nonempty script batch and clears only the completed client-side buffer.</summary>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task ExecuteScriptBatchAsync(
         SqlConnection connection,
-        StringBuilder batch
+        StringBuilder batch,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (batch.Length == 0)
         {
             return;
@@ -460,7 +644,7 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
         await using var command = connection.CreateCommand();
         command.CommandText = batch.ToString();
 
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync(cancellationToken: cancellationToken);
         batch.Clear();
     }
 }

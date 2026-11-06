@@ -22,12 +22,17 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
         var plan = CreatePlan(delayed, preamble);
         var baseline = new[] { CreateCommand(context, "SELECT N'O''Brien \uD83D\uDE80';\n") };
         var repair = new[] { CreateCommand(context, "EXEC sys.sp_executesql N'SELECT N''repair''''ed'';';\n") };
-        var reference = OriginalGuardBody(operation, plan, baseline, repair).ToString();
+        var reference = OriginalGuardBody(operation, plan, baseline, repair)
+            .ToString();
+
         var expected = ReferenceScope(reference);
 
         // Act
         var actual = SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(
-            operation, plan, new IndexedOnlyCommands(baseline), new IndexedOnlyCommands(repair));
+            operation,
+            plan,
+            new IndexedOnlyCommands(baseline),
+            new IndexedOnlyCommands(repair));
 
         // Assert
         Assert.Equal(expected, actual);
@@ -45,16 +50,23 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
         using var context = new SafeMigrationDbContext(ConnectionString);
         var operation = CreateOperation(SafeMigrationPolicy.ThrowIfDifferent, true);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var plan = catalog.Build(operation);
-        var mutation = catalog.BuildModelManagedDataMutationSql((ModelManagedDataIntent)operation.Intent,
-            scopeInUseMessage: SafeMigrationDiagnosticMessages.FormatRuntime(operation,
-                "doka_sm_identity_scope_in_use", 0));
-        var baseline = context.GetService<ISqlServerSafeMigrationsBaselineGenerator>()
+        var mutation = catalog.BuildModelManagedDataMutationSql(
+            (ModelManagedDataIntent)operation.Intent,
+            scopeInUseMessage: SafeMigrationDiagnosticMessages.FormatRuntime(
+                operation,
+                "doka_sm_identity_scope_in_use",
+                0));
+
+        var baseline = context
+            .GetService<ISqlServerSafeMigrationsBaselineGenerator>()
             .Generate([new SqlOperation { Sql = mutation }], context.Model);
 
-        var expected = OriginalGuardBody(operation, plan, baseline, [], 0).ToString();
+        var expected = OriginalGuardBody(operation, plan, baseline, [], 0)
+            .ToString();
 
         // Act
         var actual = SqlServerGuardedSqlTestContract.GenerateBody(context, operation);
@@ -88,11 +100,12 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
             ExecutionPostcondition = expression,
         };
 
-        Func<string> current = () => SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(operation, plan, [], []);
-        Func<string> original = () => SqlServerSafeMigrationsSqlGenerator.BuildIsolatedGuardSql(
+        var current = () => SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(operation, plan, [], []);
+        var original = () => SqlServerSafeMigrationsSqlGenerator.BuildIsolatedGuardSql(
             OriginalGuardBody(operation, plan, [], []));
 
-        var expected = ReferenceScope(OriginalGuardBody(operation, plan, [], []).ToString());
+        var expected = ReferenceScope(OriginalGuardBody(operation, plan, [], [])
+            .ToString());
 
         // WHY: Both measurements begin with identical immutable prepared inputs.
         // Warm rendering and the planner before excluding input preparation from
@@ -125,14 +138,17 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
             ExecutionPostcondition = null,
         };
 
-        var expected = ReferenceScope(OriginalGuardBody(operation, plan, [], []).ToString());
+        var expected = ReferenceScope(OriginalGuardBody(operation, plan, [], [])
+            .ToString());
 
         // Act
         var actual = SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(operation, plan, [], []);
 
         // Assert
         Assert.Equal(expected, actual);
-        Assert.Contains("COALESCE((), 0)", SqlServerGuardedSqlTestContract.DecodeScope(actual),
+        Assert.Contains(
+            "COALESCE((), 0)",
+            SqlServerGuardedSqlTestContract.DecodeScope(actual),
             StringComparison.Ordinal);
     }
 
@@ -149,7 +165,9 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
             SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(operation, plan, [], []));
 
         // Assert
-        Assert.Equal("expression", Assert.IsType<ArgumentNullException>(failure).ParamName);
+        Assert.Equal("expression",
+            Assert.IsType<ArgumentNullException>(failure)
+                .ParamName);
     }
 
     /// <summary>
@@ -164,12 +182,15 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
     )
     {
         // Arrange
-        var statements = Enumerable.Range(0, count).Select(static index => (index % 3) switch
-        {
-            0 => "SELECT N'O''Brien \uD83D\uDE80';\n",
-            1 => string.Empty,
-            _ => "EXEC sys.sp_executesql N'SELECT N''\uD834\uDD1E''''nested'';';\n",
-        }).ToArray();
+        var statements = Enumerable
+            .Range(0, count)
+            .Select(static index => (index % 3) switch
+            {
+                0 => "SELECT N'O''Brien \uD83D\uDE80';\n",
+                1 => string.Empty,
+                _ => "EXEC sys.sp_executesql N'SELECT N''\uD834\uDD1E''''nested'';';\n",
+            })
+            .ToArray();
 
         var body = string.Join("\n", statements);
         var expected = ReferenceScope(body);
@@ -211,7 +232,9 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
             SqlServerSafeMigrationsSqlGenerator.BuildIsolatedIdentifierGuardSql(statements!));
 
         // Assert
-        Assert.Equal("statements", Assert.IsType<ArgumentNullException>(failure).ParamName);
+        Assert.Equal("statements",
+            Assert.IsType<ArgumentNullException>(failure)
+                .ParamName);
     }
 
     /// <summary>Counts prepared identifier composition against the former joined body and growing buffer.</summary>
@@ -220,10 +243,13 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
     {
         // Arrange
         const int renderCount = 32;
-        var statements = Enumerable.Repeat("SELECT N'O''Brien \uD83D\uDE80';\n", 4096).ToArray();
+        var statements = Enumerable
+            .Repeat("SELECT N'O''Brien \uD83D\uDE80';\n", 4096)
+            .ToArray();
+
         var expected = ReferenceScope(string.Join("\n", statements));
-        Func<string> current = () => SqlServerSafeMigrationsSqlGenerator.BuildIsolatedIdentifierGuardSql(statements);
-        Func<string> original = () => OriginalIdentifierScope(statements);
+        var current = () => SqlServerSafeMigrationsSqlGenerator.BuildIsolatedIdentifierGuardSql(statements);
+        var original = () => OriginalIdentifierScope(statements);
 
         // WHY: The same completed statement list is prepared before counting.
         // Only the removed joining and literal-buffer work differs between paths.

@@ -38,27 +38,58 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         if (complete)
         {
-            Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("Items", [Column("Code")]),
-                SafeMigrationTableMode.StrictDefinition));
+            Apply(
+                projection,
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition("Items", [Column("Code")]),
+                    SafeMigrationTableMode.StrictDefinition));
         }
 
         var original = ColumnInvalidationKey("logical_original", "Items", constraint);
         var alias = ColumnInvalidationKey("logical_alias", "Items", constraint);
-        var acceptedState = complete ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Matching;
+        var acceptedState = complete
+            ? SafeMigrationObservedState.Missing
+            : SafeMigrationObservedState.Matching;
 
-        ObserveAccepted(projection, original, acceptedState, complete ? null : "physical_key");
-        ObserveAccepted(projection, alias, SafeMigrationObservedState.Matching,
-            complete ? "logical_original" : "physical_key");
-        var repair = new SafeMigrationOperation(new EnsureColumnIntent("Items",
-                new ExpectedColumnDefinition(mixedCase ? "code" : "Code", typeof(int),
-                    isNullable: true, storeType: "int")),
+        ObserveAccepted(
+            projection,
+            original,
+            acceptedState,
+            complete
+                ? null
+                : "physical_key");
+
+        ObserveAccepted(
+            projection,
+            alias,
+            SafeMigrationObservedState.Matching,
+            complete
+                ? "logical_original"
+                : "physical_key");
+
+        var repair = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "Items",
+                new ExpectedColumnDefinition(
+                    mixedCase
+                        ? "code"
+                        : "Code",
+                    typeof(int),
+                    isNullable: true,
+                    storeType: "int")),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var repairAnalysis = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.Safe, postconditionSatisfied: false, "uncertified_key_layout_repair");
+        var repairAnalysis = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            postconditionSatisfied: false,
+            "uncertified_key_layout_repair");
 
-        var repairDecision = SafeMigrationDecisionPlanner.Plan(repair.Intent.Kind, repairAnalysis.ObservedState,
-            repair.Policy, repairAnalysis.RepairCapability);
+        var repairDecision = SafeMigrationDecisionPlanner.Plan(
+            repair.Intent.Kind,
+            repairAnalysis.ObservedState,
+            repair.Policy,
+            repairAnalysis.RepairCapability);
 
         var invalidated = !mixedCase || insensitive;
         var expected = invalidated
@@ -89,7 +120,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(true, "owner")]
     [InlineData(true, "schema")]
     [InlineData(true, "column")]
-    public void ColumnKeyInvalidationRetainsExactPhysicalOwnerBoundary(bool constraint, string boundary)
+    public void ColumnKeyInvalidationRetainsExactPhysicalOwnerBoundary(
+        bool constraint,
+        string boundary
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection(
@@ -99,17 +133,34 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var original = ColumnInvalidationKey("physical_key", "Items", constraint, "Owner");
 
         ObserveAccepted(projection, original, SafeMigrationObservedState.Matching);
-        var repair = new SafeMigrationOperation(new EnsureColumnIntent(boundary == "owner" ? "items" : "Items",
-                new ExpectedColumnDefinition(boundary == "column" ? "OtherCode" : "code", typeof(int),
-                    isNullable: true, storeType: "int"),
-                boundary == "schema" ? "owner" : "Owner"),
+        var repair = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                boundary == "owner"
+                    ? "items"
+                    : "Items",
+                new ExpectedColumnDefinition(
+                    boundary == "column"
+                        ? "OtherCode"
+                        : "code",
+                    typeof(int),
+                    isNullable: true,
+                    storeType: "int"),
+                boundary == "schema"
+                    ? "owner"
+                    : "Owner"),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var analysis = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.Safe, postconditionSatisfied: false, "other_owner_repair");
+        var analysis = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            postconditionSatisfied: false,
+            "other_owner_repair");
 
-        var decision = SafeMigrationDecisionPlanner.Plan(repair.Intent.Kind, analysis.ObservedState,
-            repair.Policy, analysis.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            repair.Intent.Kind,
+            analysis.ObservedState,
+            repair.Policy,
+            analysis.RepairCapability);
 
         // Act
         projection.Observe(repair, analysis, analysis, decision);
@@ -128,11 +179,18 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         string? schema = null
     ) => constraint
         ? new EnsureUniqueConstraintIntent(new ExpectedUniqueConstraintDefinition(name, table, ["Code"], schema))
-        : new EnsureIndexIntent(new ExpectedIndexDefinition(name, table,
-            [new ExpectedIndexKeyDefinition("Code")], schema, unique: true));
+        : new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                name,
+                table,
+                [new ExpectedIndexKeyDefinition("Code")],
+                schema,
+                unique: true));
 
     /// <summary>Reads the caller-owned definition to guard against mutation while retiring physical aliases.</summary>
-    private static string ColumnInvalidationKeyMember(SafeMigrationIntent intent) => intent switch
+    private static string ColumnInvalidationKeyMember(
+        SafeMigrationIntent intent
+    ) => intent switch
     {
         EnsureIndexIntent index => index.Definition.Keys[0].Column!,
         EnsureUniqueConstraintIntent constraint => constraint.Definition.Columns[0],

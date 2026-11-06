@@ -16,7 +16,14 @@ public sealed class PostgreSqlPlaceholderReplacementContractTests
         // Arrange
         var indexes = order switch
         {
-            0 => new[] { 0, 1, 2, 3, 4 },
+            0 => new[]
+            {
+                0,
+                1,
+                2,
+                3,
+                4,
+            },
             1 => [4, 3, 2, 1, 0],
             2 => [3, 0, 4, 2, 1, 4, 0, 3, 1, 2],
             _ => throw new ArgumentOutOfRangeException(nameof(order)),
@@ -25,8 +32,11 @@ public sealed class PostgreSqlPlaceholderReplacementContractTests
         var markers = Markers();
         var values = new[]
         {
-            "cached_data_blocked", "fresh_transition", "doka_nullability_blocked",
-            "doka_nullability_repair_eligible", "verified_matching",
+            "cached_data_blocked",
+            "fresh_transition",
+            "doka_nullability_blocked",
+            "doka_nullability_repair_eligible",
+            "verified_matching",
         };
 
         var template = "prefix[" + string.Join(" | ", indexes.Select(index => markers[index])) + "]suffix";
@@ -54,11 +64,15 @@ public sealed class PostgreSqlPlaceholderReplacementContractTests
     {
         // Arrange
         var markers = Markers();
-        var quoted = string.Join(" | ", markers.Select(static marker =>
-            "'escaped ''" + marker + "' || \"escaped\"\"" + marker + "\"")) + " | ";
+        var quoted = string.Join(
+                " | ",
+                markers.Select(static marker =>
+                    "'escaped ''" + marker + "' || \"escaped\"\"" + marker + "\""))
+            + " | ";
 
         var template = quoted + string.Join(" | ", markers);
-        var expected = quoted + "cached_data_blocked | fresh_transition | doka_nullability_blocked"
+        var expected = quoted
+            + "cached_data_blocked | fresh_transition | doka_nullability_blocked"
             + " | doka_nullability_repair_eligible | verified_matching";
 
         var plan = CreatePlan(template);
@@ -89,7 +103,10 @@ public sealed class PostgreSqlPlaceholderReplacementContractTests
         // Act
         var materializedError = Record.Exception(() => plan.RenderStateExpression("blocked", "transition"));
         var appendedError = Record.Exception(() => plan.AppendStateExpression(
-            appended, "blocked", "transition", "verified_matching"));
+            appended,
+            "blocked",
+            "transition",
+            "verified_matching"));
 
         // Assert
         Assert.IsType<InvalidOperationException>(materializedError);
@@ -111,7 +128,8 @@ public sealed class PostgreSqlPlaceholderReplacementContractTests
         // the private contract directly so a future catch-all mapping cannot
         // silently reuse target-matching evidence for a new marker.
         var contract = typeof(PostgreSqlSafeMigrationRuntimePlan).GetNestedType(
-            "PlaceholderReplacements", BindingFlags.NonPublic)
+                "PlaceholderReplacements",
+                BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("The named PostgreSQL proof contract was not found.");
 
         var values = Activator.CreateInstance(contract, "data", "transition", "nulls", "repair", "matching")
@@ -124,7 +142,8 @@ public sealed class PostgreSqlPlaceholderReplacementContractTests
         var error = Record.Exception(() => resolve.Invoke(values, [kind]));
 
         // Assert
-        Assert.IsType<InvalidOperationException>(Assert.IsType<TargetInvocationException>(error).InnerException);
+        Assert.IsType<InvalidOperationException>(Assert.IsType<TargetInvocationException>(error)
+            .InnerException);
     }
 
     /// <summary>Reuses the original string when only quoted marker text is present.</summary>
@@ -180,7 +199,8 @@ public sealed class PostgreSqlPlaceholderReplacementContractTests
         var beforeMaterialization = GC.GetAllocatedBytesForCurrentThread();
         for (var iteration = 0; iteration < iterations; iteration++)
         {
-            materializedCharacters += plan.RenderStateExpression("cached_data_blocked", "fresh_transition").Length;
+            materializedCharacters += plan.RenderStateExpression("cached_data_blocked", "fresh_transition")
+                .Length;
         }
 
         var materializationAllocations = GC.GetAllocatedBytesForCurrentThread() - beforeMaterialization;
@@ -200,7 +220,10 @@ public sealed class PostgreSqlPlaceholderReplacementContractTests
     ) => new(template, "verified_matching", SafeMigrationRepairCapability.Safe, template)
     {
         NullabilityDataProbe = new PostgreSqlSafeMigrationNullabilityDataProbe(
-            "complete_contract", "repair_eligible", "row_probe", "proof_rows"),
+            "complete_contract",
+            "repair_eligible",
+            "row_probe",
+            "proof_rows"),
     };
 
     /// <summary>Lists every structural marker in the scanner's explicit kind order.</summary>

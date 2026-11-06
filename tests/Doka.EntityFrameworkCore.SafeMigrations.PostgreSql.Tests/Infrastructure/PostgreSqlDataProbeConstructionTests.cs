@@ -41,13 +41,15 @@ public sealed class PostgreSqlDataProbeConstructionTests
     public void ProbeOnlyConstruction_MatchesCompletePlan(
         string caseId,
         SafeMigrationPolicy policy,
-        bool includeTransitionEvidence)
+        bool includeTransitionEvidence
+    )
     {
         // Arrange
         using var context = OfflineContext();
         var builder = Builder(context);
         var operation = Operation(caseId, policy);
-        var expected = builder.Build(operation, includeTransitionEvidence: includeTransitionEvidence).DataProbe;
+        var expected = builder.Build(operation, includeTransitionEvidence: includeTransitionEvidence)
+            .DataProbe;
 
         // Act
         var actual = builder.BuildDataProbe(operation, includeTransitionEvidence);
@@ -67,17 +69,22 @@ public sealed class PostgreSqlDataProbeConstructionTests
     [Theory]
     [InlineData("ensure-comment")]
     [InlineData("alter-comment")]
-    public void OrdinaryProbeConstruction_DoesNotRenderDiscardedClassifierFacets(string caseId)
+    public void OrdinaryProbeConstruction_DoesNotRenderDiscardedClassifierFacets(
+        string caseId
+    )
     {
         // Arrange
         using var context = OfflineContext();
         var fullLiterals = new List<string>();
         var probeLiterals = new List<string>();
         var operation = Operation(caseId, SafeMigrationPolicy.RepairIfSafe);
-        var expected = Builder(context, fullLiterals).Build(operation, includeTransitionEvidence: true).DataProbe;
+        var expected = Builder(context, fullLiterals)
+            .Build(operation, includeTransitionEvidence: true)
+            .DataProbe;
 
         // Act
-        var actual = Builder(context, probeLiterals).BuildDataProbe(operation, includeTransitionEvidence: true);
+        var actual = Builder(context, probeLiterals)
+            .BuildDataProbe(operation, includeTransitionEvidence: true);
 
         // Assert
         Assert.NotNull(expected);
@@ -96,17 +103,22 @@ public sealed class PostgreSqlDataProbeConstructionTests
     [InlineData("captured-old")]
     [InlineData("opaque-generated")]
     [InlineData("foreign-captured")]
-    public void SourceBearingProbeConstruction_RetainsCompleteBindingPath(string caseId)
+    public void SourceBearingProbeConstruction_RetainsCompleteBindingPath(
+        string caseId
+    )
     {
         // Arrange
         using var context = OfflineContext();
         var fullLiterals = new List<string>();
         var probeLiterals = new List<string>();
         var operation = Operation(caseId, SafeMigrationPolicy.RepairIfSafe);
-        var expected = Builder(context, fullLiterals).Build(operation, includeTransitionEvidence: true).DataProbe;
+        var expected = Builder(context, fullLiterals)
+            .Build(operation, includeTransitionEvidence: true)
+            .DataProbe;
 
         // Act
-        var actual = Builder(context, probeLiterals).BuildDataProbe(operation, includeTransitionEvidence: true);
+        var actual = Builder(context, probeLiterals)
+            .BuildDataProbe(operation, includeTransitionEvidence: true);
 
         // Assert
         Assert.Equal(expected, actual);
@@ -133,22 +145,32 @@ public sealed class PostgreSqlDataProbeConstructionTests
         new("Host=127.0.0.1;Database=unused;Username=unused", registerSafeMigrations: false);
 
     /// <summary>Optionally observes existing literal calls without replacing native mapping semantics.</summary>
-    private static PostgreSqlSafeMigrationCatalogSqlBuilder Builder(DbContext context, List<string>? literals = null)
+    private static PostgreSqlSafeMigrationCatalogSqlBuilder Builder(
+        DbContext context,
+        List<string>? literals = null
+    )
     {
         var mappings = context.GetService<IRelationalTypeMappingSource>();
         var mapping = mappings.FindMapping(typeof(string))!;
 
-        return new PostgreSqlSafeMigrationCatalogSqlBuilder(mappings, context.GetService<ISqlGenerationHelper>(),
-            literals is null ? null : value =>
-            {
-                literals.Add(value);
+        return new PostgreSqlSafeMigrationCatalogSqlBuilder(
+            mappings,
+            context.GetService<ISqlGenerationHelper>(),
+            literals is null
+                ? null
+                : value =>
+                {
+                    literals.Add(value);
 
-                return mapping.GenerateSqlLiteral(value);
-            });
+                    return mapping.GenerateSqlLiteral(value);
+                });
     }
 
     /// <summary>Retains explicit positive, negative and source-binding producer axes behind serializable IDs.</summary>
-    private static SafeMigrationOperation Operation(string caseId, SafeMigrationPolicy policy)
+    private static SafeMigrationOperation Operation(
+        string caseId,
+        SafeMigrationPolicy policy
+    )
     {
         var target = Definition(40);
         var source = (ExpectedColumnDefinition?)Definition(80);
@@ -180,16 +202,24 @@ public sealed class PostgreSqlDataProbeConstructionTests
                 target = Definition(40, defaultValue: SafeMigrationDefaultValue.Literal("seed"));
                 break;
             case "ensure-structured-default":
-                target = Definition(40, defaultValue: SafeMigrationDefaultValue.Sql(
-                    SafeMigrationSql.Function("lower", SafeMigrationSql.Literal("Seed"))));
+                target = Definition(
+                    40,
+                    defaultValue: SafeMigrationDefaultValue.Sql(
+                        SafeMigrationSql.Function("lower", SafeMigrationSql.Literal("Seed"))));
+
                 break;
             case "ensure-opaque-default":
                 target = Definition(40, defaultValue: SafeMigrationDefaultValue.Sql("application_default()"));
                 break;
             case "ensure-collation":
             case "alter-collation-change":
-                target = new ExpectedColumnDefinition("value", typeof(string), true, "character varying(40)",
+                target = new ExpectedColumnDefinition(
+                    "value",
+                    typeof(string),
+                    true,
+                    "character varying(40)",
                     collation: new SafeMigrationCollationIdentifier("C"));
+
                 break;
             case "ensure-none-annotation":
                 target = AnnotatedDefinition("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
@@ -215,12 +245,22 @@ public sealed class PostgreSqlDataProbeConstructionTests
                 target = new ExpectedColumnDefinition("value", typeof(UnmappedProbeValue), true);
                 break;
             case "ensure-rowversion":
-                target = new ExpectedColumnDefinition("value", typeof(string), true, "character varying(40)",
+                target = new ExpectedColumnDefinition(
+                    "value",
+                    typeof(string),
+                    true,
+                    "character varying(40)",
                     isRowVersion: true);
+
                 break;
             case "ensure-fixed":
-                target = new ExpectedColumnDefinition("value", typeof(string), true, "character(40)",
+                target = new ExpectedColumnDefinition(
+                    "value",
+                    typeof(string),
+                    true,
+                    "character(40)",
                     isFixedLength: true);
+
                 break;
             case "alter-widen":
                 source = Definition(20);
@@ -241,9 +281,15 @@ public sealed class PostgreSqlDataProbeConstructionTests
                 target = GeneratedDefinition(SafeMigrationSql.Identifier("source"));
                 break;
             case "generated-case":
-                target = GeneratedDefinition(SafeMigrationSql.Case(
-                    [new(SafeMigrationSql.IsNotNull(SafeMigrationSql.Identifier("source")),
-                        SafeMigrationSql.Literal("known"))], SafeMigrationSql.Literal("fallback")));
+                target = GeneratedDefinition(
+                    SafeMigrationSql.Case(
+                        [
+                            new SafeMigrationSqlCaseWhenClause(
+                                SafeMigrationSql.IsNotNull(SafeMigrationSql.Identifier("source")),
+                                SafeMigrationSql.Literal("known")),
+                        ],
+                        SafeMigrationSql.Literal("fallback")));
+
                 break;
             case "generated-old":
                 source = GeneratedDefinition(SafeMigrationSql.Identifier("source"), 80);
@@ -257,8 +303,14 @@ public sealed class PostgreSqlDataProbeConstructionTests
                 alter = true;
                 break;
             case "opaque-generated":
-                target = new ExpectedColumnDefinition("value", typeof(string), true, "character varying(40)",
-                    computedColumnSql: "source +", isStored: true);
+                target = new ExpectedColumnDefinition(
+                    "value",
+                    typeof(string),
+                    true,
+                    "character varying(40)",
+                    computedColumnSql: "source +",
+                    isStored: true);
+
                 break;
             case "foreign-captured":
                 target = CapturedDefinition("`source`");
@@ -269,8 +321,10 @@ public sealed class PostgreSqlDataProbeConstructionTests
                 throw new ArgumentOutOfRangeException(nameof(caseId), caseId, "Unknown data-probe case.");
         }
 
-        var intent = alter ? (SafeMigrationIntent)new AlterColumnIntent(table, target, source, schema)
+        var intent = alter
+            ? (SafeMigrationIntent)new AlterColumnIntent(table, target, source, schema)
             : new EnsureColumnIntent(table, target, schema);
+
         var operation = new SafeMigrationOperation(intent, policy);
         if (caseId.EndsWith("operation-annotation", StringComparison.Ordinal))
         {
@@ -285,12 +339,22 @@ public sealed class PostgreSqlDataProbeConstructionTests
         int length,
         bool nullable = true,
         string? comment = null,
-        SafeMigrationDefaultValue? defaultValue = null) =>
-        new("value", typeof(string), nullable, $"character varying({length})", comment: comment,
+        SafeMigrationDefaultValue? defaultValue = null
+    ) =>
+        new(
+            "value",
+            typeof(string),
+            nullable,
+            $"character varying({length})",
+            comment: comment,
             defaultValue: defaultValue);
 
     /// <summary>Uses the real immutable annotation capture rather than synthesizing provider metadata.</summary>
-    private static ExpectedColumnDefinition AnnotatedDefinition(string name, object value, int length = 40)
+    private static ExpectedColumnDefinition AnnotatedDefinition(
+        string name,
+        object value,
+        int length = 40
+    )
     {
         var operation = new AddColumnOperation();
         operation.AddAnnotation(name, value);
@@ -304,21 +368,37 @@ public sealed class PostgreSqlDataProbeConstructionTests
     /// <summary>Keeps generated assignment and source-binding ownership on the original complete plan.</summary>
     private static ExpectedColumnDefinition GeneratedDefinition(
         SafeMigrationSqlExpression expression,
-        int length = 40) =>
-        new("value", typeof(string), true, $"character varying({length})", isStored: true,
+        int length = 40
+    ) =>
+        new(
+            "value",
+            typeof(string),
+            true,
+            $"character varying({length})",
+            isStored: true,
             computedExpression: expression);
 
     /// <summary>Captures the native source together with its finite parsed role tree.</summary>
-    private static ExpectedColumnDefinition CapturedDefinition(string source, int length = 40)
+    private static ExpectedColumnDefinition CapturedDefinition(
+        string source,
+        int length = 40
+    )
     {
-        if (!SafeMigrationSqlExpressionParser.TryParseCapturedSource(source, out var expression,
+        if (!SafeMigrationSqlExpressionParser.TryParseCapturedSource(
+            source,
+            out var expression,
             foldUnquotedIdentifiers: true))
         {
             throw new InvalidOperationException("The source-bearing probe fixture must parse.");
         }
 
-        return new ExpectedColumnDefinition("value", typeof(string), true, $"character varying({length})",
-            isStored: true, computedExpression: expression)
+        return new ExpectedColumnDefinition(
+            "value",
+            typeof(string),
+            true,
+            $"character varying({length})",
+            isStored: true,
+            computedExpression: expression)
         {
             CapturedComputedSql = source,
         };

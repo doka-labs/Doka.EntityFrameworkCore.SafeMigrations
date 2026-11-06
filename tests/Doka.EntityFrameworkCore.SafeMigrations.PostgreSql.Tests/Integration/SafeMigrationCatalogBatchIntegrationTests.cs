@@ -22,10 +22,8 @@ public sealed class SafeMigrationCatalogBatchIntegrationTests : PostgreSqlIntegr
 
         var values = new List<int>();
         await batch.ForEachResultSetAsync(
-            async (
-                    reader,
-                    cancellationToken
-                ) =>
+            async (reader,
+                cancellationToken) =>
             {
                 while (await reader.ReadAsync(cancellationToken))
                 {
@@ -71,15 +69,18 @@ public sealed class SafeMigrationCatalogBatchIntegrationTests : PostgreSqlIntegr
         Assert.Equal(19, command.SequentialCommand!.CommandTimeout);
     }
 
-    private sealed class NonBatchingDbConnection : System.Data.Common.DbConnection
+    private sealed class NonBatchingDbConnection : DbConnection
     {
         private readonly NpgsqlConnection _inner;
 
         public NonBatchingDbConnection(
             NpgsqlConnection inner
-        ) => _inner = inner;
+        )
+        {
+            _inner = inner;
+        }
 
-        [System.Diagnostics.CodeAnalysis.AllowNull]
+        [AllowNull]
         public override string ConnectionString
         {
             get => _inner.ConnectionString;
@@ -92,7 +93,7 @@ public sealed class SafeMigrationCatalogBatchIntegrationTests : PostgreSqlIntegr
 
         public override string ServerVersion => _inner.ServerVersion;
 
-        public override System.Data.ConnectionState State => _inner.State;
+        public override ConnectionState State => _inner.State;
 
         public override void ChangeDatabase(
             string databaseName
@@ -106,11 +107,11 @@ public sealed class SafeMigrationCatalogBatchIntegrationTests : PostgreSqlIntegr
             CancellationToken cancellationToken
         ) => _inner.OpenAsync(cancellationToken);
 
-        protected override System.Data.Common.DbTransaction BeginDbTransaction(
-            System.Data.IsolationLevel isolationLevel
+        protected override DbTransaction BeginDbTransaction(
+            IsolationLevel isolationLevel
         ) => _inner.BeginTransaction(isolationLevel);
 
-        protected override System.Data.Common.DbCommand CreateDbCommand() => _inner.CreateCommand();
+        protected override DbCommand CreateDbCommand() => _inner.CreateCommand();
 
         protected override void Dispose(
             bool disposing

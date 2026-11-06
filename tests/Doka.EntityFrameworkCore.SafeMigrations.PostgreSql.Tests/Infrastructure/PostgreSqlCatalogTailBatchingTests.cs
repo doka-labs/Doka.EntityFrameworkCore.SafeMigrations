@@ -18,31 +18,68 @@ public sealed class PostgreSqlCatalogTailBatchingTests
     {
         // Arrange
         var expected = Inventory(4097, distinctSchemas);
-        await using var connection = new CatalogStatementTestConnection(native,
+        await using var connection = new CatalogStatementTestConnection(
+            native,
             (sql, parameters) => Results(sql, parameters, distinctSchemas));
 
         // Act
         var findings = await PostgreSqlSafeMigrationProviderAnalyzer.ReadUnexpectedInventoryAsync(
-            connection, expected, 71, CancellationToken.None);
+            connection,
+            expected,
+            71,
+            CancellationToken.None);
 
         // Assert
-        Assert.Equal(distinctSchemas ? 8194 : 4098, findings.Count);
+        Assert.Equal(
+            distinctSchemas
+                ? 8194
+                : 4098,
+            findings.Count);
+
         Assert.Equal(4097, findings.Count(static finding => finding.Code == "unexpected_column"));
-        Assert.All(findings.Where(static finding => finding.Code == "unexpected_column"),
+        Assert.All(
+            findings.Where(static finding => finding.Code == "unexpected_column"),
             finding => Assert.Equal("ID", finding.Name));
-        Assert.Equal(distinctSchemas ? 18 : 10, connection.Submissions.Count);
-        int[] expectedCounts = native ? distinctSchemas ? [8, 8, 2] : [8, 2] : [];
+
+        Assert.Equal(
+            distinctSchemas
+                ? 18
+                : 10,
+            connection.Submissions.Count);
+
+        int[] expectedCounts = native
+            ? distinctSchemas
+                ? [8, 8, 2]
+                : [8, 2]
+            : [];
 
         Assert.Equal(expectedCounts, connection.BatchCounts);
-        Assert.All(connection.Submissions, statement =>
-        {
-            Assert.Equal(71, statement.Timeout);
-            Assert.Equal(native, statement.Native);
-            Assert.InRange(statement.Parameters.Count, 0, distinctSchemas ? 1024 : 512);
-            Assert.InRange(Encoding.UTF8.GetByteCount(statement.Sql), 1, 4 * 1024 * 1024);
-        });
+        Assert.All(
+            connection.Submissions,
+            statement =>
+            {
+                Assert.Equal(71, statement.Timeout);
+                Assert.Equal(native, statement.Native);
+                Assert.InRange(
+                    statement.Parameters.Count,
+                    0,
+                    distinctSchemas
+                        ? 1024
+                        : 512);
 
-        Assert.Equal(native ? distinctSchemas ? 3 : 2 : distinctSchemas ? 18 : 10, connection.ReadersDisposed);
+                Assert.InRange(Encoding.UTF8.GetByteCount(statement.Sql), 1, 4 * 1024 * 1024);
+            });
+
+        Assert.Equal(
+            native
+                ? distinctSchemas
+                    ? 3
+                    : 2
+                : distinctSchemas
+                    ? 18
+                    : 10,
+            connection.ReadersDisposed);
+
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
@@ -63,23 +100,29 @@ public sealed class PostgreSqlCatalogTailBatchingTests
     )
     {
         // Arrange
-        await using var connection = new CatalogStatementTestConnection(native, (sql, parameters) =>
-        {
-            var rows = Results(sql, parameters, false);
-            if (!sql.Contains("SELECT 'table'", StringComparison.Ordinal))
+        await using var connection = new CatalogStatementTestConnection(
+            native,
+            (sql, parameters) =>
             {
-                if (fault == "schema")
+                var rows = Results(sql, parameters, false);
+                if (!sql.Contains("SELECT 'table'", StringComparison.Ordinal))
                 {
-                    rows.Rows[0][1] = "other_schema";
+                    if (fault == "schema")
+                    {
+                        rows
+                            .Rows[0][1] = "other_schema";
+                    }
+                    else if (fault is "table" or "case")
+                    {
+                        rows
+                            .Rows[0][2] = fault == "case"
+                            ? "TAIL_0000"
+                            : "foreign_table";
+                    }
                 }
-                else if (fault is "table" or "case")
-                {
-                    rows.Rows[0][2] = fault == "case" ? "TAIL_0000" : "foreign_table";
-                }
-            }
 
-            return rows;
-        })
+                return rows;
+            })
         {
             ReverseResults = fault == "reverse",
         };
@@ -87,11 +130,24 @@ public sealed class PostgreSqlCatalogTailBatchingTests
         // Act
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             PostgreSqlSafeMigrationProviderAnalyzer.ReadUnexpectedInventoryAsync(
-                connection, Inventory(513, false), 71, CancellationToken.None));
+                connection,
+                Inventory(513, false),
+                71,
+                CancellationToken.None));
 
         // Assert
-        Assert.Equal(native ? 1 : 2, connection.ReadersDisposed);
-        Assert.Equal(native ? 1 : 0, connection.BatchesDisposed);
+        Assert.Equal(
+            native
+                ? 1
+                : 2,
+            connection.ReadersDisposed);
+
+        Assert.Equal(
+            native
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
+
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
@@ -100,12 +156,15 @@ public sealed class PostgreSqlCatalogTailBatchingTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task CancelledInventory_ReturnsNoPartialEvidence(bool native)
+    public async Task CancelledInventory_ReturnsNoPartialEvidence(
+        bool native
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
         var reads = 0;
-        await using var connection = new CatalogStatementTestConnection(native,
+        await using var connection = new CatalogStatementTestConnection(
+            native,
             (sql, parameters) => Results(sql, parameters, false))
         {
             BeforeRead = () =>
@@ -120,11 +179,19 @@ public sealed class PostgreSqlCatalogTailBatchingTests
         // Act
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             PostgreSqlSafeMigrationProviderAnalyzer.ReadUnexpectedInventoryAsync(
-                connection, Inventory(513, false), 71, cancellation.Token));
+                connection,
+                Inventory(513, false),
+                71,
+                cancellation.Token));
 
         // Assert
         Assert.Equal(1, connection.ReadersDisposed);
-        Assert.Equal(native ? 1 : 0, connection.BatchesDisposed);
+        Assert.Equal(
+            native
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
+
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
@@ -133,16 +200,29 @@ public sealed class PostgreSqlCatalogTailBatchingTests
     public async Task OversizedInventoryPayload_RejectsBeforeDispatch()
     {
         // Arrange
-        await using var connection = new CatalogStatementTestConnection(true,
+        await using var connection = new CatalogStatementTestConnection(
+            true,
             (sql, parameters) => Results(sql, parameters, false));
 
-        var expected = new[] { new SafeMigrationExpectedTableInventory(
-            new string('x', 4 * 1024 * 1024), null, [], [], [], [], []) };
+        var expected = new[]
+        {
+            new SafeMigrationExpectedTableInventory(
+                new string('x', 4 * 1024 * 1024),
+                null,
+                [],
+                [],
+                [],
+                [],
+                []),
+        };
 
         // Act
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             PostgreSqlSafeMigrationProviderAnalyzer.ReadUnexpectedInventoryAsync(
-                connection, expected, 71, CancellationToken.None));
+                connection,
+                expected,
+                71,
+                CancellationToken.None));
 
         // Assert
         Assert.Empty(connection.Submissions);
@@ -152,9 +232,19 @@ public sealed class PostgreSqlCatalogTailBatchingTests
     private static SafeMigrationExpectedTableInventory[] Inventory(
         int count,
         bool distinctSchemas
-    ) => Enumerable.Range(0, count).Select(index => new SafeMigrationExpectedTableInventory(
-        $"tail_{index:D4}", distinctSchemas ? $"schema_{index:D4}" : null,
-        [new KeyValuePair<string, string?>("id", "integer")], [], [], [], [])).ToArray();
+    ) => Enumerable
+        .Range(0, count)
+        .Select(index => new SafeMigrationExpectedTableInventory(
+            $"tail_{index:D4}",
+            distinctSchemas
+                ? $"schema_{index:D4}"
+                : null,
+            [new KeyValuePair<string, string?>("id", "integer")],
+            [],
+            [],
+            [],
+            []))
+        .ToArray();
 
     private static DataTable Results(
         string sql,
@@ -184,10 +274,14 @@ public sealed class PostgreSqlCatalogTailBatchingTests
         }
         else
         {
-            foreach (var name in parameters.Select(static parameter => (string)parameter.Value!)
-                         .Where(static name => name.StartsWith("tail_", StringComparison.Ordinal)))
+            foreach (var name in parameters
+                .Select(static parameter => (string)parameter.Value!)
+                .Where(static name => name.StartsWith("tail_", StringComparison.Ordinal)))
             {
-                var schema = distinctSchemas ? string.Concat("schema_", name.AsSpan(5)) : "public";
+                var schema = distinctSchemas
+                    ? string.Concat("schema_", name.AsSpan(5))
+                    : "public";
+
                 result.Rows.Add("column", schema, name, "id", "public");
                 result.Rows.Add("column", schema, name, "ID", "public");
             }

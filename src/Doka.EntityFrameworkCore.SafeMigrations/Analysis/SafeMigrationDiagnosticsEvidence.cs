@@ -86,7 +86,7 @@ public sealed class SafeMigrationPreflightException : InvalidOperationException
     /// <summary>Initializes a blocked-preflight exception.</summary>
     /// <param name="report">The immutable blocked preflight report.</param>
     /// <exception cref="ArgumentException">
-    /// <paramref name="report"/> is not a blocked preflight report.
+    /// <paramref name="report" /> is not a blocked preflight report.
     /// </exception>
     public SafeMigrationPreflightException(
         SafeMigrationRunReport report

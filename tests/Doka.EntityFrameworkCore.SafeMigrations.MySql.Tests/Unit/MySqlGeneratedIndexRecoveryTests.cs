@@ -10,13 +10,17 @@ public sealed class MySqlGeneratedIndexRecoveryTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void CaptureRebindsCurrentDatabaseAndOwnerProfile(bool foldOwners)
+    public void CaptureRebindsCurrentDatabaseAndOwnerProfile(
+        bool foldOwners
+    )
     {
         // Arrange
         var options = new DbContextOptionsBuilder<DbContext>()
-            .UseMySql("Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
+            .UseMySql(
+                "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
                 MySqlServerVersion.MySql(new Version(8, 4, 11)))
-            .UseMySqlSafeMigrations().Options;
+            .UseMySqlSafeMigrations()
+            .Options;
 
         using var context = new DbContext(options);
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
@@ -30,7 +34,7 @@ public sealed class MySqlGeneratedIndexRecoveryTests
         Prepare(analyzer, current, "current_database", foldOwners);
         var captures = typeof(MySqlSafeMigrationProviderAnalyzer)
             .GetField("_generatedIndexIdentityProofs", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?.GetValue(analyzer) as System.Collections.IDictionary;
+            ?.GetValue(analyzer) as IDictionary;
 
         // Assert
         if (foldOwners)
@@ -49,29 +53,64 @@ public sealed class MySqlGeneratedIndexRecoveryTests
     /// <summary>
     /// Builds a candidate whose qualified DROP and unqualified generated member share one native owner.
     /// </summary>
-    private static void AddCandidate(MigrationBuilder builder, string dropOwner, string columnOwner,
-        string indexOwner, string database)
+    private static void AddCandidate(
+        MigrationBuilder builder,
+        string dropOwner,
+        string columnOwner,
+        string indexOwner,
+        string database
+    )
     {
         builder.DropColumnIfExists("unrelated", dropOwner, database);
-        builder.EnsureColumn(columnOwner, new ExpectedColumnDefinition("computed", typeof(int), true, "int",
-            computedExpression: SafeMigrationSql.Identifier("source")), SafeMigrationPolicy.ThrowIfDifferent);
-        builder.EnsureIndex(new ExpectedIndexDefinition("ix_computed", indexOwner,
-            [new ExpectedIndexKeyDefinition("computed")], schema: database), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureColumn(
+            columnOwner,
+            new ExpectedColumnDefinition(
+                "computed",
+                typeof(int),
+                true,
+                "int",
+                computedExpression: SafeMigrationSql.Identifier("source")),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "ix_computed",
+                indexOwner,
+                [new ExpectedIndexKeyDefinition("computed")],
+                schema: database),
+            SafeMigrationPolicy.ThrowIfDifferent);
     }
 
     /// <summary>
     /// Sets a proved native identity profile before preparing this invocation's reference-bound captures.
     /// </summary>
-    private static void Prepare(ISafeMigrationProviderAnalyzer analyzer, MigrationBuilder builder,
-        string database, bool foldOwners)
+    private static void Prepare(
+        ISafeMigrationProviderAnalyzer analyzer,
+        MigrationBuilder builder,
+        string database,
+        bool foldOwners
+    )
     {
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
-        typeof(MySqlSafeMigrationProviderAnalyzer).GetField("_currentDatabase", flags)?.SetValue(analyzer, database);
-        typeof(MySqlSafeMigrationProviderAnalyzer).GetField("_tableNamesIgnoreCase", flags)?.SetValue(analyzer,
-            foldOwners);
+        typeof(MySqlSafeMigrationProviderAnalyzer)
+            .GetField("_currentDatabase", flags)
+            ?.SetValue(analyzer, database);
 
-        typeof(MySqlSafeMigrationProviderAnalyzer).GetMethod("PrepareGeneratedIndexIdentityCapture", flags)
-            ?.Invoke(analyzer, [builder.Operations.Cast<SafeMigrationOperation>().ToArray()]);
+        typeof(MySqlSafeMigrationProviderAnalyzer)
+            .GetField("_tableNamesIgnoreCase", flags)
+            ?.SetValue(
+                analyzer,
+                foldOwners);
+
+        typeof(MySqlSafeMigrationProviderAnalyzer)
+            .GetMethod("PrepareGeneratedIndexIdentityCapture", flags)
+            ?.Invoke(analyzer,
+            [
+                builder
+                    .Operations
+                    .Cast<SafeMigrationOperation>()
+                    .ToArray()
+            ]);
     }
 
     /// <summary>Implicit native index creation expires success and absence but retains known conflicts.</summary>
@@ -88,7 +127,10 @@ public sealed class MySqlGeneratedIndexRecoveryTests
     [InlineData(SafeMigrationObservedState.Different, false, true)]
     [InlineData(SafeMigrationObservedState.Different, true, true)]
     public void NamespaceChangesExpireMissingTombstones(
-        SafeMigrationObservedState? identity, bool changed, bool expected)
+        SafeMigrationObservedState? identity,
+        bool changed,
+        bool expected
+    )
     {
         // Arrange
         var state = identity;
@@ -105,7 +147,9 @@ public sealed class MySqlGeneratedIndexRecoveryTests
     public void OrdinaryNonuniqueKeyIsEligible()
     {
         // Arrange
-        var definition = new ExpectedIndexDefinition("ix_generated", "generated_nodes",
+        var definition = new ExpectedIndexDefinition(
+            "ix_generated",
+            "generated_nodes",
             [new ExpectedIndexKeyDefinition("has_descendants")]);
 
         // Act
@@ -126,24 +170,38 @@ public sealed class MySqlGeneratedIndexRecoveryTests
     [InlineData("collation")]
     [InlineData("null_order")]
     [InlineData("operator")]
-    public void IndependentContractFamiliesStayExcluded(string feature)
+    public void IndependentContractFamiliesStayExcluded(
+        string feature
+    )
     {
         // Arrange
         var key = feature switch
         {
             "expression" => new ExpectedIndexKeyDefinition(expression: "has_descendants + 1"),
-            "collation" => new ExpectedIndexKeyDefinition("has_descendants",
+            "collation" => new ExpectedIndexKeyDefinition(
+                "has_descendants",
                 collation: new SafeMigrationCollationIdentifier("utf8mb4_unicode_ci")),
-            "null_order" => new ExpectedIndexKeyDefinition("has_descendants",
+            "null_order" => new ExpectedIndexKeyDefinition(
+                "has_descendants",
                 nullOrder: SafeMigrationIndexNullOrder.First),
             "operator" => new ExpectedIndexKeyDefinition("has_descendants", operatorClass: "custom_operator"),
             _ => new ExpectedIndexKeyDefinition("has_descendants"),
         };
 
-        var definition = new ExpectedIndexDefinition("ix_generated", "generated_nodes", [key],
-            unique: feature == "unique", filter: feature == "filter" ? "has_descendants > 0" : null,
-            includedColumns: feature == "included" ? ["payload"] : null,
-            method: feature == "method" ? "HASH" : null);
+        var definition = new ExpectedIndexDefinition(
+            "ix_generated",
+            "generated_nodes",
+            [key],
+            unique: feature == "unique",
+            filter: feature == "filter"
+                ? "has_descendants > 0"
+                : null,
+            includedColumns: feature == "included"
+                ? ["payload"]
+                : null,
+            method: feature == "method"
+                ? "HASH"
+                : null);
 
         // Act
         var eligible = MySqlSafeMigrationProviderAnalyzer.IsGeneratedIndexRecoveryCandidate(definition);
@@ -158,7 +216,9 @@ public sealed class MySqlGeneratedIndexRecoveryTests
     [InlineData("name_length")]
     [InlineData("reserved")]
     [InlineData("duplicate")]
-    public void InvalidNativeIdentityShapesRemainExcluded(string feature)
+    public void InvalidNativeIdentityShapesRemainExcluded(
+        string feature
+    )
     {
         // Arrange
         var name = feature switch
@@ -167,7 +227,8 @@ public sealed class MySqlGeneratedIndexRecoveryTests
         };
 
         ExpectedIndexKeyDefinition[] keys = feature == "duplicate"
-            ? [new("has_descendants"), new("HAS_DESCENDANTS")] : [new("has_descendants")];
+            ? [new ExpectedIndexKeyDefinition("has_descendants"), new ExpectedIndexKeyDefinition("HAS_DESCENDANTS")]
+            : [new ExpectedIndexKeyDefinition("has_descendants")];
 
         var definition = new ExpectedIndexDefinition(name, "generated_nodes", keys);
 

@@ -1,3 +1,6 @@
+using System.Collections.Frozen;
+using System.Text.RegularExpressions;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Verifies bounded complete dependency transport without application-row probes.</summary>
@@ -8,26 +11,39 @@ public sealed class MySqlColumnDependencyTransportTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task MixedRequestsShareOneCompleteStatement(bool native)
+    public async Task MixedRequestsShareOneCompleteStatement(
+        bool native
+    )
     {
         // Arrange
         var requests = Requests(4);
-        await using var connection = new CatalogStatementTestConnection(native,
+        await using var connection = new CatalogStatementTestConnection(
+            native,
             (sql, _) => Results(sql, requests));
 
         Dictionary<int, (bool Primary, IReadOnlySet<string>? Names)> facts = [];
 
         // Act
         await MySqlSafeMigrationProviderAnalyzer.ReadColumnDependenciesAsync(
-            connection, requests, 4 * 1024 * 1024, 71,
-            (ordinal, primary, names) => facts.Add(ordinal, (primary, names)), CancellationToken.None);
+            connection,
+            requests,
+            4 * 1024 * 1024,
+            71,
+            (ordinal, primary, names) => facts.Add(ordinal, (primary, names)),
+            CancellationToken.None);
 
         // Assert
         var submission = Assert.Single(connection.Submissions);
-        Assert.StartsWith(MySqlSafeMigrationProviderAnalyzer.ColumnDependencyQueryMarker, submission.Sql,
+        Assert.StartsWith(
+            MySqlSafeMigrationProviderAnalyzer.ColumnDependencyQueryMarker,
+            submission.Sql,
             StringComparison.Ordinal);
-        Assert.Contains("rc.DELETE_RULE = 'SET NULL' OR rc.UPDATE_RULE = 'SET NULL'", submission.Sql,
+
+        Assert.Contains(
+            "rc.DELETE_RULE = 'SET NULL' OR rc.UPDATE_RULE = 'SET NULL'",
+            submission.Sql,
             StringComparison.Ordinal);
+
         Assert.Contains("CONSTRAINT_TYPE = 'PRIMARY KEY'", submission.Sql, StringComparison.Ordinal);
         Assert.DoesNotContain("GROUP_CONCAT", submission.Sql, StringComparison.Ordinal);
         Assert.DoesNotContain("JSON_ARRAYAGG", submission.Sql, StringComparison.Ordinal);
@@ -38,7 +54,7 @@ public sealed class MySqlColumnDependencyTransportTests
         var names = Assert.IsAssignableFrom<IReadOnlySet<string>>(facts[0].Names);
         Assert.True(names.SetEquals(["fk_delete_0", "fk_update_0"]));
         Assert.True(names.Contains("FK_DELETE_0"));
-        Assert.IsAssignableFrom<System.Collections.Frozen.FrozenSet<string>>(names);
+        Assert.IsAssignableFrom<FrozenSet<string>>(names);
         Assert.Equal(71, submission.Timeout);
         Assert.Equal(ConnectionState.Open, connection.State);
     }
@@ -49,12 +65,19 @@ public sealed class MySqlColumnDependencyTransportTests
     {
         // Arrange
         var requests = Requests(1);
-        await using var connection = new CatalogStatementTestConnection(true,
+        await using var connection = new CatalogStatementTestConnection(
+            true,
             (sql, _) => Results(sql, requests));
 
         IReadOnlySet<string>? captured = null;
-        await MySqlSafeMigrationProviderAnalyzer.ReadColumnDependenciesAsync(connection, requests,
-            4 * 1024 * 1024, 71, (_, _, names) => captured = names, CancellationToken.None);
+        await MySqlSafeMigrationProviderAnalyzer.ReadColumnDependenciesAsync(
+            connection,
+            requests,
+            4 * 1024 * 1024,
+            71,
+            (_, _, names) => captured = names,
+            CancellationToken.None);
+
         var names = Assert.IsAssignableFrom<ISet<string>>(captured);
         var original = names.ToArray();
 
@@ -63,7 +86,9 @@ public sealed class MySqlColumnDependencyTransportTests
 
         // Assert
         Assert.IsType<NotSupportedException>(exception);
-        Assert.True(Assert.IsAssignableFrom<ICollection<string>>(names).IsReadOnly);
+        Assert.True(Assert.IsAssignableFrom<ICollection<string>>(names)
+            .IsReadOnly);
+
         Assert.True(names.SetEquals(original));
     }
 
@@ -72,33 +97,58 @@ public sealed class MySqlColumnDependencyTransportTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task LargeCapturePreservesBoundedStatements(bool native)
+    public async Task LargeCapturePreservesBoundedStatements(
+        bool native
+    )
     {
         // Arrange
         var requests = Requests(290);
-        await using var connection = new CatalogStatementTestConnection(native,
+        await using var connection = new CatalogStatementTestConnection(
+            native,
             (sql, _) => Results(sql, requests));
 
         HashSet<int> observed = [];
-        int[] expectedBatches = native ? [8, 2] : [];
+        int[] expectedBatches = native
+            ? [8, 2]
+            : [];
 
         // Act
         await MySqlSafeMigrationProviderAnalyzer.ReadColumnDependenciesAsync(
-            connection, requests, 4 * 1024 * 1024, 71,
-            (ordinal, _, _) => Assert.True(observed.Add(ordinal)), CancellationToken.None);
+            connection,
+            requests,
+            4 * 1024 * 1024,
+            71,
+            (ordinal, _, _) => Assert.True(observed.Add(ordinal)),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(290, observed.Count);
         Assert.Equal(10, connection.Submissions.Count);
         Assert.Equal(expectedBatches, connection.BatchCounts);
-        Assert.All(connection.Submissions, submission =>
-        {
-            Assert.InRange(Ordinals(submission.Sql).Length, 1, 32);
-            Assert.InRange(submission.Parameters.Count, 1, 33);
-            Assert.Equal(71, submission.Timeout);
-        });
-        Assert.Equal(native ? 2 : 10, connection.ReadersDisposed);
-        Assert.Equal(native ? 2 : 0, connection.BatchesDisposed);
+        Assert.All(
+            connection.Submissions,
+            submission =>
+            {
+                Assert.InRange(Ordinals(submission.Sql)
+                        .Length,
+                    1,
+                    32);
+
+                Assert.InRange(submission.Parameters.Count, 1, 33);
+                Assert.Equal(71, submission.Timeout);
+            });
+
+        Assert.Equal(
+            native
+                ? 2
+                : 10,
+            connection.ReadersDisposed);
+
+        Assert.Equal(
+            native
+                ? 2
+                : 0,
+            connection.BatchesDisposed);
     }
 
     /// <summary>Payload-qualified splitting retains every request and rolls back unused parameters.</summary>
@@ -107,23 +157,31 @@ public sealed class MySqlColumnDependencyTransportTests
     {
         // Arrange
         var requests = Requests(40, new string('x', 100));
-        await using var connection = new CatalogStatementTestConnection(true,
+        await using var connection = new CatalogStatementTestConnection(
+            true,
             (sql, _) => Results(sql, requests));
 
         HashSet<int> observed = [];
 
         // Act
         await MySqlSafeMigrationProviderAnalyzer.ReadColumnDependenciesAsync(
-            connection, requests, 6500, 71,
-            (ordinal, _, _) => Assert.True(observed.Add(ordinal)), CancellationToken.None);
+            connection,
+            requests,
+            6500,
+            71,
+            (ordinal, _, _) => Assert.True(observed.Add(ordinal)),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(40, observed.Count);
         Assert.True(connection.Submissions.Count > 2);
-        Assert.All(connection.Submissions, submission => Assert.InRange(
-            Encoding.UTF8.GetByteCount(submission.Sql)
+        Assert.All(
+            connection.Submissions,
+            submission => Assert.InRange(
+                Encoding.UTF8.GetByteCount(submission.Sql)
                 + submission.Parameters.Sum(parameter => Encoding.UTF8.GetByteCount((string)parameter.Value!) + 32),
-            1, 6500));
+                1,
+                6500));
     }
 
     /// <summary>Malformed rows never publish even the earlier valid facts of the same statement.</summary>
@@ -142,19 +200,27 @@ public sealed class MySqlColumnDependencyTransportTests
     [InlineData("empty-name")]
     [InlineData("duplicate-name")]
     [InlineData("wrong-width")]
-    public async Task MalformedEvidencePublishesNoStatementFacts(string fault)
+    public async Task MalformedEvidencePublishesNoStatementFacts(
+        string fault
+    )
     {
         // Arrange
         var requests = Requests(4);
-        await using var connection = new CatalogStatementTestConnection(true,
+        await using var connection = new CatalogStatementTestConnection(
+            true,
             (sql, _) => Results(sql, requests, fault));
 
         var observed = 0;
 
         // Act
         var exception = await Record.ExceptionAsync(() =>
-            MySqlSafeMigrationProviderAnalyzer.ReadColumnDependenciesAsync(connection, requests,
-                4 * 1024 * 1024, 71, (_, _, _) => observed++, CancellationToken.None));
+            MySqlSafeMigrationProviderAnalyzer.ReadColumnDependenciesAsync(
+                connection,
+                requests,
+                4 * 1024 * 1024,
+                71,
+                (_, _, _) => observed++,
+                CancellationToken.None));
 
         // Assert
         Assert.IsType<InvalidOperationException>(exception);
@@ -168,13 +234,16 @@ public sealed class MySqlColumnDependencyTransportTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task CancellationPublishesNoIncompleteFacts(bool native)
+    public async Task CancellationPublishesNoIncompleteFacts(
+        bool native
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
         var requests = Requests(4);
         var reads = 0;
-        await using var connection = new CatalogStatementTestConnection(native,
+        await using var connection = new CatalogStatementTestConnection(
+            native,
             (sql, _) => Results(sql, requests))
         {
             BeforeRead = () =>
@@ -190,14 +259,23 @@ public sealed class MySqlColumnDependencyTransportTests
 
         // Act
         var exception = await Record.ExceptionAsync(() =>
-            MySqlSafeMigrationProviderAnalyzer.ReadColumnDependenciesAsync(connection, requests,
-                4 * 1024 * 1024, 71, (_, _, _) => observed++, cancellation.Token));
+            MySqlSafeMigrationProviderAnalyzer.ReadColumnDependenciesAsync(
+                connection,
+                requests,
+                4 * 1024 * 1024,
+                71,
+                (_, _, _) => observed++,
+                cancellation.Token));
 
         // Assert
         Assert.IsAssignableFrom<OperationCanceledException>(exception);
         Assert.Equal(0, observed);
         Assert.Equal(1, connection.ReadersDisposed);
-        Assert.Equal(native ? 1 : 0, connection.BatchesDisposed);
+        Assert.Equal(
+            native
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
     }
 
     /// <summary>Physical dedup uses verified schema aliases and CI members without merging raw table owners.</summary>
@@ -214,17 +292,23 @@ public sealed class MySqlColumnDependencyTransportTests
             Operation("ITEMS", "owner", nullable: false),
         ];
 
-        var analyses = operations.Select(static _ => Safe()).ToArray();
+        var analyses = operations
+            .Select(static _ => Safe())
+            .ToArray();
 
         // Act
         var capture = MySqlSafeMigrationProviderAnalyzer.CreateColumnDependencyRequests(
-            operations, analyses, "selected");
+            operations,
+            analyses,
+            "selected");
 
         // Assert
         Assert.Equal(3, capture.Requests.Count);
         Assert.Same(original, capture.Requests[0].Operation);
-        var consumers = Assert.Single(Assert.IsAssignableFrom<IReadOnlyDictionary<int,
-            HashSet<SafeMigrationOperation>>>(capture.Aliases));
+        var consumers = Assert.Single(
+            Assert.IsAssignableFrom<IReadOnlyDictionary<int,
+                HashSet<SafeMigrationOperation>>>(capture.Aliases));
+
         Assert.Equal(0, consumers.Key);
         Assert.Same(alias, Assert.Single(consumers.Value));
         Assert.True(capture.Requests[1].Nullable);
@@ -251,13 +335,22 @@ public sealed class MySqlColumnDependencyTransportTests
         ];
 
         var capture = MySqlSafeMigrationProviderAnalyzer.CreateColumnDependencyRequests(
-            operations, analyses, "selected");
-        await using var connection = new CatalogStatementTestConnection(true,
+            operations,
+            analyses,
+            "selected");
+
+        await using var connection = new CatalogStatementTestConnection(
+            true,
             static (_, _) => throw new InvalidOperationException("No dependency query was expected."));
 
         // Act
-        await MySqlSafeMigrationProviderAnalyzer.ReadColumnDependenciesAsync(connection, capture.Requests,
-            4 * 1024 * 1024, 71, static (_, _, _) => throw new InvalidOperationException(), CancellationToken.None);
+        await MySqlSafeMigrationProviderAnalyzer.ReadColumnDependenciesAsync(
+            connection,
+            capture.Requests,
+            4 * 1024 * 1024,
+            71,
+            static (_, _, _) => throw new InvalidOperationException(),
+            CancellationToken.None);
 
         // Assert
         Assert.Empty(capture.Requests);
@@ -272,9 +365,15 @@ public sealed class MySqlColumnDependencyTransportTests
         int count,
         string table = "items"
     ) =>
-        Enumerable.Range(0, count).Select(index => new MySqlColumnDependencyRequest(
-            Operation(table, "column_" + index.ToString(CultureInfo.InvariantCulture), index % 2 == 1), table,
-            "column_" + index.ToString(CultureInfo.InvariantCulture), index % 2 == 1, index)).ToArray();
+        Enumerable
+            .Range(0, count)
+            .Select(index => new MySqlColumnDependencyRequest(
+                Operation(table, "column_" + index.ToString(CultureInfo.InvariantCulture), index % 2 == 1),
+                table,
+                "column_" + index.ToString(CultureInfo.InvariantCulture),
+                index % 2 == 1,
+                index))
+            .ToArray();
 
     /// <summary>Creates a reference-distinct repair envelope for a physical target.</summary>
     /// <param name="table">The untouched authored owner.</param>
@@ -287,23 +386,34 @@ public sealed class MySqlColumnDependencyTransportTests
         string column,
         bool nullable,
         string? schema = null
-    ) => new(new EnsureColumnIntent(table,
-            new ExpectedColumnDefinition(column, typeof(int), nullable, "int"), schema),
-            SafeMigrationPolicy.RepairIfSafe);
+    ) => new(
+        new EnsureColumnIntent(
+            table,
+            new ExpectedColumnDefinition(column, typeof(int), nullable, "int"),
+            schema),
+        SafeMigrationPolicy.RepairIfSafe);
 
     /// <summary>Supplies a source-proven safe repair independently of dependency metadata.</summary>
     /// <returns>The independently qualified source result.</returns>
-    private static SafeMigrationProviderAnalysis Safe() => new(SafeMigrationObservedState.Different,
-        SafeMigrationRepairCapability.Safe, false, "safe");
+    private static SafeMigrationProviderAnalysis Safe() => new(
+        SafeMigrationObservedState.Different,
+        SafeMigrationRepairCapability.Safe,
+        false,
+        "safe");
 
     /// <summary>Extracts only the tagged request-source ordinals, independent of row-result contents.</summary>
     /// <param name="sql">The bounded tagged statement.</param>
     /// <returns>The distinct sorted statement-local request identities.</returns>
     private static int[] Ordinals(
         string sql
-    ) => System.Text.RegularExpressions.Regex.Matches(sql,
-            @"SELECT (\d+) AS request_ordinal,").Cast<System.Text.RegularExpressions.Match>()
-        .Select(match => int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture)).Distinct().Order().ToArray();
+    ) => Regex
+        .Matches(
+            sql,
+            @"SELECT (\d+) AS request_ordinal,")
+        .Select(match => int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture))
+        .Distinct()
+        .Order()
+        .ToArray();
 
     /// <summary>Returns explicit statement-local dependency rows and adversarial protocol variants.</summary>
     /// <param name="sql">The tagged request statement.</param>
@@ -325,16 +435,40 @@ public sealed class MySqlColumnDependencyTransportTests
         foreach (var ordinal in Ordinals(sql))
         {
             var nullable = requests[ordinal].Nullable;
-            rows.Rows.Add(ordinal, 0, nullable ? 1L : 0L, DBNull.Value, DBNull.Value);
+            rows.Rows.Add(
+                ordinal,
+                0,
+                nullable
+                    ? 1L
+                    : 0L,
+                DBNull.Value,
+                DBNull.Value);
+
             if (nullable)
             {
-                rows.Rows.Add(ordinal, 1, 1L, ordinal % 4 == 1 ? 1L : 0L, DBNull.Value);
+                rows.Rows.Add(
+                    ordinal,
+                    1,
+                    1L,
+                    ordinal % 4 == 1
+                        ? 1L
+                        : 0L,
+                    DBNull.Value);
             }
             else if (ordinal % 4 == 0)
             {
-                rows.Rows.Add(ordinal, 2, 0L, DBNull.Value,
+                rows.Rows.Add(
+                    ordinal,
+                    2,
+                    0L,
+                    DBNull.Value,
                     "fk_delete_" + ordinal.ToString(CultureInfo.InvariantCulture));
-                rows.Rows.Add(ordinal, 2, 0L, DBNull.Value,
+
+                rows.Rows.Add(
+                    ordinal,
+                    2,
+                    0L,
+                    DBNull.Value,
                     "fk_update_" + ordinal.ToString(CultureInfo.InvariantCulture));
             }
         }
@@ -353,14 +487,30 @@ public sealed class MySqlColumnDependencyTransportTests
                 primary.ItemArray = rows.Rows[4].ItemArray;
                 rows.Rows.InsertAt(primary, 5);
                 break;
-            case "bad-ordinal": rows.Rows[0][0] = 99; break;
-            case "bad-role": rows.Rows[0][1] = 9; break;
-            case "bad-target": rows.Rows[0][2] = true; break;
-            case "truthy-primary": rows.Rows[4][3] = 2L; break;
-            case "string-primary": rows.Rows[4][3] = "1"; break;
-            case "decimal-primary": rows.Rows[4][3] = 1m; break;
-            case "empty-name": rows.Rows[1][4] = string.Empty; break;
-            case "duplicate-name": rows.Rows[2][4] = "FK_DELETE_0"; break;
+            case "bad-ordinal":
+                rows
+                    .Rows[0][0] = 99; break;
+            case "bad-role":
+                rows
+                    .Rows[0][1] = 9; break;
+            case "bad-target":
+                rows
+                    .Rows[0][2] = true; break;
+            case "truthy-primary":
+                rows
+                    .Rows[4][3] = 2L; break;
+            case "string-primary":
+                rows
+                    .Rows[4][3] = "1"; break;
+            case "decimal-primary":
+                rows
+                    .Rows[4][3] = 1m; break;
+            case "empty-name":
+                rows
+                    .Rows[1][4] = string.Empty; break;
+            case "duplicate-name":
+                rows
+                    .Rows[2][4] = "FK_DELETE_0"; break;
             case "wrong-width": rows.Columns.Add("extra", typeof(int)); break;
         }
 

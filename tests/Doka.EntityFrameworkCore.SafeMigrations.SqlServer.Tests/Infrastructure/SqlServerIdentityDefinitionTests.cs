@@ -34,24 +34,39 @@ public sealed class SqlServerIdentityDefinitionTests
         using var context = new SafeMigrationDbContext(ConnectionString);
         var clrType = IdentityClrType(storeType);
 
-        var definition = new ExpectedColumnDefinition("Id", clrType, nullable, storeType,
-            defaultValue: hasDefault ? SafeMigrationDefaultValue.Literal(1) : SafeMigrationDefaultValue.None)
+        var definition = new ExpectedColumnDefinition(
+            "Id",
+            clrType,
+            nullable,
+            storeType,
+            defaultValue: hasDefault
+                ? SafeMigrationDefaultValue.Literal(1)
+                : SafeMigrationDefaultValue.None)
         {
             ProviderAnnotations = IdentityAnnotations("1, 1"),
         };
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("identity_items", definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("identity_items", definition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var catalog = CreateIdentityCatalog(context);
 
         // Act
         var plan = catalog.Build(operation);
-        var inlinePlan = catalog.Build(new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition(
-            "identity_items", [definition]), SafeMigrationTableMode.StrictDefinition), operation.Policy));
+        var inlinePlan = catalog.Build(
+            new SafeMigrationOperation(
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition(
+                        "identity_items",
+                        [definition]),
+                    SafeMigrationTableMode.StrictDefinition),
+                operation.Policy));
 
         var failure = Record.Exception(() =>
-            context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model));
 
         // Assert
         Assert.Equal(!supported, plan.IsStaticallyUnsupported);
@@ -77,14 +92,20 @@ public sealed class SqlServerIdentityDefinitionTests
         using var context = new SafeMigrationDbContext(ConnectionString);
         var first = IdentityIntColumn("First");
         var second = IdentityIntColumn("Second");
-        var operation = new SafeMigrationOperation(new EnsureTableIntent(
-            new ExpectedTableDefinition("identity_items", [first, second]), SafeMigrationTableMode.StrictDefinition),
+        var operation = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("identity_items", [first, second]),
+                SafeMigrationTableMode.StrictDefinition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateIdentityCatalog(context).Build(operation);
+        var plan = CreateIdentityCatalog(context)
+            .Build(operation);
+
         var failure = Record.Exception(() =>
-            context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model));
 
         // Assert
         Assert.True(plan.IsStaticallyUnsupported);
@@ -127,15 +148,21 @@ public sealed class SqlServerIdentityDefinitionTests
             ProviderAnnotations = IdentityAnnotations(identity),
         };
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("identity_items", column),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("identity_items", column),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateIdentityCatalog(context).Build(operation);
+        var plan = CreateIdentityCatalog(context)
+            .Build(operation);
 
         // Assert
         Assert.Equal(!supported, plan.IsStaticallyUnsupported);
-        Assert.Equal(supported ? null : "identity_definition_unproven", plan.UnsupportedCode);
+        Assert.Equal(
+            supported
+                ? null
+                : "identity_definition_unproven",
+            plan.UnsupportedCode);
     }
 
     /// <summary>Preserves every identity fixture's exact CLR mapping and ordinal fallback behavior.</summary>
@@ -156,7 +183,10 @@ public sealed class SqlServerIdentityDefinitionTests
     [InlineData("Decimal(18,0)", typeof(int))]
     [InlineData("FLOAT", typeof(int))]
     [InlineData("unknown", typeof(int))]
-    public void IdentityStoreTypeMappingsPreserveExactClrTypes(string storeType, Type expectedClrType)
+    public void IdentityStoreTypeMappingsPreserveExactClrTypes(
+        string storeType,
+        Type expectedClrType
+    )
     {
         // Arrange: The theory supplies the original store-type and CLR-type pair.
 
@@ -183,7 +213,10 @@ public sealed class SqlServerIdentityDefinitionTests
     [InlineData("1,0", false)]
     [InlineData("9223372036854775808,1", false)]
     [InlineData("1,not-a-number", false)]
-    public void IdentityArgumentsPreserveExactPairValidation(string identity, bool supported)
+    public void IdentityArgumentsPreserveExactPairValidation(
+        string identity,
+        bool supported
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
@@ -192,11 +225,13 @@ public sealed class SqlServerIdentityDefinitionTests
             ProviderAnnotations = IdentityAnnotations(identity),
         };
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("identity_items", column),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("identity_items", column),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateIdentityCatalog(context).Build(operation);
+        var plan = CreateIdentityCatalog(context)
+            .Build(operation);
 
         // Assert
         Assert.Equal(!supported, plan.IsStaticallyUnsupported);
@@ -208,13 +243,20 @@ public sealed class SqlServerIdentityDefinitionTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("identity_items", IdentityIntColumn("Id")),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("identity_items", IdentityIntColumn("Id")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateIdentityCatalog(context).Build(operation);
-        var sql = string.Join("\n", context.GetService<IMigrationsSqlGenerator>()
-            .Generate([operation], context.Model).Select(static command => command.CommandText));
+        var plan = CreateIdentityCatalog(context)
+            .Build(operation);
+
+        var sql = string.Join(
+            "\n",
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model)
+                .Select(static command => command.CommandText));
 
         var classifier = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan);
 
@@ -222,16 +264,25 @@ public sealed class SqlServerIdentityDefinitionTests
         Assert.Contains("sys.identity_columns identity_slot", plan.PrerequisiteExpression, StringComparison.Ordinal);
         Assert.Contains("sys.identity_columns identity_slot", plan.StateExpression, StringComparison.Ordinal);
         Assert.Contains("identity_slot_occupied", plan.ClassificationCodeExpression, StringComparison.Ordinal);
-        Assert.Contains("TRY_CONVERT(decimal(38,0), identity_column.seed_value)", plan.StateExpression,
+        Assert.Contains(
+            "TRY_CONVERT(decimal(38,0), identity_column.seed_value)",
+            plan.StateExpression,
             StringComparison.Ordinal);
-        Assert.Contains("TRY_CONVERT(decimal(38,0), identity_column.increment_value)", plan.Postcondition,
+
+        Assert.Contains(
+            "TRY_CONVERT(decimal(38,0), identity_column.increment_value)",
+            plan.Postcondition,
             StringComparison.Ordinal);
+
         Assert.DoesNotContain("CONVERT(bigint, identity_column", sql, StringComparison.Ordinal);
         Assert.Contains("identity_column.is_not_for_replication = 0", sql, StringComparison.Ordinal);
         Assert.Contains("sys.identity_columns identity_slot", sql, StringComparison.Ordinal);
         Assert.Contains("identity_slot_occupied", classifier, StringComparison.Ordinal);
-        Assert.Contains(plan.PrerequisiteFailureCodeExpression!.Replace("'", "''", StringComparison.Ordinal),
-            classifier, StringComparison.Ordinal);
+        Assert.Contains(
+            plan.PrerequisiteFailureCodeExpression!.Replace("'", "''", StringComparison.Ordinal),
+            classifier,
+            StringComparison.Ordinal);
+
         Assert.Contains("HAS_PERMS_BY_NAME", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
         Assert.DoesNotContain("c.name", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
     }
@@ -243,16 +294,23 @@ public sealed class SqlServerIdentityDefinitionTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = CreateIdentityAnalyzer(context);
-        AcceptIdentityOperation(analyzer, new SafeMigrationOperation(new EnsureColumnIntent(
-            "identity_items", IdentityIntColumn("First")), SafeMigrationPolicy.ThrowIfDifferent));
-        var second = new SafeMigrationOperation(new EnsureColumnIntent("identity_items", IdentityIntColumn("Second")),
+        AcceptIdentityOperation(
+            analyzer,
+            new SafeMigrationOperation(
+                new EnsureColumnIntent(
+                    "identity_items",
+                    IdentityIntColumn("First")),
+                SafeMigrationPolicy.ThrowIfDifferent));
+
+        var second = new SafeMigrationOperation(
+            new EnsureColumnIntent("identity_items", IdentityIntColumn("Second")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var missing = MissingIdentityAnalysis();
 
         // Act
         var before = analyzer.QualifyProjectedIdentityOperation(second, missing);
-        await analyzer.AnalyzeAsync(context, []);
+        await analyzer.AnalyzeAsync(context, [], cancellationToken: CancellationToken.None);
         var after = analyzer.QualifyProjectedIdentityOperation(second, missing);
 
         // Assert
@@ -272,14 +330,20 @@ public sealed class SqlServerIdentityDefinitionTests
         using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = CreateIdentityAnalyzer(context);
         var first = inline
-            ? new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition(
-                "identity_items", [IdentityIntColumn("First")]), SafeMigrationTableMode.StrictDefinition),
+            ? new SafeMigrationOperation(
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition(
+                        "identity_items",
+                        [IdentityIntColumn("First")]),
+                    SafeMigrationTableMode.StrictDefinition),
                 SafeMigrationPolicy.ThrowIfDifferent)
-            : new SafeMigrationOperation(new EnsureColumnIntent("identity_items", IdentityIntColumn("First")),
+            : new SafeMigrationOperation(
+                new EnsureColumnIntent("identity_items", IdentityIntColumn("First")),
                 SafeMigrationPolicy.ThrowIfDifferent);
 
         AcceptIdentityOperation(analyzer, first);
-        var second = new SafeMigrationOperation(new EnsureColumnIntent("identity_items", IdentityIntColumn("Second")),
+        var second = new SafeMigrationOperation(
+            new EnsureColumnIntent("identity_items", IdentityIntColumn("Second")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -301,27 +365,41 @@ public sealed class SqlServerIdentityDefinitionTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = CreateIdentityAnalyzer(context);
-        AcceptIdentityOperation(analyzer, new SafeMigrationOperation(
-            new EnsureColumnIntent("identity_items", IdentityIntColumn("First")),
-            SafeMigrationPolicy.ThrowIfDifferent));
+        AcceptIdentityOperation(
+            analyzer,
+            new SafeMigrationOperation(
+                new EnsureColumnIntent("identity_items", IdentityIntColumn("First")),
+                SafeMigrationPolicy.ThrowIfDifferent));
+
         if (opaque)
         {
             analyzer.ObserveProviderOperation(new SqlOperation { Sql = "SELECT 1;" });
         }
         else
         {
-            var drop = new SafeMigrationOperation(new DropColumnIntent("First", "identity_items"),
+            var drop = new SafeMigrationOperation(
+                new DropColumnIntent("First", "identity_items"),
                 SafeMigrationPolicy.ThrowIfDifferent);
 
-            var matching = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
-                SafeMigrationRepairCapability.None, true, "test_matching");
+            var matching = new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.Matching,
+                SafeMigrationRepairCapability.None,
+                true,
+                "test_matching");
 
-            analyzer.ObserveAcceptedOperation(drop, matching, matching,
-                SafeMigrationDecisionPlanner.Plan(drop.Intent.Kind, matching.ObservedState, drop.Policy,
+            analyzer.ObserveAcceptedOperation(
+                drop,
+                matching,
+                matching,
+                SafeMigrationDecisionPlanner.Plan(
+                    drop.Intent.Kind,
+                    matching.ObservedState,
+                    drop.Policy,
                     matching.RepairCapability));
         }
 
-        var second = new SafeMigrationOperation(new EnsureColumnIntent("identity_items", IdentityIntColumn("Second")),
+        var second = new SafeMigrationOperation(
+            new EnsureColumnIntent("identity_items", IdentityIntColumn("Second")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -339,10 +417,18 @@ public sealed class SqlServerIdentityDefinitionTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = CreateIdentityAnalyzer(context);
-        AcceptIdentityOperation(analyzer, new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition(
-            "identity_items", [new ExpectedColumnDefinition("Value", typeof(int), false, "int")]),
-            SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent));
-        var identity = new SafeMigrationOperation(new EnsureColumnIntent("identity_items", IdentityIntColumn("Id")),
+        AcceptIdentityOperation(
+            analyzer,
+            new SafeMigrationOperation(
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition(
+                        "identity_items",
+                        [new ExpectedColumnDefinition("Value", typeof(int), false, "int")]),
+                    SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationPolicy.ThrowIfDifferent));
+
+        var identity = new SafeMigrationOperation(
+            new EnsureColumnIntent("identity_items", IdentityIntColumn("Id")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var missing = MissingIdentityAnalysis();
@@ -357,7 +443,9 @@ public sealed class SqlServerIdentityDefinitionTests
     /// <summary>Maps the identity fixtures' authored store types without changing their ordinal matching.</summary>
     /// <param name="storeType">The physical type supplied by a fixture.</param>
     /// <returns>The exact CLR type used to construct the expected column.</returns>
-    private static Type IdentityClrType(string storeType)
+    private static Type IdentityClrType(
+        string storeType
+    )
     {
         if (storeType.StartsWith("decimal", StringComparison.Ordinal)
             || storeType.StartsWith("numeric", StringComparison.Ordinal))
@@ -389,25 +477,15 @@ public sealed class SqlServerIdentityDefinitionTests
     )
     {
         var missing = MissingIdentityAnalysis();
-        analyzer.ObserveAcceptedOperation(operation, missing, missing,
-            SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, missing.ObservedState, operation.Policy,
+        analyzer.ObserveAcceptedOperation(
+            operation,
+            missing,
+            missing,
+            SafeMigrationDecisionPlanner.Plan(
+                operation.Intent.Kind,
+                missing.ObservedState,
+                operation.Policy,
                 missing.RepairCapability));
-    }
-
-    private sealed class EmptyIdentityColumns : ISafeMigrationProjectedColumnSource
-    {
-        /// <inheritdoc />
-        public bool TryGetProjectedColumn(
-            string table,
-            string? schema,
-            string column,
-            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ExpectedColumnDefinition? definition
-        )
-        {
-            definition = null;
-
-            return false;
-        }
     }
 
     private static ExpectedColumnDefinition IdentityIntColumn(
@@ -430,4 +508,20 @@ public sealed class SqlServerIdentityDefinitionTests
     private static SqlServerSafeMigrationCatalogSqlBuilder CreateIdentityCatalog(
         DbContext context
     ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+
+    private sealed class EmptyIdentityColumns : ISafeMigrationProjectedColumnSource
+    {
+        /// <inheritdoc />
+        public bool TryGetProjectedColumn(
+            string table,
+            string? schema,
+            string column,
+            [NotNullWhen(true)] out ExpectedColumnDefinition? definition
+        )
+        {
+            definition = null;
+
+            return false;
+        }
+    }
 }

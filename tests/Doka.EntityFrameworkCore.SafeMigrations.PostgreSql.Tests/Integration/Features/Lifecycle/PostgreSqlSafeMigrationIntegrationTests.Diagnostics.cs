@@ -22,7 +22,8 @@ public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrat
             + "CONSTRAINT fk_diagnostic_dependent_principal FOREIGN KEY (principal_id) "
             + "REFERENCES diagnostic_principal (id) ON UPDATE CASCADE ON DELETE CASCADE); "
             + "CREATE INDEX ix_diagnostic_dependent_values "
-            + "ON diagnostic_dependent (second_value, first_value);");
+            + "ON diagnostic_dependent (second_value, first_value);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -36,6 +37,7 @@ public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrat
                 onUpdate: ReferentialAction.NoAction,
                 onDelete: ReferentialAction.Restrict),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.EnsureIndex(
             new ExpectedIndexDefinition(
                 "ix_diagnostic_dependent_values",
@@ -91,8 +93,16 @@ public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrat
             ", ",
             dependentColumns.Select(column => $"{PostgreSqlIdentifier(column)} integer NOT NULL"));
 
-        var reversedPrincipalKeys = string.Join(", ", principalColumns.Reverse().Select(PostgreSqlIdentifier));
-        var reversedDependentKeys = string.Join(", ", dependentColumns.Reverse().Select(PostgreSqlIdentifier));
+        var reversedPrincipalKeys = string.Join(", ",
+            principalColumns
+                .Reverse()
+                .Select(PostgreSqlIdentifier));
+
+        var reversedDependentKeys = string.Join(", ",
+            dependentColumns
+                .Reverse()
+                .Select(PostgreSqlIdentifier));
+
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
@@ -101,7 +111,8 @@ public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrat
             + $"CREATE TABLE long_diagnostic_dependent (id integer NOT NULL PRIMARY KEY, {dependentDefinitions}, "
             + "CONSTRAINT fk_long_diagnostic FOREIGN KEY "
             + $"({reversedDependentKeys}) REFERENCES long_diagnostic_principal ({reversedPrincipalKeys})); "
-            + $"CREATE INDEX ix_long_diagnostic ON long_diagnostic_dependent ({reversedDependentKeys});");
+            + $"CREATE INDEX ix_long_diagnostic ON long_diagnostic_dependent ({reversedDependentKeys});",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -113,6 +124,7 @@ public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrat
                 "long_diagnostic_principal",
                 principalColumns),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.EnsureIndex(
             new ExpectedIndexDefinition(
                 "ix_long_diagnostic",
@@ -128,21 +140,24 @@ public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrat
                 new SafeMigrationRunOptions("long-typed-diagnostics"),
                 CancellationToken.None);
 
-        var differences = report.Assessments
+        var differences = report
+            .Assessments
             .SelectMany(static assessment => assessment.Differences)
             .Where(static difference => difference.Facet is "foreign_key_column_order" or "index_key_order")
             .ToArray();
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(2, differences.Length);
-        Assert.All(differences, static difference =>
-        {
-            Assert.StartsWith("md5:", difference.Expected, StringComparison.Ordinal);
-            Assert.StartsWith("md5:", difference.Actual, StringComparison.Ordinal);
-            Assert.NotEqual(difference.Expected, difference.Actual);
-            Assert.InRange(difference.Expected.Length, 1, 256);
-            Assert.InRange(difference.Actual.Length, 1, 256);
-        });
+        Assert.All(
+            differences,
+            static difference =>
+            {
+                Assert.StartsWith("md5:", difference.Expected, StringComparison.Ordinal);
+                Assert.StartsWith("md5:", difference.Actual, StringComparison.Ordinal);
+                Assert.NotEqual(difference.Expected, difference.Actual);
+                Assert.InRange(difference.Expected.Length, 1, 256);
+                Assert.InRange(difference.Actual.Length, 1, 256);
+            });
     }
 
     [Fact]
@@ -154,7 +169,8 @@ public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE diagnostic_defaults (value character varying(40) NULL DEFAULT '{liveDefault}');");
+            $"CREATE TABLE diagnostic_defaults (value character varying(40) NULL DEFAULT '{liveDefault}');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -195,5 +211,4 @@ public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrat
         Assert.DoesNotContain(liveDefault, exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(targetDefault, exception.Message, StringComparison.Ordinal);
     }
-
 }

@@ -68,20 +68,6 @@ internal sealed partial class SqlServerProjectedDependencyGraph
         }
     }
 
-    /// <summary>Represents one FK's compact physical cascading contract.</summary>
-    /// <param name="Dependent">The dependent physical table id.</param>
-    /// <param name="Principal">The principal physical table id.</param>
-    /// <param name="OnDelete">The dependent action caused by deletion.</param>
-    /// <param name="OnUpdate">The dependent action caused by update.</param>
-    /// <param name="PrincipalKeyIndex">The captured backing index, or null for an unbound projected edge.</param>
-    internal readonly record struct ForeignKeyEdge(
-        int Dependent,
-        int Principal,
-        ReferentialAction OnDelete,
-        ReferentialAction OnUpdate,
-        int? PrincipalKeyIndex = null
-    );
-
     private SafeMigrationProviderAnalysis ValidateForeignKeys(
         IReadOnlyList<ExpectedForeignKeyDefinition> foreignKeys,
         SafeMigrationProviderAnalysis analysis,
@@ -172,7 +158,7 @@ internal sealed partial class SqlServerProjectedDependencyGraph
 
         return analysis is
         {
-            ObservedState: SafeMigrationObservedState.PrerequisiteMissing, Code: "foreign_key_cascade_topology"
+            ObservedState: SafeMigrationObservedState.PrerequisiteMissing, Code: "foreign_key_cascade_topology",
         }
             ? new SafeMigrationProviderAnalysis(
                 SafeMigrationObservedState.Missing,
@@ -181,6 +167,20 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                 "projected_foreign_key_topology_ready")
             : analysis;
     }
+
+    /// <summary>Represents one FK's compact physical cascading contract.</summary>
+    /// <param name="Dependent">The dependent physical table id.</param>
+    /// <param name="Principal">The principal physical table id.</param>
+    /// <param name="OnDelete">The dependent action caused by deletion.</param>
+    /// <param name="OnUpdate">The dependent action caused by update.</param>
+    /// <param name="PrincipalKeyIndex">The captured backing index, or null for an unbound projected edge.</param>
+    internal readonly record struct ForeignKeyEdge(
+        int Dependent,
+        int Principal,
+        ReferentialAction OnDelete,
+        ReferentialAction OnUpdate,
+        int? PrincipalKeyIndex = null
+    );
 
     private readonly record struct ActionNode(
         int Table,

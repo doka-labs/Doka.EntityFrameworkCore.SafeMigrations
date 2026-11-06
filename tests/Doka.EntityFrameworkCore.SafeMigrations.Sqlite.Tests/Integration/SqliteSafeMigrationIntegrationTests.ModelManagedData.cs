@@ -6,14 +6,16 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
     [Fact]
     public async Task CompositeKeysUpdatesDeletesAndNullUniqueValuesConvergeInOrder()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE composite_managed_rows ("
             + "tenant_id INTEGER NOT NULL, id INTEGER NOT NULL, code TEXT NULL, managed_value TEXT NOT NULL, "
             + "PRIMARY KEY (tenant_id, id), UNIQUE (code)); "
             + "INSERT INTO composite_managed_rows (tenant_id, id, code, managed_value) VALUES "
-            + "(1, 1, 'updated', 'source'), (2, 1, 'removed', 'source');");
+            + "(1, 1, 'updated', 'source'), (2, 1, 'removed', 'source');",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel(
@@ -24,6 +26,7 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             ["INTEGER", "INTEGER", "TEXT", "TEXT"],
             new object?[,] { { 1, 2, null, "target" } },
             uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["code"])]);
+
         builder.UpdateModelManagedDataFromModel(
             "composite_managed_rows",
             ["tenant_id", "id"],
@@ -34,6 +37,7 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             new object?[,] { { "updated", "source" } },
             new object?[,] { { "updated", "target" } },
             uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["code"])]);
+
         builder.DeleteModelManagedDataFromModel(
             "composite_managed_rows",
             ["tenant_id", "id"],
@@ -42,20 +46,23 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             ["tenant_id", "id", "code", "managed_value"],
             ["INTEGER", "INTEGER", "TEXT", "TEXT"],
             new object?[,] { { 2, 1, "removed", "source" } });
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-composite-model-data"));
+            new SafeMigrationRunOptions("sqlite-composite-model-data"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var replay = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-composite-model-data-replay"));
+            new SafeMigrationRunOptions("sqlite-composite-model-data-replay"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[0].Action);
@@ -66,27 +73,34 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             2,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM composite_managed_rows WHERE managed_value = 'target';"));
+                "SELECT COUNT(*) FROM composite_managed_rows WHERE managed_value = 'target';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM composite_managed_rows WHERE code IS NULL;"));
+                "SELECT COUNT(*) FROM composite_managed_rows WHERE code IS NULL;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM composite_managed_rows WHERE tenant_id = 2 AND id = 1;"));
+                "SELECT COUNT(*) FROM composite_managed_rows WHERE tenant_id = 2 AND id = 1;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task ModelManagedUpdateWithUnexpectedSourceValue_IsRejectedWithoutOverwrite()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE managed_drift (id INTEGER NOT NULL PRIMARY KEY, managed_value TEXT NOT NULL); "
-            + "INSERT INTO managed_drift (id, managed_value) VALUES (1, 'operator-change');");
+            + "INSERT INTO managed_drift (id, managed_value) VALUES (1, 'operator-change');",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.UpdateModelManagedDataFromModel(
@@ -104,7 +118,8 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-model-data-drift"));
+                new SafeMigrationRunOptions("sqlite-model-data-drift"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
@@ -113,13 +128,14 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             1,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM managed_drift WHERE id = 1 AND managed_value = 'operator-change';"));
+                "SELECT COUNT(*) FROM managed_drift WHERE id = 1 AND managed_value = 'operator-change';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task InitialTableAndModelManagedData_ApplyReplayAndVerify()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -134,6 +150,7 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
                 table.PrimaryKey("pk_managed_roles", value => value.Id);
                 table.UniqueConstraint("uq_managed_roles_code", value => value.Code);
             });
+
         builder.EnsureModelManagedDataFromModel(
             "managed_roles",
             ["Id"],
@@ -142,25 +159,29 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             ["INTEGER", "TEXT"],
             new object?[,] { { 1, "administrator" } },
             uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Code"])]);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-managed-initial"));
+            new SafeMigrationRunOptions("sqlite-managed-initial"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var replay = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-managed-replay"));
+            new SafeMigrationRunOptions("sqlite-managed-replay"),
+            cancellationToken: CancellationToken.None);
 
         var postflight = await runner.VerifyAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-managed-postflight"));
+            new SafeMigrationRunOptions("sqlite-managed-postflight"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.All(preflight.Assessments, assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
@@ -172,7 +193,8 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             1,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM managed_roles WHERE Id = 1 AND Code = 'administrator';"));
+                "SELECT COUNT(*) FROM managed_roles WHERE Id = 1 AND Code = 'administrator';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>An inserted row cannot reuse an existing unique value or mutate either table.</summary>
@@ -180,8 +202,8 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
     public async Task ModelManagedData_UniqueCollisionFailsClosedWithoutMutation()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateManagedRoleDependencyFixtureAsync(connection);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateManagedRoleDependencyFixtureAsync(connection, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var collision = new MigrationBuilder(context.Database.ProviderName!);
         collision.EnsureModelManagedDataFromModel(
@@ -192,20 +214,33 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             ["INTEGER", "TEXT"],
             new object?[,] { { 3, "member" } },
             uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Code"])]);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
         var report = await runner.AnalyzeAsync(
             context,
             collision.Operations,
-            new SafeMigrationRunOptions("sqlite-managed-collision"));
+            new SafeMigrationRunOptions("sqlite-managed-collision"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState);
         Assert.Equal("model_managed_unique_collision", assessment.AnalysisCode);
-        Assert.Equal(2, await ScalarIntAsync(connection, "SELECT COUNT(*) FROM managed_roles;"));
-        Assert.Equal(1, await ScalarIntAsync(connection, "SELECT COUNT(*) FROM managed_assignments;"));
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM managed_roles;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM managed_assignments;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Deleting a referenced row requires modeled dependency evidence and leaves all rows intact.</summary>
@@ -213,8 +248,8 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
     public async Task ModelManagedData_UnmodeledDependencyDeletionFailsClosedWithoutMutation()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateManagedRoleDependencyFixtureAsync(connection);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateManagedRoleDependencyFixtureAsync(connection, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var unmodeledDelete = new MigrationBuilder(context.Database.ProviderName!);
         unmodeledDelete.DeleteModelManagedDataFromModel(
@@ -225,24 +260,41 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             ["Id", "Code"],
             ["INTEGER", "TEXT"],
             new object?[,] { { 1, "administrator" } });
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
         var report = await runner.AnalyzeAsync(
             context,
             unmodeledDelete.Operations,
-            new SafeMigrationRunOptions("sqlite-managed-unmodeled-dependency"));
+            new SafeMigrationRunOptions("sqlite-managed-unmodeled-dependency"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
         Assert.Equal("model_managed_unmodeled_dependency", assessment.AnalysisCode);
-        Assert.Equal(2, await ScalarIntAsync(connection, "SELECT COUNT(*) FROM managed_roles;"));
-        Assert.Equal(1, await ScalarIntAsync(connection, "SELECT COUNT(*) FROM managed_assignments;"));
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM managed_roles;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM managed_assignments;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Creates the original small dependency fixture independently for each rejection contract.</summary>
-    private static Task CreateManagedRoleDependencyFixtureAsync(SqliteConnection connection)
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
+    private static Task CreateManagedRoleDependencyFixtureAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken
+    )
         => ExecuteSqlAsync(
             connection,
             "CREATE TABLE managed_roles ("
@@ -251,12 +303,13 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             + "Id INTEGER NOT NULL PRIMARY KEY, RoleId INTEGER NOT NULL, "
             + "CONSTRAINT fk_managed_assignments_role FOREIGN KEY (RoleId) REFERENCES managed_roles (Id)); "
             + "INSERT INTO managed_roles (Id, Code) VALUES (1, 'administrator'), (2, 'member'); "
-            + "INSERT INTO managed_assignments (Id, RoleId) VALUES (11, 1);");
+            + "INSERT INTO managed_assignments (Id, RoleId) VALUES (11, 1);",
+            cancellationToken: cancellationToken);
 
     [Fact]
     public async Task OrderedModelManagedDependencyDeletion_IsProjectedAndAppliedWithoutCascade()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE managed_roles (Id INTEGER NOT NULL PRIMARY KEY, Code TEXT NOT NULL); "
@@ -265,7 +318,9 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             + "CONSTRAINT fk_managed_assignments_role FOREIGN KEY (RoleId) "
             + "REFERENCES managed_roles (Id) ON DELETE CASCADE); "
             + "INSERT INTO managed_roles (Id, Code) VALUES (1, 'administrator'); "
-            + "INSERT INTO managed_assignments (Id, RoleId) VALUES (11, 1);");
+            + "INSERT INTO managed_assignments (Id, RoleId) VALUES (11, 1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DeleteModelManagedDataFromModel(
@@ -276,6 +331,7 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             ["Id", "RoleId"],
             ["INTEGER", "INTEGER"],
             new object?[,] { { 11, 1 } });
+
         builder.DeleteModelManagedDataFromModel(
             "managed_roles",
             ["Id"],
@@ -291,19 +347,22 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
                     ["RoleId"],
                     ["Id"]),
             ]);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-managed-dependency-handoff"));
+            new SafeMigrationRunOptions("sqlite-managed-dependency-handoff"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var replay = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-managed-dependency-replay"));
+            new SafeMigrationRunOptions("sqlite-managed-dependency-replay"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
         Assert.Equal(SafeMigrationObservedState.TransitionReady, preflight.Assessments[0].ObservedState);
@@ -311,14 +370,25 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
         Assert.Equal("projected_model_managed_data_state_unknown", preflight.Assessments[1].AnalysisCode);
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
         Assert.All(replay.Assessments, assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
-        Assert.Equal(0, await ScalarIntAsync(connection, "SELECT COUNT(*) FROM managed_roles;"));
-        Assert.Equal(0, await ScalarIntAsync(connection, "SELECT COUNT(*) FROM managed_assignments;"));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM managed_roles;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM managed_assignments;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task ModelManagedDependencyWithoutPriorDelete_IsDataBlocked()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE managed_roles (Id INTEGER NOT NULL PRIMARY KEY, Code TEXT NOT NULL); "
@@ -326,7 +396,9 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             + "Id INTEGER NOT NULL PRIMARY KEY, RoleId INTEGER NOT NULL, "
             + "FOREIGN KEY (RoleId) REFERENCES managed_roles (Id) ON DELETE CASCADE); "
             + "INSERT INTO managed_roles (Id, Code) VALUES (1, 'administrator'); "
-            + "INSERT INTO managed_assignments (Id, RoleId) VALUES (11, 1);");
+            + "INSERT INTO managed_assignments (Id, RoleId) VALUES (11, 1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DeleteModelManagedDataFromModel(
@@ -350,13 +422,25 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-managed-dependency-blocked"));
+                new SafeMigrationRunOptions("sqlite-managed-dependency-blocked"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState);
         Assert.Equal("model_managed_dependency", assessment.AnalysisCode);
-        Assert.Equal(1, await ScalarIntAsync(connection, "SELECT COUNT(*) FROM managed_roles;"));
-        Assert.Equal(1, await ScalarIntAsync(connection, "SELECT COUNT(*) FROM managed_assignments;"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM managed_roles;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM managed_assignments;",
+                cancellationToken: CancellationToken.None));
     }
 }

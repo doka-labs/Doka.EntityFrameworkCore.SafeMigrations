@@ -8,26 +8,53 @@ internal sealed class SqliteGeneratedRenameTargetContext<TShape>(
 ) : DbContext
 {
     /// <inheritdoc />
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    protected override void OnConfiguring(
+        DbContextOptionsBuilder optionsBuilder
+    )
     {
-        optionsBuilder.UseSqlite(connection).UseSqliteSafeMigrations();
+        optionsBuilder
+            .UseSqlite(connection)
+            .UseSqliteSafeMigrations();
+
         optionsBuilder.UseInternalServiceProvider(internalServices);
     }
 
     /// <inheritdoc />
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    protected override void OnModelCreating(
+        ModelBuilder modelBuilder
+    )
     {
-        var source = typeof(TShape) == typeof(SqliteGeneratedRenamedShape) ? "renamed" : "source";
-        modelBuilder.Entity("GeneratedTargetNode", entity =>
-        {
-            entity.ToTable("source_nodes", table =>
-                table.HasCheckConstraint("ck_source_nodes", "\"" + source + "\" >= 0"));
-            entity.Property<int>("Id").HasColumnName("id").ValueGeneratedNever();
-            entity.HasKey("Id").HasName("pk_source_nodes");
-            entity.Property<int>("Source").HasColumnName(source);
-            entity.Property<int>("Derived").HasColumnName("derived")
-                .HasComputedColumnSql("\"" + source + "\" + 1", stored: false);
-        });
+        var source = typeof(TShape) == typeof(SqliteGeneratedRenamedShape)
+            ? "renamed"
+            : "source";
+
+        modelBuilder.Entity(
+            "GeneratedTargetNode",
+            entity =>
+            {
+                entity.ToTable(
+                    "source_nodes",
+                    table =>
+                        table.HasCheckConstraint("ck_source_nodes", "\"" + source + "\" >= 0"));
+
+                entity
+                    .Property<int>("Id")
+                    .HasColumnName("id")
+                    .ValueGeneratedNever();
+
+                entity
+                    .HasKey("Id")
+                    .HasName("pk_source_nodes");
+
+                entity
+                    .Property<int>("Source")
+                    .HasColumnName(source);
+
+                entity
+                    .Property<int>("Derived")
+                    .HasColumnName("derived")
+                    .HasComputedColumnSql("\"" + source + "\" + 1", stored: false);
+            });
     }
 }
 

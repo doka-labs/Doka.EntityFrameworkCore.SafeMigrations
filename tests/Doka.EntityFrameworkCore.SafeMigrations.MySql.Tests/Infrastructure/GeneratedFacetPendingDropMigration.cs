@@ -6,16 +6,23 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 public sealed class GeneratedFacetPendingDropMigration : Migration
 {
     /// <inheritdoc />
-    protected override void Up(MigrationBuilder migrationBuilder)
+    protected override void Up(
+        MigrationBuilder migrationBuilder
+    )
         => migrationBuilder.DropColumnIfExists("unrelated", GeneratedFacetPendingDropDbContext.TableName);
 
     /// <inheritdoc />
-    protected override void Down(MigrationBuilder migrationBuilder)
-        => migrationBuilder.EnsureColumn(GeneratedFacetPendingDropDbContext.TableName,
+    protected override void Down(
+        MigrationBuilder migrationBuilder
+    )
+        => migrationBuilder.EnsureColumn(
+            GeneratedFacetPendingDropDbContext.TableName,
             new ExpectedColumnDefinition("unrelated", typeof(int), true, "int"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <inheritdoc />
-    protected override void BuildTargetModel(ModelBuilder modelBuilder)
+    protected override void BuildTargetModel(
+        ModelBuilder modelBuilder
+    )
         => GeneratedFacetPendingDropDbContext.ConfigureModel(modelBuilder);
 }

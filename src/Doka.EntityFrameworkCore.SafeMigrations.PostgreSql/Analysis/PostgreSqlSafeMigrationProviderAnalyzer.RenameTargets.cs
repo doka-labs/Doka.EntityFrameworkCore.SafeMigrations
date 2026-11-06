@@ -20,6 +20,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         cancellationToken.ThrowIfCancellationRequested();
 
         List<int>? candidates = null;
+
         // WHY: Keep rename candidates aligned with their original analysis ordinals.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -54,10 +55,15 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             {
                 var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
                 var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
-                    _typeMappingSource, _sqlGenerationHelper, parameters.AddString, parameters.Add);
+                    _typeMappingSource,
+                    _sqlGenerationHelper,
+                    parameters.AddString,
+                    parameters.Add);
 
-                var selections = new List<string>(Math.Min(
-                    SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement, candidates.Count - offset));
+                var selections = new List<string>(
+                    Math.Min(
+                        SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
+                        candidates.Count - offset));
 
                 var sqlBytes = trailerBytes;
                 while (offset + selections.Count < candidates.Count
@@ -79,10 +85,14 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                         + $", {intermediate}, {sourceSupported}";
 
                     var selectionBytes = Encoding.UTF8.GetByteCount(selection)
-                        + (selections.Count == 0 ? 0 : separatorBytes);
+                        + (selections.Count == 0
+                            ? 0
+                            : separatorBytes);
 
                     var payloadBytes = checked(sqlBytes + selectionBytes + parameters.Utf8PayloadBytes);
-                    if (SafeMigrationCatalogQueryLimits.Exceeded(parameters.Count, payloadBytes,
+                    if (SafeMigrationCatalogQueryLimits.Exceeded(
+                        parameters.Count,
+                        payloadBytes,
                         SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes))
                     {
                         var parameterCount = parameters.Count;
@@ -90,7 +100,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                         if (selections.Count == 0)
                         {
                             throw SafeMigrationCatalogQueryLimits.OversizedOperation(
-                                ordinal, parameterCount, payloadBytes);
+                                ordinal,
+                                parameterCount,
+                                payloadBytes);
                         }
 
                         break;
@@ -104,7 +116,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     + SafeMigrationCatalogQueryLimits.Trailer;
 
                 return new SafeMigrationCatalogProbeStatement(
-                    selections.Count, parameters.Utf8PayloadBytes, candidates[offset]);
+                    selections.Count,
+                    parameters.Utf8PayloadBytes,
+                    candidates[offset]);
             },
             async (reader, offset, count, token) =>
             {
@@ -124,21 +138,27 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
                     var intent = operations[candidates[offset + row]].Intent;
                     var hasIntermediate = intent is RenameTableIntent table
-                        && table.NewName is not null && table.NewName != table.Name
-                        && table.NewSchema is not null && table.NewSchema != table.Schema;
+                        && table.NewName is not null
+                        && table.NewName != table.Name
+                        && table.NewSchema is not null
+                        && table.NewSchema != table.Schema;
 
                     var hasSourceSupported = intent is RenameIndexIntent;
                     if (reader.GetValue(1) is not bool target
                         || reader.IsDBNull(2) == hasIntermediate
-                        || hasIntermediate && reader.GetValue(2) is not bool
+                        || (hasIntermediate && reader.GetValue(2) is not bool)
                         || reader.IsDBNull(3) == hasSourceSupported
-                        || hasSourceSupported && reader.GetValue(3) is not bool)
+                        || (hasSourceSupported && reader.GetValue(3) is not bool))
                     {
                         throw InvalidRenameTargetResult();
                     }
 
-                    targets[offset + row] = (target, hasIntermediate ? reader.GetBoolean(2) : null,
-                        hasSourceSupported ? reader.GetBoolean(3) : null);
+                    targets[offset + row] = (target, hasIntermediate
+                            ? reader.GetBoolean(2)
+                            : null,
+                        hasSourceSupported
+                            ? reader.GetBoolean(3)
+                            : null);
 
                     row++;
                 }
@@ -157,14 +177,18 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         for (var index = 0; index < candidates.Count; index++)
         {
             var ordinal = candidates[index];
-            results[ordinal] = results[ordinal].WithRenameTargetExists(
-                targets[index].Target, targets[index].Intermediate);
+            results[ordinal] = results[ordinal]
+                .WithRenameTargetExists(
+                    targets[index].Target,
+                    targets[index].Intermediate);
+
             if (targets[index].SourceSupported is { } supported)
             {
                 // WHY: Different can describe a wrong owner or attached
                 // constraint index, not just an occupied destination. A later
                 // target drop discharges only the latter conflict.
-                results[ordinal] = results[ordinal].WithRenameSourceSupported(supported);
+                results[ordinal] = results[ordinal]
+                    .WithRenameSourceSupported(supported);
             }
         }
     }

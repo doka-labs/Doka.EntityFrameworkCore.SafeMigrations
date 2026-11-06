@@ -3,6 +3,108 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 /// <summary>Preserves ordered narrowing eligibility while building only bounded transition SQL windows.</summary>
 public sealed class PostgreSqlTransitionProbeWindowTests
 {
+    /// <summary>Reset clears every observation only after the prior probe resources have been disposed.</summary>
+    /// <param name="native">Whether the deterministic transport uses native batching.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ResetCaptures_ClearsSubmissionsBatchesAndAllDisposalCounters(
+        bool native
+    )
+    {
+        // Arrange
+        using var context = OfflineContext();
+        await using var connection = new CatalogStatementTestConnection(native, EligibilityRows);
+        var operations = Operations(33);
+        _ = await ResolveAsync(
+            Analyzer(context),
+            connection,
+            operations,
+            new SafeMigrationObservedState?[33],
+            CancellationToken.None);
+
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT 0, TRUE, FALSE;";
+            using var reader = command.ExecuteReader();
+            _ = reader.Read();
+        }
+
+        connection
+            .BeginTransaction()
+            .Dispose();
+
+        var before = (
+            Commands: connection.CommandsDisposed,
+            Batches: connection.BatchesDisposed,
+            Readers: connection.ReadersDisposed,
+            Transactions: connection.TransactionsDisposed);
+
+        var hadSubmissions = connection.Submissions.Count > 0;
+        var hadBatches = connection.BatchCounts.Count > 0;
+
+        // Act
+        connection.ResetCaptures();
+        connection.ResetCaptures();
+
+        // Assert
+        Assert.True(hadSubmissions);
+        Assert.Equal(native, hadBatches);
+        Assert.True(before.Commands > 0);
+        Assert.Equal(native, before.Batches > 0);
+        Assert.True(before.Readers > 0);
+        Assert.Equal(1, before.Transactions);
+        Assert.Empty(connection.Submissions);
+        Assert.Empty(connection.BatchCounts);
+        Assert.Equal(0, connection.CommandsDisposed);
+        Assert.Equal(0, connection.BatchesDisposed);
+        Assert.Equal(0, connection.ReadersDisposed);
+        Assert.Equal(0, connection.TransactionsDisposed);
+        Assert.Equal(ConnectionState.Open, connection.State);
+    }
+
+    /// <summary>Reset makes replay observations invocation-local without changing SQL, results or transport.</summary>
+    /// <param name="native">Whether the deterministic transport uses native batching.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ResetCaptures_ReplayRetainsExactOutputWithoutAccumulatingObservations(
+        bool native
+    )
+    {
+        // Arrange
+        using var context = OfflineContext();
+        var analyzer = Analyzer(context);
+        var operations = Operations(33);
+        var states = new SafeMigrationObservedState?[33];
+        await using var connection = new CatalogStatementTestConnection(native, EligibilityRows);
+        var first = await ResolveAsync(analyzer, connection, operations, states, CancellationToken.None);
+        var sql = connection
+            .Submissions
+            .Select(static submission => submission.Sql)
+            .ToArray();
+
+        var batches = connection.BatchCounts.ToArray();
+        var disposals = (connection.CommandsDisposed, connection.BatchesDisposed, connection.ReadersDisposed);
+
+        // Act
+        connection.ResetCaptures();
+        var replay = await ResolveAsync(analyzer, connection, operations, states, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(sql, connection.Submissions.Select(static submission => submission.Sql));
+        Assert.Equal(batches, connection.BatchCounts);
+        Assert.Equal(disposals, (connection.CommandsDisposed, connection.BatchesDisposed, connection.ReadersDisposed));
+        Assert.Equal(first.Length, replay.Length);
+        for (var ordinal = 0; ordinal < first.Length; ordinal++)
+        {
+            Assert.Equal(first.GetValue(ordinal), replay.GetValue(ordinal));
+        }
+
+        Assert.Equal(0, connection.TransactionsDisposed);
+        Assert.Equal(ConnectionState.Open, connection.State);
+    }
+
     /// <summary>Each bounded statement preserves the original eligibility SQL and operation ordinals.</summary>
     /// <param name="count">The candidate count surrounding the transport boundary.</param>
     /// <param name="native">Whether the deterministic connection provides native batching.</param>
@@ -30,20 +132,30 @@ public sealed class PostgreSqlTransitionProbeWindowTests
         using var context = OfflineContext();
         var analyzer = Analyzer(context);
         var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var operations = Operations(count);
-        var expected = operations.Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
-            .Select((chunk, window) => string.Join(SafeMigrationCatalogQueryLimits.Separator,
-                chunk.Select((operation, index) => EligibilitySql(builder, operation,
-                    window * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement + index)))
-                + SafeMigrationCatalogQueryLimits.Trailer).ToArray();
+        var expected = operations
+            .Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+            .Select((chunk, window) => string.Join(
+                    SafeMigrationCatalogQueryLimits.Separator,
+                    chunk.Select((operation, index) => EligibilitySql(
+                        builder,
+                        operation,
+                        window * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement + index)))
+                + SafeMigrationCatalogQueryLimits.Trailer)
+            .ToArray();
 
         await using var connection = new CatalogStatementTestConnection(native, EligibilityRows);
 
         // Act
-        var result = await ResolveAsync(analyzer, connection, operations,
-            new SafeMigrationObservedState?[count], CancellationToken.None);
+        var result = await ResolveAsync(
+            analyzer,
+            connection,
+            operations,
+            new SafeMigrationObservedState?[count],
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(expected, connection.Submissions.Select(static submission => submission.Sql));
@@ -55,15 +167,24 @@ public sealed class PostgreSqlTransitionProbeWindowTests
             Assert.False(Fact(result.GetValue(ordinal), "IsBlocked"));
         }
 
-        Assert.All(connection.Submissions, static submission =>
-        {
-            Assert.Equal(71, submission.Timeout);
-            Assert.Empty(submission.Parameters);
-            Assert.InRange(Encoding.UTF8.GetByteCount(submission.Sql), 1,
-                SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes);
-        });
+        Assert.All(
+            connection.Submissions,
+            static submission =>
+            {
+                Assert.Equal(71, submission.Timeout);
+                Assert.Empty(submission.Parameters);
+                Assert.InRange(
+                    Encoding.UTF8.GetByteCount(submission.Sql),
+                    1,
+                    SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes);
+            });
 
-        Assert.Equal(native ? (expected.Length + 7) / 8 : expected.Length, connection.ReadersDisposed);
+        Assert.Equal(
+            native
+                ? (expected.Length + 7) / 8
+                : expected.Length,
+            connection.ReadersDisposed);
+
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
@@ -90,7 +211,10 @@ public sealed class PostgreSqlTransitionProbeWindowTests
         Assert.Equal(result.GetValue(1), result.GetValue(512));
         Assert.Equal(result.GetValue(2), result.GetValue(513));
         Assert.Equal(16, connection.Submissions.Count);
-        var ordinals = connection.Submissions.SelectMany(static submission => Ordinals(submission.Sql)).ToArray();
+        var ordinals = connection
+            .Submissions
+            .SelectMany(static submission => Ordinals(submission.Sql))
+            .ToArray();
 
         Assert.Equal(Enumerable.Range(1, 510), ordinals);
         Assert.DoesNotContain(512, ordinals);
@@ -102,51 +226,65 @@ public sealed class PostgreSqlTransitionProbeWindowTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task EligibilityWindows_RowFactsKeepIndependentSourceContracts(bool native)
+    public async Task EligibilityWindows_RowFactsKeepIndependentSourceContracts(
+        bool native
+    )
     {
         // Arrange
         using var context = OfflineContext();
-        var first = new SafeMigrationOperation(new AlterColumnIntent("window_rows",
-            new ExpectedColumnDefinition("alpha", typeof(string), true, "character varying(40)"),
-            new ExpectedColumnDefinition("alpha", typeof(string), true, "character varying(80)")),
+        var first = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "window_rows",
+                new ExpectedColumnDefinition("alpha", typeof(string), true, "character varying(40)"),
+                new ExpectedColumnDefinition("alpha", typeof(string), true, "character varying(80)")),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var otherSource = new SafeMigrationOperation(new AlterColumnIntent("window_rows",
-            new ExpectedColumnDefinition("alpha", typeof(string), true, "character varying(40)"),
-            new ExpectedColumnDefinition("alpha", typeof(string), true, "character varying(60)")),
+        var otherSource = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "window_rows",
+                new ExpectedColumnDefinition("alpha", typeof(string), true, "character varying(40)"),
+                new ExpectedColumnDefinition("alpha", typeof(string), true, "character varying(60)")),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var otherColumn = new SafeMigrationOperation(new AlterColumnIntent("window_rows",
-            new ExpectedColumnDefinition("beta", typeof(string), true, "character varying(10)"),
-            new ExpectedColumnDefinition("beta", typeof(string), true, "character varying(80)")),
+        var otherColumn = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "window_rows",
+                new ExpectedColumnDefinition("beta", typeof(string), true, "character varying(10)"),
+                new ExpectedColumnDefinition("beta", typeof(string), true, "character varying(80)")),
             SafeMigrationPolicy.RepairIfSafe);
 
         SafeMigrationOperation[] operations = [first, otherSource, otherColumn, first];
-        await using var connection = new CatalogStatementTestConnection(native, (sql, parameters) =>
-        {
-            if (sql.StartsWith("SELECT COALESCE(bool_or(", StringComparison.Ordinal))
+        await using var connection = new CatalogStatementTestConnection(
+            native,
+            (sql, parameters) =>
             {
-                var facts = new DataTable();
-                facts.Columns.Add("alpha", typeof(bool));
-                facts.Columns.Add("beta", typeof(bool));
-                facts.Rows.Add(true, false);
+                if (sql.StartsWith("SELECT COALESCE(bool_or(", StringComparison.Ordinal))
+                {
+                    var facts = new DataTable();
+                    facts.Columns.Add("alpha", typeof(bool));
+                    facts.Columns.Add("beta", typeof(bool));
+                    facts.Rows.Add(true, false);
 
-                return facts;
-            }
+                    return facts;
+                }
 
-            var rows = EligibilityRows(sql, parameters);
-            foreach (DataRow row in rows.Rows)
-            {
-                row[1] = (int)row[0] != 1;
-                row[2] = true;
-            }
+                var rows = EligibilityRows(sql, parameters);
+                foreach (DataRow row in rows.Rows)
+                {
+                    row[1] = (int)row[0] != 1;
+                    row[2] = true;
+                }
 
-            return rows;
-        });
+                return rows;
+            });
 
         // Act
-        var result = await ResolveAsync(Analyzer(context), connection, operations,
-            new SafeMigrationObservedState?[operations.Length], CancellationToken.None);
+        var result = await ResolveAsync(
+            Analyzer(context),
+            connection,
+            operations,
+            new SafeMigrationObservedState?[operations.Length],
+            CancellationToken.None);
 
         // Assert
         Assert.True(Fact(result.GetValue(0), "IsTransitionEligible"));
@@ -160,7 +298,8 @@ public sealed class PostgreSqlTransitionProbeWindowTests
         Assert.False(Fact(result.GetValue(2), "IsBlocked"));
         Assert.Equal(result.GetValue(0), result.GetValue(3));
         Assert.Equal(2, connection.Submissions.Count);
-        Assert.Equal("SELECT COALESCE(bool_or(alpha IS NOT NULL AND char_length(alpha) > 40), FALSE), "
+        Assert.Equal(
+            "SELECT COALESCE(bool_or(alpha IS NOT NULL AND char_length(alpha) > 40), FALSE), "
             + "COALESCE(bool_or(beta IS NOT NULL AND char_length(beta) > 10), FALSE) FROM window_rows;",
             connection.Submissions[1].Sql);
     }
@@ -168,53 +307,86 @@ public sealed class PostgreSqlTransitionProbeWindowTests
     /// <summary>A corrupt eligibility window cannot assign a physical proof to the wrong operation.</summary>
     /// <param name="fault">The injected ordinal or result-cardinality fault.</param>
     /// <param name="native">Whether the deterministic connection uses native transport.</param>
+    /// <param name="capture">Whether diagnostic observations are retained.</param>
     [Theory]
-    [InlineData("ordinal", true)]
-    [InlineData("ordinal", false)]
-    [InlineData("missing", true)]
-    [InlineData("missing", false)]
-    [InlineData("extra", true)]
-    [InlineData("extra", false)]
-    public async Task EligibilityWindows_RejectUnownedOrIncompleteRows(string fault, bool native)
+    [InlineData("ordinal", true, true)]
+    [InlineData("ordinal", false, true)]
+    [InlineData("missing", true, true)]
+    [InlineData("missing", false, true)]
+    [InlineData("extra", true, true)]
+    [InlineData("extra", false, true)]
+    [InlineData("ordinal", true, false)]
+    [InlineData("ordinal", false, false)]
+    [InlineData("missing", true, false)]
+    [InlineData("missing", false, false)]
+    [InlineData("extra", true, false)]
+    [InlineData("extra", false, false)]
+    public async Task EligibilityWindows_RejectUnownedOrIncompleteRows(
+        string fault,
+        bool native,
+        bool capture
+    )
     {
         // Arrange
         using var context = OfflineContext();
-        await using var connection = new CatalogStatementTestConnection(native, (sql, parameters) =>
-        {
-            var rows = EligibilityRows(sql, parameters);
-            if (fault == "ordinal")
+        await using var connection = new CatalogStatementTestConnection(
+            native,
+            (sql, parameters) =>
             {
-                rows.Rows[0][0] = -1;
-            }
-            else if (fault == "missing")
-            {
-                rows.Rows.RemoveAt(rows.Rows.Count - 1);
-            }
-            else
-            {
-                rows.Rows.Add(999, true, false);
-            }
+                var rows = EligibilityRows(sql, parameters);
+                if (fault == "ordinal")
+                {
+                    rows
+                        .Rows[0][0] = -1;
+                }
+                else if (fault == "missing")
+                {
+                    rows.Rows.RemoveAt(rows.Rows.Count - 1);
+                }
+                else
+                {
+                    rows.Rows.Add(999, true, false);
+                }
 
-            return rows;
-        });
+                return rows;
+            }) { CaptureObservations = capture };
 
         // Act
         await Assert.ThrowsAsync<InvalidOperationException>(() => ResolveAsync(
-            Analyzer(context), connection, Operations(513), new SafeMigrationObservedState?[513],
+            Analyzer(context),
+            connection,
+            Operations(513),
+            new SafeMigrationObservedState?[513],
             CancellationToken.None));
 
         // Assert
-        Assert.Equal(1, connection.ReadersDisposed);
-        Assert.Equal(native ? 1 : 0, connection.BatchesDisposed);
+        Assert.Equal(
+            capture
+                ? 1
+                : 0,
+            connection.ReadersDisposed);
+
+        Assert.Equal(
+            native && capture
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
+
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
     /// <summary>Cancellation within a window rejects the entire phase rather than returning partial evidence.</summary>
     /// <param name="native">Whether the deterministic connection uses native transport.</param>
+    /// <param name="capture">Whether diagnostic observations are retained.</param>
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task EligibilityWindows_CancellationDisposesTransportWithoutPartialEvidence(bool native)
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    public async Task EligibilityWindows_CancellationDisposesTransportWithoutPartialEvidence(
+        bool native,
+        bool capture
+    )
     {
         // Arrange
         using var context = OfflineContext();
@@ -222,6 +394,7 @@ public sealed class PostgreSqlTransitionProbeWindowTests
         var reads = 0;
         await using var connection = new CatalogStatementTestConnection(native, EligibilityRows)
         {
+            CaptureObservations = capture,
             BeforeRead = () =>
             {
                 if (++reads == 2)
@@ -233,12 +406,25 @@ public sealed class PostgreSqlTransitionProbeWindowTests
 
         // Act
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ResolveAsync(
-            Analyzer(context), connection, Operations(513), new SafeMigrationObservedState?[513],
+            Analyzer(context),
+            connection,
+            Operations(513),
+            new SafeMigrationObservedState?[513],
             cancellation.Token));
 
         // Assert
-        Assert.Equal(1, connection.ReadersDisposed);
-        Assert.Equal(native ? 1 : 0, connection.BatchesDisposed);
+        Assert.Equal(
+            capture
+                ? 1
+                : 0,
+            connection.ReadersDisposed);
+
+        Assert.Equal(
+            native && capture
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
+
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
@@ -247,33 +433,46 @@ public sealed class PostgreSqlTransitionProbeWindowTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task EligibilityWindows_ResetEvidenceAcrossRepeatedAndEmptyInvocations(bool native)
+    public async Task EligibilityWindows_ResetEvidenceAcrossRepeatedAndEmptyInvocations(
+        bool native
+    )
     {
         // Arrange
         using var context = OfflineContext();
         var analyzer = Analyzer(context);
         var operations = Operations(33);
         var eligible = false;
-        await using var connection = new CatalogStatementTestConnection(native, (sql, parameters) =>
-        {
-            var rows = EligibilityRows(sql, parameters);
-            foreach (DataRow row in rows.Rows)
+        await using var connection = new CatalogStatementTestConnection(
+            native,
+            (sql, parameters) =>
             {
-                row[1] = eligible;
-            }
+                var rows = EligibilityRows(sql, parameters);
+                foreach (DataRow row in rows.Rows)
+                {
+                    row[1] = eligible;
+                }
 
-            return rows;
-        });
+                return rows;
+            });
 
         // Act
-        var first = await ResolveAsync(analyzer, connection, operations,
-            new SafeMigrationObservedState?[operations.Length], CancellationToken.None);
+        var first = await ResolveAsync(
+            analyzer,
+            connection,
+            operations,
+            new SafeMigrationObservedState?[operations.Length],
+            CancellationToken.None);
+
         var beforeEmpty = connection.Submissions.Count;
         var empty = await ResolveAsync(analyzer, connection, [], [], CancellationToken.None);
         var afterEmpty = connection.Submissions.Count;
         eligible = true;
-        var repeated = await ResolveAsync(analyzer, connection, operations,
-            new SafeMigrationObservedState?[operations.Length], CancellationToken.None);
+        var repeated = await ResolveAsync(
+            analyzer,
+            connection,
+            operations,
+            new SafeMigrationObservedState?[operations.Length],
+            CancellationToken.None);
 
         // Assert
         Assert.Empty(empty);
@@ -291,16 +490,26 @@ public sealed class PostgreSqlTransitionProbeWindowTests
     }
 
     private static SafeMigrationDbContext OfflineContext() => new(
-        "Host=127.0.0.1;Database=unused;Username=unused", registerSafeMigrations: false);
+        "Host=127.0.0.1;Database=unused;Username=unused",
+        registerSafeMigrations: false);
 
-    private static PostgreSqlSafeMigrationProviderAnalyzer Analyzer(DbContext context) => new(
-        context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    private static PostgreSqlSafeMigrationProviderAnalyzer Analyzer(
+        DbContext context
+    ) => new(
+        context.GetService<IRelationalTypeMappingSource>(),
+        context.GetService<ISqlGenerationHelper>());
 
-    private static SafeMigrationOperation[] Operations(int count) => Enumerable.Range(0, count)
-        .Select(static index => new SafeMigrationOperation(new AlterColumnIntent("window_rows",
-            new ExpectedColumnDefinition($"value_{index:D5}", typeof(string), true, "character varying(40)"),
-            new ExpectedColumnDefinition($"value_{index:D5}", typeof(string), true, "character varying(80)")),
-            SafeMigrationPolicy.RepairIfSafe)).ToArray();
+    private static SafeMigrationOperation[] Operations(
+        int count
+    ) => Enumerable
+        .Range(0, count)
+        .Select(static index => new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "window_rows",
+                new ExpectedColumnDefinition($"value_{index:D5}", typeof(string), true, "character varying(40)"),
+                new ExpectedColumnDefinition($"value_{index:D5}", typeof(string), true, "character varying(80)")),
+            SafeMigrationPolicy.RepairIfSafe))
+        .ToArray();
 
     private static string EligibilitySql(
         PostgreSqlSafeMigrationCatalogSqlBuilder builder,
@@ -308,7 +517,8 @@ public sealed class PostgreSqlTransitionProbeWindowTests
         int ordinal
     )
     {
-        var probe = builder.Build(operation, includeTransitionEvidence: true).DataProbe
+        var probe = builder.Build(operation, includeTransitionEvidence: true)
+                .DataProbe
             ?? throw new InvalidOperationException("The test operation must have a narrowing proof.");
 
         return $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
@@ -316,7 +526,10 @@ public sealed class PostgreSqlTransitionProbeWindowTests
             + $"COALESCE(({probe.NarrowingExpression}), FALSE)";
     }
 
-    private static DataTable EligibilityRows(string sql, IReadOnlyList<DbParameter> parameters)
+    private static DataTable EligibilityRows(
+        string sql,
+        IReadOnlyList<DbParameter> parameters
+    )
     {
         var rows = new DataTable();
         rows.Columns.Add("ordinal", typeof(int));
@@ -330,9 +543,11 @@ public sealed class PostgreSqlTransitionProbeWindowTests
         return rows;
     }
 
-    private static IEnumerable<int> Ordinals(string sql)
+    private static IEnumerable<int> Ordinals(
+        string sql
+    )
     {
-        foreach (var selection in sql.Split(SafeMigrationCatalogQueryLimits.Separator, StringSplitOptions.None))
+        foreach (var selection in sql.Split(SafeMigrationCatalogQueryLimits.Separator))
         {
             var start = selection.IndexOf("SELECT ", StringComparison.Ordinal) + 7;
             var end = selection.IndexOf(',', start);
@@ -341,11 +556,16 @@ public sealed class PostgreSqlTransitionProbeWindowTests
         }
     }
 
-    private static bool Fact(object? result, string name)
+    private static bool Fact(
+        object? result,
+        string name
+    )
     {
         Assert.NotNull(result);
 
-        return Assert.IsType<bool>(result.GetType().GetProperty(name)!.GetValue(result));
+        return Assert.IsType<bool>(result
+            .GetType()
+            .GetProperty(name)!.GetValue(result));
     }
 
     /// <summary>Exercises the real private phase without adding an unused production API solely for tests.</summary>
@@ -358,7 +578,8 @@ public sealed class PostgreSqlTransitionProbeWindowTests
     )
     {
         var method = typeof(PostgreSqlSafeMigrationProviderAnalyzer).GetMethod(
-            "ResolveDataProbeResultsAsync", BindingFlags.Instance | BindingFlags.NonPublic)
+                "ResolveDataProbeResultsAsync",
+                BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("The narrowing resolution method is absent.");
 
         var task = (Task)(method.Invoke(analyzer, [connection, operations, states, 71, token])
@@ -366,7 +587,9 @@ public sealed class PostgreSqlTransitionProbeWindowTests
 
         await task;
 
-        return (Array)(task.GetType().GetProperty("Result")!.GetValue(task)
+        return (Array)(task
+                .GetType()
+                .GetProperty("Result")!.GetValue(task)
             ?? throw new InvalidOperationException("The narrowing resolution result is absent."));
     }
 }

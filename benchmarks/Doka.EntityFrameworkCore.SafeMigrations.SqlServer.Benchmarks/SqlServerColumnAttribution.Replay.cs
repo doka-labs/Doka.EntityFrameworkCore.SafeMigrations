@@ -1,6 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks;
 
-internal static partial class SqlServerColumnAttribution
+public partial class SqlServerColumnAttribution
 {
     /// <summary>Confirms a genuine safe repair preserves all data before measuring its matching replay.</summary>
     private static void PrepareRepairReplay(
@@ -14,7 +14,11 @@ internal static partial class SqlServerColumnAttribution
     )
     {
         var before = Snapshot(connection, scenario);
-        var analyses = analyzer.AnalyzeAsync(context, operations).GetAwaiter().GetResult();
+        var analyses = analyzer
+            .AnalyzeAsync(context, operations, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
         if (analyses.Count != 1
             || analyses[0].ObservedState != SafeMigrationObservedState.Different
             || analyses[0].RepairCapability != SafeMigrationRepairCapability.Safe)
@@ -25,12 +29,20 @@ internal static partial class SqlServerColumnAttribution
         WriteJson(Path.Combine(output, "initial-repair-analysis.json"), analyses);
         ExecuteGenerated(connection, commands, scenario);
         var after = Snapshot(connection, scenario);
-        if (before.AsSpan(0, 64).SequenceEqual(after.AsSpan(0, 64)) is false)
+        if (before
+            .AsSpan(0, 64)
+            .SequenceEqual(after.AsSpan(0, 64)) is false)
         {
             throw new InvalidOperationException("The initial safe repair changed fixture row data.");
         }
 
-        ValidateAnalyses(analyzer.AnalyzeAsync(context, operations).GetAwaiter().GetResult(), scenario);
+        ValidateAnalyses(
+            analyzer
+                .AnalyzeAsync(context, operations, CancellationToken.None)
+                .GetAwaiter()
+                .GetResult(),
+            scenario);
+
         var fingerprints = new
         {
             Before = before,

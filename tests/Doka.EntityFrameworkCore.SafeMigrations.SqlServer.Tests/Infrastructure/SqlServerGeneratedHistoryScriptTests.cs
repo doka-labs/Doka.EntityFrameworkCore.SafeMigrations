@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>Exercises real generated-upgrade migration SQL without depending on a native engine.</summary>
@@ -9,14 +11,17 @@ public sealed class SqlServerGeneratedHistoryScriptTests
     [InlineData("\n")]
     [InlineData("\r")]
     [InlineData("\r\n")]
-    public void IdempotentTransportPreservesLongQuotedUnicodePayload(string lineEnding)
+    public void IdempotentTransportPreservesLongQuotedUnicodePayload(
+        string lineEnding
+    )
     {
         // Arrange
         var original = new string('x', 4097) + "O'Brien\\path" + lineEnding + "GO" + lineEnding + "\u20ac\ud83d\ude00";
 
         // Act
         var sql = SqlServerSafeMigrationsSqlGenerator.ProtectCommandSql(
-            original, MigrationsSqlGenerationOptions.Idempotent);
+            original,
+            MigrationsSqlGenerationOptions.Idempotent);
 
         var payloads = DecodeIdempotentPayloads(sql);
 
@@ -33,7 +38,9 @@ public sealed class SqlServerGeneratedHistoryScriptTests
     [InlineData(MigrationsSqlGenerationOptions.Default)]
     [InlineData(MigrationsSqlGenerationOptions.Script)]
     [InlineData(MigrationsSqlGenerationOptions.Script | MigrationsSqlGenerationOptions.NoTransactions)]
-    public void NonIdempotentTransportReturnsTheOriginalCommand(MigrationsSqlGenerationOptions options)
+    public void NonIdempotentTransportReturnsTheOriginalCommand(
+        MigrationsSqlGenerationOptions options
+    )
     {
         // Arrange
         var original = "EXEC sys.sp_executesql N'SELECT ''value'';';";
@@ -53,7 +60,9 @@ public sealed class SqlServerGeneratedHistoryScriptTests
     [InlineData("before\nGO\nafter")]
     [InlineData("before\n\tgo 2\nafter")]
     [InlineData("before\r\nafter")]
-    public void RuntimeTransportPreservesLineSensitiveText(string original)
+    public void RuntimeTransportPreservesLineSensitiveText(
+        string original
+    )
     {
         // Arrange
         const MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default;
@@ -74,12 +83,18 @@ public sealed class SqlServerGeneratedHistoryScriptTests
         const string table = "managed\\\nitems";
         using var context = new SafeMigrationDbContext(
             "Server=127.0.0.1,1433;Database=offline_payload;User ID=sa;Password=unused;TrustServerCertificate=True");
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel(table, ["Id"], ["int"], ["Id"], ["int"], new object?[,] { { 7 } });
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations);
-        var payloads = commands.SelectMany(static command => DecodeNestedPayloads(command.CommandText)).ToArray();
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations);
+
+        var payloads = commands
+            .SelectMany(static command => DecodeNestedPayloads(command.CommandText))
+            .ToArray();
 
         // Assert
         Assert.Contains(payloads, static payload => payload.Contains("[" + table + "]", StringComparison.Ordinal));
@@ -92,24 +107,33 @@ public sealed class SqlServerGeneratedHistoryScriptTests
         // Arrange
         using var context = new SqlServerMultilineScriptContext(
             "Server=127.0.0.1,1433;Database=offline_payload;User ID=sa;Password=unused;TrustServerCertificate=True");
+
         var assembly = context.GetService<IMigrationsAssembly>();
         var generator = context.GetService<IMigrationsSqlGenerator>();
-        var expected = assembly.Migrations.SelectMany(migration => generator.Generate(
-                assembly.CreateMigration(migration.Value, context.Database.ProviderName!).UpOperations,
+        var expected = assembly
+            .Migrations
+            .SelectMany(migration => generator.Generate(
+                assembly.CreateMigration(migration.Value, context.Database.ProviderName!)
+                    .UpOperations,
                 options: MigrationsSqlGenerationOptions.Script))
             .SelectMany(static command =>
             {
                 var decoded = DecodeIdempotentPayloads(command.CommandText);
 
-                return decoded.Length > 0 ? decoded : [command.CommandText];
+                return decoded.Length > 0
+                    ? decoded
+                    : [command.CommandText];
             })
             .Select(NormalizePrivateIdentifier)
             .ToArray();
 
         // Act
-        var script = context.GetService<IMigrator>().GenerateScript(
-            Migration.InitialDatabase, SqlServerMultilineUpgradeMigration.MigrationIdentifier,
-            MigrationsSqlGenerationOptions.Idempotent);
+        var script = context
+            .GetService<IMigrator>()
+            .GenerateScript(
+                Migration.InitialDatabase,
+                SqlServerMultilineUpgradeMigration.MigrationIdentifier,
+                MigrationsSqlGenerationOptions.Idempotent);
 
         var payloads = DecodeIdempotentPayloads(script);
 
@@ -118,7 +142,9 @@ public sealed class SqlServerGeneratedHistoryScriptTests
         Assert.Equal(expected, payloads.Select(NormalizePrivateIdentifier));
         Assert.Contains("IF NOT EXISTS", script, StringComparison.Ordinal);
         Assert.DoesNotContain("before\n    GO", script, StringComparison.Ordinal);
-        Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        Assert.Equal(ConnectionState.Closed,
+            context.Database.GetDbConnection()
+                .State);
     }
 
     /// <summary>Actual public scripts preserve the authored CRLF, client delimiter and continuation text.</summary>
@@ -126,31 +152,52 @@ public sealed class SqlServerGeneratedHistoryScriptTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void PublicScriptsPreserveAuthoredControlText(bool idempotent)
+    public void PublicScriptsPreserveAuthoredControlText(
+        bool idempotent
+    )
     {
         // Arrange
         using var context = new SqlServerMultilineScriptContext(
             "Server=127.0.0.1,1433;Database=offline_payload;User ID=sa;Password=unused;TrustServerCertificate=True");
-        var options = idempotent ? MigrationsSqlGenerationOptions.Idempotent : MigrationsSqlGenerationOptions.Default;
+
+        var options = idempotent
+            ? MigrationsSqlGenerationOptions.Idempotent
+            : MigrationsSqlGenerationOptions.Default;
 
         // Act
-        var script = context.GetService<IMigrator>().GenerateScript(
-            Migration.InitialDatabase, SqlServerMultilineUpgradeMigration.MigrationIdentifier, options);
+        var script = context
+            .GetService<IMigrator>()
+            .GenerateScript(
+                Migration.InitialDatabase,
+                SqlServerMultilineUpgradeMigration.MigrationIdentifier,
+                options);
 
         var payloads = DecodeNestedPayloads(script);
 
         // Assert
-        Assert.Contains(payloads, static payload => payload.Contains(
-            SqlServerMultilineInitialMigration.Payload, StringComparison.Ordinal));
-        Assert.Contains(payloads, static payload => payload.Contains(
-            SqlServerMultilineUpgradeMigration.ColumnName, StringComparison.Ordinal));
-        Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        Assert.Contains(
+            payloads,
+            static payload => payload.Contains(
+                SqlServerMultilineInitialMigration.Payload,
+                StringComparison.Ordinal));
+
+        Assert.Contains(
+            payloads,
+            static payload => payload.Contains(
+                SqlServerMultilineUpgradeMigration.ColumnName,
+                StringComparison.Ordinal));
+
+        Assert.Equal(ConnectionState.Closed,
+            context.Database.GetDbConnection()
+                .State);
     }
 
     /// <summary>Observes reconstructed payloads through every generated private literal scope.</summary>
     /// <param name="sql">The complete public script or command.</param>
     /// <returns>Every reconstructed native command, without assuming a fixed nesting depth.</returns>
-    internal static string[] DecodeNestedPayloads(string sql)
+    internal static string[] DecodeNestedPayloads(
+        string sql
+    )
     {
         var pending = new Queue<string>([sql]);
         var payloads = new List<string>();
@@ -163,10 +210,14 @@ public sealed class SqlServerGeneratedHistoryScriptTests
                 pending.Enqueue(payload);
             }
 
-            foreach (System.Text.RegularExpressions.Match scope in System.Text.RegularExpressions.Regex.Matches(
-                         current, "EXEC sys\\.sp_executesql N'((?:''|[^'])*)';"))
+            foreach (Match scope in Regex.Matches(
+                current,
+                "EXEC sys\\.sp_executesql N'((?:''|[^'])*)';"))
             {
-                pending.Enqueue(scope.Groups[1].Value.Replace("''", "'", StringComparison.Ordinal));
+                pending.Enqueue(scope
+                    .Groups[1]
+                    .Value
+                    .Replace("''", "'", StringComparison.Ordinal));
             }
         }
 
@@ -176,31 +227,47 @@ public sealed class SqlServerGeneratedHistoryScriptTests
     /// <summary>Decodes the emitted literal and newline expression independently of product writer helpers.</summary>
     /// <param name="script">The public EF script, including its real history framing.</param>
     /// <returns>The exact SQL payload reconstructed by each private scripted scope.</returns>
-    internal static string[] DecodeIdempotentPayloads(string script)
+    internal static string[] DecodeIdempotentPayloads(
+        string script
+    )
     {
-        var scopes = System.Text.RegularExpressions.Regex.Matches(
-            script, "EXEC sys\\.sp_executesql N'((?:''|[^'])*)';");
+        var scopes = Regex.Matches(
+            script,
+            "EXEC sys\\.sp_executesql N'((?:''|[^'])*)';");
+
         var payloads = new List<string>();
-        foreach (System.Text.RegularExpressions.Match scope in scopes)
+        foreach (Match scope in scopes)
         {
-            var body = scope.Groups[1].Value.Replace("''", "'", StringComparison.Ordinal);
+            var body = scope
+                .Groups[1]
+                .Value
+                .Replace("''", "'", StringComparison.Ordinal);
+
             if (!body.StartsWith("DECLARE @doka_script_payload nvarchar(max) = ", StringComparison.Ordinal))
             {
                 continue;
             }
 
             var reconstructed = new StringBuilder();
-            foreach (System.Text.RegularExpressions.Match part in System.Text.RegularExpressions.Regex.Matches(
-                         body, "N'(?:''|[^'])*'|NCHAR\\((?:10|13)\\)"))
+            foreach (Match part in Regex.Matches(
+                body,
+                "N'(?:''|[^'])*'|NCHAR\\((?:10|13)\\)"))
             {
                 if (part.Value.StartsWith("N'", StringComparison.Ordinal))
                 {
-                    reconstructed.Append(part.Value.AsSpan(2, part.Value.Length - 3)
-                        .ToString().Replace("''", "'", StringComparison.Ordinal));
+                    reconstructed.Append(
+                        part
+                            .Value
+                            .AsSpan(2, part.Value.Length - 3)
+                            .ToString()
+                            .Replace("''", "'", StringComparison.Ordinal));
                 }
                 else
                 {
-                    reconstructed.Append(part.Value == "NCHAR(10)" ? '\n' : '\r');
+                    reconstructed.Append(
+                        part.Value == "NCHAR(10)"
+                            ? '\n'
+                            : '\r');
                 }
             }
 
@@ -213,13 +280,17 @@ public sealed class SqlServerGeneratedHistoryScriptTests
     /// <summary>Normalizes only private random identity and external command separators.</summary>
     /// <param name="sql">The complete command whose authored literal content must remain untouched.</param>
     /// <returns>A command with one deterministic private temporary-table identity.</returns>
-    private static string NormalizePrivateIdentifier(string sql)
+    private static string NormalizePrivateIdentifier(
+        string sql
+    )
     {
         // WHY: Independent Generate calls intentionally use different GUIDs
         // for their private collision table. This fixture contains no such
         // authored identifier; all user payload characters remain byte-exact.
-        return System.Text.RegularExpressions.Regex.Replace(sql.TrimEnd('\r', '\n'),
-            "#doka_sm_identifiers_[0-9a-f]{32}", "#doka_sm_identifiers_fixture");
+        return Regex.Replace(
+            sql.TrimEnd('\r', '\n'),
+            "#doka_sm_identifiers_[0-9a-f]{32}",
+            "#doka_sm_identifiers_fixture");
     }
 
     /// <summary>Generates the actual historical operations without an implicit target-model data mapping.</summary>
@@ -227,15 +298,20 @@ public sealed class SqlServerGeneratedHistoryScriptTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void RealHistoryUpScriptUsesExplicitHistoricalDataTypes(bool upgrade)
+    public void RealHistoryUpScriptUsesExplicitHistoricalDataTypes(
+        bool upgrade
+    )
     {
         // Arrange
         using var context = Context();
-        var target = upgrade ? SqlServerGeneratedUpgradeMigration.MigrationIdentifier
+        var target = upgrade
+            ? SqlServerGeneratedUpgradeMigration.MigrationIdentifier
             : SqlServerGeneratedInitialMigration.MigrationIdentifier;
 
         // Act
-        var script = context.GetService<IMigrator>().GenerateScript("0", target);
+        var script = context
+            .GetService<IMigrator>()
+            .GenerateScript("0", target);
 
         // Assert
         Assert.Contains("INSERT INTO [generated_upgrade_nodes]", script, StringComparison.Ordinal);
@@ -251,8 +327,11 @@ public sealed class SqlServerGeneratedHistoryScriptTests
         using var context = Context();
 
         // Act
-        var script = context.GetService<IMigrator>().GenerateScript(
-            SqlServerGeneratedUpgradeMigration.MigrationIdentifier, "0");
+        var script = context
+            .GetService<IMigrator>()
+            .GenerateScript(
+                SqlServerGeneratedUpgradeMigration.MigrationIdentifier,
+                "0");
 
         // Assert
         Assert.Contains("DROP TABLE", script, StringComparison.Ordinal);
@@ -267,11 +346,18 @@ public sealed class SqlServerGeneratedHistoryScriptTests
         // Arrange
         using var context = Context();
         var migration = new SqlServerGeneratedInitialMigration { ActiveProvider = context.Database.ProviderName! };
-        var insert = migration.UpOperations.OfType<InsertDataOperation>().Single();
+        var insert = migration
+            .UpOperations
+            .OfType<InsertDataOperation>()
+            .Single();
+
         insert.ColumnTypes = null;
         var generator = context.GetService<IMigrationsSqlGenerator>();
-        var targetModel = context.GetService<IModelRuntimeInitializer>().Initialize(
-            migration.TargetModel, designTime: true);
+        var targetModel = context
+            .GetService<IModelRuntimeInitializer>()
+            .Initialize(
+                migration.TargetModel,
+                designTime: true);
 
         // Act
         var failure = Record.Exception(() => generator.Generate(migration.UpOperations, targetModel));
@@ -293,14 +379,24 @@ public sealed class SqlServerMultilineScriptContext : DbContext
 
     /// <summary>Creates the fixture context for an offline or independently owned native database.</summary>
     /// <param name="connectionString">The fixture's explicit connection string.</param>
-    public SqlServerMultilineScriptContext(string connectionString) => _connectionString = connectionString;
+    public SqlServerMultilineScriptContext(
+        string connectionString
+    )
+    {
+        _connectionString = connectionString;
+    }
 
     /// <inheritdoc />
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    protected override void OnConfiguring(
+        DbContextOptionsBuilder optionsBuilder
+    )
     {
-        optionsBuilder.UseSqlServer(_connectionString, provider => provider
-            .MigrationsAssembly(typeof(SqlServerMultilineScriptContext).Assembly.FullName)
-            .CommandTimeout(SafeMigrationDbContext.CommandTimeoutSeconds));
+        optionsBuilder.UseSqlServer(
+            _connectionString,
+            provider => provider
+                .MigrationsAssembly(typeof(SqlServerMultilineScriptContext).Assembly.FullName)
+                .CommandTimeout(SafeMigrationDbContext.CommandTimeoutSeconds));
+
         optionsBuilder.UseSqlServerSafeMigrations<SqlServerMultilineScriptContext>();
     }
 }
@@ -317,22 +413,33 @@ public sealed class SqlServerMultilineInitialMigration : Migration
     public static string Payload { get; } = new string('x', 5000) + "before\r\nGO\nafter";
 
     /// <inheritdoc />
-    protected override void Up(MigrationBuilder migrationBuilder)
+    protected override void Up(
+        MigrationBuilder migrationBuilder
+    )
     {
-        migrationBuilder.CreateTableIfNotExists("multiline_payload_items", table => new
-        {
-            Id = table.Column<int>(type: "int", nullable: false),
-        }, constraints: table => table.PrimaryKey("PK_multiline_payload_items", row => row.Id));
+        migrationBuilder.CreateTableIfNotExists(
+            "multiline_payload_items",
+            table => new
+            {
+                Id = table.Column<int>(type: "int", nullable: false),
+            },
+            constraints: table => table.PrimaryKey("PK_multiline_payload_items", row => row.Id));
+
         // WHY: The direct SQL-default API retains authored SQL. Captured table
         // defaults can be rewritten by EF as CONCAT/nchar and would not
         // reproduce this independent command-text transport defect.
-        migrationBuilder.AddColumnIfNotExists<string>("Payload", "multiline_payload_items",
-            type: "nvarchar(max)", nullable: true,
+        migrationBuilder.AddColumnIfNotExists<string>(
+            "Payload",
+            "multiline_payload_items",
+            type: "nvarchar(max)",
+            nullable: true,
             defaultValueSql: "'" + Payload.Replace("'", "''", StringComparison.Ordinal) + "'");
     }
 
     /// <inheritdoc />
-    protected override void Down(MigrationBuilder migrationBuilder)
+    protected override void Down(
+        MigrationBuilder migrationBuilder
+    )
         => migrationBuilder.DropTableIfExists("multiline_payload_items");
 }
 
@@ -351,14 +458,21 @@ public sealed class SqlServerMultilineUpgradeMigration : Migration
     public const string ColumnName = "Later\\\nPayload";
 
     /// <inheritdoc />
-    protected override void Up(MigrationBuilder migrationBuilder)
+    protected override void Up(
+        MigrationBuilder migrationBuilder
+    )
     {
-        migrationBuilder.AddColumnIfNotExists<string>(ColumnName, "multiline_payload_items",
-            type: "nvarchar(80)", nullable: true,
+        migrationBuilder.AddColumnIfNotExists<string>(
+            ColumnName,
+            "multiline_payload_items",
+            type: "nvarchar(80)",
+            nullable: true,
             defaultValueSql: "'" + Payload.Replace("'", "''", StringComparison.Ordinal) + "'");
     }
 
     /// <inheritdoc />
-    protected override void Down(MigrationBuilder migrationBuilder)
+    protected override void Down(
+        MigrationBuilder migrationBuilder
+    )
         => migrationBuilder.DropColumnIfExists(ColumnName, "multiline_payload_items");
 }

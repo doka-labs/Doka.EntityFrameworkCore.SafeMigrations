@@ -10,9 +10,12 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
         using var watchdog = new CancellationTokenSource(TimeSpan.FromMinutes(2));
         var token = watchdog.Token;
         var connectionString = await CreateDatabaseAsync(token);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE \"__LegacyMigrationsHistory\" (\"MigrationId\" text NOT NULL); "
-            + "INSERT INTO \"__LegacyMigrationsHistory\" VALUES ('legacy-unchanged');");
+            + "INSERT INTO \"__LegacyMigrationsHistory\" VALUES ('legacy-unchanged');",
+            cancellationToken: token);
+
         var barrier = new MigrationAdmissionBarrier(expectedArrivals: 1);
         var secondIdentity = $"sm-second-{Guid.NewGuid():N}";
         var secondConnection = new NpgsqlConnectionStringBuilder(connectionString)
@@ -31,7 +34,10 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
         try
         {
             await barrier.Admitted.WaitAsync(token);
-            secondMigration = second.GetService<IMigrator>().MigrateAsync(cancellationToken: token);
+            secondMigration = second
+                .GetService<IMigrator>()
+                .MigrateAsync(cancellationToken: token);
+
             waiterObserved = await ObserveHistoryLockWaiterAsync(connectionString, secondIdentity, token);
             secondIncomplete = !secondMigration.IsCompleted;
         }
@@ -41,11 +47,16 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
             await Task.WhenAll(firstMigration, secondMigration);
         }
 
-        var historyRows = await ScalarIntAsync(connectionString,
+        var historyRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM \"__ApplicationDbContextMigrationsHistory\" "
-            + $"WHERE \"MigrationId\" = '{CoreConvergenceMigration.MigrationIdentifier}';");
-        var legacyRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM \"__LegacyMigrationsHistory\" WHERE \"MigrationId\" = 'legacy-unchanged';");
+            + $"WHERE \"MigrationId\" = '{CoreConvergenceMigration.MigrationIdentifier}';",
+            cancellationToken: token);
+
+        var legacyRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM \"__LegacyMigrationsHistory\" WHERE \"MigrationId\" = 'legacy-unchanged';",
+            cancellationToken: token);
 
         // Assert
         Assert.True(waiterObserved);
@@ -83,12 +94,17 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
             await Task.WhenAll(leftMigration, rightMigration);
         }
 
-        var leftTables = await ScalarIntAsync(leftConnectionString,
+        var leftTables = await ScalarIntAsync(
+            leftConnectionString,
             "SELECT COUNT(*) FROM information_schema.tables "
-            + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state';");
-        var rightTables = await ScalarIntAsync(rightConnectionString,
+            + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state';",
+            cancellationToken: token);
+
+        var rightTables = await ScalarIntAsync(
+            rightConnectionString,
             "SELECT COUNT(*) FROM information_schema.tables "
-            + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state';");
+            + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state';",
+            cancellationToken: token);
 
         // Assert
         Assert.True(bothIncomplete);
@@ -100,12 +116,15 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
     /// <summary>Attaches only a test-owned admission observer without changing migration services.</summary>
     private static SafeMigrationDbContext CreateAdmissionContext(
         string connectionString,
-        MigrationAdmissionBarrier barrier)
+        MigrationAdmissionBarrier barrier
+    )
     {
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>()
-            .UseNpgsql(connectionString, provider => provider
-                .MigrationsAssembly(typeof(SafeMigrationDbContext).Assembly.FullName)
-                .MigrationsHistoryTable("__ApplicationDbContextMigrationsHistory"))
+            .UseNpgsql(
+                connectionString,
+                provider => provider
+                    .MigrationsAssembly(typeof(SafeMigrationDbContext).Assembly.FullName)
+                    .MigrationsHistoryTable("__ApplicationDbContextMigrationsHistory"))
             .UsePostgreSqlSafeMigrations<SafeMigrationDbContext>()
             .AddInterceptors(barrier)
             .Options;
@@ -117,7 +136,8 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
     private static async Task<bool> ObserveHistoryLockWaiterAsync(
         string connectionString,
         string applicationName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
@@ -126,12 +146,15 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
             + "WHERE datname = current_database() AND application_name = @application "
             + "AND wait_event_type = 'Lock' "
             + "AND query LIKE '%__ApplicationDbContextMigrationsHistory%');";
+
         command.Parameters.AddWithValue("application", applicationName);
 
         while (true)
         {
-            var waiting = Convert.ToBoolean(await command.ExecuteScalarAsync(cancellationToken),
+            var waiting = Convert.ToBoolean(
+                await command.ExecuteScalarAsync(cancellationToken),
                 CultureInfo.InvariantCulture);
+
             if (waiting)
             {
                 return true;
@@ -164,7 +187,8 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
             DbCommand command,
             CommandEventData eventData,
             InterceptionResult<int> result,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             if (!command.CommandText.Contains("CREATE TABLE pipeline_probe", StringComparison.Ordinal))
             {

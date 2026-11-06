@@ -12,7 +12,9 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     [InlineData("in")]
     [InlineData("cast")]
     [InlineData("deparsed-additions")]
-    public void RenderCatalogCandidateSql_PreservesServerAuthoritativeShape(string caseId)
+    public void RenderCatalogCandidateSql_PreservesServerAuthoritativeShape(
+        string caseId
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -35,9 +37,12 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
                 " = ANY (ARRAY[1, 2])", false, false),
             "cast" => (SafeMigrationSql.Cast(value, "text"), ")::text", false, false),
             "deparsed-additions" => (SafeMigrationSql.Binary(
-                    SafeMigrationSql.Binary(SafeMigrationSql.Identifier("user"), SafeMigrationSqlBinaryOperator.Add,
+                    SafeMigrationSql.Binary(
+                        SafeMigrationSql.Identifier("user"),
+                        SafeMigrationSqlBinaryOperator.Add,
                         SafeMigrationSql.Identifier("a$b")),
-                    SafeMigrationSqlBinaryOperator.Add, SafeMigrationSql.Identifier("ordinary")),
+                    SafeMigrationSqlBinaryOperator.Add,
+                    SafeMigrationSql.Identifier("ordinary")),
                 "('(' || pg_catalog.quote_ident('user') || ' + ' || pg_catalog.quote_ident('a$b') "
                 + "|| ' + ' || pg_catalog.quote_ident('ordinary') || ')')", true, true),
             _ => throw new ArgumentOutOfRangeException(nameof(caseId), caseId, "Unknown catalog candidate case."),

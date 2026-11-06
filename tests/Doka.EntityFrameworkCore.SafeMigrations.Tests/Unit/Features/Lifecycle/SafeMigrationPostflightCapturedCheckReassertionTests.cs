@@ -10,30 +10,51 @@ public sealed class SafeMigrationPostflightCapturedCheckReassertionTests
     /// <param name="targetSql">The authored CHECK after the known member rename.</param>
     /// <param name="preserves">Whether every other source role remains byte-identical.</param>
     [Theory]
-    [InlineData("score >= 0 AND COALESCE(1e0, 2) = 1e0 AND CAST(score AS bigint) >= 0 "
-        + "AND 'KeepCase' = 'KeepCase'", true)]
-    [InlineData("SCORE >= 0 AND COALESCE(1e0, 2) = 1e0 AND CAST(SCORE AS bigint) >= 0 "
-        + "AND 'KeepCase' = 'KeepCase'", true)]
-    [InlineData("`score` >= 0 AND COALESCE(1e0, 2) = 1e0 AND CAST(`score` AS bigint) >= 0 "
-        + "AND 'KeepCase' = 'KeepCase'", true)]
-    [InlineData("score >= 0 AND COALESCE(1e0, 2) = 1e0 AND CAST(score AS bigint) >= 0 "
-        + "AND 'keepcase' = 'KeepCase'", false)]
-    [InlineData("score >= 0 AND COALESCE(1.0, 2) = 1e0 AND CAST(score AS bigint) >= 0 "
-        + "AND 'KeepCase' = 'KeepCase'", false)]
-    [InlineData("score >= 0 AND COALESCE(1e0, 2) = 1e0 AND CAST(score AS integer) >= 0 "
-        + "AND 'KeepCase' = 'KeepCase'", false)]
-    [InlineData("score > 0 AND COALESCE(1e0, 2) = 1e0 AND CAST(score AS bigint) >= 0 "
-        + "AND 'KeepCase' = 'KeepCase'", false)]
-    [InlineData("score >= 0 AND coalesce(1e0, 2) = 1e0 AND CAST(score AS bigint) >= 0 "
-        + "AND 'KeepCase' = 'KeepCase'", false)]
-    public void CapturedCheckReassertionRetainsOnlyCertifiedFinalTableLineage(string targetSql, bool preserves)
+    [InlineData(
+        "score >= 0 AND COALESCE(1e0, 2) = 1e0 AND CAST(score AS bigint) >= 0 "
+        + "AND 'KeepCase' = 'KeepCase'",
+        true)]
+    [InlineData(
+        "SCORE >= 0 AND COALESCE(1e0, 2) = 1e0 AND CAST(SCORE AS bigint) >= 0 "
+        + "AND 'KeepCase' = 'KeepCase'",
+        true)]
+    [InlineData(
+        "`score` >= 0 AND COALESCE(1e0, 2) = 1e0 AND CAST(`score` AS bigint) >= 0 "
+        + "AND 'KeepCase' = 'KeepCase'",
+        true)]
+    [InlineData(
+        "score >= 0 AND COALESCE(1e0, 2) = 1e0 AND CAST(score AS bigint) >= 0 "
+        + "AND 'keepcase' = 'KeepCase'",
+        false)]
+    [InlineData(
+        "score >= 0 AND COALESCE(1.0, 2) = 1e0 AND CAST(score AS bigint) >= 0 "
+        + "AND 'KeepCase' = 'KeepCase'",
+        false)]
+    [InlineData(
+        "score >= 0 AND COALESCE(1e0, 2) = 1e0 AND CAST(score AS integer) >= 0 "
+        + "AND 'KeepCase' = 'KeepCase'",
+        false)]
+    [InlineData(
+        "score > 0 AND COALESCE(1e0, 2) = 1e0 AND CAST(score AS bigint) >= 0 "
+        + "AND 'KeepCase' = 'KeepCase'",
+        false)]
+    [InlineData(
+        "score >= 0 AND coalesce(1e0, 2) = 1e0 AND CAST(score AS bigint) >= 0 "
+        + "AND 'KeepCase' = 'KeepCase'",
+        false)]
+    public void CapturedCheckReassertionRetainsOnlyCertifiedFinalTableLineage(
+        string targetSql,
+        bool preserves
+    )
     {
         // Arrange
         var operations = Operations(targetSql);
         var analyses = FinalAnalyses();
 
         // Act
-        var probes = SafeMigrationPostflightProjection.CreateRenamedTableProbes(operations, analyses,
+        var probes = SafeMigrationPostflightProjection.CreateRenamedTableProbes(
+            operations,
+            analyses,
             new NativeCheckIdentity());
 
         // Assert
@@ -47,16 +68,24 @@ public sealed class SafeMigrationPostflightCapturedCheckReassertionTests
         var probe = Assert.Single(probes!);
         Assert.Equal(0, probe.OperationOrdinal);
         Assert.Equal(0, probe.SafeOrdinal);
-        var table = Assert.IsType<EnsureTableIntent>(probe.Operation.Intent).Definition;
+        var table = Assert.IsType<EnsureTableIntent>(probe.Operation.Intent)
+            .Definition;
+
         Assert.Equal("retained table", table.Comment);
         Assert.Equal(["score", "payload"], table.Columns.Select(static column => column.Name));
         Assert.Equal("retained column", table.Columns[1].Comment);
         Assert.Equal(SafeMigrationDefaultValueKind.Literal, table.Columns[1].DefaultValue.Kind);
         Assert.Equal(1, Assert.IsType<int>(table.Columns[1].DefaultValue.LiteralValue));
         Assert.Equal(["score"], table.PrimaryKey!.Columns);
-        Assert.Equal(["payload"], Assert.Single(table.UniqueConstraints).Columns);
-        Assert.Equal("`score` >= 0 AND COALESCE(1e0, 2) = 1e0 AND CAST(`score` AS bigint) >= 0 "
-            + "AND 'KeepCase' = 'KeepCase'", Assert.Single(table.CheckConstraints).CapturedSql);
+        Assert.Equal(["payload"],
+            Assert.Single(table.UniqueConstraints)
+                .Columns);
+
+        Assert.Equal(
+            "`score` >= 0 AND COALESCE(1e0, 2) = 1e0 AND CAST(`score` AS bigint) >= 0 "
+            + "AND 'KeepCase' = 'KeepCase'",
+            Assert.Single(table.CheckConstraints)
+                .CapturedSql);
     }
 
     /// <summary>Explicit opaque CHECKs and later additions cannot acquire a historical full-table rewrite.</summary>
@@ -64,45 +93,77 @@ public sealed class SafeMigrationPostflightCapturedCheckReassertionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void UnrelatedShapeMutationDoesNotAcquireCapturedCheckLineage(bool addColumn)
+    public void UnrelatedShapeMutationDoesNotAcquireCapturedCheckLineage(
+        bool addColumn
+    )
     {
         // Arrange
-        var member = addColumn ? "`score`" : "score";
+        var member = addColumn
+            ? "`score`"
+            : "score";
+
         var target = $"{member} >= 0 AND COALESCE(1e0, 2) = 1e0 "
             + $"AND CAST({member} AS bigint) >= 0 AND 'KeepCase' = 'KeepCase'";
 
-        var operations = Operations(target, opaqueTarget: !addColumn).ToList();
+        var operations = Operations(target, opaqueTarget: !addColumn)
+            .ToList();
 
-        var analyses = FinalAnalyses().ToList();
+        var analyses = FinalAnalyses()
+            .ToList();
+
         if (addColumn)
         {
-            operations.Add(Safe(new EnsureColumnIntent("items", new ExpectedColumnDefinition(
-                "added", typeof(int), true, "int"))));
+            operations.Add(
+                Safe(
+                    new EnsureColumnIntent(
+                        "items",
+                        new ExpectedColumnDefinition(
+                            "added",
+                            typeof(int),
+                            true,
+                            "int"))));
 
-            analyses.Add(new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
-                SafeMigrationRepairCapability.None, true, "classified_matching"));
+            analyses.Add(
+                new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.Matching,
+                    SafeMigrationRepairCapability.None,
+                    true,
+                    "classified_matching"));
         }
 
         // Act
-        var probes = SafeMigrationPostflightProjection.CreateRenamedTableProbes(operations, analyses,
+        var probes = SafeMigrationPostflightProjection.CreateRenamedTableProbes(
+            operations,
+            analyses,
             new NativeCheckIdentity());
 
         // Assert
         Assert.Null(probes);
     }
 
-    private static MigrationOperation[] Operations(string targetSql, bool opaqueTarget = false)
+    private static MigrationOperation[] Operations(
+        string targetSql,
+        bool opaqueTarget = false
+    )
     {
         var original = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_items", "items", SourceSql, null);
-        var target = opaqueTarget ? new ExpectedCheckConstraintDefinition("ck_items", "items", targetSql)
+        var target = opaqueTarget
+            ? new ExpectedCheckConstraintDefinition("ck_items", "items", targetSql)
             : SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_items", "items", targetSql, null);
 
-        var table = new ExpectedTableDefinition("items",
+        var table = new ExpectedTableDefinition(
+            "items",
             [
                 new ExpectedColumnDefinition("LeftBound", typeof(int), false, "int"),
-                new ExpectedColumnDefinition("payload", typeof(int), false, "int", comment: "retained column",
+                new ExpectedColumnDefinition(
+                    "payload",
+                    typeof(int),
+                    false,
+                    "int",
+                    comment: "retained column",
                     defaultValue: SafeMigrationDefaultValue.Literal(1)),
-            ], comment: "retained table",
+            ],
+            comment: "retained table",
             primaryKey: new ExpectedPrimaryKeyDefinition("pk_items", "items", ["LeftBound"]),
             uniqueConstraints: [new ExpectedUniqueConstraintDefinition("uq_payload", "items", ["payload"])],
             checkConstraints: [original]);
@@ -122,7 +183,9 @@ public sealed class SafeMigrationPostflightCapturedCheckReassertionTests
         new(SafeMigrationObservedState.Matching, SafeMigrationRepairCapability.None, true, "classified_matching"),
     ];
 
-    private static SafeMigrationOperation Safe(SafeMigrationIntent intent) =>
+    private static SafeMigrationOperation Safe(
+        SafeMigrationIntent intent
+    ) =>
         new(intent, SafeMigrationPolicy.ThrowIfDifferent);
 
     private sealed class NativeCheckIdentity : ISafeMigrationProviderObjectIdentityNormalizer
@@ -133,10 +196,16 @@ public sealed class SafeMigrationPostflightCapturedCheckReassertionTests
 
         public char? CapturedSqlIdentifierDelimiter => '`';
 
-        public string NormalizeIdentifier(string identifier) => identifier;
+        public string NormalizeIdentifier(
+            string identifier
+        ) => identifier;
 
-        public string? NormalizeSchema(string? schema) => schema;
+        public string? NormalizeSchema(
+            string? schema
+        ) => schema;
 
-        public bool IsObjectIdentityMismatch(SafeMigrationProviderAnalysis analysis) => false;
+        public bool IsObjectIdentityMismatch(
+            SafeMigrationProviderAnalysis analysis
+        ) => false;
     }
 }

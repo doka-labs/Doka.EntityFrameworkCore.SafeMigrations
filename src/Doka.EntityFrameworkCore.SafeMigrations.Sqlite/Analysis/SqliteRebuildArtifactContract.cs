@@ -10,11 +10,11 @@ internal sealed class SqliteRebuildArtifactContract
 
     private readonly IReadOnlyDictionary<string, AddedTableArtifacts> _addedArtifacts;
     private readonly IReadOnlyList<MigrationOperation> _operations;
+    private readonly HashSet<SafeMigrationOperation>? _potentialColumnRebuilds;
     private readonly IReadOnlyDictionary<string, RemovedTableArtifacts> _removedArtifacts;
     private readonly IReadOnlySet<string> _removedTables;
-    private readonly IReadOnlyDictionary<string, RebuildTableContract> _tables;
     private readonly SqliteTableConstraintTransitions _tableConstraintTransitions;
-    private readonly HashSet<SafeMigrationOperation>? _potentialColumnRebuilds;
+    private readonly IReadOnlyDictionary<string, RebuildTableContract> _tables;
 
     private SqliteRebuildArtifactContract(
         IReadOnlyDictionary<string, RebuildTableContract> tables,
@@ -50,7 +50,8 @@ internal sealed class SqliteRebuildArtifactContract
         var tables = new Dictionary<string, RebuildTableContract>(s_identifierComparer);
         if (model is not null)
         {
-            foreach (var table in model.GetRelationalModel().Tables)
+            foreach (var table in model.GetRelationalModel()
+                .Tables)
             {
                 if (table.Schema is not null
                     && !s_identifierComparer.Equals(table.Schema, "main"))
@@ -158,7 +159,9 @@ internal sealed class SqliteRebuildArtifactContract
     /// <summary>Gets authored table constraints from the current structural window only.</summary>
     /// <param name="operation">The exact table creator in that window.</param>
     /// <returns>The bounded transition contract, or null for a non-table operation.</returns>
-    public SafeMigrationExpectedTableConstraints? GetTableConstraintTransitions(SafeMigrationOperation operation)
+    public SafeMigrationExpectedTableConstraints? GetTableConstraintTransitions(
+        SafeMigrationOperation operation
+    )
         => _tableConstraintTransitions.Find(operation);
 
     /// <summary>
@@ -166,7 +169,9 @@ internal sealed class SqliteRebuildArtifactContract
     /// </summary>
     /// <param name="operation">The exact authored operation whose conditional row proof is being captured.</param>
     /// <returns>Whether row analysis is warranted, never whether execution is authorized.</returns>
-    public bool MayRebuildMissingColumn(SafeMigrationOperation operation)
+    public bool MayRebuildMissingColumn(
+        SafeMigrationOperation operation
+    )
         => _potentialColumnRebuilds?.Contains(operation) == true;
 
     /// <summary>
@@ -234,7 +239,11 @@ internal sealed class SqliteRebuildArtifactContract
 
         return candidates;
 
-        static void AddSource(ref Dictionary<string, HashSet<string>>? added, string table, string column)
+        static void AddSource(
+            ref Dictionary<string, HashSet<string>>? added,
+            string table,
+            string column
+        )
         {
             added ??= new Dictionary<string, HashSet<string>>(s_identifierComparer);
             if (!added.TryGetValue(table, out var columns))
@@ -249,7 +258,11 @@ internal sealed class SqliteRebuildArtifactContract
             _ = columns.Add(column);
         }
 
-        static void MoveOwner(Dictionary<string, HashSet<string>>? added, string oldName, string newName)
+        static void MoveOwner(
+            Dictionary<string, HashSet<string>>? added,
+            string oldName,
+            string newName
+        )
         {
             if (added?.Remove(oldName, out var columns) == true)
             {
@@ -257,9 +270,14 @@ internal sealed class SqliteRebuildArtifactContract
             }
         }
 
-        static void AliasOwner(Dictionary<string, HashSet<string>>? added, string oldName, string newName)
+        static void AliasOwner(
+            Dictionary<string, HashSet<string>>? added,
+            string oldName,
+            string newName
+        )
         {
-            if (added is null || !added.TryGetValue(oldName, out var columns))
+            if (added is null
+                || !added.TryGetValue(oldName, out var columns))
             {
                 return;
             }
@@ -288,7 +306,9 @@ internal sealed class SqliteRebuildArtifactContract
             string newName
         )
         {
-            if (added is null || !added.TryGetValue(table, out var columns) || !columns.Contains(oldName))
+            if (added is null
+                || !added.TryGetValue(table, out var columns)
+                || !columns.Contains(oldName))
             {
                 return;
             }
@@ -425,7 +445,9 @@ internal sealed class SqliteRebuildArtifactContract
             var foreignKey = foreignKeys[index];
             foreignKeys[index] = foreignKey with
             {
-                Table = s_identifierComparer.Equals(foreignKey.Table, source) ? target : foreignKey.Table,
+                Table = s_identifierComparer.Equals(foreignKey.Table, source)
+                    ? target
+                    : foreignKey.Table,
                 PrincipalTable = s_identifierComparer.Equals(foreignKey.PrincipalTable, source)
                     ? target
                     : foreignKey.PrincipalTable,
@@ -456,6 +478,7 @@ internal sealed class SqliteRebuildArtifactContract
     )
     {
         var currentIndex = -1;
+
         // WHY: Locate the exact current operation before walking its earlier rename history.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -474,6 +497,7 @@ internal sealed class SqliteRebuildArtifactContract
         }
 
         var result = projectedTable;
+
         // WHY: Undo earlier table renames in reverse stream order to recover the live source name.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -535,14 +559,14 @@ internal sealed class SqliteRebuildArtifactContract
         }
 
         if (snapshot.OtherObjects.Any(value => value.Type == "trigger"
-                && (s_identifierComparer.Equals(value.Table, table)
-                    || SqliteSqlIdentifierScanner.ReferencesIdentifier(value.Sql, table))))
+            && (s_identifierComparer.Equals(value.Table, table)
+                || SqliteSqlIdentifierScanner.ReferencesIdentifier(value.Sql, table))))
         {
             return "table_rebuild_trigger";
         }
 
         if (snapshot.OtherObjects.Any(value => value.Type == "view"
-                && SqliteSqlIdentifierScanner.ReferencesIdentifier(value.Sql, table)))
+            && SqliteSqlIdentifierScanner.ReferencesIdentifier(value.Sql, table)))
         {
             return "table_rebuild_view";
         }
@@ -580,7 +604,7 @@ internal sealed class SqliteRebuildArtifactContract
         }
 
         if (expected.Columns.Keys.Any(column => !tableSnapshot.Columns.ContainsKey(column)
-                && added?.Columns.Contains(column) != true))
+            && added?.Columns.Contains(column) != true))
         {
             return "table_rebuild_unmodeled_target_column";
         }
@@ -605,8 +629,8 @@ internal sealed class SqliteRebuildArtifactContract
         }
 
         if (expected.Indexes.Keys.Any(index =>
-                tableSnapshot.Indexes.All(actual => !s_identifierComparer.Equals(actual.Name, index))
-                && added?.Indexes.Contains(index) != true))
+            tableSnapshot.Indexes.All(actual => !s_identifierComparer.Equals(actual.Name, index))
+            && added?.Indexes.Contains(index) != true))
         {
             return "table_rebuild_unmodeled_target_index";
         }
@@ -715,30 +739,30 @@ internal sealed class SqliteRebuildArtifactContract
         }
 
         if (expected.UniqueConstraints.Any(unique =>
-                tableSnapshot.UniqueConstraints.All(actual =>
-                    !SqliteCatalogEquivalence.IdentifiersEqual(actual.Columns, unique.Columns))
-                && added?.UniqueConstraints.Contains(unique.Name) != true))
+            tableSnapshot.UniqueConstraints.All(actual =>
+                !SqliteCatalogEquivalence.IdentifiersEqual(actual.Columns, unique.Columns))
+            && added?.UniqueConstraints.Contains(unique.Name) != true))
         {
             return "table_rebuild_unmodeled_target_unique_constraint";
         }
 
         if (expected.ForeignKeys.Any(foreignKey => tableSnapshot.ForeignKeys.All(actual =>
-                    !SqliteCatalogEquivalence.ForeignKeyMatches(
-                        snapshot,
-                        actual,
-                        foreignKey.PrincipalTable,
-                        foreignKey.Columns,
-                        foreignKey.PrincipalColumns,
-                        foreignKey.OnUpdate,
-                        foreignKey.OnDelete))
-                && added?.ForeignKeys.Contains(foreignKey.Name) != true))
+                !SqliteCatalogEquivalence.ForeignKeyMatches(
+                    snapshot,
+                    actual,
+                    foreignKey.PrincipalTable,
+                    foreignKey.Columns,
+                    foreignKey.PrincipalColumns,
+                    foreignKey.OnUpdate,
+                    foreignKey.OnDelete))
+            && added?.ForeignKeys.Contains(foreignKey.Name) != true))
         {
             return "table_rebuild_unmodeled_target_foreign_key";
         }
 
         if (expected.Checks.Any(check =>
-                tableSnapshot.Checks.All(actual => !checkMatches(actual.Expression, check.Sql))
-                && (check.Name is null || added?.Checks.Contains(check.Name) != true)))
+            tableSnapshot.Checks.All(actual => !checkMatches(actual.Expression, check.Sql))
+            && (check.Name is null || added?.Checks.Contains(check.Name) != true)))
         {
             return "table_rebuild_unmodeled_target_check_constraint";
         }
@@ -806,7 +830,9 @@ internal sealed class SqliteRebuildArtifactContract
     private static bool ConstraintNamesEqual(
         string? left,
         string? right
-    ) => left is null ? right is null : right is not null && s_identifierComparer.Equals(left, right);
+    ) => left is null
+        ? right is null
+        : right is not null && s_identifierComparer.Equals(left, right);
 
     private static bool IsConstraintReplacement(
         HashSet<string>? removed,
@@ -848,91 +874,109 @@ internal sealed class SqliteRebuildArtifactContract
                     _ = Add(result, value.Table)
                         .Columns
                         .Add(value.Definition.Name);
+
                     break;
                 case SafeMigrationOperation { Intent: RenameColumnIntent value }:
                     _ = Add(result, value.Table)
                         .Columns
                         .Add(value.NewName);
+
                     break;
                 case SafeMigrationOperation { Intent: AlterColumnIntent value }:
                     _ = Add(result, value.Table)
                         .Columns
                         .Add(value.Definition.Name);
+
                     break;
                 case SafeMigrationOperation { Intent: EnsureIndexIntent value }:
                     _ = Add(result, value.Definition.Table)
                         .Indexes
                         .Add(value.Definition.Name);
+
                     break;
                 case SafeMigrationOperation { Intent: RenameIndexIntent value }:
                     _ = Add(result, value.Table)
                         .Indexes
                         .Add(value.NewName);
+
                     break;
                 case SafeMigrationOperation { Intent: EnsurePrimaryKeyIntent value }:
                     _ = Add(result, value.Definition.Table)
                         .PrimaryKeys
                         .Add(value.Definition.Name);
+
                     break;
                 case SafeMigrationOperation { Intent: EnsureUniqueConstraintIntent value }:
                     _ = Add(result, value.Definition.Table)
                         .UniqueConstraints
                         .Add(value.Definition.Name);
+
                     break;
                 case SafeMigrationOperation { Intent: EnsureCheckConstraintIntent value }:
                     _ = Add(result, value.Definition.Table)
                         .Checks
                         .Add(value.Definition.Name);
+
                     break;
                 case SafeMigrationOperation { Intent: EnsureForeignKeyIntent value }:
                     _ = Add(result, value.Definition.Table)
                         .ForeignKeys
                         .Add(value.Definition.Name);
+
                     break;
                 case AddColumnOperation value:
                     _ = Add(result, value.Table)
                         .Columns
                         .Add(value.Name);
+
                     break;
                 case AlterColumnOperation value:
                     _ = Add(result, value.Table)
                         .Columns
                         .Add(value.Name);
+
                     break;
                 case RenameColumnOperation value:
                     _ = Add(result, value.Table)
                         .Columns
                         .Add(value.NewName);
+
                     break;
                 case CreateIndexOperation value:
                     _ = Add(result, value.Table)
                         .Indexes
                         .Add(value.Name);
+
                     break;
                 case RenameIndexOperation { Table: { } table } value:
                     _ = Add(result, table)
                         .Indexes
                         .Add(value.NewName);
+
                     break;
                 case AddPrimaryKeyOperation value:
                     _ = Add(result, value.Table)
                         .PrimaryKeys
                         .Add(value.Name);
+
                     break;
                 case AddUniqueConstraintOperation value:
                     _ = Add(result, value.Table)
                         .UniqueConstraints
                         .Add(value.Name);
+
                     break;
                 case AddCheckConstraintOperation value:
                     _ = Add(result, value.Table)
                         .Checks
                         .Add(value.Name);
+
                     break;
                 case AddForeignKeyOperation value:
                     _ = Add(result, value.Table)
                         .ForeignKeys
                         .Add(value.Name);
+
                     break;
             }
         }
@@ -953,89 +997,107 @@ internal sealed class SqliteRebuildArtifactContract
                     _ = Remove(result, value.Table)
                         .Columns
                         .Add(value.Name);
+
                     break;
                 case SafeMigrationOperation { Intent: RenameColumnIntent value }:
                     _ = Remove(result, value.Table)
                         .Columns
                         .Add(value.Name);
+
                     break;
                 case SafeMigrationOperation { Intent: AlterColumnIntent value }:
                     _ = Remove(result, value.Table)
                         .Columns
                         .Add(value.Definition.Name);
+
                     break;
                 case SafeMigrationOperation { Intent: DropIndexIntent value }:
                     _ = Remove(result, value.Table)
                         .Indexes
                         .Add(value.Name);
+
                     break;
                 case SafeMigrationOperation { Intent: RenameIndexIntent value }:
                     _ = Remove(result, value.Table)
                         .Indexes
                         .Add(value.Name);
+
                     break;
                 case SafeMigrationOperation { Intent: DropPrimaryKeyIntent value }:
                     Remove(result, value.Table)
                         .PrimaryKey = true;
+
                     break;
                 case SafeMigrationOperation { Intent: DropUniqueConstraintIntent value }:
                     _ = Remove(result, value.Table)
                         .UniqueConstraints
                         .Add(value.Name);
+
                     break;
                 case SafeMigrationOperation { Intent: DropCheckConstraintIntent value }:
                     _ = Remove(result, value.Table)
                         .Checks
                         .Add(value.Name);
+
                     break;
                 case SafeMigrationOperation { Intent: DropForeignKeyIntent value }:
                     _ = Remove(result, value.Table)
                         .ForeignKeys
                         .Add(value.Name);
+
                     break;
                 case DropColumnOperation value:
                     _ = Remove(result, value.Table)
                         .Columns
                         .Add(value.Name);
+
                     break;
                 case AlterColumnOperation value:
                     _ = Remove(result, value.Table)
                         .Columns
                         .Add(value.Name);
+
                     break;
                 case RenameColumnOperation value:
                     _ = Remove(result, value.Table)
                         .Columns
                         .Add(value.Name);
+
                     break;
                 case DropIndexOperation { Table: { } table } value:
                     _ = Remove(result, table)
                         .Indexes
                         .Add(value.Name);
+
                     break;
                 case RenameIndexOperation { Table: { } table } value:
                     _ = Remove(result, table)
                         .Indexes
                         .Add(value.Name);
+
                     break;
                 case DropPrimaryKeyOperation value:
                     Remove(result, value.Table)
                         .PrimaryKey = true;
+
                     break;
                 case DropUniqueConstraintOperation value:
                     _ = Remove(result, value.Table)
                         .UniqueConstraints
                         .Add(value.Name);
+
                     break;
                 case DropCheckConstraintOperation value:
                     _ = Remove(result, value.Table)
                         .Checks
                         .Add(value.Name);
+
                     break;
                 case DropForeignKeyOperation value:
                     _ = Remove(result, value.Table)
                         .ForeignKeys
                         .Add(value.Name);
+
                     break;
             }
         }

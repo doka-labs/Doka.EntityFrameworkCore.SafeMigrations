@@ -35,7 +35,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         + "WHERE i.type=1 AND ic.key_ordinal>0) AS clustered_key "
         + "ON clustered_key.object_id=c.object_id AND clustered_key.column_id=c.column_id ";
 
-    private const string ColumnLayoutSchemaQuery = ColumnLayoutScalarFields + ColumnLayoutScalarSource
+    private const string ColumnLayoutSchemaQuery = ColumnLayoutScalarFields
+        + ColumnLayoutScalarSource
         + "WHERE c.object_id=t.object_id";
 
     /// <summary>Describes only row storage that variable-length row overflow cannot release.</summary>
@@ -54,7 +55,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return false;
         }
 
-        if (SqlServerComputedColumnContract.IsComputed(definition) && definition.IsStored != true)
+        if (SqlServerComputedColumnContract.IsComputed(definition)
+            && definition.IsStored != true)
         {
             // WHY: A virtual computed column occupies a column id, but not a
             // stored field, bit slot or variable-offset entry in each row.
@@ -70,19 +72,39 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             "smallint" => 2,
             "date" => 3,
             "int" or "real" or "smalldatetime" or "smallmoney" => 4,
-            "time" => type.Scale <= 2 ? 3 : type.Scale <= 4 ? 4 : 5,
-            "datetime2" => type.Scale <= 2 ? 6 : type.Scale <= 4 ? 7 : 8,
-            "datetimeoffset" => type.Scale <= 2 ? 8 : type.Scale <= 4 ? 9 : 10,
+            "time" => type.Scale <= 2
+                ? 3
+                : type.Scale <= 4
+                    ? 4
+                    : 5,
+            "datetime2" => type.Scale <= 2
+                ? 6
+                : type.Scale <= 4
+                    ? 7
+                    : 8,
+            "datetimeoffset" => type.Scale <= 2
+                ? 8
+                : type.Scale <= 4
+                    ? 9
+                    : 10,
             "bigint" or "datetime" or "float" or "money" or "timestamp" => 8,
             "uniqueidentifier" => 16,
-            "decimal" or "numeric" => type.Precision <= 9 ? 5 : type.Precision <= 19 ? 9
-                : type.Precision <= 28 ? 13 : 17,
+            "decimal" or "numeric" => type.Precision <= 9
+                ? 5
+                : type.Precision <= 19
+                    ? 9
+                    : type.Precision <= 28
+                        ? 13
+                        : 17,
             "bit" or "varchar" or "nvarchar" or "varbinary" => 0,
             _ => 8061,
         };
 
-        layout = new ColumnStorageLayout(bytes, type.Name == "bit",
-            type.Name is "varchar" or "nvarchar" or "varbinary", type.Length ?? 0);
+        layout = new ColumnStorageLayout(
+            bytes,
+            type.Name == "bit",
+            type.Name is "varchar" or "nvarchar" or "varbinary",
+            type.Length ?? 0);
 
         return bytes <= 8060;
     }
@@ -99,7 +121,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return "N'column_layout_unproven'";
         }
 
-        var bit = addition.IsBit ? 1 : 0;
+        var bit = addition.IsBit
+            ? 1
+            : 0;
+
         var bytes = addition.FixedBytes.ToString(CultureInfo.InvariantCulture);
         var tableId = TableId(intent.Table, intent.Schema);
         var exists = ColumnExists(intent.Table, intent.Schema, intent.Definition.Name);
@@ -113,15 +138,15 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // and copying that catalog SQL repeatedly for each column addition.
 
         return $"""
-            CASE WHEN {exists} THEN CONVERT(nvarchar(128), NULL) ELSE (SELECT CASE
-            WHEN layout.column_count >= 1024 THEN N'column_limit'
-            WHEN layout.unknown_columns <> 0 OR t.max_column_id_used <> layout.column_count
-            THEN N'column_layout_unproven'
-            WHEN layout.fixed_bytes + {bytes} + (layout.bit_columns + {bit} + 7) / 8
-            + 6 + (layout.column_count + 8) / 8 > 8060
-            THEN N'column_fixed_row_limit' ELSE NULL END FROM sys.tables AS t
-            CROSS APPLY ({ColumnLayoutSchemaQuery}) AS layout WHERE t.object_id = {tableId}) END
-            """;
+                CASE WHEN {exists} THEN CONVERT(nvarchar(128), NULL) ELSE (SELECT CASE
+                WHEN layout.column_count >= 1024 THEN N'column_limit'
+                WHEN layout.unknown_columns <> 0 OR t.max_column_id_used <> layout.column_count
+                THEN N'column_layout_unproven'
+                WHEN layout.fixed_bytes + {bytes} + (layout.bit_columns + {bit} + 7) / 8
+                + 6 + (layout.column_count + 8) / 8 > 8060
+                THEN N'column_fixed_row_limit' ELSE NULL END FROM sys.tables AS t
+                CROSS APPLY ({ColumnLayoutSchemaQuery}) AS layout WHERE t.object_id = {tableId}) END
+                """;
     }
 
     /// <summary>Builds one compact aggregate over documented scalar catalog metadata.</summary>
@@ -151,16 +176,24 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return null;
         }
 
-        var bits = addition.IsBit ? 1 : 0;
-        var variables = addition.IsVariable ? 1 : 0;
+        var bits = addition.IsBit
+            ? 1
+            : 0;
+
+        var variables = addition.IsVariable
+            ? 1
+            : 0;
+
         var bytes = addition.FixedBytes.ToString(CultureInfo.InvariantCulture);
+
         // WHY: Schema admission alone permits near-limit variable columns
         // whose NULL/empty values fit. Backfilling a populated row additionally
         // needs offsets and overflow roots. Variable clustered-key columns
         // cannot overflow, so their declared width replaces the root allowance.
         // Without that conservative upper-bound proof, require no rows.
 
-        return "EXISTS(SELECT 1 FROM (" + BuildColumnLayoutCatalogQuery(TableId(intent.Table, intent.Schema))
+        return "EXISTS(SELECT 1 FROM ("
+            + BuildColumnLayoutCatalogQuery(TableId(intent.Table, intent.Schema))
             + ") AS layout WHERE "
             + $"layout.variable_columns + {variables} > 0 AND layout.fixed_bytes + {bytes} "
             + $"+ (layout.bit_columns + {bits} + 7) / 8 + 6 + (layout.column_count + 8) / 8 "
@@ -178,9 +211,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         ExpectedColumnDefinition definition,
         ColumnStorageLayout layout
     ) => !(SqlServerComputedColumnContract.IsComputed(definition) && definition.IsStored != true)
-        && (!layout.IsVariable || !definition.IsNullable
-            || definition.DefaultValue.Kind != SafeMigrationDefaultValueKind.None
-                && !definition.DefaultValue.IsNullLiteral);
+        && (!layout.IsVariable
+            || !definition.IsNullable
+            || (definition.DefaultValue.Kind != SafeMigrationDefaultValueKind.None
+                && !definition.DefaultValue.IsNullLiteral));
 
     /// <summary>The unavoidable scalar row-storage contribution of an authored column.</summary>
     /// <param name="FixedBytes">Fixed storage in bytes, excluding packed bit storage.</param>

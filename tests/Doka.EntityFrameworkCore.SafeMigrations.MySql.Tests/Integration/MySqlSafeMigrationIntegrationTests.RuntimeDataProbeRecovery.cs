@@ -1,12 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the RuntimeDataProbeRecovery migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlRuntimeDataProbeRecoveryIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlRuntimeDataProbeRecoveryIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
-    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
-    /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlRuntimeDataProbeRecoveryIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
-
     private const string RuntimeProbeColumnLengthSql = "SELECT CHARACTER_MAXIMUM_LENGTH "
         + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
         + "AND TABLE_NAME = 'runtime_probe_rows' AND COLUMN_NAME = 'Code';";
@@ -20,6 +16,12 @@ public sealed partial class MySqlRuntimeDataProbeRecoveryIntegrationTests : MySq
         + "WHERE (`Id` = 1 AND BINARY `Code` = BINARY 'preserved') OR (`Id` = 2 AND `Code` IS NULL) "
         + "OR (`Id` = 3 AND OCTET_LENGTH(`Code`) = 0);";
 
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlRuntimeDataProbeRecoveryIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
+
     /// <summary>
     /// Verifies an interrupted fused DataProbe cannot mutate rows or bypass independent session cleanup.
     /// </summary>
@@ -28,7 +30,9 @@ public sealed partial class MySqlRuntimeDataProbeRecoveryIntegrationTests : MySq
     [InlineData("error")]
     [InlineData("cancellation")]
     [InlineData("timeout")]
-    public async Task RuntimeDataProbeSetupFailure_PreservesRowsAndRecoversSameSession(string failureMode)
+    public async Task RuntimeDataProbeSetupFailure_PreservesRowsAndRecoversSameSession(
+        string failureMode
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -36,14 +40,16 @@ public sealed partial class MySqlRuntimeDataProbeRecoveryIntegrationTests : MySq
             connectionString,
             "CREATE TABLE `runtime_probe_rows` (`Id` int NOT NULL, `Code` varchar(20) NULL, "
             + "PRIMARY KEY (`Id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `runtime_probe_rows` VALUES (1, 'preserved'), (2, NULL), (3, '');");
+            + "INSERT INTO `runtime_probe_rows` VALUES (1, 'preserved'), (2, NULL), (3, '');",
+            cancellationToken: CancellationToken.None);
 
         await using var blocker = failureMode == "error"
             ? null
-            : await AcquireRuntimeSetupLockAsync(connectionString);
+            : await AcquireRuntimeSetupLockAsync(connectionString, cancellationToken: CancellationToken.None);
 
         using var cancellation = new CancellationTokenSource();
         var observer = new MySqlRuntimeCommandInterceptor();
+
         // WHY: A real held row lock makes interruption observable on both engines;
         // an interrupted SLEEP may return normally and would not prove first-error behavior.
         var probe = failureMode == "error"
@@ -52,12 +58,19 @@ public sealed partial class MySqlRuntimeDataProbeRecoveryIntegrationTests : MySq
 
         observer.InjectFirstCompactedDataProbeGroup(
             "SET @runtime_data_probe_prepared = 1; " + probe + " SET @runtime_data_probe_sentinel = 1;",
-            failureMode == "cancellation" ? () => cancellation.CancelAfter(TimeSpan.FromMilliseconds(500)) : null);
+            failureMode == "cancellation"
+                ? () => cancellation.CancelAfter(TimeSpan.FromMilliseconds(500))
+                : null);
 
         await using var context = CreateRuntimeContext(connectionString, observer);
-        context.Database.SetCommandTimeout(failureMode == "timeout" ? 1 : 60);
+        context.Database.SetCommandTimeout(
+            failureMode == "timeout"
+                ? 1
+                : 60);
+
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
+
         // WHY: Nullable narrowing requires the dedicated length DataProbe, not only
         // the nullability guard reached by the other prepared-setup recovery tests.
         builder.EnsureColumn(
@@ -72,7 +85,10 @@ public sealed partial class MySqlRuntimeDataProbeRecoveryIntegrationTests : MySq
 
         // Act
         var result = await ExecuteRuntimeDataProbeRecoveryAsync(
-            context, observer, builder.Operations, cancellation.Token);
+            context,
+            observer,
+            builder.Operations,
+            cancellation.Token);
 
         // Assert
         if (failureMode == "cancellation")
@@ -128,29 +144,78 @@ public sealed partial class MySqlRuntimeDataProbeRecoveryIntegrationTests : MySq
         CancellationToken cancellationToken
     )
     {
-        var sessionBefore = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();");
+        var sessionBefore = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
+            cancellationToken: cancellationToken);
+
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, operations, cancellationToken));
 
+        // WHY: The attempted operation may have canceled its token. Recovery observations and retry
+        // remain independent so cancellation cannot hide failed cleanup or poison the same-session retry.
+
         var bodiesBefore = observer.GuardedBodyCount;
-        var cleanup = await ReadRuntimeCleanupProofAsync(context.Database.GetDbConnection());
+        var cleanup = await ReadRuntimeCleanupProofAsync(
+            context.Database.GetDbConnection(),
+            cancellationToken: CancellationToken.None);
+
         var preparedMarker = await ContextScalarIntAsync(
             context,
-            "SELECT COALESCE(@runtime_data_probe_prepared = 1, FALSE);");
+            "SELECT COALESCE(@runtime_data_probe_prepared = 1, FALSE);",
+            cancellationToken: CancellationToken.None);
 
-        var sentinel = await ContextScalarIntAsync(context, "SELECT @runtime_data_probe_sentinel IS NOT NULL;");
-        var lengthBefore = await ContextScalarIntAsync(context, RuntimeProbeColumnLengthSql);
-        var nullableBefore = await ContextScalarIntAsync(context, RuntimeProbeColumnNullableSql);
-        var rowCountBefore = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `runtime_probe_rows`;");
-        var preservedBefore = await ContextScalarIntAsync(context, RuntimeProbePreservedRowsSql);
+        var sentinel = await ContextScalarIntAsync(
+            context,
+            "SELECT @runtime_data_probe_sentinel IS NOT NULL;",
+            cancellationToken: CancellationToken.None);
+
+        var lengthBefore = await ContextScalarIntAsync(
+            context,
+            RuntimeProbeColumnLengthSql,
+            cancellationToken: CancellationToken.None);
+
+        var nullableBefore = await ContextScalarIntAsync(
+            context,
+            RuntimeProbeColumnNullableSql,
+            cancellationToken: CancellationToken.None);
+
+        var rowCountBefore = await ContextScalarIntAsync(
+            context,
+            "SELECT COUNT(*) FROM `runtime_probe_rows`;",
+            cancellationToken: CancellationToken.None);
+
+        var preservedBefore = await ContextScalarIntAsync(
+            context,
+            RuntimeProbePreservedRowsSql,
+            cancellationToken: CancellationToken.None);
 
         context.Database.SetCommandTimeout(60);
         await ExecuteOperationsAsync(context, operations, CancellationToken.None);
-        var sessionAfter = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();");
-        var lengthAfter = await ContextScalarIntAsync(context, RuntimeProbeColumnLengthSql);
-        var nullableAfter = await ContextScalarIntAsync(context, RuntimeProbeColumnNullableSql);
-        var rowCountAfter = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `runtime_probe_rows`;");
-        var preservedAfter = await ContextScalarIntAsync(context, RuntimeProbePreservedRowsSql);
+        var sessionAfter = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
+            cancellationToken: CancellationToken.None);
+
+        var lengthAfter = await ContextScalarIntAsync(
+            context,
+            RuntimeProbeColumnLengthSql,
+            cancellationToken: CancellationToken.None);
+
+        var nullableAfter = await ContextScalarIntAsync(
+            context,
+            RuntimeProbeColumnNullableSql,
+            cancellationToken: CancellationToken.None);
+
+        var rowCountAfter = await ContextScalarIntAsync(
+            context,
+            "SELECT COUNT(*) FROM `runtime_probe_rows`;",
+            cancellationToken: CancellationToken.None);
+
+        var preservedAfter = await ContextScalarIntAsync(
+            context,
+            RuntimeProbePreservedRowsSql,
+            cancellationToken: CancellationToken.None);
 
         return new RuntimeDataProbeRecovery(
             exception,
@@ -174,7 +239,6 @@ public sealed partial class MySqlRuntimeDataProbeRecoveryIntegrationTests : MySq
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-
     /// <summary>
     /// Carries immutable before-retry proofs and successful same-session DataProbe recovery evidence.
     /// </summary>

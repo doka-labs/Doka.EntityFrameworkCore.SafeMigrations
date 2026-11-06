@@ -4,6 +4,68 @@ internal sealed partial class SafeMigrationPreflightProjection
 {
     private Dictionary<TableKey, int>? _certifiedColumnDropOrigins;
 
+    /// <inheritdoc />
+    bool ISafeMigrationProjectedColumnSource.PreservesLiveColumnValues(
+        string table,
+        string? schema,
+        string column
+    )
+    {
+        var key = new TableKey(table, schema);
+        var hasState = TryGetProjectedColumnState(table, schema, column, out var state);
+        if ((_projectedStructurallyModifiedTables.Contains(key)
+                && _certifiedColumnDropOrigins?.ContainsKey(key) != true
+                && !HasColumnPreservingHistory(key)
+                && _projectedIndexDropOnlyTables?.Contains(key) != true
+                && (!hasState || !state.PreservesLiveValueDomain))
+            || _hasOpaqueProviderPostcondition
+            || HasOpaqueSqlPostcondition
+            || DataMutationVersion != 0
+            || HasUnanalyzedDataChanges(table, schema)
+            || _projectedMissingTables.Contains(key)
+            || (_prerequisites.TryGetValue(key, out var prerequisites) && prerequisites.NewlyCreated)
+            || IsProjectedColumnMissing(table, schema, column)
+            || IsProjectedColumnUnknown(table, schema, column))
+        {
+            return false;
+        }
+
+        var wasChanged = _projectedChangedColumns.TryGetValue(key, out var changes) && changes.Contains(column);
+
+        // WHY: Completing an owned staging member preserves that exact member's
+        // values, not the owner's full physical layout or another member's values.
+        return hasState
+            ? state.Definition is not null && (!wasChanged || state.PreservesLiveValueDomain)
+            : !wasChanged;
+    }
+
+    /// <inheritdoc />
+    int? ISafeMigrationProjectedColumnSource.GetColumnValueMutationOrigin(
+        string table,
+        string? schema,
+        string column
+    )
+    {
+        var key = new TableKey(table, schema);
+        if (_hasOpaqueProviderPostcondition
+            || HasOpaqueSqlPostcondition
+            || DataMutationVersion != 0
+            || HasUnanalyzedDataChanges(table, schema)
+            || _projectedMissingTables.Contains(key)
+            || (_prerequisites.TryGetValue(key, out var prerequisites) && prerequisites.NewlyCreated)
+            || !TryGetProjectedColumnState(table, schema, column, out var state)
+            || state.Definition is null
+            || state.ValueMutationOriginOrdinal < 0)
+        {
+            return null;
+        }
+
+        // WHY: One compact ordinal travels with its exact member state; no
+        // per-ADD side graph or nullable field is needed for large streams.
+
+        return state.ValueMutationOriginOrdinal;
+    }
+
     /// <summary>Retains a real accepted DROP origin without claiming its unknown dependent-key effects.</summary>
     private void ObserveIndependentColumnDrop(
         DropColumnIntent intent
@@ -13,8 +75,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         if (CurrentOperationOrdinal < 0
             || _projectedColumnAnalyzer?.PreservesIntrinsicColumnSources(intent) != true
             || _hasOpaqueProviderPostcondition
-            || _hasOpaqueSqlPostcondition
-            || _providerDataMutationVersion != 0
+            || HasOpaqueSqlPostcondition
+            || DataMutationVersion != 0
             || HasUnanalyzedDataChanges(intent.Table, intent.Schema)
             || (_prerequisites.TryGetValue(key, out var prerequisites) && prerequisites.NewlyCreated)
             || (IsProjectedTableStructureUnknown(intent.Table, intent.Schema)
@@ -98,8 +160,8 @@ internal sealed partial class SafeMigrationPreflightProjection
     ) => _projectedKeyAnalyzer?.CanValidateAfterColumnDrops == true
         && _certifiedColumnDropOrigins?.ContainsKey(new TableKey(table, schema)) == true
         && !_hasOpaqueProviderPostcondition
-        && !_hasOpaqueSqlPostcondition
-        && _providerDataMutationVersion == 0
+        && !HasOpaqueSqlPostcondition
+        && DataMutationVersion == 0
         && !HasUnanalyzedDataChanges(table, schema);
 
     /// <summary>Keeps accepted missing or unknown member facts ahead of a provider's speculative key proof.</summary>
@@ -127,64 +189,4 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationRepairCapability.None,
         postconditionSatisfied: false,
         "projected_key_after_column_drop_unproven");
-
-    /// <inheritdoc />
-    bool ISafeMigrationProjectedColumnSource.PreservesLiveColumnValues(
-        string table,
-        string? schema,
-        string column
-    )
-    {
-        var key = new TableKey(table, schema);
-        var hasState = TryGetProjectedColumnState(table, schema, column, out var state);
-        if ((_projectedStructurallyModifiedTables.Contains(key)
-                && _certifiedColumnDropOrigins?.ContainsKey(key) != true
-                && !HasColumnPreservingHistory(key)
-                && _projectedIndexDropOnlyTables?.Contains(key) != true
-                && (!hasState || !state.PreservesLiveValueDomain))
-            || _hasOpaqueProviderPostcondition
-            || _hasOpaqueSqlPostcondition
-            || _providerDataMutationVersion != 0
-            || HasUnanalyzedDataChanges(table, schema)
-            || _projectedMissingTables.Contains(key)
-            || (_prerequisites.TryGetValue(key, out var prerequisites) && prerequisites.NewlyCreated)
-            || IsProjectedColumnMissing(table, schema, column)
-            || IsProjectedColumnUnknown(table, schema, column))
-        {
-            return false;
-        }
-
-        var wasChanged = _projectedChangedColumns.TryGetValue(key, out var changes) && changes.Contains(column);
-
-        // WHY: Completing an owned staging member preserves that exact member's
-        // values, not the owner's full physical layout or another member's values.
-        return hasState ? state.Definition is not null && (!wasChanged || state.PreservesLiveValueDomain) : !wasChanged;
-    }
-
-    /// <inheritdoc />
-    int? ISafeMigrationProjectedColumnSource.GetColumnValueMutationOrigin(
-        string table,
-        string? schema,
-        string column
-    )
-    {
-        var key = new TableKey(table, schema);
-        if (_hasOpaqueProviderPostcondition
-            || _hasOpaqueSqlPostcondition
-            || _providerDataMutationVersion != 0
-            || HasUnanalyzedDataChanges(table, schema)
-            || _projectedMissingTables.Contains(key)
-            || (_prerequisites.TryGetValue(key, out var prerequisites) && prerequisites.NewlyCreated)
-            || !TryGetProjectedColumnState(table, schema, column, out var state)
-            || state.Definition is null
-            || state.ValueMutationOriginOrdinal < 0)
-        {
-            return null;
-        }
-
-        // WHY: One compact ordinal travels with its exact member state; no
-        // per-ADD side graph or nullable field is needed for large streams.
-
-        return state.ValueMutationOriginOrdinal;
-    }
 }

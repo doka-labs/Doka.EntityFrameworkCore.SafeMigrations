@@ -7,12 +7,15 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
     // WHY: Hazard evidence belongs to captured operation instances, not equal-looking contracts
     // from another capture. Reference identity prevents accidental proof reuse; Rebind explicitly
     // transfers evidence to the corresponding source-bound replacement instances.
-    private static readonly MySqlBackfillConstraintCatalog s_empty = new(new(ReferenceEqualityComparer.Instance));
+    private static readonly MySqlBackfillConstraintCatalog s_empty = new(
+        new HashSet<SafeMigrationOperation>(ReferenceEqualityComparer.Instance));
 
     /// <summary>Tests whether this exact operation needs a NULL-free proof for a declared constraint.</summary>
     /// <param name="operation">The operation captured or rendered.</param>
     /// <returns>Whether a retained declaration constrains its backfill.</returns>
-    internal bool RequiresNullFreeRows(SafeMigrationOperation operation) => constrained.Contains(operation);
+    internal bool RequiresNullFreeRows(
+        SafeMigrationOperation operation
+    ) => constrained.Contains(operation);
 
     /// <summary>Transfers complete-stream evidence to exact source-bound analysis operations.</summary>
     /// <param name="originals">The original operation references in source-capture order.</param>
@@ -29,6 +32,7 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
         }
 
         var result = new HashSet<SafeMigrationOperation>(ReferenceEqualityComparer.Instance);
+
         // WHY: Select the rebound operation at the original operation's matching ordinal.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -40,7 +44,9 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
             }
         }
 
-        return result.Count == 0 ? s_empty : new(result);
+        return result.Count == 0
+            ? s_empty
+            : new MySqlBackfillConstraintCatalog(result);
     }
 
     /// <summary>Builds a conservative union of declarations across exact table and column rename aliases.</summary>
@@ -59,16 +65,21 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
             return s_empty;
         }
 
-        var tables = new Aliases<MySqlTableIdentity>(new MySqlTableIdentityComparer(
-            tableComparer ?? StringComparer.Ordinal));
+        var tables = new Aliases<MySqlTableIdentity>(
+            new MySqlTableIdentityComparer(
+                tableComparer ?? StringComparer.Ordinal));
+
         var hazards = new Dictionary<int, TableHazards>();
         foreach (var operation in operations)
         {
             if (operation.Intent is RenameTableIntent rename)
             {
-                tables.Union(MySqlTableIdentity.Create(rename.Name, rename.Schema, currentDatabase),
-                    MySqlTableIdentity.Create(rename.NewName ?? rename.Name,
-                        rename.NewSchema ?? rename.Schema, currentDatabase));
+                tables.Union(
+                    MySqlTableIdentity.Create(rename.Name, rename.Schema, currentDatabase),
+                    MySqlTableIdentity.Create(
+                        rename.NewName ?? rename.Name,
+                        rename.NewSchema ?? rename.Schema,
+                        currentDatabase));
             }
         }
 
@@ -91,7 +102,9 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
         {
             if (operation.Intent is RenameColumnIntent rename)
             {
-                For(rename.Table, rename.Schema).Columns.Union(rename.Name, rename.NewName);
+                For(rename.Table, rename.Schema)
+                    .Columns
+                    .Union(rename.Name, rename.NewName);
             }
         }
 
@@ -119,13 +132,19 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
 
                     break;
                 case EnsurePrimaryKeyIntent primary:
-                    For(primary.Definition.Table, primary.Definition.Schema).Add(primary.Definition.Columns);
+                    For(primary.Definition.Table, primary.Definition.Schema)
+                        .Add(primary.Definition.Columns);
+
                     break;
                 case EnsureUniqueConstraintIntent unique:
-                    For(unique.Definition.Table, unique.Definition.Schema).Add(unique.Definition.Columns);
+                    For(unique.Definition.Table, unique.Definition.Schema)
+                        .Add(unique.Definition.Columns);
+
                     break;
                 case EnsureCheckConstraintIntent check:
-                    For(check.Definition.Table, check.Definition.Schema).AllColumns = true;
+                    For(check.Definition.Table, check.Definition.Schema)
+                        .AllColumns = true;
+
                     break;
                 case EnsureIndexIntent { Definition.Unique: true } index:
                     var indexHazards = For(index.Definition.Table, index.Definition.Schema);
@@ -162,7 +181,9 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
             }
         }
 
-        return constrained.Count == 0 ? s_empty : new(constrained);
+        return constrained.Count == 0
+            ? s_empty
+            : new MySqlBackfillConstraintCatalog(constrained);
     }
 
     /// <summary>Contains only constraint participation, never an inferred physical table definition.</summary>
@@ -200,7 +221,9 @@ internal sealed class MySqlBackfillConstraintCatalog(HashSet<SafeMigrationOperat
         /// <summary>Creates an unseen identity or resolves its root while compressing the traversed path.</summary>
         /// <param name="value">The alias whose current root is required.</param>
         /// <returns>The integer root, stable for retained constraints after all unions finish.</returns>
-        internal int Resolve(T value)
+        internal int Resolve(
+            T value
+        )
         {
             if (!_identities.TryGetValue(value, out var index))
             {

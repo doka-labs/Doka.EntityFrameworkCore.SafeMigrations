@@ -22,8 +22,9 @@ internal static partial class SafeMigrationExpectedCatalog
             return;
         }
 
-        var dependentIndex = table.IndexDefinitions.Values.FirstOrDefault(
-            value => SafeMigrationExpectedIndexTransitions.MayDependOnColumn(value, intent.Name));
+        var dependentIndex = table.IndexDefinitions.Values.FirstOrDefault(value =>
+            SafeMigrationExpectedIndexTransitions.MayDependOnColumn(value, intent.Name));
+
         if (dependentIndex is not null)
         {
             throw new InvalidOperationException(
@@ -40,7 +41,9 @@ internal static partial class SafeMigrationExpectedCatalog
         RenameColumnIntent intent
     )
     {
-        var columns = Find(tables, intent.Schema, intent.Table)?.Columns;
+        var columns = Find(tables, intent.Schema, intent.Table)
+            ?.Columns;
+
         if (columns?.Remove(intent.Name, out var storeType) == true)
         {
             columns[intent.NewName] = storeType;
@@ -53,7 +56,9 @@ internal static partial class SafeMigrationExpectedCatalog
         var table = Find(tables, intent.Schema, intent.Table)!;
         foreach (var pair in table.IndexDefinitions.ToArray())
         {
-            var keys = pair.Value.Keys
+            var keys = pair
+                .Value
+                .Keys
                 .Select(key => StringComparer.Ordinal.Equals(key.Column, intent.Name)
                     ? new ExpectedIndexKeyDefinition(
                         column: intent.NewName,
@@ -68,7 +73,9 @@ internal static partial class SafeMigrationExpectedCatalog
             table.IndexDefinitions[pair.Key] = Copy(
                 pair.Value,
                 keys: keys,
-                includedColumns: pair.Value.IncludedColumns
+                includedColumns: pair
+                    .Value
+                    .IncludedColumns
                     .Select(column => StringComparer.Ordinal.Equals(column, intent.Name)
                         ? intent.NewName
                         : column)

@@ -11,17 +11,29 @@ public sealed class PostgreSqlTestParallelismTests
         var assembly = typeof(PostgreSqlTestParallelismTests).Assembly;
 
         // Act
-        var behavior = Assert.Single(assembly.GetCustomAttributesData(), static attribute =>
-            attribute.AttributeType == typeof(CollectionBehaviorAttribute));
-        var framework = Assert.Single(assembly.GetCustomAttributesData(), static attribute =>
-            attribute.AttributeType == typeof(TestFrameworkAttribute));
+        var behavior = Assert.Single(
+            assembly.GetCustomAttributesData(),
+            static attribute =>
+                attribute.AttributeType == typeof(CollectionBehaviorAttribute));
+
+        var framework = Assert.Single(
+            assembly.GetCustomAttributesData(),
+            static attribute =>
+                attribute.AttributeType == typeof(TestFrameworkAttribute));
 
         // Assert
         Assert.Equal((int)CollectionBehavior.CollectionPerClass, behavior.ConstructorArguments[0].Value);
-        Assert.Equal(4, Assert.Single(behavior.NamedArguments, static argument =>
-            argument.MemberName == nameof(CollectionBehaviorAttribute.MaxParallelThreads)).TypedValue.Value);
+        Assert.Equal(
+            4,
+            Assert.Single(
+                    behavior.NamedArguments,
+                    static argument =>
+                        argument.MemberName == nameof(CollectionBehaviorAttribute.MaxParallelThreads))
+                .TypedValue.Value);
+
         Assert.Equal(typeof(PostgreSqlTestFramework).FullName, framework.ConstructorArguments[0].Value);
-        Assert.Equal(typeof(SharedContainerTestFramework<PostgreSqlContainerFixture>),
+        Assert.Equal(
+            typeof(SharedContainerTestFramework<PostgreSqlContainerFixture>),
             typeof(PostgreSqlTestFramework).BaseType);
     }
 
@@ -30,12 +42,15 @@ public sealed class PostgreSqlTestParallelismTests
     public void ExclusiveCollections_ContainOnlyProcessTotalAllocationCases()
     {
         // Arrange
-        var classes = typeof(PostgreSqlTestParallelismTests).Assembly.GetTypes()
+        var classes = typeof(PostgreSqlTestParallelismTests)
+            .Assembly
+            .GetTypes()
             .Where(static type => type.GetCustomAttribute<CollectionAttribute>() is not null)
             .ToArray();
 
         // Act
-        var methods = classes.SelectMany(static type => type.GetMethods())
+        var methods = classes
+            .SelectMany(static type => type.GetMethods())
             .Where(static method => method.IsDefined(typeof(FactAttribute), inherit: true))
             .Select(static method => method.Name)
             .OrderBy(static name => name, StringComparer.Ordinal)
@@ -43,13 +58,24 @@ public sealed class PostgreSqlTestParallelismTests
 
         // Assert
         Assert.Equal(2, classes.Length);
-        Assert.All(classes, static type => Assert.Equal(ProcessWideTestGroup.Name,
-            Assert.Single(type.GetCustomAttributesData(), static attribute =>
-                attribute.AttributeType == typeof(CollectionAttribute)).ConstructorArguments[0].Value));
+        Assert.All(
+            classes,
+            static type => Assert.Equal(
+                ProcessWideTestGroup.Name,
+                Assert
+                    .Single(
+                        type.GetCustomAttributesData(),
+                        static attribute =>
+                            attribute.AttributeType == typeof(CollectionAttribute))
+                    .ConstructorArguments[0].Value));
+
         Assert.Equal(
-            ["ColumnAttribution_PairedPlainAndMixedCatalogRuntimeFixtures",
-                "ModelManagedData_FiftyThousandMixedRowsConvergeAndReplayIdempotently"],
+            [
+                "ColumnAttribution_PairedPlainAndMixedCatalogRuntimeFixtures",
+                "ModelManagedData_FiftyThousandMixedRowsConvergeAndReplayIdempotently",
+            ],
             methods);
+
         Assert.Null(typeof(PostgreSqlPerformanceIntegrationTests).GetCustomAttribute<CollectionAttribute>());
     }
 
@@ -59,20 +85,28 @@ public sealed class PostgreSqlTestParallelismTests
     {
         // Arrange
         var originalOwner = typeof(PostgreSqlSafeMigrationIntegrationTests);
-        var featureClasses = originalOwner.Assembly.GetTypes()
+        var featureClasses = originalOwner
+            .Assembly
+            .GetTypes()
             .Where(type => !type.IsAbstract && originalOwner.IsAssignableFrom(type))
             .ToArray();
 
         // Act
-        var declaredCases = featureClasses.SelectMany(static type => type.GetMethods(
+        var declaredCases = featureClasses
+            .SelectMany(static type => type.GetMethods(
                 BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
             .Where(static method => method.IsDefined(typeof(FactAttribute), inherit: true))
             .ToArray();
-        var inheritedCases = originalOwner.GetMethods()
+
+        var inheritedCases = originalOwner
+            .GetMethods()
             .Where(static method => method.IsDefined(typeof(FactAttribute), inherit: true))
             .ToArray();
-        var nestedTypes = originalOwner.GetNestedTypes(BindingFlags.NonPublic)
-            .Where(static type => !type.IsDefined(typeof(System.Runtime.CompilerServices.CompilerGeneratedAttribute),
+
+        var nestedTypes = originalOwner
+            .GetNestedTypes(BindingFlags.NonPublic)
+            .Where(static type => !type.IsDefined(
+                typeof(CompilerGeneratedAttribute),
                 inherit: false))
             .Select(static type => type.Name)
             .OrderBy(static name => name, StringComparer.Ordinal)
@@ -83,13 +117,23 @@ public sealed class PostgreSqlTestParallelismTests
         Assert.Empty(inheritedCases);
         Assert.Equal(53, featureClasses.Length);
         Assert.Equal(328, declaredCases.Length);
-        Assert.Equal(328, declaredCases.Select(static method => method.Name).Distinct(StringComparer.Ordinal).Count());
-        Assert.All(featureClasses, static type =>
-            Assert.True(typeof(IClassFixture<PostgreSqlContainerFixture>).IsAssignableFrom(type)));
+        Assert.Equal(328,
+            declaredCases
+                .Select(static method => method.Name)
+                .Distinct(StringComparer.Ordinal)
+                .Count());
+
+        Assert.All(
+            featureClasses,
+            static type =>
+                Assert.True(typeof(IClassFixture<PostgreSqlContainerFixture>).IsAssignableFrom(type)));
+
         Assert.Equal(
-            ["BlockingProviderAnalyzer", "CountingDbConnection", "DerivedEntity", "MatchingDerivedContext",
+            [
+                "BlockingProviderAnalyzer", "CountingDbConnection", "DerivedEntity", "MatchingDerivedContext",
                 "SchemaChangingDerivedContext", "SnapshotFreeContext", "SnapshotFreeEntry",
-                "StandaloneForeignKeyContext", "TransitionChild", "TransitionParent", "UnmappedValue"],
+                "StandaloneForeignKeyContext", "TransitionChild", "TransitionParent", "UnmappedValue",
+            ],
             nestedTypes);
     }
 
@@ -130,11 +174,13 @@ public sealed class PostgreSqlTestParallelismTests
             constructions++;
             throw new InvalidOperationException("offline construction sentinel");
         });
+
         var required = SharedContainerFixtureSelection.RequiresFixture<PostgreSqlContainerFixture>(
-            typeof(PostgreSqlTestParallelismTests), skipReason: null);
+            typeof(PostgreSqlTestParallelismTests),
+            skipReason: null);
 
         // Act
-        await lifecycle.InitializeAsync(required);
+        await lifecycle.InitializeAsync(required, cancellationToken: CancellationToken.None);
         await lifecycle.DisposeAsync();
 
         // Assert

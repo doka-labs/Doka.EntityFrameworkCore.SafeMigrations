@@ -104,9 +104,9 @@ internal static class SafeMigrationSqlExpressionParser
             return true;
         }
         catch (Exception exception) when (exception is SqlExpressionParseException
-                                              or ArgumentException
-                                              or FormatException
-                                              or OverflowException)
+            or ArgumentException
+            or FormatException
+            or OverflowException)
         {
             return false;
         }
@@ -172,6 +172,7 @@ internal static class SafeMigrationSqlExpressionParser
 
             var leftOffset = 0;
             var rightOffset = 0;
+
             // WHY: Pair corresponding tokens while preserving each source's independent quoted-text offsets.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
@@ -179,8 +180,16 @@ internal static class SafeMigrationSqlExpressionParser
             {
                 var first = leftColumns[index];
                 var second = rightColumns[index];
-                var firstStart = first.Token.Start - (first.Token.Delimiter == '\0' ? 0 : 1);
-                var secondStart = second.Token.Start - (second.Token.Delimiter == '\0' ? 0 : 1);
+                var firstStart = first.Token.Start
+                    - (first.Token.Delimiter == '\0'
+                        ? 0
+                        : 1);
+
+                var secondStart = second.Token.Start
+                    - (second.Token.Delimiter == '\0'
+                        ? 0
+                        : 1);
+
                 if (!left
                         .AsSpan(leftOffset, firstStart - leftOffset)
                         .SequenceEqual(right.AsSpan(rightOffset, secondStart - rightOffset))
@@ -191,8 +200,17 @@ internal static class SafeMigrationSqlExpressionParser
                     return false;
                 }
 
-                leftOffset = first.Token.Start + first.Token.Length + (first.Token.Delimiter == '\0' ? 0 : 1);
-                rightOffset = second.Token.Start + second.Token.Length + (second.Token.Delimiter == '\0' ? 0 : 1);
+                leftOffset = first.Token.Start
+                    + first.Token.Length
+                    + (first.Token.Delimiter == '\0'
+                        ? 0
+                        : 1);
+
+                rightOffset = second.Token.Start
+                    + second.Token.Length
+                    + (second.Token.Delimiter == '\0'
+                        ? 0
+                        : 1);
             }
 
             return left
@@ -200,9 +218,9 @@ internal static class SafeMigrationSqlExpressionParser
                 .SequenceEqual(right.AsSpan(rightOffset));
         }
         catch (Exception exception) when (exception is SqlExpressionParseException
-                                              or ArgumentException
-                                              or FormatException
-                                              or OverflowException)
+            or ArgumentException
+            or FormatException
+            or OverflowException)
         {
             return false;
         }
@@ -265,9 +283,9 @@ internal static class SafeMigrationSqlExpressionParser
             return true;
         }
         catch (Exception exception) when (exception is SqlExpressionParseException
-                                              or ArgumentException
-                                              or FormatException
-                                              or OverflowException)
+            or ArgumentException
+            or FormatException
+            or OverflowException)
         {
             return false;
         }
@@ -378,7 +396,9 @@ internal static class SafeMigrationSqlExpressionParser
                     continue;
                 }
 
-                var delimiter = column.Token.Delimiter == '\0' ? unquotedIdentifierDelimiter : column.Token.Delimiter;
+                var delimiter = column.Token.Delimiter == '\0'
+                    ? unquotedIdentifierDelimiter
+                    : column.Token.Delimiter;
 
                 if (delimiter is not ('"' or '`' or '['))
                 {
@@ -388,7 +408,10 @@ internal static class SafeMigrationSqlExpressionParser
                     return false;
                 }
 
-                var closing = delimiter == '[' ? ']' : delimiter.Value;
+                var closing = delimiter == '['
+                    ? ']'
+                    : delimiter.Value;
+
                 var replacementLength = target.Length + 2;
                 foreach (var character in target)
                 {
@@ -401,8 +424,17 @@ internal static class SafeMigrationSqlExpressionParser
                 // WHY: Delimited lexer tokens expose their content span for
                 // decoding. A source rewrite replaces the enclosing quotes
                 // as well, including any doubled closing delimiter inside.
-                var start = column.Token.Start - (column.Token.Delimiter == '\0' ? 0 : 1);
-                var end = column.Token.Start + column.Token.Length + (column.Token.Delimiter == '\0' ? 0 : 1);
+                var start = column.Token.Start
+                    - (column.Token.Delimiter == '\0'
+                        ? 0
+                        : 1);
+
+                var end = column.Token.Start
+                    + column.Token.Length
+                    + (column.Token.Delimiter == '\0'
+                        ? 0
+                        : 1);
+
                 if ((long)(rewritten?.Length ?? 0) + start - copied + replacementLength + sql.Length - end
                     > MaximumLength)
                 {
@@ -445,9 +477,9 @@ internal static class SafeMigrationSqlExpressionParser
             return true;
         }
         catch (Exception exception) when (exception is SqlExpressionParseException
-                                              or ArgumentException
-                                              or FormatException
-                                              or OverflowException)
+            or ArgumentException
+            or FormatException
+            or OverflowException)
         {
             return false;
         }
@@ -532,7 +564,9 @@ internal static class SafeMigrationSqlExpressionParser
             {
                 var negated = MatchKeyword("NOT");
                 ExpectKeyword("NULL");
-                return negated ? SafeMigrationSql.IsNotNull(expression) : SafeMigrationSql.IsNull(expression);
+                return negated
+                    ? SafeMigrationSql.IsNotNull(expression)
+                    : SafeMigrationSql.IsNull(expression);
             }
 
             var negatedPredicate = MatchKeyword("NOT");
@@ -650,7 +684,12 @@ internal static class SafeMigrationSqlExpressionParser
                         Fail("invalid_collation_path");
                     }
 
-                    expression = SafeMigrationSql.Collate(expression, parts[^1], parts.Count == 2 ? parts[0] : null);
+                    expression = SafeMigrationSql.Collate(
+                        expression,
+                        parts[^1],
+                        parts.Count == 2
+                            ? parts[0]
+                            : null);
                 }
 
                 return expression;
@@ -850,7 +889,10 @@ internal static class SafeMigrationSqlExpressionParser
                     clauses.Add(new SafeMigrationSqlCaseWhenClause(condition, result));
                 } while (IsKeyword("WHEN"));
 
-                var elseResult = MatchKeyword("ELSE") ? ParseOr() : null;
+                var elseResult = MatchKeyword("ELSE")
+                    ? ParseOr()
+                    : null;
+
                 ExpectKeyword("END");
 
                 return SafeMigrationSql.Case(clauses, elseResult);
@@ -1024,10 +1066,8 @@ internal static class SafeMigrationSqlExpressionParser
                 value = string.Create(
                     value.Length,
                     value,
-                    static (
-                        destination,
-                        original
-                    ) =>
+                    static (destination,
+                        original) =>
                     {
                         // WHY: Write each folded ASCII code unit to the same destination offset without changing quoted
                         // roles.
@@ -1036,7 +1076,9 @@ internal static class SafeMigrationSqlExpressionParser
                         for (var index = 0; index < original.Length; index++)
                         {
                             var character = original[index];
-                            destination[index] = character is >= 'A' and <= 'Z' ? (char)(character + 32) : character;
+                            destination[index] = character is >= 'A' and <= 'Z'
+                                ? (char)(character + 32)
+                                : character;
                         }
                     });
             }
@@ -1183,7 +1225,7 @@ internal static class SafeMigrationSqlExpressionParser
         private void Advance()
         {
             while (_position < _source.Length
-                   && char.IsWhiteSpace(_source[_position]))
+                && char.IsWhiteSpace(_source[_position]))
             {
                 _position++;
             }
@@ -1290,7 +1332,7 @@ internal static class SafeMigrationSqlExpressionParser
         )
         {
             while (_position < _source.Length
-                   && char.IsAsciiDigit(_source[_position]))
+                && char.IsAsciiDigit(_source[_position]))
             {
                 _position++;
             }
@@ -1306,7 +1348,7 @@ internal static class SafeMigrationSqlExpressionParser
                 }
 
                 while (_position < _source.Length
-                       && char.IsAsciiDigit(_source[_position]))
+                    && char.IsAsciiDigit(_source[_position]))
                 {
                     _position++;
                 }
@@ -1329,7 +1371,7 @@ internal static class SafeMigrationSqlExpressionParser
                 }
 
                 while (_position < _source.Length
-                       && char.IsAsciiDigit(_source[_position]))
+                    && char.IsAsciiDigit(_source[_position]))
                 {
                     _position++;
                 }
@@ -1343,7 +1385,7 @@ internal static class SafeMigrationSqlExpressionParser
         )
         {
             while (_position < _source.Length
-                   && IsIdentifierPart(_source[_position]))
+                && IsIdentifierPart(_source[_position]))
             {
                 _position++;
             }
@@ -1356,7 +1398,10 @@ internal static class SafeMigrationSqlExpressionParser
         )
         {
             var raw = TokenText(token);
-            var closing = token.Delimiter == '[' ? ']' : token.Delimiter;
+            var closing = token.Delimiter == '['
+                ? ']'
+                : token.Delimiter;
+
             var escapedIndex = raw.IndexOf(closing);
             if (escapedIndex < 0)
             {
@@ -1372,6 +1417,7 @@ internal static class SafeMigrationSqlExpressionParser
                 start = escapedIndex + 2;
                 escapedIndex = raw[start..]
                     .IndexOf(closing);
+
                 if (escapedIndex >= 0)
                 {
                     escapedIndex += start;

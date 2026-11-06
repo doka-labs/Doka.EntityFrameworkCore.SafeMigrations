@@ -28,7 +28,8 @@ internal static class SqlServerGuardedSqlTestContract
                 continue;
             }
 
-            if (offset + 1 < commandText.Length && commandText[offset + 1] == '\'')
+            if (offset + 1 < commandText.Length
+                && commandText[offset + 1] == '\'')
             {
                 body.Append('\'');
                 offset++;
@@ -36,7 +37,10 @@ internal static class SqlServerGuardedSqlTestContract
                 continue;
             }
 
-            if (!commandText.AsSpan(offset + 1).Trim().SequenceEqual(";"))
+            if (!commandText
+                .AsSpan(offset + 1)
+                .Trim()
+                .SequenceEqual(";"))
             {
                 throw new InvalidOperationException("The guarded command has content outside its dynamic scope.");
             }
@@ -63,8 +67,11 @@ internal static class SqlServerGuardedSqlTestContract
         SafeMigrationOperation operation
     )
     {
-        var command = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model)
-            .Single(static candidate => candidate.CommandText.Contains("DECLARE @doka_state", StringComparison.Ordinal));
+        var command = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model)
+            .Single(static candidate =>
+                candidate.CommandText.Contains("DECLARE @doka_state", StringComparison.Ordinal));
 
         return DecodeScope(command.CommandText);
     }

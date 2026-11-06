@@ -3,13 +3,16 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 /// <summary>Verifies conditional generated candidates without trusting live or future schema guesses.</summary>
 public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
 {
-    private readonly Xunit.Abstractions.ITestOutputHelper _output;
+    private readonly ITestOutputHelper _output;
 
     /// <summary>Receives informational allocation evidence without introducing a performance gate.</summary>
     /// <param name="output">The test-owned evidence sink.</param>
     public MySqlGeneratedColumnDependencyContractCatalogTests(
-        Xunit.Abstractions.ITestOutputHelper output
-    ) => _output = output;
+        ITestOutputHelper output
+    )
+    {
+        _output = output;
+    }
 
     /// <summary>Sharing empty immutable values cannot merge operation keys or ambiguous states.</summary>
     [Fact]
@@ -17,14 +20,20 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
     {
         // Arrange
         const int dropCount = 1000;
-        var operations = new List<MigrationOperation>(dropCount + 3) { Table(), };
+        var operations = new List<MigrationOperation>(dropCount + 3) { Table() };
         for (var ordinal = 0; ordinal < dropCount; ordinal++)
         {
             operations.Add(Safe(new DropColumnIntent($"retired_{ordinal}", "rows")));
         }
 
-        operations.Add(Safe(new EnsureTableIntent(new ExpectedTableDefinition("ambiguous",
-            [Ordinary("VALUE"), Ordinary("value")]), SafeMigrationTableMode.StrictDefinition)));
+        operations.Add(
+            Safe(
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition(
+                        "ambiguous",
+                        [Ordinary("VALUE"), Ordinary("value")]),
+                    SafeMigrationTableMode.StrictDefinition)));
+
         var ambiguous = Safe(new DropColumnIntent("retired", "ambiguous"));
         operations.Add(ambiguous);
         for (var warmup = 0; warmup < 4; warmup++)
@@ -46,8 +55,9 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
         Assert.Same(empty, catalog.Get(last));
         Assert.Null(catalog.Get(Safe(new DropColumnIntent("retired_0", "rows"))));
         Assert.NotSame(empty, catalog.Get(ambiguous));
-        Assert.False(Assert.IsType<MySqlGeneratedColumnDependencyContract>(catalog.Get(ambiguous))
-            .HasOnlyParsedExpressions);
+        Assert.False(
+            Assert.IsType<MySqlGeneratedColumnDependencyContract>(catalog.Get(ambiguous))
+                .HasOnlyParsedExpressions);
     }
 
     /// <summary>Identifier roles, not matching text in literals, establish a generated dependency.</summary>
@@ -55,24 +65,33 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void SnapshotDistinguishesIdentifierAndLiteralRoles(bool identifierReference)
+    public void SnapshotDistinguishesIdentifierAndLiteralRoles(
+        bool identifierReference
+    )
     {
         // Arrange
         var expression = SafeMigrationSql.Binary(
-            identifierReference ? SafeMigrationSql.Identifier("VALUE") : SafeMigrationSql.Identifier("other"),
-            SafeMigrationSqlBinaryOperator.Equal, SafeMigrationSql.Literal("value"));
+            identifierReference
+                ? SafeMigrationSql.Identifier("VALUE")
+                : SafeMigrationSql.Identifier("other"),
+            SafeMigrationSqlBinaryOperator.Equal,
+            SafeMigrationSql.Literal("value"));
 
         var rename = Rename("value", "renamed");
         MigrationOperation[] operations = [Table(Generated("derived", expression)), rename];
 
         // Act
-        var contract = MySqlGeneratedColumnDependencyContractCatalog.Create(operations).Get(rename);
+        var contract = MySqlGeneratedColumnDependencyContractCatalog
+            .Create(operations)
+            .Get(rename);
 
         // Assert
         Assert.NotNull(contract);
         Assert.True(contract.HasOnlyParsedExpressions);
         Assert.Equal(identifierReference, contract.ReferencesSource);
-        Assert.Equal("derived", Assert.Single(contract.GeneratedColumns).Name);
+        Assert.Equal("derived",
+            Assert.Single(contract.GeneratedColumns)
+                .Name);
     }
 
     /// <summary>Unknown syntax or role binding cannot certify absence of a generated dependency.</summary>
@@ -82,23 +101,31 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
     [InlineData("nested_opaque")]
     [InlineData("provider_fragment")]
     [InlineData("qualified")]
-    public void UnknownGeneratedMembersDoNotBecomeParsedNondependencyProof(string syntax)
+    public void UnknownGeneratedMembersDoNotBecomeParsedNondependencyProof(
+        string syntax
+    )
     {
         // Arrange
         var column = syntax == "raw"
             ? new ExpectedColumnDefinition("derived", typeof(int), true, "int", computedColumnSql: "opaque(value)")
-            : Generated("derived", syntax switch
-            {
-                "nested_opaque" => SafeMigrationSql.Binary(SafeMigrationSql.Identifier("other"),
-                    SafeMigrationSqlBinaryOperator.Add, SafeMigrationSql.Opaque("opaque(value)")),
-                "provider_fragment" => SafeMigrationSql.ProviderFragment("mysql", "opaque(value)"),
-                _ => SafeMigrationSql.Identifier("external", "value"),
-            });
+            : Generated(
+                "derived",
+                syntax switch
+                {
+                    "nested_opaque" => SafeMigrationSql.Binary(
+                        SafeMigrationSql.Identifier("other"),
+                        SafeMigrationSqlBinaryOperator.Add,
+                        SafeMigrationSql.Opaque("opaque(value)")),
+                    "provider_fragment" => SafeMigrationSql.ProviderFragment("mysql", "opaque(value)"),
+                    _ => SafeMigrationSql.Identifier("external", "value"),
+                });
 
         var rename = Rename("value", "renamed");
 
         // Act
-        var contract = MySqlGeneratedColumnDependencyContractCatalog.Create([Table(column), rename]).Get(rename);
+        var contract = MySqlGeneratedColumnDependencyContractCatalog
+            .Create([Table(column), rename])
+            .Get(rename);
 
         // Assert
         Assert.NotNull(contract);
@@ -117,7 +144,9 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
     [InlineData("annotated")]
     [InlineData("annotated_data")]
     [InlineData("drop_owner")]
-    public void UnknownOrInexactBoundaryExpiresCompleteOwnerPrefix(string boundary)
+    public void UnknownOrInexactBoundaryExpiresCompleteOwnerPrefix(
+        string boundary
+    )
     {
         // Arrange
         var generated = Generated("derived", SafeMigrationSql.Identifier("other"));
@@ -126,16 +155,24 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
         annotated.AddAnnotation("Test:UnknownOperationAnnotation", true);
         var annotatedData = new InsertDataOperation
         {
-            Table = "rows", Columns = ["value"], Values = new object?[,] { { 1 }, },
+            Table = "rows",
+            Columns = ["value"],
+            Values = new object?[,] { { 1 } },
         };
 
         annotatedData.AddAnnotation("Test:UnknownDataAnnotation", true);
         MigrationOperation mutation = boundary switch
         {
-            "raw" => new SqlOperation { Sql = "SELECT 1;", },
-            "provider" => new AddColumnOperation { Name = "outside", Table = "other_rows", ClrType = typeof(int), },
+            "raw" => new SqlOperation { Sql = "SELECT 1;" },
+            "provider" => new AddColumnOperation
+            {
+                Name = "outside",
+                Table = "other_rows",
+                ClrType = typeof(int),
+            },
             "existence_table" => Table(generated, policy: SafeMigrationPolicy.ExistenceOnly),
-            "existence_column" => Safe(new EnsureColumnIntent("rows", Ordinary("added")),
+            "existence_column" => Safe(
+                new EnsureColumnIntent("rows", Ordinary("added")),
                 SafeMigrationPolicy.ExistenceOnly),
             "convergence" => Table(generated, mode: SafeMigrationTableMode.ConvergenceContainer),
             "annotated" => annotated,
@@ -144,7 +181,8 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
         };
 
         // Act
-        var contract = MySqlGeneratedColumnDependencyContractCatalog.Create([Table(generated), mutation, rename])
+        var contract = MySqlGeneratedColumnDependencyContractCatalog
+            .Create([Table(generated), mutation, rename])
             .Get(rename);
 
         // Assert
@@ -158,32 +196,50 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
     [InlineData("insert")]
     [InlineData("update")]
     [InlineData("delete")]
-    public void TypedDataChangesPreserveConditionalGeneratedMemberCandidates(string change)
+    public void TypedDataChangesPreserveConditionalGeneratedMemberCandidates(
+        string change
+    )
     {
         // Arrange
         var generated = Generated("derived", SafeMigrationSql.Identifier("other"));
         var rename = Rename("value", "renamed");
         MigrationOperation data = change switch
         {
-            "managed_insert" => Safe(new EnsureModelManagedDataIntent("rows", ["value"], ["int"],
-                ["value", "other"], ["int", "int"], new object?[,] { { 1, 2 }, }, null, null)),
+            "managed_insert" => Safe(
+                new EnsureModelManagedDataIntent(
+                    "rows",
+                    ["value"],
+                    ["int"],
+                    ["value", "other"],
+                    ["int", "int"],
+                    new object?[,] { { 1, 2 } },
+                    null,
+                    null)),
             "insert" => new InsertDataOperation
             {
-                Table = "rows", Columns = ["value", "other"], Values = new object?[,] { { 1, 2 }, },
+                Table = "rows",
+                Columns = ["value", "other"],
+                Values = new object?[,] { { 1, 2 } },
             },
             "update" => new UpdateDataOperation
             {
-                Table = "rows", KeyColumns = ["value"], KeyValues = new object?[,] { { 1 }, },
-                Columns = ["other"], Values = new object?[,] { { 3 }, },
+                Table = "rows",
+                KeyColumns = ["value"],
+                KeyValues = new object?[,] { { 1 } },
+                Columns = ["other"],
+                Values = new object?[,] { { 3 } },
             },
             _ => new DeleteDataOperation
             {
-                Table = "rows", KeyColumns = ["value"], KeyValues = new object?[,] { { 1 }, },
+                Table = "rows",
+                KeyColumns = ["value"],
+                KeyValues = new object?[,] { { 1 } },
             },
         };
 
         // Act
-        var contract = MySqlGeneratedColumnDependencyContractCatalog.Create([Table(generated), data, rename])
+        var contract = MySqlGeneratedColumnDependencyContractCatalog
+            .Create([Table(generated), data, rename])
             .Get(rename);
 
         // Assert
@@ -203,18 +259,35 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
     [InlineData("literal", 1, false)]
     [InlineData("self", 0, false)]
     [InlineData("opaque_self", 0, false)]
-    public void DropSnapshotExcludesOnlyTheRemovedGeneratedMember(string shape, int generatedCount, bool references)
+    public void DropSnapshotExcludesOnlyTheRemovedGeneratedMember(
+        string shape,
+        int generatedCount,
+        bool references
+    )
     {
         // Arrange
         var generated = shape == "opaque_self"
             ? new ExpectedColumnDefinition("derived", typeof(int), true, "int", computedColumnSql: "opaque(value)")
-            : Generated("derived", shape == "literal" ? SafeMigrationSql.Literal("value")
-                : SafeMigrationSql.Identifier(shape is "dependent" or "self" ? "value" : "other"));
+            : Generated(
+                "derived",
+                shape == "literal"
+                    ? SafeMigrationSql.Literal("value")
+                    : SafeMigrationSql.Identifier(
+                        shape is "dependent" or "self"
+                            ? "value"
+                            : "other"));
 
-        var drop = Safe(new DropColumnIntent(shape is "self" or "opaque_self" ? "derived" : "value", "rows"));
+        var drop = Safe(
+            new DropColumnIntent(
+                shape is "self" or "opaque_self"
+                    ? "derived"
+                    : "value",
+                "rows"));
 
         // Act
-        var contract = MySqlGeneratedColumnDependencyContractCatalog.Create([Table(generated), drop]).Get(drop);
+        var contract = MySqlGeneratedColumnDependencyContractCatalog
+            .Create([Table(generated), drop])
+            .Get(drop);
 
         // Assert
         Assert.NotNull(contract);
@@ -228,15 +301,25 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void SparseGeneratedDeclarationCanSupplyConditionalDropCandidate(bool references)
+    public void SparseGeneratedDeclarationCanSupplyConditionalDropCandidate(
+        bool references
+    )
     {
         // Arrange
-        var generated = Generated("derived", SafeMigrationSql.Identifier(references ? "value" : "other"));
+        var generated = Generated(
+            "derived",
+            SafeMigrationSql.Identifier(
+                references
+                    ? "value"
+                    : "other"));
+
         var drop = Safe(new DropColumnIntent("value", "rows"));
         MigrationOperation[] operations = [Safe(new EnsureColumnIntent("rows", generated)), drop];
 
         // Act
-        var contract = MySqlGeneratedColumnDependencyContractCatalog.Create(operations).Get(drop);
+        var contract = MySqlGeneratedColumnDependencyContractCatalog
+            .Create(operations)
+            .Get(drop);
 
         // Assert
         Assert.NotNull(contract);
@@ -256,8 +339,11 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
         var catalog = MySqlGeneratedColumnDependencyContractCatalog.Create([first, source]);
 
         // Assert
-        Assert.Empty(Assert.IsType<MySqlGeneratedColumnDependencyContract>(catalog.Get(first)).GeneratedColumns);
-        Assert.Empty(Assert.IsType<MySqlGeneratedColumnDependencyContract>(catalog.Get(source)).GeneratedColumns);
+        Assert.Empty(Assert.IsType<MySqlGeneratedColumnDependencyContract>(catalog.Get(first))
+            .GeneratedColumns);
+
+        Assert.Empty(Assert.IsType<MySqlGeneratedColumnDependencyContract>(catalog.Get(source))
+            .GeneratedColumns);
     }
 
     /// <summary>Model bytes need fresh native proof and cannot become an authored prefix across raw SQL.</summary>
@@ -265,16 +351,21 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void OperationBoundModelDoesNotBecomePrefixAcrossOpaqueBoundary(bool opaque)
+    public void OperationBoundModelDoesNotBecomePrefixAcrossOpaqueBoundary(
+        bool opaque
+    )
     {
         // Arrange
         var generated = Generated("derived", SafeMigrationSql.Identifier("value"));
         var model = new ExpectedTableDefinition("rows", [generated]);
         var rename = Rename("value", "renamed");
-        MigrationOperation[] operations = opaque ? [new SqlOperation { Sql = "SELECT 1;", }, rename] : [rename];
+        MigrationOperation[] operations = opaque
+            ? [new SqlOperation { Sql = "SELECT 1;" }, rename]
+            : [rename];
 
         // Act
-        var catalog = MySqlGeneratedColumnDependencyContractCatalog.Create(operations,
+        var catalog = MySqlGeneratedColumnDependencyContractCatalog.Create(
+            operations,
             targetModelCandidates: ModelCandidates(rename, model));
 
         // Assert
@@ -294,7 +385,8 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
         var model = new ExpectedTableDefinition("rows", [generated]);
 
         // Act
-        var catalog = MySqlGeneratedColumnDependencyContractCatalog.Create([rename],
+        var catalog = MySqlGeneratedColumnDependencyContractCatalog.Create(
+            [rename],
             targetModelCandidates: ModelCandidates(rename, model));
 
         // Assert
@@ -311,7 +403,8 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
         var drop = Safe(new DropColumnIntent("value", "rows"));
 
         // Act
-        var catalog = MySqlGeneratedColumnDependencyContractCatalog.Create([Table(authored), drop],
+        var catalog = MySqlGeneratedColumnDependencyContractCatalog.Create(
+            [Table(authored), drop],
             targetModelCandidates: ModelCandidates(drop, new ExpectedTableDefinition("rows", [modeled])));
 
         // Assert
@@ -342,7 +435,8 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
         };
 
         // Act
-        var catalog = MySqlGeneratedColumnDependencyContractCatalog.Create([first, second],
+        var catalog = MySqlGeneratedColumnDependencyContractCatalog.Create(
+            [first, second],
             targetModelCandidates: models);
 
         // Assert
@@ -359,19 +453,28 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ModelOwnerCollisionIsProfileSpecificAndCannotUnionCandidates(bool foldOwners)
+    public void ModelOwnerCollisionIsProfileSpecificAndCannotUnionCandidates(
+        bool foldOwners
+    )
     {
         // Arrange
         var rename = Safe(new RenameColumnIntent("value", "Rows", "renamed"));
         var exactColumn = Generated("exact_derived", SafeMigrationSql.Identifier("other"));
         var foldedColumn = Generated("folded_derived", SafeMigrationSql.Identifier("value"));
-        var models = ModelCandidates(rename, new ExpectedTableDefinition("Rows", [exactColumn]),
+        var models = ModelCandidates(
+            rename,
+            new ExpectedTableDefinition("Rows", [exactColumn]),
             new ExpectedTableDefinition("rows", [foldedColumn]));
 
         // Act
-        var contract = MySqlGeneratedColumnDependencyContractCatalog.Create([rename],
-            tableComparer: foldOwners ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal,
-            targetModelCandidates: models).GetModelCandidate(rename);
+        var contract = MySqlGeneratedColumnDependencyContractCatalog
+            .Create(
+                [rename],
+                tableComparer: foldOwners
+                    ? StringComparer.OrdinalIgnoreCase
+                    : StringComparer.Ordinal,
+                targetModelCandidates: models)
+            .GetModelCandidate(rename);
 
         // Assert
         if (foldOwners)
@@ -396,7 +499,8 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
         var models = ModelCandidates(rename, new ExpectedTableDefinition("rows", [generated]));
 
         // Act
-        var catalog = MySqlGeneratedColumnDependencyContractCatalog.Create([rename, Table(generated), rename],
+        var catalog = MySqlGeneratedColumnDependencyContractCatalog.Create(
+            [rename, Table(generated), rename],
             targetModelCandidates: models);
 
         // Assert
@@ -428,16 +532,25 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
     {
         // Arrange
         var rename = Rename("value", "renamed");
-        var generated = new ExpectedColumnDefinition("derived", typeof(string), true, "varchar(32)",
-            maxLength: 32, collation: new SafeMigrationCollationIdentifier("utf8mb4_bin"),
+        var generated = new ExpectedColumnDefinition(
+            "derived",
+            typeof(string),
+            true,
+            "varchar(32)",
+            maxLength: 32,
+            collation: new SafeMigrationCollationIdentifier("utf8mb4_bin"),
             comment: "generated contract",
-            computedExpression: SafeMigrationSql.Identifier("other"), isStored: true);
+            computedExpression: SafeMigrationSql.Identifier("other"),
+            isStored: true);
 
         var model = new ExpectedTableDefinition("rows", [generated]);
 
         // Act
-        var contract = MySqlGeneratedColumnDependencyContractCatalog.Create([rename],
-            targetModelCandidates: ModelCandidates(rename, model)).GetModelCandidate(rename);
+        var contract = MySqlGeneratedColumnDependencyContractCatalog
+            .Create(
+                [rename],
+                targetModelCandidates: ModelCandidates(rename, model))
+            .GetModelCandidate(rename);
 
         // Assert
         Assert.NotNull(contract);
@@ -452,7 +565,9 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
         var drop = Safe(new DropColumnIntent("value", "rows"));
 
         // Act
-        var contract = MySqlGeneratedColumnDependencyContractCatalog.Create([Table(), drop, drop]).Get(drop);
+        var contract = MySqlGeneratedColumnDependencyContractCatalog
+            .Create([Table(), drop, drop])
+            .Get(drop);
 
         // Assert
         Assert.Null(contract);
@@ -468,7 +583,9 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
         MigrationOperation[] operations = [Table(), rename, Safe(new EnsureColumnIntent("rows", generated))];
 
         // Act
-        var contract = MySqlGeneratedColumnDependencyContractCatalog.Create(operations).Get(rename);
+        var contract = MySqlGeneratedColumnDependencyContractCatalog
+            .Create(operations)
+            .Get(rename);
 
         // Assert
         Assert.NotNull(contract);
@@ -485,13 +602,20 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
     [InlineData("add", 1, true)]
     [InlineData("alter", 1, true)]
     [InlineData("drop", 0, false)]
-    public void PrefixAppliesKnownGeneratedMemberTransitions(string change, int count, bool references)
+    public void PrefixAppliesKnownGeneratedMemberTransitions(
+        string change,
+        int count,
+        bool references
+    )
     {
         // Arrange
         var old = Generated("derived", SafeMigrationSql.Identifier("other"));
         var target = Generated("derived", SafeMigrationSql.Identifier("value"));
         var rename = Rename("value", "renamed");
-        var initial = change == "add" ? Table() : Table(old);
+        var initial = change == "add"
+            ? Table()
+            : Table(old);
+
         var mutation = change switch
         {
             "add" => Safe(new EnsureColumnIntent("rows", target)),
@@ -500,7 +624,9 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
         };
 
         // Act
-        var contract = MySqlGeneratedColumnDependencyContractCatalog.Create([initial, mutation, rename]).Get(rename);
+        var contract = MySqlGeneratedColumnDependencyContractCatalog
+            .Create([initial, mutation, rename])
+            .Get(rename);
 
         // Assert
         Assert.NotNull(contract);
@@ -518,7 +644,9 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
         MigrationOperation[] operations = [Table(old), Safe(new DropTableIntent("rows")), Table(), rename];
 
         // Act
-        var contract = MySqlGeneratedColumnDependencyContractCatalog.Create(operations).Get(rename);
+        var contract = MySqlGeneratedColumnDependencyContractCatalog
+            .Create(operations)
+            .Get(rename);
 
         // Assert
         Assert.NotNull(contract);
@@ -540,7 +668,9 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
         var catalog = MySqlGeneratedColumnDependencyContractCatalog.Create(operations);
 
         // Assert
-        Assert.True(Assert.IsType<MySqlGeneratedColumnDependencyContract>(catalog.Get(first)).ReferencesSource);
+        Assert.True(Assert.IsType<MySqlGeneratedColumnDependencyContract>(catalog.Get(first))
+            .ReferencesSource);
+
         Assert.Null(catalog.Get(later));
     }
 
@@ -549,7 +679,9 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ColumnCaseDoesNotSilentlyFoldTableOwners(bool foldOwners)
+    public void ColumnCaseDoesNotSilentlyFoldTableOwners(
+        bool foldOwners
+    )
     {
         // Arrange
         var generated = Generated("derived", SafeMigrationSql.Identifier("VALUE"));
@@ -557,8 +689,14 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
         var rename = Safe(new RenameColumnIntent("value", "rows", "renamed"));
 
         // Act
-        var contract = MySqlGeneratedColumnDependencyContractCatalog.Create([table, rename], "selected",
-            foldOwners ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).Get(rename);
+        var contract = MySqlGeneratedColumnDependencyContractCatalog
+            .Create(
+                [table, rename],
+                "selected",
+                foldOwners
+                    ? StringComparer.OrdinalIgnoreCase
+                    : StringComparer.Ordinal)
+            .Get(rename);
 
         // Assert
         Assert.Equal(foldOwners, contract is not null);
@@ -592,7 +730,10 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
 
         // Assert
         Assert.Same(generated, Assert.Single(original.GeneratedColumns));
-        Assert.Equal("renamed_derived", Assert.Single(final.GeneratedColumns).Name);
+        Assert.Equal("renamed_derived",
+            Assert.Single(final.GeneratedColumns)
+                .Name);
+
         Assert.IsType<NotSupportedException>(mutation);
     }
 
@@ -623,6 +764,7 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
         var rename = Rename("value", "renamed");
         SafeMigrationOperation[] operations =
             [Table(Generated("derived", SafeMigrationSql.Identifier("other"))), rename];
+
         var catalog = MySqlGeneratedColumnDependencyContractCatalog.Create(operations);
         var capture = new MySqlSafeMigrationPlanCapture();
         var indexes = MySqlSafeMigrationPlanCapture.CreateExpectedUniqueIndexes(operations);
@@ -674,9 +816,15 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
         ];
 
         // Act
-        var exact = MySqlGeneratedColumnDependencyContractCatalog.Create(operations).Get(rename);
-        var folded = MySqlGeneratedColumnDependencyContractCatalog.Create(operations,
-            tableComparer: StringComparer.OrdinalIgnoreCase).Get(rename);
+        var exact = MySqlGeneratedColumnDependencyContractCatalog
+            .Create(operations)
+            .Get(rename);
+
+        var folded = MySqlGeneratedColumnDependencyContractCatalog
+            .Create(
+                operations,
+                tableComparer: StringComparer.OrdinalIgnoreCase)
+            .Get(rename);
 
         // Assert
         Assert.NotNull(exact);
@@ -690,9 +838,7 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
         // Arrange
         var rename = Rename("value", "renamed");
         var capture = new MySqlSafeMigrationPlanCapture();
-        using (capture.BeginGeneration([Table(), rename]))
-        {
-        }
+        using (capture.BeginGeneration([Table(), rename])) { }
 
         // Act
         var failure = Record.Exception(() => capture.GetGenerationGeneratedColumnDependencyContract(rename));
@@ -711,9 +857,7 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
         var rename = Rename("value", "renamed");
         var capture = new MySqlSafeMigrationPlanCapture();
         var model = new ExpectedTableDefinition("rows", [Generated("derived", SafeMigrationSql.Identifier("other"))]);
-        using (capture.BeginGeneration([rename], ModelCandidates(rename, model)))
-        {
-        }
+        using (capture.BeginGeneration([rename], ModelCandidates(rename, model))) { }
 
         // Act
         var failure = Record.Exception(() => capture.GetGenerationGeneratedColumnModelCandidate(rename));
@@ -727,18 +871,26 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
     private static Dictionary<SafeMigrationOperation, IReadOnlyList<ExpectedTableDefinition>> ModelCandidates(
         SafeMigrationOperation operation,
         params ExpectedTableDefinition[] definitions
-    ) => new Dictionary<SafeMigrationOperation, IReadOnlyList<ExpectedTableDefinition>>(
+    ) => new(
         ReferenceEqualityComparer.Instance)
     {
         [operation] = definitions,
     };
 
-    private static ExpectedColumnDefinition Ordinary(string name) => new(name, typeof(int), true, "int");
+    private static ExpectedColumnDefinition Ordinary(
+        string name
+    ) => new(name, typeof(int), true, "int");
 
-    private static ExpectedColumnDefinition Generated(string name, SafeMigrationSqlExpression expression) =>
+    private static ExpectedColumnDefinition Generated(
+        string name,
+        SafeMigrationSqlExpression expression
+    ) =>
         new(name, typeof(int), true, "int", computedExpression: expression);
 
-    private static SafeMigrationOperation Rename(string source, string target) =>
+    private static SafeMigrationOperation Rename(
+        string source,
+        string target
+    ) =>
         Safe(new RenameColumnIntent(source, "rows", target));
 
     private static SafeMigrationOperation Table(
@@ -747,10 +899,19 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
         string? schema = null,
         SafeMigrationPolicy policy = SafeMigrationPolicy.ThrowIfDifferent,
         SafeMigrationTableMode mode = SafeMigrationTableMode.StrictDefinition
-    ) => Safe(new EnsureTableIntent(new ExpectedTableDefinition(table,
-        generated is null ? [Ordinary("value"), Ordinary("other")] : [Ordinary("value"), Ordinary("other"), generated],
-        schema), mode), policy);
+    ) => Safe(
+        new EnsureTableIntent(
+            new ExpectedTableDefinition(
+                table,
+                generated is null
+                    ? [Ordinary("value"), Ordinary("other")]
+                    : [Ordinary("value"), Ordinary("other"), generated],
+                schema),
+            mode),
+        policy);
 
-    private static SafeMigrationOperation Safe(SafeMigrationIntent intent,
-        SafeMigrationPolicy policy = SafeMigrationPolicy.ThrowIfDifferent) => new(intent, policy);
+    private static SafeMigrationOperation Safe(
+        SafeMigrationIntent intent,
+        SafeMigrationPolicy policy = SafeMigrationPolicy.ThrowIfDifferent
+    ) => new(intent, policy);
 }

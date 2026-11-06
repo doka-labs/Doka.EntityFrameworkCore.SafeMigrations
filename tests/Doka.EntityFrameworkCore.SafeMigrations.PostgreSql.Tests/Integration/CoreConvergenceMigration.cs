@@ -17,6 +17,7 @@ public sealed class CoreConvergenceMigration : Migration
                 Id = table.Column<int>(type: "integer", nullable: false),
             },
             constraints: table => table.PrimaryKey("pk_pipeline_probe", value => value.Id));
+
         migrationBuilder.CreateTableIfNotExists(
             "pipeline_state",
             table => new
@@ -26,6 +27,7 @@ public sealed class CoreConvergenceMigration : Migration
             constraints: table => table.PrimaryKey("pk_pipeline_state", value => value.Id),
             policy: SafeMigrationPolicy.ExistenceOnly,
             mode: SafeMigrationTableMode.ConvergenceContainer);
+
         migrationBuilder.AddColumnIfNotExists<string>(
             "payload",
             "pipeline_state",

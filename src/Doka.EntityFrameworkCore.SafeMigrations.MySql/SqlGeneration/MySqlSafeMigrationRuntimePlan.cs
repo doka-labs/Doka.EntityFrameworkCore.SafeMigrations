@@ -105,31 +105,8 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     /// <summary>Gets the fresh catalog predicate for an empty surviving generated-member set after DROP.</summary>
     public string? DropLeavesNoGeneratedColumnsExpression { get; init; }
 
-    /// <summary>Renders only surviving generated-member metadata, without reading application rows.</summary>
-    internal string RenderDropLeavesNoGeneratedColumnsExpression(
-        Func<MySqlCatalogParameterValue, string> renderValue
-    ) => DropLeavesNoGeneratedColumnsExpression is { } expression
-        ? RenderTemplate(expression, ParameterValues, renderValue)
-        : throw new InvalidOperationException("The DROP plan has no generated-member completeness predicate.");
-
     /// <summary>Gets owner-independent native source grammar qualification before missing prerequisites.</summary>
     public string? CapturedSourceSyntaxExpression { get; init; }
-
-    /// <summary>Renders native source grammar without substituting a missing application table for evidence.</summary>
-    internal string RenderCapturedSourceSyntaxExpression(
-        Func<MySqlCatalogParameterValue, string> renderValue
-    ) => CapturedSourceSyntaxExpression is { } syntax ? RenderTemplate(syntax, ParameterValues, renderValue) : "TRUE";
-
-    /// <summary>Renders only name/semantic index identity, never physical width or unique-row predicates.</summary>
-    internal string RenderProjectedIndexIdentityExpression(
-        Func<MySqlCatalogParameterValue, string> renderValue
-    ) => IndexNameExistsExpression is { } exists
-        ? "CASE WHEN ("
-        + RenderPostcondition(renderValue)
-        + ") THEN 'matching' WHEN ("
-        + RenderTemplate(exists, ParameterValues, renderValue)
-        + ") THEN 'different' ELSE 'missing' END"
-        : throw new InvalidOperationException("The generated-key identity capture requires an index-name predicate.");
 
     /// <summary>Gets optional constant evidence for a privacy-sensitive Different result.</summary>
     public SafeMigrationFacetDifference? DifferentDifference { get; init; }
@@ -157,6 +134,31 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
 
     /// <summary>Gets the expected number of dependency-count entries.</summary>
     public int ModelManagedDependencyCount { get; init; }
+
+    /// <summary>Renders only surviving generated-member metadata, without reading application rows.</summary>
+    internal string RenderDropLeavesNoGeneratedColumnsExpression(
+        Func<MySqlCatalogParameterValue, string> renderValue
+    ) => DropLeavesNoGeneratedColumnsExpression is { } expression
+        ? RenderTemplate(expression, ParameterValues, renderValue)
+        : throw new InvalidOperationException("The DROP plan has no generated-member completeness predicate.");
+
+    /// <summary>Renders native source grammar without substituting a missing application table for evidence.</summary>
+    internal string RenderCapturedSourceSyntaxExpression(
+        Func<MySqlCatalogParameterValue, string> renderValue
+    ) => CapturedSourceSyntaxExpression is { } syntax
+        ? RenderTemplate(syntax, ParameterValues, renderValue)
+        : "TRUE";
+
+    /// <summary>Renders only name/semantic index identity, never physical width or unique-row predicates.</summary>
+    internal string RenderProjectedIndexIdentityExpression(
+        Func<MySqlCatalogParameterValue, string> renderValue
+    ) => IndexNameExistsExpression is { } exists
+        ? "CASE WHEN ("
+        + RenderPostcondition(renderValue)
+        + ") THEN 'matching' WHEN ("
+        + RenderTemplate(exists, ParameterValues, renderValue)
+        + ") THEN 'different' ELSE 'missing' END"
+        : throw new InvalidOperationException("The generated-key identity capture requires an index-name predicate.");
 
     /// <summary>Renders the prerequisite expression with provider literals.</summary>
     /// <param name="renderValue">The provider literal renderer.</param>
@@ -745,10 +747,8 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
             (Expression: expression, Data: dataReplacement, Transition: transitionReplacement,
                 Nullability: nullabilityReplacement, RepairInvariant: repairInvariantReplacement,
                 RequiredAddStatus: requiredAddStatusReplacement ?? RequiredColumnAddStatusPlaceholder),
-            static (
-                destination,
-                state
-            ) =>
+            static (destination,
+                state) =>
             {
                 var source = state.Expression.AsSpan();
                 var sourceOffset = 0;
@@ -782,6 +782,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
                     replacement
                         .AsSpan()
                         .CopyTo(destination[destinationOffset..]);
+
                     destinationOffset += replacement.Length;
                     sourceOffset = marker.Index + marker.Length;
                 }
@@ -804,6 +805,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         {
             var next = sql[index..]
                 .IndexOfAny(s_proofTokenStarts);
+
             if (next < 0)
             {
                 break;
@@ -883,7 +885,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
                 var end = MySqlSafeMigrationBinaryDefaultProof.MarkerPrefix.Length;
                 var digits = end;
                 while (end < remaining.Length
-                       && char.IsAsciiDigit(remaining[end]))
+                    && char.IsAsciiDigit(remaining[end]))
                 {
                     end++;
                 }
@@ -906,7 +908,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
                 var end = MySqlSafeMigrationIdentifierReferenceProof.MarkerPrefix.Length;
                 var digits = end;
                 while (end < remaining.Length
-                       && char.IsAsciiDigit(remaining[end]))
+                    && char.IsAsciiDigit(remaining[end]))
                 {
                     end++;
                 }
@@ -934,6 +936,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         var rendered = MySqlSafeMigrationBinaryDefaultProof.Bind(
             MySqlCatalogSqlTemplate.Render(template, values, renderValue, CatalogRelations),
             BinaryDefaultProofs);
+
         rendered = MySqlSafeMigrationIdentifierReferenceBinding.Bind(rendered, IdentifierReferenceProofs);
         if (!HasRequiredColumnAddStatusMarker(rendered))
         {
@@ -942,6 +945,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
 
         var protocol = RequiredColumnAddPlan
             ?? throw new InvalidOperationException("The status marker requires a required-column add protocol.");
+
         var status = protocol.StatusBinding ?? "(" + RenderRequiredColumnAddStatusExpression(renderValue) + ")";
 
         return ReplaceTransitionPlaceholders(
@@ -961,6 +965,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         var rendered = MySqlSafeMigrationBinaryDefaultProof.Bind(
             MySqlCatalogSqlTemplate.RenderPrepared(template, renderedValues, CatalogRelations),
             BinaryDefaultProofs);
+
         rendered = MySqlSafeMigrationIdentifierReferenceBinding.Bind(rendered, IdentifierReferenceProofs);
         if (!HasRequiredColumnAddStatusMarker(rendered))
         {
@@ -969,6 +974,7 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
 
         var protocol = RequiredColumnAddPlan
             ?? throw new InvalidOperationException("The status marker requires a required-column add protocol.");
+
         var status = protocol.StatusBinding
             ?? "(" + RenderPreparedRequiredColumnAddStatusExpression(renderedValues) + ")";
 

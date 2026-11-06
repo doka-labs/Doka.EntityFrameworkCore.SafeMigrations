@@ -5,7 +5,9 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlColumnsLosslessRepairIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlColumnsLosslessRepairIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     [Fact]
     public async Task VarcharWidening_RepairsWithoutDataLossAndReplaysAsNoOp()
@@ -20,7 +22,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             + "INDEX `ix_varchar_widening_value` (`value`), "
             + "INDEX `ix_varchar_widening_value_id` (`value`, `id`)) "
             + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `varchar_widening` (`id`, `value`) VALUES (1, 'preserved');");
+            + "INSERT INTO `varchar_widening` (`id`, `value`) VALUES (1, 'preserved');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -47,7 +50,10 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             .GetService<ISafeMigrationProviderAnalyzer>()
             .AnalyzeAsync(
                 context,
-                builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
+                builder
+                    .Operations
+                    .Cast<SafeMigrationOperation>()
+                    .ToArray(),
                 CancellationToken.None);
 
         var assessment = Assert.Single(preflight.Assessments);
@@ -76,14 +82,21 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.True(Assert.Single(postflight.Assessments).PostconditionSatisfied);
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(replay.Assessments).ObservedState);
+        Assert.True(Assert.Single(postflight.Assessments)
+            .PostconditionSatisfied);
+
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(replay.Assessments)
+                .ObservedState);
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM `varchar_widening` "
-                + "WHERE `id` = 1 AND `value` = 'preserved';"));
+                + "WHERE `id` = 1 AND `value` = 'preserved';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             2,
             await ScalarIntAsync(
@@ -91,7 +104,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'varchar_widening' "
                 + "AND INDEX_NAME IN ('ix_varchar_widening_value', 'ix_varchar_widening_value_id') "
-                + "AND SEQ_IN_INDEX = 1 AND COLUMN_NAME = 'value';"));
+                + "AND SEQ_IN_INDEX = 1 AND COLUMN_NAME = 'value';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -112,10 +126,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
     )
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var nullability = isNullable ? "NULL" : "NOT NULL";
+        var nullability = isNullable
+            ? "NULL"
+            : "NOT NULL";
+
         var seedSql = containsData
             ? "INSERT INTO `text_family_widening` (`id`, `value`) "
-                + "VALUES (1, CONCAT('ok-', CONVERT(0xF09F9880 USING utf8mb4)));"
+            + "VALUES (1, CONCAT('ok-', CONVERT(0xF09F9880 USING utf8mb4)));"
             : string.Empty;
 
         await ExecuteSqlAsync(
@@ -123,7 +140,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             $"CREATE TABLE `text_family_widening` ("
             + $"`id` int NOT NULL, `value` {liveStoreType} {nullability}, PRIMARY KEY (`id`)) "
             + $"ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE {collation}; "
-            + seedSql);
+            + seedSql,
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -166,20 +184,30 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.True(Assert.Single(postflight.Assessments).PostconditionSatisfied);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
+        Assert.True(Assert.Single(postflight.Assessments)
+            .PostconditionSatisfied);
+
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replay.Assessments)
+                .Action);
+
         Assert.Equal(
             targetStoreType,
             await ScalarStringAsync(
                 connectionString,
                 "SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_family_widening' "
-                + "AND COLUMN_NAME = 'value';"));
+                + "AND COLUMN_NAME = 'value';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
-            containsData ? 1 : 0,
+            containsData
+                ? 1
+                : 0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM `text_family_widening`;"));
+                "SELECT COUNT(*) FROM `text_family_widening`;",
+                cancellationToken: CancellationToken.None));
 
         if (containsData)
         {
@@ -187,7 +215,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 "6F6B2DF09F9880",
                 await ScalarStringAsync(
                     connectionString,
-                    "SELECT HEX(`value`) FROM `text_family_widening` WHERE `id` = 1;"));
+                    "SELECT HEX(`value`) FROM `text_family_widening` WHERE `id` = 1;",
+                    cancellationToken: CancellationToken.None));
         }
     }
 
@@ -201,7 +230,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             + "`id` int NOT NULL, `value` text NULL, PRIMARY KEY (`id`)) "
             + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
             + "INSERT INTO `text_to_varchar` (`id`, `value`) VALUES "
-            + "(1, REPEAT(CONVERT(0xF09F9880 USING utf8mb4), 5)), (2, CONCAT('a', REPEAT(' ', 3))); ");
+            + "(1, REPEAT(CONVERT(0xF09F9880 USING utf8mb4), 5)), (2, CONCAT('a', REPEAT(' ', 3))); ",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -219,7 +249,10 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             .GetService<ISafeMigrationProviderAnalyzer>()
             .AnalyzeAsync(
                 context,
-                builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
+                builder
+                    .Operations
+                    .Cast<SafeMigrationOperation>()
+                    .ToArray(),
                 CancellationToken.None);
 
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -229,9 +262,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             new SafeMigrationRunOptions("text-to-varchar"),
             CancellationToken.None);
 
-        Assert.True(Assert.Single(providerAnalysis).RequiresLiveDataProof);
+        Assert.True(Assert.Single(providerAnalysis)
+            .RequiresLiveDataProof);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.Equal(SafeMigrationAction.Repair, Assert.Single(preflight.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Repair,
+            Assert.Single(preflight.Assessments)
+                .Action);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -241,12 +278,15 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 connectionString,
                 "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_to_varchar' "
-                + "AND COLUMN_NAME = 'value';"));
+                + "AND COLUMN_NAME = 'value';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             4,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT CHAR_LENGTH(`value`) FROM `text_to_varchar` WHERE `id` = 2;"));
+                "SELECT CHAR_LENGTH(`value`) FROM `text_to_varchar` WHERE `id` = 2;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -258,7 +298,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             "CREATE TABLE `text_to_varchar_blocked` ("
             + "`id` int NOT NULL, `value` text NULL, PRIMARY KEY (`id`)) "
             + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `text_to_varchar_blocked` (`id`, `value`) VALUES (1, 'too-long');");
+            + "INSERT INTO `text_to_varchar_blocked` (`id`, `value`) VALUES (1, 'too-long');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -292,7 +333,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 connectionString,
                 "SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_to_varchar_blocked' "
-                + "AND COLUMN_NAME = 'value';"));
+                + "AND COLUMN_NAME = 'value';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -305,7 +347,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             + "`id` int NOT NULL, `value` text NULL, PRIMARY KEY (`id`)) "
             + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
             + "INSERT INTO `text_to_varchar_spaces` (`id`, `value`) "
-            + "VALUES (1, CONCAT('abc', REPEAT(' ', 3))); ");
+            + "VALUES (1, CONCAT('abc', REPEAT(' ', 3))); ",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -337,14 +380,17 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             6,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT CHAR_LENGTH(`value`) FROM `text_to_varchar_spaces` WHERE `id` = 1;"));
+                "SELECT CHAR_LENGTH(`value`) FROM `text_to_varchar_spaces` WHERE `id` = 1;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             "text",
             await ScalarStringAsync(
                 connectionString,
                 "SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_to_varchar_spaces' "
-                + "AND COLUMN_NAME = 'value';"));
+                + "AND COLUMN_NAME = 'value';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -362,7 +408,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             "CREATE TABLE `varchar_to_tinytext` ("
             + $"`id` int NOT NULL, `value` varchar({sourceLength}) NULL, PRIMARY KEY (`id`)) "
             + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `varchar_to_tinytext` (`id`, `value`) VALUES (1, 'fits');");
+            + "INSERT INTO `varchar_to_tinytext` (`id`, `value`) VALUES (1, 'fits');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -394,12 +441,15 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         }
 
         Assert.Equal(
-            expectedStatus == SafeMigrationReportStatus.Ready ? "tinytext" : "varchar",
+            expectedStatus == SafeMigrationReportStatus.Ready
+                ? "tinytext"
+                : "varchar",
             await ScalarStringAsync(
                 connectionString,
                 "SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'varchar_to_tinytext' "
-                + "AND COLUMN_NAME = 'value';"));
+                + "AND COLUMN_NAME = 'value';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -419,7 +469,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             + "`id` int NOT NULL, `value` varchar(100) NULL, PRIMARY KEY (`id`), "
             + $"{indexDefinition}) ENGINE=InnoDB "
             + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `text_transition_index` (`id`, `value`) VALUES (1, 'preserved');");
+            + "INSERT INTO `text_transition_index` (`id`, `value`) VALUES (1, 'preserved');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -443,10 +494,15 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(
-            repairExpected ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+            repairExpected
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
             report.Status);
+
         Assert.Equal(
-            repairExpected ? SafeMigrationAction.Repair : SafeMigrationAction.RejectDifferent,
+            repairExpected
+                ? SafeMigrationAction.Repair
+                : SafeMigrationAction.RejectDifferent,
             assessment.Action);
 
         if (repairExpected)
@@ -455,19 +511,24 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         }
 
         Assert.Equal(
-            repairExpected ? "text" : "varchar",
+            repairExpected
+                ? "text"
+                : "varchar",
             await ScalarStringAsync(
                 connectionString,
                 "SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_transition_index' "
-                + "AND COLUMN_NAME = 'value';"));
+                + "AND COLUMN_NAME = 'value';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             expectedPrefixLength,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COALESCE(MAX(SUB_PART), 0) FROM INFORMATION_SCHEMA.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_transition_index' "
-                + "AND INDEX_NAME = 'ix_text_transition_value';"));
+                + "AND INDEX_NAME = 'ix_text_transition_value';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -488,7 +549,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             + "CONSTRAINT `fk_varchar_fk_child_parent` FOREIGN KEY (`parent_code`) "
             + "REFERENCES `varchar_fk_parent` (`code`)) ENGINE=InnoDB; "
             + "INSERT INTO `varchar_fk_parent` (`code`) VALUES ('core'); "
-            + "INSERT INTO `varchar_fk_child` (`id`, `parent_code`) VALUES (1, 'core');");
+            + "INSERT INTO `varchar_fk_child` (`id`, `parent_code`) VALUES (1, 'core');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -501,6 +563,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 storeType: $"varchar({targetLength})",
                 maxLength: targetLength),
             SafeMigrationPolicy.RepairIfSafe);
+
         builder.EnsureColumn(
             "varchar_fk_child",
             new ExpectedColumnDefinition(
@@ -520,12 +583,15 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.All(report.Assessments, static assessment =>
-        {
-            Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-            Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
-            Assert.Equal(SafeMigrationOperationalImpact.NotApplicable, assessment.OperationalImpact);
-        });
+        Assert.All(
+            report.Assessments,
+            static assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
+                Assert.Equal(SafeMigrationOperationalImpact.NotApplicable, assessment.OperationalImpact);
+            });
+
         Assert.Equal(
             2,
             await ScalarIntAsync(
@@ -534,14 +600,17 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 + "WHERE TABLE_SCHEMA = DATABASE() "
                 + "AND TABLE_NAME IN ('varchar_fk_parent', 'varchar_fk_child') "
                 + "AND COLUMN_NAME IN ('code', 'parent_code') "
-                + "AND CHARACTER_MAXIMUM_LENGTH = 10;"));
+                + "AND CHARACTER_MAXIMUM_LENGTH = 10;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
                 + "WHERE CONSTRAINT_SCHEMA = DATABASE() "
-                + "AND CONSTRAINT_NAME = 'fk_varchar_fk_child_parent';"));
+                + "AND CONSTRAINT_NAME = 'fk_varchar_fk_child_parent';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -566,7 +635,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             + "(`id`, `unicode_value`, `trailing_value`, `empty_value`, `required_value`) "
             + "VALUES (1, REPEAT(CONVERT(0xF09F9880 USING utf8mb4), 5), "
             + "CONCAT('a', REPEAT(' ', 3)), NULL, 'exact'); "
-            + "INSERT INTO `varchar_narrowing_single` (`id`, `value`) VALUES (1, 'fits');");
+            + "INSERT INTO `varchar_narrowing_single` (`id`, `value`) VALUES (1, 'fits');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -602,34 +672,44 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 maxLength: 5),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var nullableOperations = builder.Operations.Where(static operation => operation is SafeMigrationOperation
-        {
-            Intent: EnsureColumnIntent { Definition.IsNullable: true },
-        }).ToArray();
+        var nullableOperations = builder
+            .Operations
+            .Where(static operation => operation is SafeMigrationOperation
+            {
+                Intent: EnsureColumnIntent { Definition.IsNullable: true },
+            })
+            .ToArray();
 
-        var requiredOperations = builder.Operations.Where(static operation => operation is SafeMigrationOperation
-        {
-            Intent: EnsureColumnIntent { Definition.IsNullable: false },
-        }).ToArray();
+        var requiredOperations = builder
+            .Operations
+            .Where(static operation => operation is SafeMigrationOperation
+            {
+                Intent: EnsureColumnIntent { Definition.IsNullable: false },
+            })
+            .ToArray();
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
         var nullableSingle = await CountProviderAnalysisQueriesAsync(
             connectionString,
-            singleBuilder.Operations);
+            singleBuilder.Operations,
+            cancellationToken: CancellationToken.None);
 
         var nullableGroup = await CountProviderAnalysisQueriesAsync(
             connectionString,
-            nullableOperations);
+            nullableOperations,
+            cancellationToken: CancellationToken.None);
 
         var requiredSingle = await CountProviderAnalysisQueriesAsync(
             connectionString,
-            requiredOperations);
+            requiredOperations,
+            cancellationToken: CancellationToken.None);
 
         var mixedGroup = await CountProviderAnalysisQueriesAsync(
             connectionString,
-            builder.Operations);
+            builder.Operations,
+            cancellationToken: CancellationToken.None);
 
         Console.WriteLine(
             $"narrowing_analysis_counts nullable_single=[q:{nullableSingle.Questions},"
@@ -662,7 +742,10 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             .GetService<ISafeMigrationProviderAnalyzer>()
             .AnalyzeAsync(
                 context,
-                builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
+                builder
+                    .Operations
+                    .Cast<SafeMigrationOperation>()
+                    .ToArray(),
                 CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -679,14 +762,25 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             new SafeMigrationRunOptions("varchar-narrowing-replay"),
             CancellationToken.None);
 
-        var unicodeLength = await ScalarIntAsync(connectionString,
-            "SELECT CHAR_LENGTH(`unicode_value`) FROM `varchar_narrowing` WHERE `id` = 1;");
-        var trailingLength = await ScalarIntAsync(connectionString,
-            "SELECT CHAR_LENGTH(`trailing_value`) FROM `varchar_narrowing` WHERE `id` = 1;");
-        var requiredLength = await ScalarIntAsync(connectionString,
-            "SELECT CHAR_LENGTH(`required_value`) FROM `varchar_narrowing` WHERE `id` = 1;");
-        var retainedNull = await ScalarIntAsync(connectionString,
-            "SELECT `empty_value` IS NULL FROM `varchar_narrowing` WHERE `id` = 1;");
+        var unicodeLength = await ScalarIntAsync(
+            connectionString,
+            "SELECT CHAR_LENGTH(`unicode_value`) FROM `varchar_narrowing` WHERE `id` = 1;",
+            cancellationToken: CancellationToken.None);
+
+        var trailingLength = await ScalarIntAsync(
+            connectionString,
+            "SELECT CHAR_LENGTH(`trailing_value`) FROM `varchar_narrowing` WHERE `id` = 1;",
+            cancellationToken: CancellationToken.None);
+
+        var requiredLength = await ScalarIntAsync(
+            connectionString,
+            "SELECT CHAR_LENGTH(`required_value`) FROM `varchar_narrowing` WHERE `id` = 1;",
+            cancellationToken: CancellationToken.None);
+
+        var retainedNull = await ScalarIntAsync(
+            connectionString,
+            "SELECT `empty_value` IS NULL FROM `varchar_narrowing` WHERE `id` = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -698,6 +792,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
                 Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact);
             });
+
         Assert.All(providerAnalysis, static analysis => Assert.True(analysis.RequiresLiveDataProof));
 
         // WHY: Required no-default targets add atomic storage/session facts.
@@ -746,7 +841,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             + "`id` int NOT NULL, `value` varchar(40) NULL, PRIMARY KEY (`id`)) "
             + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
             + "INSERT INTO `varchar_narrowing_blocked` (`id`, `value`) "
-            + $"VALUES (1, 'fits'), (2, 'exact'), (3, '{privateValue}');");
+            + $"VALUES (1, 'fits'), (2, 'exact'), (3, '{privateValue}');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -781,13 +877,15 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             assessment.Differences,
             difference => difference.Expected.Contains(privateValue, StringComparison.Ordinal)
                 || difference.Actual.Contains(privateValue, StringComparison.Ordinal));
+
         Assert.Equal(
             40,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'varchar_narrowing_blocked' "
-                + "AND COLUMN_NAME = 'value';"));
+                + "AND COLUMN_NAME = 'value';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -801,7 +899,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             "CREATE TABLE `varchar_narrowing_race` ("
             + "`id` int NOT NULL, `value` varchar(40) NULL, PRIMARY KEY (`id`)) "
             + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `varchar_narrowing_race` (`id`, `value`) VALUES (1, 'fits');");
+            + "INSERT INTO `varchar_narrowing_race` (`id`, `value`) VALUES (1, 'fits');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -827,10 +926,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
 
         await ExecuteSqlAsync(
             connectionString,
-            $"INSERT INTO `varchar_narrowing_race` (`id`, `value`) VALUES (2, '{concurrentValue}');");
+            $"INSERT INTO `varchar_narrowing_race` (`id`, `value`) VALUES (2, '{concurrentValue}');",
+            cancellationToken: CancellationToken.None);
 
-        var exception = await AssertOwnedGuardFailureAsync(() =>
-            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, builder.Operations, operationToken),
+            cancellationToken: CancellationToken.None);
 
         Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
@@ -839,12 +941,15 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 connectionString,
                 "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'varchar_narrowing_race' "
-                + "AND COLUMN_NAME = 'value';"));
+                + "AND COLUMN_NAME = 'value';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
-                $"SELECT COUNT(*) FROM `varchar_narrowing_race` WHERE `value` = '{concurrentValue}';"));
+                $"SELECT COUNT(*) FROM `varchar_narrowing_race` WHERE `value` = '{concurrentValue}';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -856,7 +961,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             "CREATE TABLE `varchar_narrowing_timeout` ("
             + "`id` int NOT NULL, `value` varchar(40) NULL, PRIMARY KEY (`id`)) "
             + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `varchar_narrowing_timeout` (`id`, `value`) VALUES (1, 'fits');");
+            + "INSERT INTO `varchar_narrowing_timeout` (`id`, `value`) VALUES (1, 'fits');",
+            cancellationToken: CancellationToken.None);
 
         await using var blocker = new MySqlConnection(connectionString);
         await blocker.OpenAsync(CancellationToken.None);
@@ -887,7 +993,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 connectionString,
                 "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'varchar_narrowing_timeout' "
-                + "AND COLUMN_NAME = 'value';"));
+                + "AND COLUMN_NAME = 'value';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -899,7 +1006,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             "CREATE TABLE `varchar_narrowing_cancellation` ("
             + "`id` int NOT NULL, `value` varchar(40) NULL, PRIMARY KEY (`id`)) "
             + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `varchar_narrowing_cancellation` (`id`, `value`) VALUES (1, 'fits');");
+            + "INSERT INTO `varchar_narrowing_cancellation` (`id`, `value`) VALUES (1, 'fits');",
+            cancellationToken: CancellationToken.None);
 
         await using var blocker = new MySqlConnection(connectionString);
         await blocker.OpenAsync(CancellationToken.None);
@@ -928,6 +1036,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             connectionString,
             "varchar_narrowing_cancellation",
             CancellationToken.None);
+
         await cancellation.CancelAsync();
 
         _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => analysis);
@@ -938,7 +1047,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 connectionString,
                 "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'varchar_narrowing_cancellation' "
-                + "AND COLUMN_NAME = 'value';"));
+                + "AND COLUMN_NAME = 'value';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -950,11 +1060,15 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             "CREATE TABLE `varchar_narrowing_non_strict` ("
             + "`id` int NOT NULL, `value` varchar(40) NULL, PRIMARY KEY (`id`)) "
             + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `varchar_narrowing_non_strict` (`id`, `value`) VALUES (1, 'fits');");
+            + "INSERT INTO `varchar_narrowing_non_strict` (`id`, `value`) VALUES (1, 'fits');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
-        await using (var command = context.Database.GetDbConnection().CreateCommand())
+        await using (var command = context
+            .Database
+            .GetDbConnection()
+            .CreateCommand())
         {
             command.CommandText = "SET SESSION sql_mode = '';";
 
@@ -992,7 +1106,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 connectionString,
                 "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'varchar_narrowing_non_strict' "
-                + "AND COLUMN_NAME = 'value';"));
+                + "AND COLUMN_NAME = 'value';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -1007,7 +1122,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             + "`nullable_value` bit(1) NULL DEFAULT NULL, PRIMARY KEY (`id`), "
             + "INDEX `ix_boolean_repairs_required` (`required_value`)) ENGINE=InnoDB; "
             + "INSERT INTO `boolean_repairs` (`id`, `required_value`, `true_value`, `nullable_value`) "
-            + "VALUES (1, b'0', b'1', NULL), (2, b'1', b'1', b'0'), (3, b'1', b'1', b'1');");
+            + "VALUES (1, b'0', b'1', NULL), (2, b'1', b'1', b'0'), (3, b'1', b'1', b'1');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -1020,6 +1136,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 storeType: "tinyint(1)",
                 defaultValue: SafeMigrationDefaultValue.Literal(false)),
             SafeMigrationPolicy.RepairIfSafe);
+
         builder.EnsureColumn(
             "boolean_repairs",
             new ExpectedColumnDefinition(
@@ -1029,6 +1146,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 storeType: "tinyint(1)",
                 defaultValue: SafeMigrationDefaultValue.Literal(true)),
             SafeMigrationPolicy.RepairIfSafe);
+
         builder.EnsureColumn(
             "boolean_repairs",
             new ExpectedColumnDefinition(
@@ -1049,6 +1167,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         Assert.All(
             preflight.Assessments,
             static assessment => Assert.Equal(SafeMigrationAction.Repair, assessment.Action));
+
         Assert.All(
             preflight.Assessments,
             static assessment =>
@@ -1080,14 +1199,17 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 + "OR (`id` = 2 AND `required_value` = 1 AND `true_value` = 1 "
                 + "AND `nullable_value` = 0) "
                 + "OR (`id` = 3 AND `required_value` = 1 AND `true_value` = 1 "
-                + "AND `nullable_value` = 1);"));
+                + "AND `nullable_value` = 1);",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'boolean_repairs' "
-                + "AND INDEX_NAME = 'ix_boolean_repairs_required';"));
+                + "AND INDEX_NAME = 'ix_boolean_repairs_required';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -1101,7 +1223,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             + "CREATE TABLE `boolean_child` (`id` int NOT NULL, `parent_value` bit(1) NOT NULL, "
             + "PRIMARY KEY (`id`), INDEX `ix_boolean_child_parent` (`parent_value`), "
             + "CONSTRAINT `fk_boolean_child_parent` FOREIGN KEY (`parent_value`) "
-            + "REFERENCES `boolean_parent` (`value`)) ENGINE=InnoDB;");
+            + "REFERENCES `boolean_parent` (`value`)) ENGINE=InnoDB;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -1113,6 +1236,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 isNullable: true,
                 storeType: "tinyint(1)"),
             SafeMigrationPolicy.RepairIfSafe);
+
         builder.EnsureColumn(
             "boolean_parent",
             new ExpectedColumnDefinition(
@@ -1131,26 +1255,32 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.All(report.Assessments, static assessment =>
-        {
-            Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-            Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
-            Assert.Equal(SafeMigrationOperationalImpact.NotApplicable, assessment.OperationalImpact);
-        });
+        Assert.All(
+            report.Assessments,
+            static assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
+                Assert.Equal(SafeMigrationOperationalImpact.NotApplicable, assessment.OperationalImpact);
+            });
+
         Assert.Equal(
             "bit(1)",
             await ScalarStringAsync(
                 connectionString,
                 "SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'boolean_default_blocked' "
-                + "AND COLUMN_NAME = 'value';"));
+                + "AND COLUMN_NAME = 'value';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             "bit(1)",
             await ScalarStringAsync(
                 connectionString,
                 "SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'boolean_parent' "
-                + "AND COLUMN_NAME = 'value';"));
+                + "AND COLUMN_NAME = 'value';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -1168,13 +1298,15 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `boolean_repair_blocked` (`value` {liveStoreType} NULL) ENGINE=InnoDB;");
+            $"CREATE TABLE `boolean_repair_blocked` (`value` {liveStoreType} NULL) ENGINE=InnoDB;",
+            cancellationToken: CancellationToken.None);
 
         var originalStoreType = await ScalarStringAsync(
             connectionString,
             "SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
             + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'boolean_repair_blocked' "
-            + "AND COLUMN_NAME = 'value';");
+            + "AND COLUMN_NAME = 'value';",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -1207,7 +1339,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 connectionString,
                 "SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'boolean_repair_blocked' "
-                + "AND COLUMN_NAME = 'value';"));
+                + "AND COLUMN_NAME = 'value';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -1230,13 +1363,15 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `string_family_blocked` (`value` {liveStoreType} NULL) ENGINE=InnoDB;");
+            $"CREATE TABLE `string_family_blocked` (`value` {liveStoreType} NULL) ENGINE=InnoDB;",
+            cancellationToken: CancellationToken.None);
 
         var originalStoreType = await ScalarStringAsync(
             connectionString,
             "SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
             + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'string_family_blocked' "
-            + "AND COLUMN_NAME = 'value';");
+            + "AND COLUMN_NAME = 'value';",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var targetLength = targetStoreType.Contains('(', StringComparison.Ordinal)
@@ -1275,7 +1410,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 connectionString,
                 "SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'string_family_blocked' "
-                + "AND COLUMN_NAME = 'value';"));
+                + "AND COLUMN_NAME = 'value';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -1287,7 +1423,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             "CREATE TABLE `varchar_engine_blocked` (`value` varchar(10) NULL) "
             + "ENGINE=MyISAM DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
             + "CREATE TABLE `varchar_collation_blocked` (`value` varchar(10) NULL) "
-            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;");
+            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -1300,6 +1437,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 storeType: "varchar(20)",
                 maxLength: 20),
             SafeMigrationPolicy.RepairIfSafe);
+
         builder.EnsureColumn(
             "varchar_collation_blocked",
             new ExpectedColumnDefinition(
@@ -1320,12 +1458,14 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.All(report.Assessments, static assessment =>
-        {
-            Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-            Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
-            Assert.Equal(SafeMigrationOperationalImpact.NotApplicable, assessment.OperationalImpact);
-        });
+        Assert.All(
+            report.Assessments,
+            static assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
+                Assert.Equal(SafeMigrationOperationalImpact.NotApplicable, assessment.OperationalImpact);
+            });
     }
 
     [Fact]
@@ -1336,12 +1476,15 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var fillerColumns = string.Join(
             ", ",
-            Enumerable.Range(0, fillerColumnCount).Select(index => $"`f{index}` varchar(5000) NULL"));
+            Enumerable
+                .Range(0, fillerColumnCount)
+                .Select(index => $"`f{index}` varchar(5000) NULL"));
 
         await ExecuteSqlAsync(
             connectionString,
             $"CREATE TABLE `varchar_row_size_blocked` ({fillerColumns}, `value` varchar(10) NULL) "
-            + "ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARACTER SET latin1;");
+            + "ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARACTER SET latin1;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -1375,7 +1518,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 connectionString,
                 "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'varchar_row_size_blocked' "
-                + "AND COLUMN_NAME = 'value';"));
+                + "AND COLUMN_NAME = 'value';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -1386,7 +1530,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             connectionString,
             "CREATE TABLE `boolean_repair_race` ("
             + "`id` int NOT NULL PRIMARY KEY, `value` bit(1) NULL); "
-            + "INSERT INTO `boolean_repair_race` (`id`, `value`) VALUES (1, NULL);");
+            + "INSERT INTO `boolean_repair_race` (`id`, `value`) VALUES (1, NULL);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var tightening = new MigrationBuilder(context.Database.ProviderName!);
@@ -1407,11 +1552,14 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             new SafeMigrationRunOptions("boolean-null-blocked"),
             CancellationToken.None);
 
-        Assert.Equal(SafeMigrationObservedState.DataBlocked, Assert.Single(blocked.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.DataBlocked,
+            Assert.Single(blocked.Assessments)
+                .ObservedState);
 
         await ExecuteSqlAsync(
             connectionString,
-            "UPDATE `boolean_repair_race` SET `value` = b'0';");
+            "UPDATE `boolean_repair_race` SET `value` = b'0';",
+            cancellationToken: CancellationToken.None);
 
         var preflight = await runner.AnalyzeAsync(
             context,
@@ -1423,10 +1571,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
 
         await ExecuteSqlAsync(
             connectionString,
-            "ALTER TABLE `boolean_repair_race` MODIFY COLUMN `value` bit(2) NULL;");
+            "ALTER TABLE `boolean_repair_race` MODIFY COLUMN `value` bit(2) NULL;",
+            cancellationToken: CancellationToken.None);
 
-        var exception = await AssertOwnedGuardFailureAsync(() =>
-            ExecuteOperationsAsync(context, tightening.Operations, CancellationToken.None));
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, tightening.Operations, operationToken),
+            cancellationToken: CancellationToken.None);
 
         Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
@@ -1435,45 +1586,53 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 connectionString,
                 "SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'boolean_repair_race' "
-                + "AND COLUMN_NAME = 'value';"));
+                + "AND COLUMN_NAME = 'value';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Measures native server Questions and statement purposes on an isolated analysis connection.</summary>
     /// <param name="connectionString">The unchanged fixture database containing the physical source rows.</param>
     /// <param name="operations">The immutable workload analyzed without executing target DDL.</param>
     /// <returns>The measured native Questions and independently counted safety and row-probe purposes.</returns>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private async Task<ProviderAnalysisQueries> CountProviderAnalysisQueriesAsync(
         string connectionString,
-        IReadOnlyList<MigrationOperation> operations
+        IReadOnlyList<MigrationOperation> operations,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(
-            new MySqlConnection(connectionString), nativeBatch: true);
+            new MySqlConnection(connectionString),
+            nativeBatch: true);
 
         context.Database.SetDbConnection(connection);
         var safeOperations = operations
             .Cast<SafeMigrationOperation>()
             .ToArray();
 
-        var questionsBefore = await ReadSessionQuestionsAsync(context);
+        var questionsBefore = await ReadSessionQuestionsAsync(context, cancellationToken: cancellationToken);
 
         _ = await context
             .GetService<ISafeMigrationProviderAnalyzer>()
-            .AnalyzeAsync(context, safeOperations, CancellationToken.None);
+            .AnalyzeAsync(context, safeOperations, cancellationToken);
 
-        var questionsAfter = await ReadSessionQuestionsAsync(context);
+        var questionsAfter = await ReadSessionQuestionsAsync(context, cancellationToken: cancellationToken);
 
-        return new ProviderAnalysisQueries(questionsAfter - questionsBefore,
+        return new ProviderAnalysisQueries(
+            questionsAfter - questionsBefore,
             connection.NarrowingDataStatementCount + connection.NativeNarrowingStatementCount,
-            connection.RequiredAddSessionStatementCount, connection.RequiredAddOwnerEngineStatementCount,
-            connection.RequiredAddStatusStatementCount, connection.ColumnDependencyStatementCount);
+            connection.RequiredAddSessionStatementCount,
+            connection.RequiredAddOwnerEngineStatementCount,
+            connection.RequiredAddStatusStatementCount,
+            connection.ColumnDependencyStatementCount);
     }
 }
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-
     /// <summary>Retains measured counts only, without storing submitted SQL or provider row values.</summary>
     private protected readonly record struct ProviderAnalysisQueries(
         int Questions,
@@ -1487,15 +1646,20 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
 public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
-
+    /// <summary>Performs the read session questions test operation with explicit cancellation.</summary>
+    /// <param name="context">The context for this operation.</param>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<int> ReadSessionQuestionsAsync(
-        DbContext context
+        DbContext context,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var connection = context.Database.GetDbConnection();
         if (connection.State != ConnectionState.Open)
         {
-            await connection.OpenAsync(CancellationToken.None);
+            await connection.OpenAsync(cancellationToken);
         }
 
         await using var command = connection.CreateCommand();
@@ -1503,8 +1667,8 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
 
         // WHY: SHOW SESSION STATUS is supported by both MySQL and MariaDB,
         // whereas MySQL 8.4 does not expose INFORMATION_SCHEMA.SESSION_STATUS.
-        await using var reader = await command.ExecuteReaderAsync(CancellationToken.None);
-        if (!await reader.ReadAsync(CancellationToken.None))
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
         {
             throw new InvalidOperationException(
                 "The server did not return the session Questions status variable.");
@@ -1546,6 +1710,7 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             await using var command = connection.CreateCommand();
             command.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.PROCESSLIST "
                 + "WHERE ID <> CONNECTION_ID() AND INFO LIKE @probe;";
+
             command.Parameters.AddWithValue("@probe", $"%{table}%CHAR_LENGTH%");
 
             var count = Convert.ToInt32(

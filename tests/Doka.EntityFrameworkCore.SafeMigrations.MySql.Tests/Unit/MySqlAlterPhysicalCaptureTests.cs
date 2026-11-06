@@ -8,21 +8,38 @@ public sealed class MySqlAlterPhysicalCaptureTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task CaptureBatchesTablesAndRetainsCommandTimeout(bool native)
+    public async Task CaptureBatchesTablesAndRetainsCommandTimeout(
+        bool native
+    )
     {
         await using var connection = new CatalogStatementTestConnection(native, Results);
         var operations = Operations(513);
         var environments = Environments(operations);
 
         var result = await MySqlSafeMigrationProviderAnalyzer.ReadProjectedAlterPhysicalSnapshotsAsync(
-            connection, operations, environments, 4 * 1024 * 1024, 71, CancellationToken.None);
+            connection,
+            operations,
+            environments,
+            4 * 1024 * 1024,
+            71,
+            CancellationToken.None);
 
         Assert.Equal(513, result.Count);
         Assert.Equal(4, connection.Submissions.Count);
         Assert.Equal([512, 512, 1, 1], connection.Submissions.Select(static statement => statement.Parameters.Count));
         Assert.All(connection.Submissions, statement => Assert.Equal(71, statement.Timeout));
-        Assert.Equal(native ? [4] : Array.Empty<int>(), connection.BatchCounts);
-        Assert.Equal(native ? 1 : 4, connection.ReadersDisposed);
+        Assert.Equal(
+            native
+                ? [4]
+                : Array.Empty<int>(),
+            connection.BatchCounts);
+
+        Assert.Equal(
+            native
+                ? 1
+                : 4,
+            connection.ReadersDisposed);
+
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
@@ -32,10 +49,17 @@ public sealed class MySqlAlterPhysicalCaptureTests
     {
         await using var connection = new CatalogStatementTestConnection(true, Results);
         var operation = Operations(1)[0];
-        var operations = Enumerable.Repeat(operation, 1000).ToArray();
+        var operations = Enumerable
+            .Repeat(operation, 1000)
+            .ToArray();
 
         var result = await MySqlSafeMigrationProviderAnalyzer.ReadProjectedAlterPhysicalSnapshotsAsync(
-            connection, operations, Environments(operations), 4 * 1024 * 1024, 71, CancellationToken.None);
+            connection,
+            operations,
+            Environments(operations),
+            4 * 1024 * 1024,
+            71,
+            CancellationToken.None);
 
         Assert.Single(result);
         Assert.Equal(2, connection.Submissions.Count);
@@ -53,8 +77,12 @@ public sealed class MySqlAlterPhysicalCaptureTests
         ];
 
         var result = await MySqlSafeMigrationProviderAnalyzer.ReadProjectedAlterPhysicalSnapshotsAsync(
-            connection, operations, new Dictionary<string, SafeMigrationIndexPhysicalEnvironment>(),
-            4 * 1024 * 1024, 71, CancellationToken.None);
+            connection,
+            operations,
+            new Dictionary<string, SafeMigrationIndexPhysicalEnvironment>(),
+            4 * 1024 * 1024,
+            71,
+            CancellationToken.None);
 
         Assert.Empty(result);
         Assert.Empty(connection.Submissions);
@@ -67,38 +95,49 @@ public sealed class MySqlAlterPhysicalCaptureTests
     [InlineData("duplicate_column")]
     [InlineData("foreign_index")]
     [InlineData("index_ordinal")]
-    public async Task MalformedCatalogEvidenceIsRejected(string fault)
+    public async Task MalformedCatalogEvidenceIsRejected(
+        string fault
+    )
     {
-        await using var connection = new CatalogStatementTestConnection(true, (sql, parameters) =>
-        {
-            var result = Results(sql, parameters);
-            var columns = sql.StartsWith("SELECT c.TABLE_NAME", StringComparison.Ordinal);
-            if (columns
-                && fault == "foreign_column"
-                || !columns
-                && fault == "foreign_index")
+        await using var connection = new CatalogStatementTestConnection(
+            true,
+            (sql, parameters) =>
             {
-                result.Rows[0][0] = "unowned_table";
-            }
-            else if (columns
-                && fault == "duplicate_column")
-            {
-                result.Rows.Add(result.Rows[0].ItemArray);
-            }
-            else if (!columns
-                && fault == "index_ordinal")
-            {
-                result.Rows[0][3] = 2;
-            }
+                var result = Results(sql, parameters);
+                var columns = sql.StartsWith("SELECT c.TABLE_NAME", StringComparison.Ordinal);
+                if ((columns
+                        && fault == "foreign_column")
+                    || (!columns
+                        && fault == "foreign_index"))
+                {
+                    result
+                        .Rows[0][0] = "unowned_table";
+                }
+                else if (columns
+                    && fault == "duplicate_column")
+                {
+                    result.Rows.Add(result.Rows[0].ItemArray);
+                }
+                else if (!columns
+                    && fault == "index_ordinal")
+                {
+                    result
+                        .Rows[0][3] = 2;
+                }
 
-            return result;
-        });
+                return result;
+            });
 
         var operations = Operations(1);
 
         var exception = await Record.ExceptionAsync(() =>
             MySqlSafeMigrationProviderAnalyzer.ReadProjectedAlterPhysicalSnapshotsAsync(
-                connection, operations, Environments(operations), 4 * 1024 * 1024, 71, CancellationToken.None));
+                connection,
+                operations,
+                Environments(operations),
+                4 * 1024 * 1024,
+                71,
+                CancellationToken.None));
 
         Assert.IsType<InvalidOperationException>(exception);
         Assert.Equal(1, connection.ReadersDisposed);
@@ -126,7 +165,12 @@ public sealed class MySqlAlterPhysicalCaptureTests
 
         var exception = await Record.ExceptionAsync(() =>
             MySqlSafeMigrationProviderAnalyzer.ReadProjectedAlterPhysicalSnapshotsAsync(
-                connection, operations, Environments(operations), 4 * 1024 * 1024, 71, cancellation.Token));
+                connection,
+                operations,
+                Environments(operations),
+                4 * 1024 * 1024,
+                71,
+                cancellation.Token));
 
         Assert.IsAssignableFrom<OperationCanceledException>(exception);
         Assert.Equal(1, connection.ReadersDisposed);
@@ -134,21 +178,38 @@ public sealed class MySqlAlterPhysicalCaptureTests
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
-    private static SafeMigrationOperation[] Operations(int count) => Enumerable.Range(0, count)
-        .Select(index => new SafeMigrationOperation(new AlterColumnIntent(
-            $"physical_{index:D4}", Column("varchar(80)"), Column("longtext")), SafeMigrationPolicy.RepairIfSafe))
+    private static SafeMigrationOperation[] Operations(
+        int count
+    ) => Enumerable
+        .Range(0, count)
+        .Select(index => new SafeMigrationOperation(
+            new AlterColumnIntent(
+                $"physical_{index:D4}",
+                Column("varchar(80)"),
+                Column("longtext")),
+            SafeMigrationPolicy.RepairIfSafe))
         .ToArray();
 
     private static Dictionary<string, SafeMigrationIndexPhysicalEnvironment> Environments(
         IEnumerable<SafeMigrationOperation> operations
-    ) => operations.Select(static operation => ((AlterColumnIntent)operation.Intent).Table)
+    ) => operations
+        .Select(static operation => ((AlterColumnIntent)operation.Intent).Table)
         .Distinct(StringComparer.Ordinal)
-        .ToDictionary(static table => table, static _ => new SafeMigrationIndexPhysicalEnvironment(3072,
-                StorageRowFormat: "Dynamic", StoragePageSize: 16384),
+        .ToDictionary(
+            static table => table,
+            static _ => new SafeMigrationIndexPhysicalEnvironment(
+                3072,
+                StorageRowFormat: "Dynamic",
+                StoragePageSize: 16384),
             StringComparer.Ordinal);
 
-    private static ExpectedColumnDefinition Column(string type) => new(
-        "value", typeof(string), isNullable: false, storeType: type);
+    private static ExpectedColumnDefinition Column(
+        string type
+    ) => new(
+        "value",
+        typeof(string),
+        isNullable: false,
+        storeType: type);
 
     private static DataTable Results(
         string sql,
@@ -159,9 +220,19 @@ public sealed class MySqlAlterPhysicalCaptureTests
         var types = columns
             ? new[]
             {
-                typeof(string), typeof(string), typeof(string), typeof(string), typeof(long),
-                typeof(long), typeof(int), typeof(int), typeof(int), typeof(int), typeof(string),
-                typeof(string), typeof(bool),
+                typeof(string),
+                typeof(string),
+                typeof(string),
+                typeof(string),
+                typeof(long),
+                typeof(long),
+                typeof(int),
+                typeof(int),
+                typeof(int),
+                typeof(int),
+                typeof(string),
+                typeof(string),
+                typeof(bool),
             }
             : [typeof(string), typeof(string), typeof(string), typeof(int), typeof(string), typeof(int), typeof(int)];
 
@@ -175,12 +246,31 @@ public sealed class MySqlAlterPhysicalCaptureTests
         {
             if (columns)
             {
-                result.Rows.Add(parameter.Value, "value", "longtext", "NO", uint.MaxValue,
-                    uint.MaxValue, DBNull.Value, DBNull.Value, DBNull.Value, 4, "utf8mb4_unicode_ci", "utf8mb4", false);
+                result.Rows.Add(
+                    parameter.Value,
+                    "value",
+                    "longtext",
+                    "NO",
+                    uint.MaxValue,
+                    uint.MaxValue,
+                    DBNull.Value,
+                    DBNull.Value,
+                    DBNull.Value,
+                    4,
+                    "utf8mb4_unicode_ci",
+                    "utf8mb4",
+                    false);
             }
             else
             {
-                result.Rows.Add(parameter.Value, "ix_value", "BTREE", 1, "value", 16, 1);
+                result.Rows.Add(
+                    parameter.Value,
+                    "ix_value",
+                    "BTREE",
+                    1,
+                    "value",
+                    16,
+                    1);
             }
         }
 

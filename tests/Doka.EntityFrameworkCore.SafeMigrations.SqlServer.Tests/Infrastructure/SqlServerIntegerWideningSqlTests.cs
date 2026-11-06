@@ -23,12 +23,14 @@ public sealed class SqlServerIntegerWideningSqlTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
         var source = new ExpectedColumnDefinition("Value", sourceClr, false, sourceType);
         var target = new ExpectedColumnDefinition("Value", targetClr, false, targetType);
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("items", target, source),
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent("items", target, source),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
@@ -66,12 +68,16 @@ public sealed class SqlServerIntegerWideningSqlTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("items",
-            new ExpectedColumnDefinition("Value", targetClr, false, targetType),
-            new ExpectedColumnDefinition("Value", sourceClr, false, sourceType)), SafeMigrationPolicy.RepairIfSafe);
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "items",
+                new ExpectedColumnDefinition("Value", targetClr, false, targetType),
+                new ExpectedColumnDefinition("Value", sourceClr, false, sourceType)),
+            SafeMigrationPolicy.RepairIfSafe);
 
         // Act
         var plan = catalog.Build(operation);
@@ -86,12 +92,16 @@ public sealed class SqlServerIntegerWideningSqlTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("items",
-            new ExpectedColumnDefinition("Value", typeof(long), false, "bigint"),
-            new ExpectedColumnDefinition("Value", typeof(int), true, "int")), SafeMigrationPolicy.RepairIfSafe);
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "items",
+                new ExpectedColumnDefinition("Value", typeof(long), false, "bigint"),
+                new ExpectedColumnDefinition("Value", typeof(int), true, "int")),
+            SafeMigrationPolicy.RepairIfSafe);
 
         // Act
         var plan = catalog.Build(operation);
@@ -114,18 +124,29 @@ public sealed class SqlServerIntegerWideningSqlTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
-        var source = new ExpectedColumnDefinition("Value", typeof(int), false, "int",
+        var source = new ExpectedColumnDefinition(
+            "Value",
+            typeof(int),
+            false,
+            "int",
             defaultValue: SafeMigrationDefaultValue.Literal(7));
 
-        var target = new ExpectedColumnDefinition("Value", typeof(long), false, "bigint",
+        var target = new ExpectedColumnDefinition(
+            "Value",
+            typeof(long),
+            false,
+            "bigint",
             defaultValue: SafeMigrationDefaultValue.Literal(value));
 
         // Act
-        var plan = catalog.Build(new SafeMigrationOperation(new AlterColumnIntent("items", target, source),
-            SafeMigrationPolicy.RepairIfSafe));
+        var plan = catalog.Build(
+            new SafeMigrationOperation(
+                new AlterColumnIntent("items", target, source),
+                SafeMigrationPolicy.RepairIfSafe));
 
         // Assert
         Assert.Equal(expected, plan.RepairCapability);
@@ -150,18 +171,25 @@ public sealed class SqlServerIntegerWideningSqlTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
         var oldColumn = new AddColumnOperation
         {
-            Name = "Value", Table = "items", ClrType = typeof(int), ColumnType = "int",
+            Name = "Value",
+            Table = "items",
+            ClrType = typeof(int),
+            ColumnType = "int",
         };
 
         oldColumn.AddAnnotation("SqlServer:Identity", "3, 7");
         var newColumn = new AddColumnOperation
         {
-            Name = "Value", Table = "items", ClrType = typeof(long), ColumnType = "bigint",
+            Name = "Value",
+            Table = "items",
+            ClrType = typeof(long),
+            ColumnType = "bigint",
         };
 
         if (targetIdentity is not null)
@@ -173,8 +201,10 @@ public sealed class SqlServerIntegerWideningSqlTests
         var target = SafeMigrationExpectedDefinitionFactory.From(newColumn);
 
         // Act
-        var plan = catalog.Build(new SafeMigrationOperation(new AlterColumnIntent("items", target, source),
-            SafeMigrationPolicy.RepairIfSafe));
+        var plan = catalog.Build(
+            new SafeMigrationOperation(
+                new AlterColumnIntent("items", target, source),
+                SafeMigrationPolicy.RepairIfSafe));
 
         // Assert
         Assert.Equal(expected, plan.RepairCapability);

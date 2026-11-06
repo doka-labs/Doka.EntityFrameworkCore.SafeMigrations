@@ -35,9 +35,7 @@ internal sealed class SafeMigrationModelManagedDataEvidence
 
     // WHY: Parse creates and validates both arrays itself. Only that private path may
     // transfer ownership without making a second full snapshot of provider evidence.
-    private SafeMigrationModelManagedDataEvidence()
-    {
-    }
+    private SafeMigrationModelManagedDataEvidence() { }
 
     /// <summary>Gets the owned row classifications in authored order.</summary>
     public SafeMigrationModelManagedRowState[] RowStates { get; private init; } = [];
@@ -65,6 +63,7 @@ internal sealed class SafeMigrationModelManagedDataEvidence
         }
 
         var states = new SafeMigrationModelManagedRowState[rowStates.Length];
+
         // WHY: Map each protocol character to the row-state entry at the same ordinal.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -82,7 +81,10 @@ internal sealed class SafeMigrationModelManagedDataEvidence
         }
 
         var payload = dependencyCounts.AsSpan();
-        var counts = payload.IsEmpty ? [] : new long[payload.Count(',') + 1];
+        var counts = payload.IsEmpty
+            ? []
+            : new long[payload.Count(',') + 1];
+
         var countIndex = 0;
         if (!payload.IsEmpty)
         {

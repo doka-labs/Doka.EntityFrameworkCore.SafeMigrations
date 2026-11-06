@@ -67,17 +67,23 @@ internal static class MySqlSignedIntegerWidening
 
         if (clr == typeof(sbyte))
         {
-            return type.Equals("tinyint", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+            return type.Equals("tinyint", StringComparison.OrdinalIgnoreCase)
+                ? 1
+                : 0;
         }
 
         if (clr == typeof(short))
         {
-            return type.Equals("smallint", StringComparison.OrdinalIgnoreCase) ? 2 : 0;
+            return type.Equals("smallint", StringComparison.OrdinalIgnoreCase)
+                ? 2
+                : 0;
         }
 
         if (clr == typeof(long))
         {
-            return type.Equals("bigint", StringComparison.OrdinalIgnoreCase) ? 8 : 0;
+            return type.Equals("bigint", StringComparison.OrdinalIgnoreCase)
+                ? 8
+                : 0;
         }
 
         return type.Equals("mediumint", StringComparison.OrdinalIgnoreCase)

@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ColumnsExplicitBackfill migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlColumnsExplicitBackfillIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlColumnsExplicitBackfillIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>A nullable GUID column with no NULL rows needs no invented backfill value.</summary>
     [Fact]
@@ -13,38 +15,65 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExplicitBackfillNullableGuidFixture(includeNull: false));
+        await ExecuteSqlAsync(
+            connectionString,
+            ExplicitBackfillNullableGuidFixture(includeNull: false),
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var operation = ExplicitBackfillGuidTightening();
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("null-free-guid-tightening"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("null-free-guid-tightening"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, [operation],
-            new SafeMigrationRunOptions("null-free-guid-tightening-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("null-free-guid-tightening-final"),
+            CancellationToken.None);
 
-        var rerun = await runner.AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("null-free-guid-tightening-rerun"), CancellationToken.None);
+        var rerun = await runner.AnalyzeAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("null-free-guid-tightening-rerun"),
+            CancellationToken.None);
 
         rerun.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var preserved = await ScalarIntAsync(connectionString,
+        var preserved = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE `owner_id` = "
-            + "'00000000-0000-0000-0000-000000000002';");
-        var required = await ExplicitBackfillRequiredColumnCountAsync(connectionString, "owner_id");
+            + "'00000000-0000-0000-0000-000000000002';",
+            cancellationToken: CancellationToken.None);
+
+        var required = await ExplicitBackfillRequiredColumnCountAsync(
+            connectionString,
+            "owner_id",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.Repair, Assert.Single(preflight.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Repair,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(rerun.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(rerun.Assessments)
+                .Action);
+
         Assert.Equal(1, preserved);
         Assert.Equal(1, required);
-        Assert.Equal(SafeMigrationDefaultValueKind.None,
-            Assert.IsType<AlterColumnIntent>(operation.Intent).Definition.DefaultValue.Kind);
+        Assert.Equal(
+            SafeMigrationDefaultValueKind.None,
+            Assert.IsType<AlterColumnIntent>(operation.Intent)
+                .Definition.DefaultValue.Kind);
     }
 
     /// <summary>The backfill marker cannot manufacture a GUID for a stored NULL value.</summary>
@@ -53,25 +82,47 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExplicitBackfillNullableGuidFixture(includeNull: true));
+        await ExecuteSqlAsync(
+            connectionString,
+            ExplicitBackfillNullableGuidFixture(includeNull: true),
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var operation = ExplicitBackfillGuidTightening();
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("null-guid-tightening"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                new SafeMigrationRunOptions("null-guid-tightening"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var nullRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE `owner_id` IS NULL;");
-        var required = await ExplicitBackfillRequiredColumnCountAsync(connectionString, "owner_id");
+        var nullRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE `owner_id` IS NULL;",
+            cancellationToken: CancellationToken.None);
+
+        var required = await ExplicitBackfillRequiredColumnCountAsync(
+            connectionString,
+            "owner_id",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.RejectDataBlocked, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(exception).Message,
+        Assert.Equal(SafeMigrationAction.RejectDataBlocked,
+            Assert.Single(report.Assessments)
+                .Action);
+
+        Assert.Contains(
+            "doka_sm_data_blocked",
+            AssertOwnedGuardFailure(exception)
+                .Message,
             StringComparison.Ordinal);
+
         Assert.Equal(1, nullRows);
         Assert.Equal(0, required);
     }
@@ -82,27 +133,49 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExplicitBackfillNullableGuidFixture(includeNull: false));
+        await ExecuteSqlAsync(
+            connectionString,
+            ExplicitBackfillNullableGuidFixture(includeNull: false),
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var operation = ExplicitBackfillGuidTightening();
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("guid-tightening-race"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                new SafeMigrationRunOptions("guid-tightening-race"),
+                CancellationToken.None);
 
-        await ExecuteSqlAsync(connectionString,
-            "INSERT INTO `explicit_backfill_items` (`value`, `owner_id`) VALUES (2, NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "INSERT INTO `explicit_backfill_items` (`value`, `owner_id`) VALUES (2, NULL);",
+            cancellationToken: CancellationToken.None);
+
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var nullRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE `owner_id` IS NULL;");
-        var required = await ExplicitBackfillRequiredColumnCountAsync(connectionString, "owner_id");
+        var nullRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE `owner_id` IS NULL;",
+            cancellationToken: CancellationToken.None);
+
+        var required = await ExplicitBackfillRequiredColumnCountAsync(
+            connectionString,
+            "owner_id",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(exception).Message,
+        Assert.Contains(
+            "doka_sm_data_blocked",
+            AssertOwnedGuardFailure(exception)
+                .Message,
             StringComparison.Ordinal);
+
         Assert.Equal(1, nullRows);
         Assert.Equal(0, required);
     }
@@ -113,29 +186,53 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var operation = ExplicitBackfillRequiredIdAdd();
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("required-guid-add-race"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                new SafeMigrationRunOptions("required-guid-add-race"),
+                CancellationToken.None);
 
-        await ExecuteSqlAsync(connectionString, "INSERT INTO `explicit_backfill_items` (`value`) VALUES (7);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "INSERT INTO `explicit_backfill_items` (`value`) VALUES (7);",
+            cancellationToken: CancellationToken.None);
+
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var idColumns = await ScalarIntAsync(connectionString,
+        var idColumns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'explicit_backfill_items' AND COLUMN_NAME = 'id';");
-        var preserved = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE `value` = 7;");
+            + "AND TABLE_NAME = 'explicit_backfill_items' AND COLUMN_NAME = 'id';",
+            cancellationToken: CancellationToken.None);
+
+        var preserved = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE `value` = 7;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(exception).Message,
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(report.Assessments)
+                .Action);
+
+        Assert.Contains(
+            "doka_sm_data_blocked",
+            AssertOwnedGuardFailure(exception)
+                .Message,
             StringComparison.Ordinal);
+
         Assert.Equal(0, idColumns);
         Assert.Equal(1, preserved);
     }
@@ -146,39 +243,69 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExplicitBackfillNullableGuidFixture(includeNull: true));
+        await ExecuteSqlAsync(
+            connectionString,
+            ExplicitBackfillNullableGuidFixture(includeNull: true),
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var replacement = Guid.Parse("00000000-0000-0000-0000-000000000001");
         var operation = ExplicitBackfillGuidTightening(replacement);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("declared-guid-backfill"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("declared-guid-backfill"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, [operation],
-            new SafeMigrationRunOptions("declared-guid-backfill-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("declared-guid-backfill-final"),
+            CancellationToken.None);
 
-        var rerun = await runner.AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("declared-guid-backfill-rerun"), CancellationToken.None);
+        var rerun = await runner.AnalyzeAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("declared-guid-backfill-rerun"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var expectedValues = await ScalarIntAsync(connectionString,
+        var expectedValues = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE "
             + "(`value` = 1 AND `owner_id` = '00000000-0000-0000-0000-000000000002') OR "
-            + "(`value` = 2 AND `owner_id` = '00000000-0000-0000-0000-000000000001');");
-        var required = await ExplicitBackfillRequiredColumnCountAsync(connectionString, "owner_id");
+            + "(`value` = 2 AND `owner_id` = '00000000-0000-0000-0000-000000000001');",
+            cancellationToken: CancellationToken.None);
+
+        var required = await ExplicitBackfillRequiredColumnCountAsync(
+            connectionString,
+            "owner_id",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.Repair, Assert.Single(preflight.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Repair,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(rerun.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(rerun.Assessments)
+                .Action);
+
         Assert.Equal(2, expectedValues);
         Assert.Equal(1, required);
-        Assert.Equal(replacement,
-            Assert.IsType<AlterColumnIntent>(operation.Intent).Definition.DefaultValue.GetLiteralValue());
+        Assert.Equal(
+            replacement,
+            Assert
+                .IsType<AlterColumnIntent>(operation.Intent)
+                .Definition
+                .DefaultValue
+                .GetLiteralValue());
     }
 
     /// <summary>A guarded empty-table ID addition also proves a subsequent primary-key replacement.</summary>
@@ -187,9 +314,12 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL PRIMARY KEY) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.Operations.Add(ExplicitBackfillRequiredIdAdd());
@@ -198,23 +328,34 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("required-guid-key-replacement"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("required-guid-key-replacement"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("required-guid-key-replacement-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("required-guid-key-replacement-final"),
+            CancellationToken.None);
 
-        var rerun = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("required-guid-key-replacement-rerun"), CancellationToken.None);
+        var rerun = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("required-guid-key-replacement-rerun"),
+            CancellationToken.None);
 
         rerun.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var idPrimaryKeys = await ScalarIntAsync(connectionString,
+        var idPrimaryKeys = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE CONSTRAINT_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'explicit_backfill_items' AND CONSTRAINT_NAME = 'PRIMARY' "
-            + "AND COLUMN_NAME = 'id' AND ORDINAL_POSITION = 1;");
+            + "AND COLUMN_NAME = 'id' AND ORDINAL_POSITION = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -232,29 +373,49 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL); "
-            + "INSERT INTO `explicit_backfill_items` (`value`) VALUES (7);");
+            + "INSERT INTO `explicit_backfill_items` (`value`) VALUES (7);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var operation = ExplicitBackfillRequiredIdAdd();
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("populated-required-guid-add"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                new SafeMigrationRunOptions("populated-required-guid-add"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var idColumns = await ScalarIntAsync(connectionString,
+        var idColumns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'explicit_backfill_items' AND COLUMN_NAME = 'id';");
-        var preserved = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE `value` = 7;");
+            + "AND TABLE_NAME = 'explicit_backfill_items' AND COLUMN_NAME = 'id';",
+            cancellationToken: CancellationToken.None);
+
+        var preserved = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE `value` = 7;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.RejectDataBlocked, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(exception).Message,
+        Assert.Equal(SafeMigrationAction.RejectDataBlocked,
+            Assert.Single(report.Assessments)
+                .Action);
+
+        Assert.Contains(
+            "doka_sm_data_blocked",
+            AssertOwnedGuardFailure(exception)
+                .Message,
             StringComparison.Ordinal);
+
         Assert.Equal(0, idColumns);
         Assert.Equal(1, preserved);
     }
@@ -267,15 +428,23 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL); "
-            + "INSERT INTO `explicit_backfill_items` (`value`) VALUES (1), (2);");
+            + "INSERT INTO `explicit_backfill_items` (`value`) VALUES (1), (2);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var nullableBuilder = new MigrationBuilder(context.Database.ProviderName!);
         nullableBuilder.AddColumnIfNotExistsFromModel(
-            operationFactory: static operations => operations.AddColumn<Guid>(
-                    name: "owner_id", table: "explicit_backfill_items", type: "char(36)",
-                    fixedLength: true, maxLength: 36, nullable: true)
+            operationFactory: static operations => operations
+                .AddColumn<Guid>(
+                    name: "owner_id",
+                    table: "explicit_backfill_items",
+                    type: "char(36)",
+                    fixedLength: true,
+                    maxLength: 36,
+                    nullable: true)
                 .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Char36)
                 .Annotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None));
 
@@ -284,25 +453,41 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
 
         // Act
         await ExecuteOperationsAsync(context, nullableBuilder.Operations, CancellationToken.None);
+
         // WHY: Row ownership is the caller's decision. The subsequent proof
         // must use these explicit values instead of inventing a shared GUID.
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "UPDATE `explicit_backfill_items` SET `owner_id` = CASE `value` "
             + "WHEN 1 THEN '00000000-0000-0000-0000-000000000001' "
-            + "WHEN 2 THEN '00000000-0000-0000-0000-000000000002' END;");
-        var preflight = await runner.AnalyzeAsync(context, [requiredOperation],
-            new SafeMigrationRunOptions("staged-guid-backfill"), CancellationToken.None);
+            + "WHEN 2 THEN '00000000-0000-0000-0000-000000000002' END;",
+            cancellationToken: CancellationToken.None);
+
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            [requiredOperation],
+            new SafeMigrationRunOptions("staged-guid-backfill"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, [requiredOperation], CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, [requiredOperation],
-            new SafeMigrationRunOptions("staged-guid-backfill-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            [requiredOperation],
+            new SafeMigrationRunOptions("staged-guid-backfill-final"),
+            CancellationToken.None);
 
-        var expectedValues = await ScalarIntAsync(connectionString,
+        var expectedValues = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE "
             + "(`value` = 1 AND `owner_id` = '00000000-0000-0000-0000-000000000001') OR "
-            + "(`value` = 2 AND `owner_id` = '00000000-0000-0000-0000-000000000002');");
-        var required = await ExplicitBackfillRequiredColumnCountAsync(connectionString, "owner_id");
+            + "(`value` = 2 AND `owner_id` = '00000000-0000-0000-0000-000000000002');",
+            cancellationToken: CancellationToken.None);
+
+        var required = await ExplicitBackfillRequiredColumnCountAsync(
+            connectionString,
+            "owner_id",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -316,27 +501,50 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ExplicitBackfillGuidTighteningRejectsStillLiveSetNullForeignKey(bool onUpdate)
+    public async Task ExplicitBackfillGuidTighteningRejectsStillLiveSetNullForeignKey(
+        bool onUpdate
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExplicitBackfillGuidForeignKeyFixture(
-            onUpdate ? ReferentialAction.NoAction : ReferentialAction.SetNull,
-            onUpdate ? ReferentialAction.SetNull : ReferentialAction.NoAction));
+        await ExecuteSqlAsync(
+            connectionString,
+            ExplicitBackfillGuidForeignKeyFixture(
+                onUpdate
+                    ? ReferentialAction.NoAction
+                    : ReferentialAction.SetNull,
+                onUpdate
+                    ? ReferentialAction.SetNull
+                    : ReferentialAction.NoAction),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operation = ExplicitBackfillGuidTightening();
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("retained-set-null-guid-tightening"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                new SafeMigrationRunOptions("retained-set-null-guid-tightening"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var required = await ExplicitBackfillRequiredColumnCountAsync(connectionString, "owner_id");
-        var preserved = await ExplicitBackfillGuidSentinelCountAsync(connectionString);
-        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(connectionString);
+        var required = await ExplicitBackfillRequiredColumnCountAsync(
+            connectionString,
+            "owner_id",
+            cancellationToken: CancellationToken.None);
+
+        var preserved = await ExplicitBackfillGuidSentinelCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
@@ -344,8 +552,12 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
         Assert.Equal("alter_not_approved", assessment.Code);
         Assert.Equal("column_set_null_dependency", assessment.AnalysisCode);
-        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
+        Assert.Contains(
+            "doka_sm_different",
+            AssertOwnedGuardFailure(exception)
+                .Message,
             StringComparison.Ordinal);
+
         Assert.Equal(0, required);
         Assert.Equal(1, preserved);
         Assert.Equal(1, foreignKeys);
@@ -357,8 +569,13 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExplicitBackfillGuidForeignKeyFixture(
-            ReferentialAction.SetNull, ReferentialAction.NoAction, secondDependency: true));
+        await ExecuteSqlAsync(
+            connectionString,
+            ExplicitBackfillGuidForeignKeyFixture(
+                ReferentialAction.SetNull,
+                ReferentialAction.NoAction,
+                secondDependency: true),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -368,22 +585,40 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("removed-set-null-guid-tightening"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("removed-set-null-guid-tightening"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("removed-set-null-guid-tightening-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("removed-set-null-guid-tightening-final"),
+            CancellationToken.None);
 
-        var rerun = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("removed-set-null-guid-tightening-rerun"), CancellationToken.None);
+        var rerun = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("removed-set-null-guid-tightening-rerun"),
+            CancellationToken.None);
 
         rerun.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var required = await ExplicitBackfillRequiredColumnCountAsync(connectionString, "owner_id");
-        var preserved = await ExplicitBackfillGuidSentinelCountAsync(connectionString);
-        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(connectionString);
+        var required = await ExplicitBackfillRequiredColumnCountAsync(
+            connectionString,
+            "owner_id",
+            cancellationToken: CancellationToken.None);
+
+        var preserved = await ExplicitBackfillGuidSentinelCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -402,8 +637,13 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExplicitBackfillGuidForeignKeyFixture(
-            ReferentialAction.SetNull, ReferentialAction.NoAction, secondDependency: true));
+        await ExecuteSqlAsync(
+            connectionString,
+            ExplicitBackfillGuidForeignKeyFixture(
+                ReferentialAction.SetNull,
+                ReferentialAction.NoAction,
+                secondDependency: true),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -411,23 +651,41 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
         builder.Operations.Add(ExplicitBackfillGuidTightening());
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("partial-set-null-guid-tightening"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("partial-set-null-guid-tightening"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
-        var required = await ExplicitBackfillRequiredColumnCountAsync(connectionString, "owner_id");
-        var preserved = await ExplicitBackfillGuidSentinelCountAsync(connectionString);
-        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(connectionString);
+        var required = await ExplicitBackfillRequiredColumnCountAsync(
+            connectionString,
+            "owner_id",
+            cancellationToken: CancellationToken.None);
+
+        var preserved = await ExplicitBackfillGuidSentinelCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[1].Action);
         Assert.Equal("alter_not_approved", report.Assessments[1].Code);
         Assert.Equal("column_set_null_dependency", report.Assessments[1].AnalysisCode);
-        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
+        Assert.Contains(
+            "doka_sm_different",
+            AssertOwnedGuardFailure(exception)
+                .Message,
             StringComparison.Ordinal);
+
         Assert.Equal(0, required);
         Assert.Equal(1, preserved);
         Assert.Equal(1, foreignKeys);
@@ -439,28 +697,50 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExplicitBackfillGuidForeignKeyFixture(
-            ReferentialAction.Cascade, ReferentialAction.NoAction));
+        await ExecuteSqlAsync(
+            connectionString,
+            ExplicitBackfillGuidForeignKeyFixture(
+                ReferentialAction.Cascade,
+                ReferentialAction.NoAction),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operation = ExplicitBackfillGuidTightening();
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("cascade-guid-tightening"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("cascade-guid-tightening"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, [operation],
-            new SafeMigrationRunOptions("cascade-guid-tightening-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("cascade-guid-tightening-final"),
+            CancellationToken.None);
 
-        var required = await ExplicitBackfillRequiredColumnCountAsync(connectionString, "owner_id");
-        var preserved = await ExplicitBackfillGuidSentinelCountAsync(connectionString);
-        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(connectionString);
+        var required = await ExplicitBackfillRequiredColumnCountAsync(
+            connectionString,
+            "owner_id",
+            cancellationToken: CancellationToken.None);
+
+        var preserved = await ExplicitBackfillGuidSentinelCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.Repair, Assert.Single(preflight.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Repair,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.Equal(1, required);
         Assert.Equal(1, preserved);
@@ -472,32 +752,58 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ExplicitBackfillGuidTighteningRejectsSetNullForeignKeyRecreatedAfterDrop(bool reusePhysicalName)
+    public async Task ExplicitBackfillGuidTighteningRejectsSetNullForeignKeyRecreatedAfterDrop(
+        bool reusePhysicalName
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExplicitBackfillGuidForeignKeyFixture(
-            ReferentialAction.SetNull, ReferentialAction.NoAction));
+        await ExecuteSqlAsync(
+            connectionString,
+            ExplicitBackfillGuidForeignKeyFixture(
+                ReferentialAction.SetNull,
+                ReferentialAction.NoAction),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_explicit_backfill_owner", "explicit_backfill_items");
         builder.AddForeignKeyIfNotExists(
-            reusePhysicalName ? "fk_explicit_backfill_owner" : "fk_explicit_backfill_owner_recreated",
-            "explicit_backfill_items", ["owner_id"], "explicit_backfill_owners", ["id"],
+            reusePhysicalName
+                ? "fk_explicit_backfill_owner"
+                : "fk_explicit_backfill_owner_recreated",
+            "explicit_backfill_items",
+            ["owner_id"],
+            "explicit_backfill_owners",
+            ["id"],
             onDelete: ReferentialAction.SetNull);
+
         builder.Operations.Add(ExplicitBackfillGuidTightening());
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("recreated-set-null-guid-tightening"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("recreated-set-null-guid-tightening"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
-        var required = await ExplicitBackfillRequiredColumnCountAsync(connectionString, "owner_id");
-        var preserved = await ExplicitBackfillGuidSentinelCountAsync(connectionString);
-        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(connectionString);
+        var required = await ExplicitBackfillRequiredColumnCountAsync(
+            connectionString,
+            "owner_id",
+            cancellationToken: CancellationToken.None);
+
+        var preserved = await ExplicitBackfillGuidSentinelCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
@@ -505,8 +811,12 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[2].Action);
         Assert.Equal("alter_not_approved", report.Assessments[2].Code);
         Assert.Equal("column_set_null_dependency", report.Assessments[2].AnalysisCode);
-        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
+        Assert.Contains(
+            "doka_sm_different",
+            AssertOwnedGuardFailure(exception)
+                .Message,
             StringComparison.Ordinal);
+
         Assert.Equal(0, required);
         Assert.Equal(1, preserved);
         Assert.Equal(1, foreignKeys);
@@ -529,35 +839,58 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         if (recreated)
         {
-            await ExecuteSqlAsync(connectionString,
-                "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL, `owner_id` char(36) NULL);");
+            await ExecuteSqlAsync(
+                connectionString,
+                "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL, `owner_id` char(36) NULL);",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
         var operations = ExplicitBackfillFreshSetNullOperations(recreated, inlineForeignKey);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("fresh-set-null-guid-tightening"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                new SafeMigrationRunOptions("fresh-set-null-guid-tightening"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, operations, CancellationToken.None));
 
-        var required = await ExplicitBackfillRequiredColumnCountAsync(connectionString, "owner_id");
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `explicit_backfill_items`;");
-        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(connectionString);
+        var required = await ExplicitBackfillRequiredColumnCountAsync(
+            connectionString,
+            "owner_id",
+            cancellationToken: CancellationToken.None);
+
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `explicit_backfill_items`;",
+            cancellationToken: CancellationToken.None);
+
+        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var alteration = report.Assessments[^1];
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.All(report.Assessments.Take(report.Assessments.Count - 1),
+        Assert.All(
+            report.Assessments.Take(report.Assessments.Count - 1),
             assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
+
         Assert.Equal(SafeMigrationAction.RejectDifferent, alteration.Action);
         Assert.Equal("alter_not_approved", alteration.Code);
         Assert.Equal("column_set_null_dependency", alteration.AnalysisCode);
-        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
+        Assert.Contains(
+            "doka_sm_different",
+            AssertOwnedGuardFailure(exception)
+                .Message,
             StringComparison.Ordinal);
+
         Assert.Equal(0, required);
         Assert.Equal(0, rows);
         Assert.Equal(1, foreignKeys);
@@ -569,10 +902,15 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExplicitBackfillGuidForeignKeyFixture(
-            ReferentialAction.SetNull, ReferentialAction.NoAction, secondDependency: true)
+        await ExecuteSqlAsync(
+            connectionString,
+            ExplicitBackfillGuidForeignKeyFixture(
+                ReferentialAction.SetNull,
+                ReferentialAction.NoAction,
+                secondDependency: true)
             + " INSERT INTO `explicit_backfill_owners` (`id`) VALUES ('00000000-0000-0000-0000-000000000001');"
-            + " INSERT INTO `explicit_backfill_items` (`value`, `owner_id`) VALUES (2, NULL);");
+            + " INSERT INTO `explicit_backfill_items` (`value`, `owner_id`) VALUES (2, NULL);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var replacement = Guid.Parse("00000000-0000-0000-0000-000000000001");
@@ -583,25 +921,43 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("removed-set-null-guid-backfill"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("removed-set-null-guid-backfill"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("removed-set-null-guid-backfill-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("removed-set-null-guid-backfill-final"),
+            CancellationToken.None);
 
-        var rerun = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("removed-set-null-guid-backfill-rerun"), CancellationToken.None);
+        var rerun = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("removed-set-null-guid-backfill-rerun"),
+            CancellationToken.None);
 
         rerun.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var expectedValues = await ScalarIntAsync(connectionString,
+        var expectedValues = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE "
             + "(`value` = 1 AND `owner_id` = '00000000-0000-0000-0000-000000000002') OR "
-            + "(`value` = 2 AND `owner_id` = '00000000-0000-0000-0000-000000000001');");
-        var required = await ExplicitBackfillRequiredColumnCountAsync(connectionString, "owner_id");
-        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(connectionString);
+            + "(`value` = 2 AND `owner_id` = '00000000-0000-0000-0000-000000000001');",
+            cancellationToken: CancellationToken.None);
+
+        var required = await ExplicitBackfillRequiredColumnCountAsync(
+            connectionString,
+            "owner_id",
+            cancellationToken: CancellationToken.None);
+
+        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -630,7 +986,8 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
             name: "explicit_backfill_owners",
             columns: static table => new
             {
-                id = table.Column<Guid>(type: "char(36)", fixedLength: true, maxLength: 36, nullable: false)
+                id = table
+                    .Column<Guid>(type: "char(36)", fixedLength: true, maxLength: 36, nullable: false)
                     .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Char36)
                     .Annotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None),
             },
@@ -646,7 +1003,8 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
             columns: static table => new
             {
                 value = table.Column<int>(type: "int", nullable: false),
-                owner_id = table.Column<Guid>(type: "char(36)", fixedLength: true, maxLength: 36, nullable: true)
+                owner_id = table
+                    .Column<Guid>(type: "char(36)", fixedLength: true, maxLength: 36, nullable: true)
                     .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Char36)
                     .Annotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None),
             },
@@ -654,16 +1012,24 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
             {
                 if (inlineForeignKey)
                 {
-                    table.ForeignKey("fk_explicit_backfill_owner", child => child.owner_id,
-                        "explicit_backfill_owners", "id", onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        "fk_explicit_backfill_owner",
+                        child => child.owner_id,
+                        "explicit_backfill_owners",
+                        "id",
+                        onDelete: ReferentialAction.SetNull);
                 }
-
             });
 
         if (!inlineForeignKey)
         {
-            builder.AddForeignKeyIfNotExists("fk_explicit_backfill_owner", "explicit_backfill_items", ["owner_id"],
-                "explicit_backfill_owners", ["id"], onDelete: ReferentialAction.SetNull);
+            builder.AddForeignKeyIfNotExists(
+                "fk_explicit_backfill_owner",
+                "explicit_backfill_items",
+                ["owner_id"],
+                "explicit_backfill_owners",
+                ["id"],
+                onDelete: ReferentialAction.SetNull);
         }
 
         builder.Operations.Add(ExplicitBackfillGuidTightening());
@@ -678,27 +1044,50 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ExplicitBackfillGuidEnsureRejectsStillLiveSetNullForeignKey(bool onUpdate)
+    public async Task ExplicitBackfillGuidEnsureRejectsStillLiveSetNullForeignKey(
+        bool onUpdate
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExplicitBackfillGuidForeignKeyFixture(
-            onUpdate ? ReferentialAction.NoAction : ReferentialAction.SetNull,
-            onUpdate ? ReferentialAction.SetNull : ReferentialAction.NoAction));
+        await ExecuteSqlAsync(
+            connectionString,
+            ExplicitBackfillGuidForeignKeyFixture(
+                onUpdate
+                    ? ReferentialAction.NoAction
+                    : ReferentialAction.SetNull,
+                onUpdate
+                    ? ReferentialAction.SetNull
+                    : ReferentialAction.NoAction),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operation = ExplicitBackfillGuidEnsure();
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("retained-set-null-guid-ensure"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                new SafeMigrationRunOptions("retained-set-null-guid-ensure"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var required = await ExplicitBackfillRequiredColumnCountAsync(connectionString, "owner_id");
-        var preserved = await ExplicitBackfillGuidSentinelCountAsync(connectionString);
-        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(connectionString);
+        var required = await ExplicitBackfillRequiredColumnCountAsync(
+            connectionString,
+            "owner_id",
+            cancellationToken: CancellationToken.None);
+
+        var preserved = await ExplicitBackfillGuidSentinelCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
@@ -706,8 +1095,12 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
         Assert.Equal("different_no_safe_repair", assessment.Code);
         Assert.Equal("column_set_null_dependency", assessment.AnalysisCode);
-        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
+        Assert.Contains(
+            "doka_sm_different",
+            AssertOwnedGuardFailure(exception)
+                .Message,
             StringComparison.Ordinal);
+
         Assert.Equal(0, required);
         Assert.Equal(1, preserved);
         Assert.Equal(1, foreignKeys);
@@ -719,8 +1112,13 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExplicitBackfillGuidForeignKeyFixture(
-            ReferentialAction.SetNull, ReferentialAction.NoAction, secondDependency: true));
+        await ExecuteSqlAsync(
+            connectionString,
+            ExplicitBackfillGuidForeignKeyFixture(
+                ReferentialAction.SetNull,
+                ReferentialAction.NoAction,
+                secondDependency: true),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -730,22 +1128,40 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("removed-set-null-guid-ensure"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("removed-set-null-guid-ensure"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("removed-set-null-guid-ensure-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("removed-set-null-guid-ensure-final"),
+            CancellationToken.None);
 
-        var rerun = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("removed-set-null-guid-ensure-rerun"), CancellationToken.None);
+        var rerun = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("removed-set-null-guid-ensure-rerun"),
+            CancellationToken.None);
 
         rerun.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var required = await ExplicitBackfillRequiredColumnCountAsync(connectionString, "owner_id");
-        var preserved = await ExplicitBackfillGuidSentinelCountAsync(connectionString);
-        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(connectionString);
+        var required = await ExplicitBackfillRequiredColumnCountAsync(
+            connectionString,
+            "owner_id",
+            cancellationToken: CancellationToken.None);
+
+        var preserved = await ExplicitBackfillGuidSentinelCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -764,28 +1180,50 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExplicitBackfillGuidForeignKeyFixture(
-            ReferentialAction.Cascade, ReferentialAction.NoAction));
+        await ExecuteSqlAsync(
+            connectionString,
+            ExplicitBackfillGuidForeignKeyFixture(
+                ReferentialAction.Cascade,
+                ReferentialAction.NoAction),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operation = ExplicitBackfillGuidEnsure();
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("cascade-guid-ensure"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("cascade-guid-ensure"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, [operation],
-            new SafeMigrationRunOptions("cascade-guid-ensure-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("cascade-guid-ensure-final"),
+            CancellationToken.None);
 
-        var required = await ExplicitBackfillRequiredColumnCountAsync(connectionString, "owner_id");
-        var preserved = await ExplicitBackfillGuidSentinelCountAsync(connectionString);
-        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(connectionString);
+        var required = await ExplicitBackfillRequiredColumnCountAsync(
+            connectionString,
+            "owner_id",
+            cancellationToken: CancellationToken.None);
+
+        var preserved = await ExplicitBackfillGuidSentinelCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var foreignKeys = await ExplicitBackfillGuidForeignKeyCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.Repair, Assert.Single(preflight.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Repair,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.Equal(1, required);
         Assert.Equal(1, preserved);
@@ -798,25 +1236,47 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExplicitBackfillNullableGuidFixture(includeNull: true));
+        await ExecuteSqlAsync(
+            connectionString,
+            ExplicitBackfillNullableGuidFixture(includeNull: true),
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var operation = ExplicitBackfillGuidEnsure();
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("null-guid-ensure"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                new SafeMigrationRunOptions("null-guid-ensure"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var nullRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE `owner_id` IS NULL;");
-        var required = await ExplicitBackfillRequiredColumnCountAsync(connectionString, "owner_id");
+        var nullRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE `owner_id` IS NULL;",
+            cancellationToken: CancellationToken.None);
+
+        var required = await ExplicitBackfillRequiredColumnCountAsync(
+            connectionString,
+            "owner_id",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.RejectDataBlocked, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(exception).Message,
+        Assert.Equal(SafeMigrationAction.RejectDataBlocked,
+            Assert.Single(report.Assessments)
+                .Action);
+
+        Assert.Contains(
+            "doka_sm_data_blocked",
+            AssertOwnedGuardFailure(exception)
+                .Message,
             StringComparison.Ordinal);
+
         Assert.Equal(1, nullRows);
         Assert.Equal(0, required);
     }
@@ -826,15 +1286,19 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ExplicitBackfillGuidEnsureNullableTargetRequiresPrimaryKeyRemoval(bool dropPrimaryKey)
+    public async Task ExplicitBackfillGuidEnsureNullableTargetRequiresPrimaryKeyRemoval(
+        bool dropPrimaryKey
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL, `owner_id` char(36) NOT NULL PRIMARY KEY) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
             + "INSERT INTO `explicit_backfill_items` (`value`, `owner_id`) "
-            + "VALUES (1, '00000000-0000-0000-0000-000000000002');");
+            + "VALUES (1, '00000000-0000-0000-0000-000000000002');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -846,38 +1310,72 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
         builder.Operations.Add(ExplicitBackfillGuidEnsure(nullable: true));
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("primary-guid-ensure"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("primary-guid-ensure"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
-        var required = await ExplicitBackfillRequiredColumnCountAsync(connectionString, "owner_id");
-        var preserved = await ExplicitBackfillGuidSentinelCountAsync(connectionString);
-        var primaryKeys = await ScalarIntAsync(connectionString,
+        var required = await ExplicitBackfillRequiredColumnCountAsync(
+            connectionString,
+            "owner_id",
+            cancellationToken: CancellationToken.None);
+
+        var preserved = await ExplicitBackfillGuidSentinelCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var primaryKeys = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'explicit_backfill_items' AND CONSTRAINT_TYPE = 'PRIMARY KEY';");
+            + "AND TABLE_NAME = 'explicit_backfill_items' AND CONSTRAINT_TYPE = 'PRIMARY KEY';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var column = report.Assessments[^1];
 
-        Assert.Equal(dropPrimaryKey ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+        Assert.Equal(
+            dropPrimaryKey
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
             report.Status);
-        Assert.Equal(dropPrimaryKey ? SafeMigrationAction.Repair : SafeMigrationAction.RejectDifferent,
+
+        Assert.Equal(
+            dropPrimaryKey
+                ? SafeMigrationAction.Repair
+                : SafeMigrationAction.RejectDifferent,
             column.Action);
+
         if (dropPrimaryKey)
         {
             Assert.Null(exception);
         }
         else
         {
-            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
+            Assert.Contains(
+                "doka_sm_different",
+                AssertOwnedGuardFailure(exception)
+                    .Message,
                 StringComparison.Ordinal);
         }
 
-        Assert.Equal(dropPrimaryKey ? 0 : 1, required);
+        Assert.Equal(
+            dropPrimaryKey
+                ? 0
+                : 1,
+            required);
+
         Assert.Equal(1, preserved);
-        Assert.Equal(dropPrimaryKey ? 0 : 1, primaryKeys);
+        Assert.Equal(
+            dropPrimaryKey
+                ? 0
+                : 1,
+            primaryKeys);
     }
 
     /// <summary>A NULL-free tightening requires strict conversion; an exact match needs no conversion.</summary>
@@ -895,57 +1393,97 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExplicitBackfillNullableGuidFixture(includeNull: false)
+        await ExecuteSqlAsync(
+            connectionString,
+            ExplicitBackfillNullableGuidFixture(includeNull: false)
             + (alreadyMatching
                 ? " ALTER TABLE `explicit_backfill_items` MODIFY `owner_id` char(36) NOT NULL;"
-                : string.Empty));
+                : string.Empty),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("SET SESSION sql_mode = '';", CancellationToken.None);
-        var operation = ensure ? ExplicitBackfillGuidEnsure() : ExplicitBackfillGuidTightening();
+        var operation = ensure
+            ? ExplicitBackfillGuidEnsure()
+            : ExplicitBackfillGuidTightening();
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("strict-null-free-guid-tightening"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                new SafeMigrationRunOptions("strict-null-free-guid-tightening"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var required = await ExplicitBackfillRequiredColumnCountAsync(connectionString, "owner_id");
-        var preserved = await ExplicitBackfillGuidSentinelCountAsync(connectionString);
+        var required = await ExplicitBackfillRequiredColumnCountAsync(
+            connectionString,
+            "owner_id",
+            cancellationToken: CancellationToken.None);
+
+        var preserved = await ExplicitBackfillGuidSentinelCountAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(alreadyMatching ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+        Assert.Equal(
+            alreadyMatching
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
             report.Status);
-        Assert.Equal(alreadyMatching ? SafeMigrationAction.NoOp : SafeMigrationAction.RejectDifferent,
-            Assert.Single(report.Assessments).Action);
+
+        Assert.Equal(
+            alreadyMatching
+                ? SafeMigrationAction.NoOp
+                : SafeMigrationAction.RejectDifferent,
+            Assert.Single(report.Assessments)
+                .Action);
+
         if (alreadyMatching)
         {
             Assert.Null(exception);
         }
         else
         {
-            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
+            Assert.Contains(
+                "doka_sm_different",
+                AssertOwnedGuardFailure(exception)
+                    .Message,
                 StringComparison.Ordinal);
         }
 
-        Assert.Equal(alreadyMatching ? 1 : 0, required);
+        Assert.Equal(
+            alreadyMatching
+                ? 1
+                : 0,
+            required);
+
         Assert.Equal(1, preserved);
     }
 
     /// <summary>Captures a complete Ensure-column target rather than an explicit Alter operation.</summary>
     /// <param name="nullable">Whether the expected GUID contract allows NULL.</param>
     /// <returns>The immutable complete target under RepairIfSafe.</returns>
-    private static SafeMigrationOperation ExplicitBackfillGuidEnsure(bool nullable = false)
+    private static SafeMigrationOperation ExplicitBackfillGuidEnsure(
+        bool nullable = false
+    )
     {
         var builder = new MigrationBuilder("Doka.EntityFrameworkCore.MySql");
         builder.AddColumnIfNotExistsFromModel(
             operationFactory: operations =>
             {
-                var operation = operations.AddColumn<Guid>(
-                        name: "owner_id", table: "explicit_backfill_items", type: "char(36)",
-                        fixedLength: true, maxLength: 36, nullable: nullable)
+                var operation = operations
+                    .AddColumn<Guid>(
+                        name: "owner_id",
+                        table: "explicit_backfill_items",
+                        type: "char(36)",
+                        fixedLength: true,
+                        maxLength: 36,
+                        nullable: nullable)
                     .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Char36)
                     .Annotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None);
 
@@ -953,7 +1491,6 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
                 {
                     operation.Annotation("Doka:MySql:RequiresExplicitBackfill", true);
                 }
-
             },
             policy: SafeMigrationPolicy.RepairIfSafe);
 
@@ -963,15 +1500,26 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     /// <summary>Captures the exact provider safety marker on a same-layout GUID tightening.</summary>
     /// <param name="replacement">The optional caller-declared replacement for existing NULL values.</param>
     /// <returns>The immutable SafeMigrations alteration with its original nullable contract.</returns>
-    private static SafeMigrationOperation ExplicitBackfillGuidTightening(Guid? replacement = null)
+    private static SafeMigrationOperation ExplicitBackfillGuidTightening(
+        Guid? replacement = null
+    )
     {
         var builder = new MigrationBuilder("Doka.EntityFrameworkCore.MySql");
         builder.AlterColumnIfDifferentFromModel(
-            operationFactory: operations => operations.AlterColumn<Guid>(
-                    name: "owner_id", table: "explicit_backfill_items", type: "char(36)",
-                    fixedLength: true, maxLength: 36, nullable: false, defaultValue: replacement,
-                    oldClrType: typeof(Guid), oldType: "char(36)", oldFixedLength: true,
-                    oldMaxLength: 36, oldNullable: true)
+            operationFactory: operations => operations
+                .AlterColumn<Guid>(
+                    name: "owner_id",
+                    table: "explicit_backfill_items",
+                    type: "char(36)",
+                    fixedLength: true,
+                    maxLength: 36,
+                    nullable: false,
+                    defaultValue: replacement,
+                    oldClrType: typeof(Guid),
+                    oldType: "char(36)",
+                    oldFixedLength: true,
+                    oldMaxLength: 36,
+                    oldNullable: true)
                 .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Char36)
                 .Annotation("Doka:MySql:RequiresExplicitBackfill", true)
                 .Annotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None)
@@ -988,9 +1536,14 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     {
         var builder = new MigrationBuilder("Doka.EntityFrameworkCore.MySql");
         builder.AddColumnIfNotExistsFromModel(
-            operationFactory: static operations => operations.AddColumn<Guid>(
-                    name: "id", table: "explicit_backfill_items", type: "char(36)",
-                    fixedLength: true, maxLength: 36, nullable: false)
+            operationFactory: static operations => operations
+                .AddColumn<Guid>(
+                    name: "id",
+                    table: "explicit_backfill_items",
+                    type: "char(36)",
+                    fixedLength: true,
+                    maxLength: 36,
+                    nullable: false)
                 .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Char36)
                 .Annotation("Doka:MySql:RequiresExplicitBackfill", true)
                 .Annotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.ClientGuid));
@@ -1001,12 +1554,16 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     /// <summary>Creates a nullable GUID fixture with one sentinel row and an optional NULL row.</summary>
     /// <param name="includeNull">Whether the fixture requires a real row backfill.</param>
     /// <returns>The isolated schema and deterministic row values.</returns>
-    private static string ExplicitBackfillNullableGuidFixture(bool includeNull)
+    private static string ExplicitBackfillNullableGuidFixture(
+        bool includeNull
+    )
         => "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL, `owner_id` char(36) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
             + "INSERT INTO `explicit_backfill_items` (`value`, `owner_id`) "
             + "VALUES (1, '00000000-0000-0000-0000-000000000002');"
-            + (includeNull ? " INSERT INTO `explicit_backfill_items` (`value`, `owner_id`) VALUES (2, NULL);" : "");
+            + (includeNull
+                ? " INSERT INTO `explicit_backfill_items` (`value`, `owner_id`) VALUES (2, NULL);"
+                : "");
 
     /// <summary>Creates a populated NULL-free GUID fixture with explicit compatible FK storage.</summary>
     /// <param name="onDelete">The primary constraint's DELETE action.</param>
@@ -1021,11 +1578,13 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
         + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
         + "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL, `owner_id` char(36) NULL, "
         + "CONSTRAINT `fk_explicit_backfill_owner` FOREIGN KEY (`owner_id`) "
-        + "REFERENCES `explicit_backfill_owners` (`id`) ON DELETE " + ExplicitBackfillReferentialActionSql(onDelete)
-        + " ON UPDATE " + ExplicitBackfillReferentialActionSql(onUpdate)
+        + "REFERENCES `explicit_backfill_owners` (`id`) ON DELETE "
+        + ExplicitBackfillReferentialActionSql(onDelete)
+        + " ON UPDATE "
+        + ExplicitBackfillReferentialActionSql(onUpdate)
         + (secondDependency
             ? ", CONSTRAINT `fk_explicit_backfill_owner_update` FOREIGN KEY (`owner_id`) "
-                + "REFERENCES `explicit_backfill_owners` (`id`) ON DELETE NO ACTION ON UPDATE SET NULL"
+            + "REFERENCES `explicit_backfill_owners` (`id`) ON DELETE NO ACTION ON UPDATE SET NULL"
             : "")
         + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
         + "INSERT INTO `explicit_backfill_owners` (`id`) VALUES ('00000000-0000-0000-0000-000000000002'); "
@@ -1035,7 +1594,9 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     /// <summary>Renders only referential actions declared by these anonymous fixtures.</summary>
     /// <param name="action">The fixture's bounded referential action.</param>
     /// <returns>The canonical SQL action.</returns>
-    private static string ExplicitBackfillReferentialActionSql(ReferentialAction action) => action switch
+    private static string ExplicitBackfillReferentialActionSql(
+        ReferentialAction action
+    ) => action switch
     {
         ReferentialAction.NoAction => "NO ACTION",
         ReferentialAction.Cascade => "CASCADE",
@@ -1046,25 +1607,46 @@ public sealed partial class MySqlColumnsExplicitBackfillIntegrationTests : MySql
     /// <summary>Counts the known NULL-free sentinel without exposing row payloads in test diagnostics.</summary>
     /// <param name="connectionString">The isolated fixture database connection.</param>
     /// <returns>One while the row's explicit GUID remains unchanged.</returns>
-    private static Task<int> ExplicitBackfillGuidSentinelCountAsync(string connectionString)
-        => ScalarIntAsync(connectionString,
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static Task<int> ExplicitBackfillGuidSentinelCountAsync(
+        string connectionString,
+        CancellationToken cancellationToken
+    )
+        => ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE `value` = 1 "
-            + "AND `owner_id` = '00000000-0000-0000-0000-000000000002';");
+            + "AND `owner_id` = '00000000-0000-0000-0000-000000000002';",
+            cancellationToken: cancellationToken);
 
     /// <summary>Counts actual outgoing FK owners remaining on the fixture table.</summary>
     /// <param name="connectionString">The isolated fixture database connection.</param>
     /// <returns>The physical outgoing FK count.</returns>
-    private static Task<int> ExplicitBackfillGuidForeignKeyCountAsync(string connectionString)
-        => ScalarIntAsync(connectionString,
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static Task<int> ExplicitBackfillGuidForeignKeyCountAsync(
+        string connectionString,
+        CancellationToken cancellationToken
+    )
+        => ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'explicit_backfill_items';");
+            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'explicit_backfill_items';",
+            cancellationToken: cancellationToken);
 
     /// <summary>Reads only catalog nullability, without inspecting confidential row payloads.</summary>
     /// <param name="connectionString">The isolated fixture database connection.</param>
     /// <param name="column">The known test column to inspect.</param>
     /// <returns>One when the named column exists and is required; otherwise zero.</returns>
-    private static Task<int> ExplicitBackfillRequiredColumnCountAsync(string connectionString, string column)
-        => ScalarIntAsync(connectionString,
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static Task<int> ExplicitBackfillRequiredColumnCountAsync(
+        string connectionString,
+        string column,
+        CancellationToken cancellationToken
+    )
+        => ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'explicit_backfill_items' AND COLUMN_NAME = '" + column + "' AND IS_NULLABLE = 'NO';");
+            + "AND TABLE_NAME = 'explicit_backfill_items' AND COLUMN_NAME = '"
+            + column
+            + "' AND IS_NULLABLE = 'NO';",
+            cancellationToken: cancellationToken);
 }

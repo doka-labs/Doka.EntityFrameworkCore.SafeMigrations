@@ -3,12 +3,12 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 internal sealed class MySqlCatalogQueryParameterizer
 {
     private readonly Func<DbParameter> _createParameter;
+    private readonly Dictionary<string, string> _parameters = new(StringComparer.Ordinal);
     private readonly DbParameterCollection _parametersCollection;
     private readonly IRelationalTypeMappingSource? _typeMappingSource;
-    private readonly Dictionary<string, string> _parameters = new(StringComparer.Ordinal);
+
     private readonly Dictionary<MySqlCatalogParameterValue, string> _typedParameters = new(
         MySqlCatalogParameterValueComparer.Instance);
-    private int _utf8PayloadBytes;
 
     public MySqlCatalogQueryParameterizer(
         DbCommand command,
@@ -36,9 +36,9 @@ internal sealed class MySqlCatalogQueryParameterizer
 
     public int Count => _parametersCollection.Count;
 
-    public int Utf8PayloadBytes => _utf8PayloadBytes;
+    public int Utf8PayloadBytes { get; private set; }
 
-    public Checkpoint Capture() => new(_parametersCollection.Count, _utf8PayloadBytes);
+    public Checkpoint Capture() => new(_parametersCollection.Count, Utf8PayloadBytes);
 
     public void Rollback(
         Checkpoint checkpoint
@@ -59,7 +59,7 @@ internal sealed class MySqlCatalogQueryParameterizer
 
         // Rebuild both lookup maps lazily. Retaining entries for parameters
         // removed by an oversized statement would allow stale marker reuse.
-        _utf8PayloadBytes = checkpoint.Utf8PayloadBytes;
+        Utf8PayloadBytes = checkpoint.Utf8PayloadBytes;
     }
 
     public string AddString(
@@ -79,7 +79,7 @@ internal sealed class MySqlCatalogQueryParameterizer
         parameter.Value = value;
         _parametersCollection.Add(parameter);
         _parameters.Add(value, name);
-        _utf8PayloadBytes += Encoding.UTF8.GetByteCount(value) + 32;
+        Utf8PayloadBytes += Encoding.UTF8.GetByteCount(value) + 32;
 
         return name;
     }
@@ -116,7 +116,7 @@ internal sealed class MySqlCatalogQueryParameterizer
 
         _parametersCollection.Add(parameter);
         _typedParameters.Add(value, name);
-        _utf8PayloadBytes += EstimatePayloadBytes(value.Value) + 32;
+        Utf8PayloadBytes += EstimatePayloadBytes(value.Value) + 32;
 
         return name;
     }
@@ -125,10 +125,7 @@ internal sealed class MySqlCatalogQueryParameterizer
         object? value
     ) => value switch
     {
-        null => 4,
-        string text => Encoding.UTF8.GetByteCount(text),
-        byte[] bytes => bytes.Length,
-        _ => 32,
+        null => 4, string text => Encoding.UTF8.GetByteCount(text), byte[] bytes => bytes.Length, _ => 32,
     };
 
     public readonly record struct Checkpoint(

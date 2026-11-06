@@ -13,11 +13,15 @@ public sealed class MySqlAlterCollationCaptureTests
             new(
                 new EnsureColumnIntent("records", Column("longtext", false, null)),
                 SafeMigrationPolicy.ThrowIfDifferent),
-            new(new AlterColumnIntent("records", Column("varchar(80)", false, "latin1_bin"),
-                Column("varchar(80)", true, "latin1_bin")), SafeMigrationPolicy.RepairIfSafe),
+            new(
+                new AlterColumnIntent(
+                    "records",
+                    Column("varchar(80)", false, "latin1_bin"),
+                    Column("varchar(80)", true, "latin1_bin")),
+                SafeMigrationPolicy.RepairIfSafe),
         ];
 
-        var result = await Capture(connection, operations);
+        var result = await Capture(connection, operations, cancellationToken: CancellationToken.None);
 
         Assert.Empty(result);
         Assert.Empty(connection.Submissions);
@@ -28,11 +32,16 @@ public sealed class MySqlAlterCollationCaptureTests
     public async Task ExplicitCollationIsResolvedOnce()
     {
         await using var connection = new CatalogStatementTestConnection(true, Results);
-        var operations = Enumerable.Repeat(Operation("latin1_bin"), 1000).ToArray();
+        var operations = Enumerable
+            .Repeat(Operation("latin1_bin"), 1000)
+            .ToArray();
 
-        var result = await Capture(connection, operations);
+        var result = await Capture(connection, operations, cancellationToken: CancellationToken.None);
 
-        Assert.Equal("latin1", Assert.Single(result).Value);
+        Assert.Equal("latin1",
+            Assert.Single(result)
+                .Value);
+
         var statement = Assert.Single(connection.Submissions);
         Assert.Single(statement.Parameters);
         Assert.Equal(71, statement.Timeout);
@@ -45,7 +54,7 @@ public sealed class MySqlAlterCollationCaptureTests
     {
         await using var connection = new CatalogStatementTestConnection(true, (_, _) => EmptyResults());
 
-        var result = await Capture(connection, [Operation("unknown_bin")]);
+        var result = await Capture(connection, [Operation("unknown_bin")], cancellationToken: CancellationToken.None);
 
         Assert.Empty(result);
         Assert.Single(connection.Submissions);
@@ -56,29 +65,51 @@ public sealed class MySqlAlterCollationCaptureTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task MalformedCollationOwnershipIsRejected(bool duplicate)
+    public async Task MalformedCollationOwnershipIsRejected(
+        bool duplicate
+    )
     {
-        await using var connection = new CatalogStatementTestConnection(true, (sql, parameters) =>
-        {
-            var result = Results(sql, parameters);
-            result.Rows.Add(duplicate ? "latin1_bin" : "unowned_bin", "latin1");
+        await using var connection = new CatalogStatementTestConnection(
+            true,
+            (sql, parameters) =>
+            {
+                var result = Results(sql, parameters);
+                result.Rows.Add(
+                    duplicate
+                        ? "latin1_bin"
+                        : "unowned_bin",
+                    "latin1");
 
-            return result;
-        });
+                return result;
+            });
 
-        var exception = await Record.ExceptionAsync(() => Capture(connection, [Operation("latin1_bin")]));
+        var exception = await Record.ExceptionAsync(() => Capture(
+            connection,
+            [Operation("latin1_bin")],
+            cancellationToken: CancellationToken.None));
 
         Assert.IsType<InvalidOperationException>(exception);
         Assert.Equal(1, connection.ReadersDisposed);
     }
 
+    /// <summary>Performs the capture test operation with explicit cancellation.</summary>
+    /// <param name="connection">The connection for this operation.</param>
+    /// <param name="operations">The operations for this operation.</param>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static Task<IReadOnlyDictionary<string, string>> Capture(
         DbConnection connection,
-        IReadOnlyList<SafeMigrationOperation> operations
+        IReadOnlyList<SafeMigrationOperation> operations,
+        CancellationToken cancellationToken
     ) => MySqlSafeMigrationProviderAnalyzer.ReadProjectedAlterCollationCharacterSetsAsync(
-        connection, operations, 4 * 1024 * 1024, 71, CancellationToken.None);
+        connection,
+        operations,
+        4 * 1024 * 1024,
+        71,
+        cancellationToken);
 
-    private static SafeMigrationOperation Operation(string collation) => new(
+    private static SafeMigrationOperation Operation(
+        string collation
+    ) => new(
         new AlterColumnIntent("records", Column("varchar(80)", false, collation), Column("longtext", true, collation)),
         SafeMigrationPolicy.RepairIfSafe);
 
@@ -87,9 +118,16 @@ public sealed class MySqlAlterCollationCaptureTests
         bool nullable,
         string? collation
     ) => new(
-        "value", typeof(string), isNullable: nullable, storeType: type,
-        defaultValue: nullable ? SafeMigrationDefaultValue.None : SafeMigrationDefaultValue.Literal("seed"),
-        collation: collation is null ? null : new SafeMigrationCollationIdentifier(collation));
+        "value",
+        typeof(string),
+        isNullable: nullable,
+        storeType: type,
+        defaultValue: nullable
+            ? SafeMigrationDefaultValue.None
+            : SafeMigrationDefaultValue.Literal("seed"),
+        collation: collation is null
+            ? null
+            : new SafeMigrationCollationIdentifier(collation));
 
     private static DataTable Results(
         string _,

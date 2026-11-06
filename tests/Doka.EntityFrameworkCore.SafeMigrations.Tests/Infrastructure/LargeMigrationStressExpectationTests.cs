@@ -11,7 +11,9 @@ public sealed class LargeMigrationStressExpectationTests
     {
         // Arrange
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.SqlServer");
-        var expectation = LargeMigrationStressContract.Populate(builder, LargeMigrationStressDialect.SqlServer,
+        var expectation = LargeMigrationStressContract.Populate(
+            builder,
+            LargeMigrationStressDialect.SqlServer,
             operationCount: 18);
 
         var report = CreateReport(CreateSqlServerGoldenAssessments(), sqlServer: true);
@@ -30,12 +32,18 @@ public sealed class LargeMigrationStressExpectationTests
     {
         // Arrange
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.SqlServer");
-        var expectation = LargeMigrationStressContract.Populate(builder, LargeMigrationStressDialect.SqlServer,
+        var expectation = LargeMigrationStressContract.Populate(
+            builder,
+            LargeMigrationStressDialect.SqlServer,
             operationCount: 18);
 
         var assessments = CreateSqlServerGoldenAssessments();
-        assessments[13] = ProvenAssessment(13, SafeMigrationOperationKind.EnsureColumn, "required_value",
-            SafeMigrationObservedState.DataBlocked, SafeMigrationAction.RejectDataBlocked);
+        assessments[13] = ProvenAssessment(
+            13,
+            SafeMigrationOperationKind.EnsureColumn,
+            "required_value",
+            SafeMigrationObservedState.DataBlocked,
+            SafeMigrationAction.RejectDataBlocked);
 
         var report = CreateReport(assessments, sqlServer: true);
 
@@ -43,7 +51,7 @@ public sealed class LargeMigrationStressExpectationTests
         var exception = Record.Exception(() => expectation.AssertReport(report));
 
         // Assert
-        Assert.IsAssignableFrom<Xunit.Sdk.XunitException>(exception);
+        Assert.IsAssignableFrom<XunitException>(exception);
     }
 
     /// <summary>Accepts only the expected uncertainty after the first model-managed ensure.</summary>
@@ -90,7 +98,8 @@ public sealed class LargeMigrationStressExpectationTests
     )
     {
         // Arrange
-        var scenarios = CreateScenarios().ToArray();
+        var scenarios = CreateScenarios()
+            .ToArray();
 
         scenarios[scenarioOrdinal] = scenarios[scenarioOrdinal] with { RequiresLiveDataProof = true };
 
@@ -125,7 +134,8 @@ public sealed class LargeMigrationStressExpectationTests
     )
     {
         // Arrange
-        var scenarios = CreateScenarios().ToArray();
+        var scenarios = CreateScenarios()
+            .ToArray();
 
         scenarios[scenarioOrdinal] = scenarios[scenarioOrdinal] with { RequiresLiveDataProof = true };
 
@@ -136,7 +146,7 @@ public sealed class LargeMigrationStressExpectationTests
         var exception = Record.Exception(() => expectation.AssertReport(report));
 
         // Assert
-        Assert.IsAssignableFrom<Xunit.Sdk.XunitException>(exception);
+        Assert.IsAssignableFrom<XunitException>(exception);
     }
 
     /// <summary>Rejects each independently corrupted field of otherwise valid deferred evidence.</summary>
@@ -170,7 +180,7 @@ public sealed class LargeMigrationStressExpectationTests
         var exception = Record.Exception(() => expectation.AssertReport(report));
 
         // Assert
-        Assert.IsAssignableFrom<Xunit.Sdk.XunitException>(exception);
+        Assert.IsAssignableFrom<XunitException>(exception);
     }
 
     /// <summary>A runtime deferral cannot erase a proven blocker or precede the first managed mutation.</summary>
@@ -192,7 +202,9 @@ public sealed class LargeMigrationStressExpectationTests
             ordinal,
             original.OperationKind!.Value,
             original.ObjectName!,
-            originOrdinal: ordinal == 12 ? 9 : 0);
+            originOrdinal: ordinal == 12
+                ? 9
+                : 0);
 
         var report = CreateReport(assessments);
 
@@ -200,7 +212,7 @@ public sealed class LargeMigrationStressExpectationTests
         var exception = Record.Exception(() => expectation.AssertReport(report));
 
         // Assert
-        Assert.IsAssignableFrom<Xunit.Sdk.XunitException>(exception);
+        Assert.IsAssignableFrom<XunitException>(exception);
     }
 
     /// <summary>The first model-managed update retains its source-state proof and must not be deferred.</summary>
@@ -223,7 +235,7 @@ public sealed class LargeMigrationStressExpectationTests
         var exception = Record.Exception(() => expectation.AssertReport(report));
 
         // Assert
-        Assert.IsAssignableFrom<Xunit.Sdk.XunitException>(exception);
+        Assert.IsAssignableFrom<XunitException>(exception);
     }
 
     /// <summary>Separately pins the constructor boundary for an inconsistent deferred action and origin.</summary>
@@ -236,7 +248,10 @@ public sealed class LargeMigrationStressExpectationTests
     )
     {
         // Arrange
-        var action = runtimeAction ? SafeMigrationAction.ValidateAtRuntime : SafeMigrationAction.Apply;
+        var action = runtimeAction
+            ? SafeMigrationAction.ValidateAtRuntime
+            : SafeMigrationAction.Apply;
+
         var origin = runtimeAction
             ? null
             : new SafeMigrationDeferredOrigin(null, 7, typeof(SafeMigrationOperation).FullName!);
@@ -339,42 +354,118 @@ public sealed class LargeMigrationStressExpectationTests
         bool updateFirst = false
     ) =>
     [
-        new(static (_, _) => { }, static _ => "matching_column", SafeMigrationOperationKind.EnsureColumn,
-            SafeMigrationObservedState.Matching, SafeMigrationAction.NoOp, true,
-            SafeMigrationOperationalImpact.NotApplicable, false, false),
-        new(static (_, _) => { }, static _ => "missing_table", SafeMigrationOperationKind.EnsureTable,
-            SafeMigrationObservedState.Missing, SafeMigrationAction.Apply, false,
-            SafeMigrationOperationalImpact.NotApplicable, false, false),
-        new(static (_, _) => { }, static _ => "different_column", SafeMigrationOperationKind.EnsureColumn,
-            SafeMigrationObservedState.Different, SafeMigrationAction.RejectDifferent, false,
-            SafeMigrationOperationalImpact.NotApplicable, false, false),
-        new(static (_, _) => { }, static _ => "unsupported_index", SafeMigrationOperationKind.EnsureIndex,
-            SafeMigrationObservedState.Unsupported, SafeMigrationAction.RejectUnsupported, false,
-            SafeMigrationOperationalImpact.NotApplicable, false, false),
-        new(static (_, _) => { }, static _ => "blocked_column", SafeMigrationOperationKind.EnsureColumn,
-            SafeMigrationObservedState.DataBlocked, SafeMigrationAction.RejectDataBlocked, false,
-            SafeMigrationOperationalImpact.NotApplicable, false, false),
-        new(static (_, _) => { }, static _ => "dependent_column", SafeMigrationOperationKind.EnsureColumn,
-            SafeMigrationObservedState.PrerequisiteMissing, SafeMigrationAction.RejectPrerequisiteMissing, false,
-            SafeMigrationOperationalImpact.NotApplicable, false, false),
-        new(static (_, _) => { }, static _ => "repaired_column", SafeMigrationOperationKind.AlterColumn,
-            SafeMigrationObservedState.Different, SafeMigrationAction.Repair, false,
-            SafeMigrationOperationalImpact.TableRewritePossible, false, true),
-        new(static (_, _) => { }, _ => updateFirst ? "managed_update" : "managed_ensure",
+        new(
+            static (_, _) => { },
+            static _ => "matching_column",
+            SafeMigrationOperationKind.EnsureColumn,
+            SafeMigrationObservedState.Matching,
+            SafeMigrationAction.NoOp,
+            true,
+            SafeMigrationOperationalImpact.NotApplicable,
+            false,
+            false),
+        new(
+            static (_, _) => { },
+            static _ => "missing_table",
+            SafeMigrationOperationKind.EnsureTable,
+            SafeMigrationObservedState.Missing,
+            SafeMigrationAction.Apply,
+            false,
+            SafeMigrationOperationalImpact.NotApplicable,
+            false,
+            false),
+        new(
+            static (_, _) => { },
+            static _ => "different_column",
+            SafeMigrationOperationKind.EnsureColumn,
+            SafeMigrationObservedState.Different,
+            SafeMigrationAction.RejectDifferent,
+            false,
+            SafeMigrationOperationalImpact.NotApplicable,
+            false,
+            false),
+        new(
+            static (_, _) => { },
+            static _ => "unsupported_index",
+            SafeMigrationOperationKind.EnsureIndex,
+            SafeMigrationObservedState.Unsupported,
+            SafeMigrationAction.RejectUnsupported,
+            false,
+            SafeMigrationOperationalImpact.NotApplicable,
+            false,
+            false),
+        new(
+            static (_, _) => { },
+            static _ => "blocked_column",
+            SafeMigrationOperationKind.EnsureColumn,
+            SafeMigrationObservedState.DataBlocked,
+            SafeMigrationAction.RejectDataBlocked,
+            false,
+            SafeMigrationOperationalImpact.NotApplicable,
+            false,
+            false),
+        new(
+            static (_, _) => { },
+            static _ => "dependent_column",
+            SafeMigrationOperationKind.EnsureColumn,
+            SafeMigrationObservedState.PrerequisiteMissing,
+            SafeMigrationAction.RejectPrerequisiteMissing,
+            false,
+            SafeMigrationOperationalImpact.NotApplicable,
+            false,
+            false),
+        new(
+            static (_, _) => { },
+            static _ => "repaired_column",
+            SafeMigrationOperationKind.AlterColumn,
+            SafeMigrationObservedState.Different,
+            SafeMigrationAction.Repair,
+            false,
+            SafeMigrationOperationalImpact.TableRewritePossible,
+            false,
+            true),
+        new(
+            static (_, _) => { },
+            _ => updateFirst
+                ? "managed_update"
+                : "managed_ensure",
             updateFirst
                 ? SafeMigrationOperationKind.UpdateModelManagedData
                 : SafeMigrationOperationKind.EnsureModelManagedData,
-            updateFirst ? SafeMigrationObservedState.TransitionReady : SafeMigrationObservedState.Missing,
-            SafeMigrationAction.Apply, false, SafeMigrationOperationalImpact.NotApplicable, false, false),
-        new(static (_, _) => { }, _ => updateFirst ? "managed_ensure" : "managed_update",
+            updateFirst
+                ? SafeMigrationObservedState.TransitionReady
+                : SafeMigrationObservedState.Missing,
+            SafeMigrationAction.Apply,
+            false,
+            SafeMigrationOperationalImpact.NotApplicable,
+            false,
+            false),
+        new(
+            static (_, _) => { },
+            _ => updateFirst
+                ? "managed_ensure"
+                : "managed_update",
             updateFirst
                 ? SafeMigrationOperationKind.EnsureModelManagedData
                 : SafeMigrationOperationKind.UpdateModelManagedData,
-            updateFirst ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.TransitionReady,
-            SafeMigrationAction.Apply, false, SafeMigrationOperationalImpact.NotApplicable, false, false),
-        new(static (_, _) => { }, static _ => "managed_delete", SafeMigrationOperationKind.DeleteModelManagedData,
-            SafeMigrationObservedState.Missing, SafeMigrationAction.NoOp, true,
-            SafeMigrationOperationalImpact.NotApplicable, false, false),
+            updateFirst
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.TransitionReady,
+            SafeMigrationAction.Apply,
+            false,
+            SafeMigrationOperationalImpact.NotApplicable,
+            false,
+            false),
+        new(
+            static (_, _) => { },
+            static _ => "managed_delete",
+            SafeMigrationOperationKind.DeleteModelManagedData,
+            SafeMigrationObservedState.Missing,
+            SafeMigrationAction.NoOp,
+            true,
+            SafeMigrationOperationalImpact.NotApplicable,
+            false,
+            false),
     ];
 
     private static SafeMigrationAssessment[] CreateGoldenAssessments()
@@ -383,39 +474,102 @@ public sealed class LargeMigrationStressExpectationTests
         // regression oracle from agreeing on the same projection mistake.
         return
         [
-            ProvenAssessment(0, SafeMigrationOperationKind.EnsureColumn, "matching_column",
-                SafeMigrationObservedState.Matching, SafeMigrationAction.NoOp, postconditionSatisfied: true),
-            ProvenAssessment(1, SafeMigrationOperationKind.EnsureTable, "missing_table",
-                SafeMigrationObservedState.Missing, SafeMigrationAction.Apply),
-            ProvenAssessment(2, SafeMigrationOperationKind.EnsureColumn, "different_column",
-                SafeMigrationObservedState.Different, SafeMigrationAction.RejectDifferent),
-            ProvenAssessment(3, SafeMigrationOperationKind.EnsureIndex, "unsupported_index",
-                SafeMigrationObservedState.Unsupported, SafeMigrationAction.RejectUnsupported),
-            ProvenAssessment(4, SafeMigrationOperationKind.EnsureColumn, "blocked_column",
-                SafeMigrationObservedState.DataBlocked, SafeMigrationAction.RejectDataBlocked),
-            ProvenAssessment(5, SafeMigrationOperationKind.EnsureColumn, "dependent_column",
-                SafeMigrationObservedState.PrerequisiteMissing, SafeMigrationAction.RejectPrerequisiteMissing),
-            ProvenAssessment(6, SafeMigrationOperationKind.AlterColumn, "repaired_column",
-                SafeMigrationObservedState.Different, SafeMigrationAction.Repair,
+            ProvenAssessment(
+                0,
+                SafeMigrationOperationKind.EnsureColumn,
+                "matching_column",
+                SafeMigrationObservedState.Matching,
+                SafeMigrationAction.NoOp,
+                postconditionSatisfied: true),
+            ProvenAssessment(
+                1,
+                SafeMigrationOperationKind.EnsureTable,
+                "missing_table",
+                SafeMigrationObservedState.Missing,
+                SafeMigrationAction.Apply),
+            ProvenAssessment(
+                2,
+                SafeMigrationOperationKind.EnsureColumn,
+                "different_column",
+                SafeMigrationObservedState.Different,
+                SafeMigrationAction.RejectDifferent),
+            ProvenAssessment(
+                3,
+                SafeMigrationOperationKind.EnsureIndex,
+                "unsupported_index",
+                SafeMigrationObservedState.Unsupported,
+                SafeMigrationAction.RejectUnsupported),
+            ProvenAssessment(
+                4,
+                SafeMigrationOperationKind.EnsureColumn,
+                "blocked_column",
+                SafeMigrationObservedState.DataBlocked,
+                SafeMigrationAction.RejectDataBlocked),
+            ProvenAssessment(
+                5,
+                SafeMigrationOperationKind.EnsureColumn,
+                "dependent_column",
+                SafeMigrationObservedState.PrerequisiteMissing,
+                SafeMigrationAction.RejectPrerequisiteMissing),
+            ProvenAssessment(
+                6,
+                SafeMigrationOperationKind.AlterColumn,
+                "repaired_column",
+                SafeMigrationObservedState.Different,
+                SafeMigrationAction.Repair,
                 impact: SafeMigrationOperationalImpact.TableRewritePossible),
-            ProvenAssessment(7, SafeMigrationOperationKind.EnsureModelManagedData, "managed_ensure",
-                SafeMigrationObservedState.Missing, SafeMigrationAction.Apply),
+            ProvenAssessment(
+                7,
+                SafeMigrationOperationKind.EnsureModelManagedData,
+                "managed_ensure",
+                SafeMigrationObservedState.Missing,
+                SafeMigrationAction.Apply),
             DeferredAssessment(8, SafeMigrationOperationKind.UpdateModelManagedData, "managed_update", 7),
             DeferredAssessment(9, SafeMigrationOperationKind.DeleteModelManagedData, "managed_delete", 8),
-            ProvenAssessment(10, SafeMigrationOperationKind.EnsureColumn, "matching_column",
-                SafeMigrationObservedState.Matching, SafeMigrationAction.NoOp, postconditionSatisfied: true),
-            ProvenAssessment(11, SafeMigrationOperationKind.EnsureTable, "missing_table",
-                SafeMigrationObservedState.Missing, SafeMigrationAction.Apply),
-            ProvenAssessment(12, SafeMigrationOperationKind.EnsureColumn, "different_column",
-                SafeMigrationObservedState.Different, SafeMigrationAction.RejectDifferent),
-            ProvenAssessment(13, SafeMigrationOperationKind.EnsureIndex, "unsupported_index",
-                SafeMigrationObservedState.Unsupported, SafeMigrationAction.RejectUnsupported),
-            ProvenAssessment(14, SafeMigrationOperationKind.EnsureColumn, "blocked_column",
-                SafeMigrationObservedState.DataBlocked, SafeMigrationAction.RejectDataBlocked),
-            ProvenAssessment(15, SafeMigrationOperationKind.EnsureColumn, "dependent_column",
-                SafeMigrationObservedState.PrerequisiteMissing, SafeMigrationAction.RejectPrerequisiteMissing),
-            ProvenAssessment(16, SafeMigrationOperationKind.AlterColumn, "repaired_column",
-                SafeMigrationObservedState.Matching, SafeMigrationAction.NoOp, postconditionSatisfied: true),
+            ProvenAssessment(
+                10,
+                SafeMigrationOperationKind.EnsureColumn,
+                "matching_column",
+                SafeMigrationObservedState.Matching,
+                SafeMigrationAction.NoOp,
+                postconditionSatisfied: true),
+            ProvenAssessment(
+                11,
+                SafeMigrationOperationKind.EnsureTable,
+                "missing_table",
+                SafeMigrationObservedState.Missing,
+                SafeMigrationAction.Apply),
+            ProvenAssessment(
+                12,
+                SafeMigrationOperationKind.EnsureColumn,
+                "different_column",
+                SafeMigrationObservedState.Different,
+                SafeMigrationAction.RejectDifferent),
+            ProvenAssessment(
+                13,
+                SafeMigrationOperationKind.EnsureIndex,
+                "unsupported_index",
+                SafeMigrationObservedState.Unsupported,
+                SafeMigrationAction.RejectUnsupported),
+            ProvenAssessment(
+                14,
+                SafeMigrationOperationKind.EnsureColumn,
+                "blocked_column",
+                SafeMigrationObservedState.DataBlocked,
+                SafeMigrationAction.RejectDataBlocked),
+            ProvenAssessment(
+                15,
+                SafeMigrationOperationKind.EnsureColumn,
+                "dependent_column",
+                SafeMigrationObservedState.PrerequisiteMissing,
+                SafeMigrationAction.RejectPrerequisiteMissing),
+            ProvenAssessment(
+                16,
+                SafeMigrationOperationKind.AlterColumn,
+                "repaired_column",
+                SafeMigrationObservedState.Matching,
+                SafeMigrationAction.NoOp,
+                postconditionSatisfied: true),
             DeferredAssessment(17, SafeMigrationOperationKind.EnsureModelManagedData, "managed_ensure", 9),
             DeferredAssessment(18, SafeMigrationOperationKind.UpdateModelManagedData, "managed_update", 17),
             DeferredAssessment(19, SafeMigrationOperationKind.DeleteModelManagedData, "managed_delete", 18),
@@ -426,13 +580,25 @@ public sealed class LargeMigrationStressExpectationTests
     {
         var assessments = CreateGoldenAssessments();
 
-        assessments[7] = ProvenAssessment(7, SafeMigrationOperationKind.UpdateModelManagedData, "managed_update",
-            SafeMigrationObservedState.TransitionReady, SafeMigrationAction.Apply);
+        assessments[7] = ProvenAssessment(
+            7,
+            SafeMigrationOperationKind.UpdateModelManagedData,
+            "managed_update",
+            SafeMigrationObservedState.TransitionReady,
+            SafeMigrationAction.Apply);
+
         assessments[8] = DeferredAssessment(8, SafeMigrationOperationKind.EnsureModelManagedData, "managed_ensure", 7);
         assessments[17] = DeferredAssessment(
-            17, SafeMigrationOperationKind.UpdateModelManagedData, "managed_update", 9);
+            17,
+            SafeMigrationOperationKind.UpdateModelManagedData,
+            "managed_update",
+            9);
+
         assessments[18] = DeferredAssessment(
-            18, SafeMigrationOperationKind.EnsureModelManagedData, "managed_ensure", 17);
+            18,
+            SafeMigrationOperationKind.EnsureModelManagedData,
+            "managed_ensure",
+            17);
 
         return assessments;
     }
@@ -444,42 +610,115 @@ public sealed class LargeMigrationStressExpectationTests
         // flags. Deriving this report from its scenarios would hide a missing flag.
         return
         [
-            ProvenAssessment(0, SafeMigrationOperationKind.EnsureColumn, "id",
-                SafeMigrationObservedState.Matching, SafeMigrationAction.NoOp, postconditionSatisfied: true),
-            ProvenAssessment(1, SafeMigrationOperationKind.EnsureTable, "sm_stress_missing_table_000001",
-                SafeMigrationObservedState.Missing, SafeMigrationAction.Apply),
-            ProvenAssessment(2, SafeMigrationOperationKind.EnsureColumn, "id",
-                SafeMigrationObservedState.Different, SafeMigrationAction.RejectDifferent),
-            ProvenAssessment(3, SafeMigrationOperationKind.EnsureIndex, "ix_sqlserver_stress_unsupported",
-                SafeMigrationObservedState.Unsupported, SafeMigrationAction.RejectUnsupported),
-            ProvenAssessment(4, SafeMigrationOperationKind.EnsureColumn, "required_value",
-                SafeMigrationObservedState.DataBlocked, SafeMigrationAction.RejectDataBlocked),
-            ProvenAssessment(5, SafeMigrationOperationKind.EnsureColumn, "value",
-                SafeMigrationObservedState.PrerequisiteMissing, SafeMigrationAction.RejectPrerequisiteMissing),
-            ProvenAssessment(6, SafeMigrationOperationKind.AlterColumn, "caption",
-                SafeMigrationObservedState.Different, SafeMigrationAction.Repair,
+            ProvenAssessment(
+                0,
+                SafeMigrationOperationKind.EnsureColumn,
+                "id",
+                SafeMigrationObservedState.Matching,
+                SafeMigrationAction.NoOp,
+                postconditionSatisfied: true),
+            ProvenAssessment(
+                1,
+                SafeMigrationOperationKind.EnsureTable,
+                "sm_stress_missing_table_000001",
+                SafeMigrationObservedState.Missing,
+                SafeMigrationAction.Apply),
+            ProvenAssessment(
+                2,
+                SafeMigrationOperationKind.EnsureColumn,
+                "id",
+                SafeMigrationObservedState.Different,
+                SafeMigrationAction.RejectDifferent),
+            ProvenAssessment(
+                3,
+                SafeMigrationOperationKind.EnsureIndex,
+                "ix_sqlserver_stress_unsupported",
+                SafeMigrationObservedState.Unsupported,
+                SafeMigrationAction.RejectUnsupported),
+            ProvenAssessment(
+                4,
+                SafeMigrationOperationKind.EnsureColumn,
+                "required_value",
+                SafeMigrationObservedState.DataBlocked,
+                SafeMigrationAction.RejectDataBlocked),
+            ProvenAssessment(
+                5,
+                SafeMigrationOperationKind.EnsureColumn,
+                "value",
+                SafeMigrationObservedState.PrerequisiteMissing,
+                SafeMigrationAction.RejectPrerequisiteMissing),
+            ProvenAssessment(
+                6,
+                SafeMigrationOperationKind.AlterColumn,
+                "caption",
+                SafeMigrationObservedState.Different,
+                SafeMigrationAction.Repair,
                 impact: SafeMigrationOperationalImpact.TableRewritePossible),
-            ProvenAssessment(7, SafeMigrationOperationKind.UpdateModelManagedData, "sqlserver_stress_managed",
-                SafeMigrationObservedState.TransitionReady, SafeMigrationAction.Apply),
-            ProvenAssessment(8, SafeMigrationOperationKind.DropTable, "sqlserver_stress_absent",
-                SafeMigrationObservedState.Missing, SafeMigrationAction.NoOp, postconditionSatisfied: true),
-            ProvenAssessment(9, SafeMigrationOperationKind.EnsureColumn, "id",
-                SafeMigrationObservedState.Matching, SafeMigrationAction.NoOp, postconditionSatisfied: true),
-            ProvenAssessment(10, SafeMigrationOperationKind.EnsureTable, "sm_stress_missing_table_000010",
-                SafeMigrationObservedState.Missing, SafeMigrationAction.Apply),
-            ProvenAssessment(11, SafeMigrationOperationKind.EnsureColumn, "id",
-                SafeMigrationObservedState.Different, SafeMigrationAction.RejectDifferent),
-            ProvenAssessment(12, SafeMigrationOperationKind.EnsureIndex, "ix_sqlserver_stress_unsupported",
-                SafeMigrationObservedState.Unsupported, SafeMigrationAction.RejectUnsupported),
-            ProvenAssessment(13, SafeMigrationOperationKind.EnsureColumn, "required_value",
-                SafeMigrationObservedState.PrerequisiteMissing, SafeMigrationAction.RejectPrerequisiteMissing),
-            ProvenAssessment(14, SafeMigrationOperationKind.EnsureColumn, "value",
-                SafeMigrationObservedState.PrerequisiteMissing, SafeMigrationAction.RejectPrerequisiteMissing),
-            ProvenAssessment(15, SafeMigrationOperationKind.AlterColumn, "caption",
-                SafeMigrationObservedState.Matching, SafeMigrationAction.NoOp, postconditionSatisfied: true),
+            ProvenAssessment(
+                7,
+                SafeMigrationOperationKind.UpdateModelManagedData,
+                "sqlserver_stress_managed",
+                SafeMigrationObservedState.TransitionReady,
+                SafeMigrationAction.Apply),
+            ProvenAssessment(
+                8,
+                SafeMigrationOperationKind.DropTable,
+                "sqlserver_stress_absent",
+                SafeMigrationObservedState.Missing,
+                SafeMigrationAction.NoOp,
+                postconditionSatisfied: true),
+            ProvenAssessment(
+                9,
+                SafeMigrationOperationKind.EnsureColumn,
+                "id",
+                SafeMigrationObservedState.Matching,
+                SafeMigrationAction.NoOp,
+                postconditionSatisfied: true),
+            ProvenAssessment(
+                10,
+                SafeMigrationOperationKind.EnsureTable,
+                "sm_stress_missing_table_000010",
+                SafeMigrationObservedState.Missing,
+                SafeMigrationAction.Apply),
+            ProvenAssessment(
+                11,
+                SafeMigrationOperationKind.EnsureColumn,
+                "id",
+                SafeMigrationObservedState.Different,
+                SafeMigrationAction.RejectDifferent),
+            ProvenAssessment(
+                12,
+                SafeMigrationOperationKind.EnsureIndex,
+                "ix_sqlserver_stress_unsupported",
+                SafeMigrationObservedState.Unsupported,
+                SafeMigrationAction.RejectUnsupported),
+            ProvenAssessment(
+                13,
+                SafeMigrationOperationKind.EnsureColumn,
+                "required_value",
+                SafeMigrationObservedState.PrerequisiteMissing,
+                SafeMigrationAction.RejectPrerequisiteMissing),
+            ProvenAssessment(
+                14,
+                SafeMigrationOperationKind.EnsureColumn,
+                "value",
+                SafeMigrationObservedState.PrerequisiteMissing,
+                SafeMigrationAction.RejectPrerequisiteMissing),
+            ProvenAssessment(
+                15,
+                SafeMigrationOperationKind.AlterColumn,
+                "caption",
+                SafeMigrationObservedState.Matching,
+                SafeMigrationAction.NoOp,
+                postconditionSatisfied: true),
             DeferredAssessment(16, SafeMigrationOperationKind.UpdateModelManagedData, "sqlserver_stress_managed", 7),
-            ProvenAssessment(17, SafeMigrationOperationKind.DropTable, "sqlserver_stress_absent",
-                SafeMigrationObservedState.Missing, SafeMigrationAction.NoOp, postconditionSatisfied: true),
+            ProvenAssessment(
+                17,
+                SafeMigrationOperationKind.DropTable,
+                "sqlserver_stress_absent",
+                SafeMigrationObservedState.Missing,
+                SafeMigrationAction.NoOp,
+                postconditionSatisfied: true),
         ];
     }
 
@@ -537,26 +776,40 @@ public sealed class LargeMigrationStressExpectationTests
         original.IsSafeOperation,
         original.OperationKind,
         original.ObjectName,
-        field == "observed_state" ? SafeMigrationObservedState.TransitionReady : original.ObservedState,
-        field == "action" ? SafeMigrationAction.Apply : original.Action,
+        field == "observed_state"
+            ? SafeMigrationObservedState.TransitionReady
+            : original.ObservedState,
+        field == "action"
+            ? SafeMigrationAction.Apply
+            : original.Action,
         field switch
         {
-            "postcondition_false" => false,
-            "postcondition_true" => true,
-            _ => original.PostconditionSatisfied,
+            "postcondition_false" => false, "postcondition_true" => true, _ => original.PostconditionSatisfied,
         },
-        field == "code" ? "matching" : original.Code,
-        field == "analysis_code" ? "projected_matching" : original.AnalysisCode,
-        field == "decision_code" ? "matching" : original.DecisionCode,
-        field == "impact" ? SafeMigrationOperationalImpact.NotApplicable : original.OperationalImpact,
+        field == "code"
+            ? "matching"
+            : original.Code,
+        field == "analysis_code"
+            ? "projected_matching"
+            : original.AnalysisCode,
+        field == "decision_code"
+            ? "matching"
+            : original.DecisionCode,
+        field == "impact"
+            ? SafeMigrationOperationalImpact.NotApplicable
+            : original.OperationalImpact,
         field == "differences"
             ? [new SafeMigrationFacetDifference("column_nullability", "nullable", "not_nullable")]
             : original.Differences,
         field == "action"
             ? null
             : new SafeMigrationDeferredOrigin(
-                field == "origin_migration" ? "202601010001_WrongOrigin" : null,
-                field == "origin_ordinal" ? 6 : 7,
+                field == "origin_migration"
+                    ? "202601010001_WrongOrigin"
+                    : null,
+                field == "origin_ordinal"
+                    ? 6
+                    : 7,
                 field == "origin_type"
                     ? typeof(AddColumnOperation).FullName!
                     : typeof(SafeMigrationOperation).FullName!));
@@ -577,7 +830,7 @@ public sealed class LargeMigrationStressExpectationTests
             : new SafeMigrationProviderEnvironment("npgsql_postgresql", "postgresql", "18.6"),
         targetMigrationId: null,
         $"safe-relational-model:v1:{(sqlServer ? "efcore_sqlserver" : "npgsql_postgresql")}:sha256:"
-            + new string('a', 64),
+        + new string('a', 64),
         new string('b', 64),
         assessments);
 }

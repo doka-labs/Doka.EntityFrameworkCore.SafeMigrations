@@ -143,7 +143,9 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
             {
                 // WHY: Provider setup remains opaque, large strings need no additional copy, and
                 // incomplete owned statements cannot be joined safely without rewriting SQL.
-                compacted?.Add(setupCommands[offset].ToSql());
+                compacted?.Add(setupCommands[offset]
+                    .ToSql());
+
                 offset++;
 
                 continue;
@@ -153,7 +155,7 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
             var length = setupCommands[offset].Length;
             var bytes = setupCommands[offset].Utf8ByteCount;
             while (end < setupCommands.Count
-                   && (end < providerSetupOffset || end >= providerSetupEnd))
+                && (end < providerSetupOffset || end >= providerSetupEnd))
             {
                 var next = setupCommands[end];
                 if (next.Length > maximumBytes - bytes
@@ -175,7 +177,8 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
 
             if (end == offset + 1)
             {
-                compacted?.Add(setupCommands[offset].ToSql());
+                compacted?.Add(setupCommands[offset]
+                    .ToSql());
             }
             else
             {
@@ -184,13 +187,15 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
                     // WHY: This first completed group proves a smaller upper bound; later groups
                     // can only reduce the result further, so no original-sized backing array is needed.
                     compacted = new List<string>(setupCommands.Count - (end - offset - 1));
+
                     // WHY: Retain the struct source's indexed fragment ranges without introducing an enumerable
                     // adapter.
                     // ReSharper disable once ForCanBeConvertedToForeach
                     // ReSharper disable once LoopCanBeConvertedToQuery
                     for (var index = 0; index < offset; index++)
                     {
-                        compacted.Add(setupCommands[index].ToSql());
+                        compacted.Add(setupCommands[index]
+                            .ToSql());
                     }
                 }
 
@@ -205,6 +210,7 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
                         static (destination, state) =>
                         {
                             var position = 0;
+
                             // WHY: Retain the struct source's indexed fragment ranges without introducing an enumerable
                             // adapter.
                             // ReSharper disable once ForCanBeConvertedToForeach
@@ -265,7 +271,9 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
         int Count { get; }
 
         /// <summary>Gets one immutable fragment descriptor without materializing its SQL.</summary>
-        MySqlSafeMigrationSetupFragment this[int index] { get; }
+        MySqlSafeMigrationSetupFragment this[
+            int index
+        ] { get; }
 
         /// <summary>Returns unchanged fragment boundaries when grouping is inapplicable.</summary>
         IReadOnlyList<string> Materialize();
@@ -278,7 +286,9 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
         public int Count => commands.Count;
 
         /// <inheritdoc />
-        public MySqlSafeMigrationSetupFragment this[int index] => commands[index];
+        public MySqlSafeMigrationSetupFragment this[
+            int index
+        ] => commands[index];
 
         /// <inheritdoc />
         public IReadOnlyList<string> Materialize() => commands;
@@ -291,7 +301,9 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
         public int Count => commands.Count;
 
         /// <inheritdoc />
-        public MySqlSafeMigrationSetupFragment this[int index] => commands[index];
+        public MySqlSafeMigrationSetupFragment this[
+            int index
+        ] => commands[index];
 
         /// <inheritdoc />
         public IReadOnlyList<string> Materialize()
@@ -302,12 +314,14 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
             }
 
             var result = new string[commands.Count];
+
             // WHY: Fill the SQL array at each fragment's original ordinal without an intermediate sequence.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < commands.Count; index++)
             {
-                result[index] = commands[index].ToSql();
+                result[index] = commands[index]
+                    .ToSql();
             }
 
             return result;

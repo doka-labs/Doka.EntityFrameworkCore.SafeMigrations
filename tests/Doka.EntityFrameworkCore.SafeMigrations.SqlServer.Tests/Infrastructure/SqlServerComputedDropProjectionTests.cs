@@ -11,17 +11,35 @@ public sealed partial class SqlServerComputedDropProjectionTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void AcceptedComputedColumnProtectsOnlyItsCurrentSource(bool authored, bool dependent)
+    public void AcceptedComputedColumnProtectsOnlyItsCurrentSource(
+        bool authored,
+        bool dependent
+    )
     {
         // Arrange
         using var context = Context();
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
         var source = new ExpectedColumnDefinition("L", typeof(long), false, "bigint");
         var flag = Flag();
-        var bindings = new Dictionary<string, int> { ["L"] = 7, ["Payload"] = 8, };
+        var bindings = new Dictionary<string, int>
+        {
+            ["L"] = 7,
+            ["Payload"] = 8,
+        };
+
         Capture(analyzer, flag, source, bindings, authored);
-        var columns = new Source(flag, authored ? source : null);
-        var drop = new SafeMigrationOperation(new DropColumnIntent(dependent ? "L" : "Payload", "nodes"),
+        var columns = new Source(
+            flag,
+            authored
+                ? source
+                : null);
+
+        var drop = new SafeMigrationOperation(
+            new DropColumnIntent(
+                dependent
+                    ? "L"
+                    : "Payload",
+                "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -47,25 +65,30 @@ public sealed partial class SqlServerComputedDropProjectionTests
     [InlineData(8)]
     [InlineData(-1)]
     [InlineData(0)]
-    public void SparseSourceAliasRequiresItsOriginalPositiveNativeIdentity(int identity)
+    public void SparseSourceAliasRequiresItsOriginalPositiveNativeIdentity(
+        int identity
+    )
     {
         // Arrange
         using var context = Context();
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
         var source = new ExpectedColumnDefinition("L", typeof(long), false, "bigint");
         var flag = Flag();
-        var bindings = new Dictionary<string, int> { ["L"] = 7, };
+        var bindings = new Dictionary<string, int> { ["L"] = 7 };
         if (identity != 0)
         {
             bindings.Add("l", identity);
         }
 
         Capture(analyzer, flag, source, bindings, authored: false);
-        var drop = new SafeMigrationOperation(new DropColumnIntent("l", "nodes"),
+        var drop = new SafeMigrationOperation(
+            new DropColumnIntent("l", "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var analysis = analyzer.ValidateCapturedProjection(drop, Live(SafeMigrationObservedState.Matching),
+        var analysis = analyzer.ValidateCapturedProjection(
+            drop,
+            Live(SafeMigrationObservedState.Matching),
             new Source(flag, null));
 
         // Assert
@@ -77,16 +100,24 @@ public sealed partial class SqlServerComputedDropProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void RemovedOrRejectedComputedPrefixDoesNotBecomeAcceptedEvidence(bool replaced)
+    public void RemovedOrRejectedComputedPrefixDoesNotBecomeAcceptedEvidence(
+        bool replaced
+    )
     {
         // Arrange
         using var context = Context();
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
         var source = new ExpectedColumnDefinition("L", typeof(long), false, "bigint");
         var flag = Flag();
-        Capture(analyzer, flag, source, new Dictionary<string, int> { ["L"] = 7, }, authored: false);
-        var columns = new Source(replaced ? Flag() : null, null);
-        var drop = new SafeMigrationOperation(new DropColumnIntent("L", "nodes"),
+        Capture(analyzer, flag, source, new Dictionary<string, int> { ["L"] = 7 }, authored: false);
+        var columns = new Source(
+            replaced
+                ? Flag()
+                : null,
+            null);
+
+        var drop = new SafeMigrationOperation(
+            new DropColumnIntent("L", "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -105,12 +136,15 @@ public sealed partial class SqlServerComputedDropProjectionTests
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
         var source = new ExpectedColumnDefinition("L", typeof(long), false, "bigint");
         var flag = Flag();
-        Capture(analyzer, flag, source, new Dictionary<string, int> { ["L"] = 7, }, authored: false);
-        var drop = new SafeMigrationOperation(new DropColumnIntent(flag.Name, "nodes"),
+        Capture(analyzer, flag, source, new Dictionary<string, int> { ["L"] = 7 }, authored: false);
+        var drop = new SafeMigrationOperation(
+            new DropColumnIntent(flag.Name, "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var analysis = analyzer.ValidateCapturedProjection(drop, Live(SafeMigrationObservedState.Matching),
+        var analysis = analyzer.ValidateCapturedProjection(
+            drop,
+            Live(SafeMigrationObservedState.Matching),
             new Source(flag, null));
 
         // Assert
@@ -123,10 +157,12 @@ public sealed partial class SqlServerComputedDropProjectionTests
     {
         // Arrange
         using var context = Context();
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
-        var operation = new SafeMigrationOperation(new DropColumnIntent("L", "nodes"),
+        var operation = new SafeMigrationOperation(
+            new DropColumnIntent("L", "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -135,16 +171,28 @@ public sealed partial class SqlServerComputedDropProjectionTests
         // Assert
         Assert.True(plan.RequiresExpressionDependencyRead);
         Assert.True(plan.RequiresDelayedBinding);
-        Assert.Contains("generated_column_drop_dependency", plan.ClassificationCodeExpression,
+        Assert.Contains(
+            "generated_column_drop_dependency",
+            plan.ClassificationCodeExpression,
             StringComparison.Ordinal);
+
         Assert.Contains("JOIN sys.computed_columns", plan.ClassificationCodeExpression, StringComparison.Ordinal);
-        Assert.Contains("generated.column_id=d.referencing_minor_id", plan.ClassificationCodeExpression,
+        Assert.Contains(
+            "generated.column_id=d.referencing_minor_id",
+            plan.ClassificationCodeExpression,
             StringComparison.Ordinal);
-        Assert.Contains("generated_column_drop_other_dependency", plan.ClassificationCodeExpression,
+
+        Assert.Contains(
+            "generated_column_drop_other_dependency",
+            plan.ClassificationCodeExpression,
             StringComparison.Ordinal);
+
         Assert.Contains("sys.index_columns", plan.ClassificationCodeExpression, StringComparison.Ordinal);
-        Assert.Contains(SqlServerSafeMigrationCatalogSqlBuilder.EmptyGeneratedDropSetCode,
-            plan.ClassificationCodeExpression, StringComparison.Ordinal);
+        Assert.Contains(
+            SqlServerSafeMigrationCatalogSqlBuilder.EmptyGeneratedDropSetCode,
+            plan.ClassificationCodeExpression,
+            StringComparison.Ordinal);
+
         Assert.Contains("sys.index_columns", plan.StateExpression, StringComparison.Ordinal);
         Assert.Contains("N'SELECT'", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
     }
@@ -154,18 +202,25 @@ public sealed partial class SqlServerComputedDropProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void CapturedOwnerMovesOnlyAfterAcceptedRename(bool accepted)
+    public void CapturedOwnerMovesOnlyAfterAcceptedRename(
+        bool accepted
+    )
     {
         // Arrange
         using var context = Context();
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
         var source = new ExpectedColumnDefinition("L", typeof(long), false, "bigint");
         var flag = Flag();
-        Capture(analyzer, flag, source, new Dictionary<string, int> { ["L"] = 7, }, authored: false);
-        var rename = new SafeMigrationOperation(new RenameTableIntent("nodes", "renamed", "dbo", "other_schema"),
+        Capture(analyzer, flag, source, new Dictionary<string, int> { ["L"] = 7 }, authored: false);
+        var rename = new SafeMigrationOperation(
+            new RenameTableIntent("nodes", "renamed", "dbo", "other_schema"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var state = Live(accepted ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different);
+        var state = Live(
+            accepted
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different);
+
         var decision = SafeMigrationDecisionPlanner.Plan(rename.Intent.Kind, state.ObservedState, rename.Policy);
 
         // Act
@@ -174,8 +229,18 @@ public sealed partial class SqlServerComputedDropProjectionTests
 
         // Assert
         Assert.Equal(accepted, decision.ShouldExecute);
-        Assert.Equal(accepted ? "renamed" : "nodes", proof.Table);
-        Assert.Equal(accepted ? "other_schema" : null, proof.Schema);
+        Assert.Equal(
+            accepted
+                ? "renamed"
+                : "nodes",
+            proof.Table);
+
+        Assert.Equal(
+            accepted
+                ? "other_schema"
+                : null,
+            proof.Schema);
+
         Assert.Equal(accepted, proof.Matches(new Source(flag, null), "renamed", "other_schema"));
         Assert.Equal(!accepted, proof.Matches(new Source(flag, null), "nodes", null));
     }
@@ -186,19 +251,27 @@ public sealed partial class SqlServerComputedDropProjectionTests
     [InlineData(null)]
     [InlineData(false)]
     [InlineData(true)]
-    public void NativeGenericRefusalSurvivesExactSourcePresence(bool? generatedDependency)
+    public void NativeGenericRefusalSurvivesExactSourcePresence(
+        bool? generatedDependency
+    )
     {
         // Arrange
         using var context = Context();
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
-        var operation = new SafeMigrationOperation(new DropColumnIntent("L", "nodes"),
+        var operation = new SafeMigrationOperation(
+            new DropColumnIntent("L", "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var native = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.None, false, "classified_different");
+        var native = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.None,
+            false,
+            "classified_different");
 
         analyzer.CaptureProjectedComputedDropRefusals([operation], [native]);
-        var columns = new Source(null, new ExpectedColumnDefinition("L", typeof(long), false, "bigint"),
+        var columns = new Source(
+            null,
+            new ExpectedColumnDefinition("L", typeof(long), false, "bigint"),
             generatedDependency);
 
         // Act
@@ -217,30 +290,49 @@ public sealed partial class SqlServerComputedDropProjectionTests
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
-    public void NativeComputedRefusalRequiresCompleteCurrentDischarge(bool complete, bool mixed)
+    public void NativeComputedRefusalRequiresCompleteCurrentDischarge(
+        bool complete,
+        bool mixed
+    )
     {
         // Arrange
         using var context = Context();
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
-        var operation = new SafeMigrationOperation(new DropColumnIntent("L", "nodes"),
+        var operation = new SafeMigrationOperation(
+            new DropColumnIntent("L", "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var native = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.None, false, mixed
-                ? "generated_column_drop_other_dependency" : "generated_column_drop_dependency");
+        var native = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.None,
+            false,
+            mixed
+                ? "generated_column_drop_other_dependency"
+                : "generated_column_drop_dependency");
 
         analyzer.CaptureProjectedComputedDropRefusals([operation], [native]);
 
-        var columns = new Source(null, new ExpectedColumnDefinition("L", typeof(long), false, "bigint"),
-            complete ? false : null);
+        var columns = new Source(
+            null,
+            new ExpectedColumnDefinition("L", typeof(long), false, "bigint"),
+            complete
+                ? false
+                : null);
 
         // Act
         var result = analyzer.ValidateProjectedOperation(operation, Live(SafeMigrationObservedState.Matching), columns);
 
         // Assert
-        Assert.Equal(complete && !mixed ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
+        Assert.Equal(
+            complete && !mixed
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different,
             result.ObservedState);
-        Assert.Equal(complete && !mixed ? "projected_generated_column_drop_safe" : native.Code,
+
+        Assert.Equal(
+            complete && !mixed
+                ? "projected_generated_column_drop_safe"
+                : native.Code,
             result.Code);
     }
 
@@ -251,18 +343,25 @@ public sealed partial class SqlServerComputedDropProjectionTests
     [InlineData(true, true)]
     [InlineData(true, false)]
     [InlineData(false, true)]
-    public void NativeGeneratedCompletenessIsKindAndStateBound(bool drop, bool matching)
+    public void NativeGeneratedCompletenessIsKindAndStateBound(
+        bool drop,
+        bool matching
+    )
     {
         // Arrange
         using var context = Context();
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
-        SafeMigrationIntent intent = drop ? new DropColumnIntent("L", "nodes")
+        SafeMigrationIntent intent = drop
+            ? new DropColumnIntent("L", "nodes")
             : new EnsureColumnIntent("nodes", new ExpectedColumnDefinition("L", typeof(long), false, "bigint"));
 
         var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
-        var native = new SafeMigrationProviderAnalysis(matching
-            ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Missing,
-            SafeMigrationRepairCapability.None, false,
+        var native = new SafeMigrationProviderAnalysis(
+            matching
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Missing,
+            SafeMigrationRepairCapability.None,
+            false,
             SqlServerSafeMigrationCatalogSqlBuilder.EmptyGeneratedDropSetCode);
 
         SafeMigrationProviderAnalysis[] results = [native];
@@ -292,10 +391,16 @@ public sealed partial class SqlServerComputedDropProjectionTests
         // Arrange
         using var context = Context();
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
-        var operation = new SafeMigrationOperation(new DropColumnIntent("L", "nodes"),
+        var operation = new SafeMigrationOperation(
+            new DropColumnIntent("L", "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
-        var native = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.None, false, "generated_column_drop_dependency");
+
+        var native = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.None,
+            false,
+            "generated_column_drop_dependency");
+
         analyzer.CaptureProjectedComputedDropRefusals([operation], [native]);
         var missing = Live(SafeMigrationObservedState.Missing);
 
@@ -331,35 +436,55 @@ public sealed partial class SqlServerComputedDropProjectionTests
         // Arrange
         using var context = Context();
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
-        var predecessor = new SafeMigrationOperation(new DropIndexIntent("IX_L", "nodes"),
+        var predecessor = new SafeMigrationOperation(
+            new DropIndexIntent("IX_L", "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var operation = new SafeMigrationOperation(new DropColumnIntent("L", "nodes"),
+        var operation = new SafeMigrationOperation(
+            new DropColumnIntent("L", "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var field = typeof(SqlServerSafeMigrationProviderAnalyzer).GetField("_computedDropIndexCandidates",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+        var field = typeof(SqlServerSafeMigrationProviderAnalyzer).GetField(
+                "_computedDropIndexCandidates",
+                BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("The conditional native predecessor capture is unavailable.");
 
-        field.SetValue(analyzer, new Dictionary<SafeMigrationOperation, int[]> { [operation] = [0], });
-        var nativeIndex = new SafeMigrationProviderAnalysis(nativeMatching
-            ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Missing,
-            SafeMigrationRepairCapability.None, false, "classified_matching")
+        field.SetValue(analyzer, new Dictionary<SafeMigrationOperation, int[]> { [operation] = [0] });
+        var nativeIndex = new SafeMigrationProviderAnalysis(
+            nativeMatching
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Missing,
+            SafeMigrationRepairCapability.None,
+            false,
+            "classified_matching")
         {
-            MatchedObjectName = nativeMatching ? "IX_L" : null,
+            MatchedObjectName = nativeMatching
+                ? "IX_L"
+                : null,
         };
 
-        var nativeDrop = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.None, false, "generated_column_drop_named_index_dependency");
+        var nativeDrop = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.None,
+            false,
+            "generated_column_drop_named_index_dependency");
 
         analyzer.CaptureProjectedComputedDropRefusals([predecessor, operation], [nativeIndex, nativeDrop]);
         var source = new Source(null, null, generatedDependency: false, indexMissing: missing);
-        var state = Live(accepted ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different);
-        var decision = SafeMigrationDecisionPlanner.Plan(predecessor.Intent.Kind, state.ObservedState,
+        var state = Live(
+            accepted
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different);
+
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            predecessor.Intent.Kind,
+            state.ObservedState,
             predecessor.Policy);
 
-        var recreate = new SafeMigrationOperation(new EnsureIndexIntent(
-            new ExpectedIndexDefinition("IX_L", "nodes", [new(column: "L")])), SafeMigrationPolicy.ThrowIfDifferent);
+        var recreate = new SafeMigrationOperation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition("IX_L", "nodes", [new ExpectedIndexKeyDefinition(column: "L")])),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         var absent = Live(SafeMigrationObservedState.Missing);
 
@@ -367,16 +492,26 @@ public sealed partial class SqlServerComputedDropProjectionTests
         analyzer.ObserveAcceptedOperation(predecessor, nativeIndex, state, decision);
         if (recreated)
         {
-            analyzer.ObserveAcceptedOperation(recreate, absent, absent,
+            analyzer.ObserveAcceptedOperation(
+                recreate,
+                absent,
+                absent,
                 SafeMigrationDecisionPlanner.Plan(recreate.Intent.Kind, absent.ObservedState, recreate.Policy));
         }
 
         var result = analyzer.ValidateProjectedOperation(operation, Live(SafeMigrationObservedState.Matching), source);
 
         // Assert
-        Assert.Equal(safe ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
+        Assert.Equal(
+            safe
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different,
             result.ObservedState);
-        Assert.Equal(safe ? "projected_generated_column_drop_safe" : "generated_column_drop_other_dependency",
+
+        Assert.Equal(
+            safe
+                ? "projected_generated_column_drop_safe"
+                : "generated_column_drop_other_dependency",
             result.Code);
     }
 
@@ -386,20 +521,29 @@ public sealed partial class SqlServerComputedDropProjectionTests
     {
         // Arrange
         using var context = Context();
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
-        var operation = new SafeMigrationOperation(new DropColumnIntent("L", "nodes"),
+
+        var operation = new SafeMigrationOperation(
+            new DropColumnIntent("L", "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var plan = catalog.Build(operation, projectedIndexDropCandidates: ["IX_L"]);
 
         // Assert
-        Assert.Contains("generated_column_drop_named_index_dependency", plan.ClassificationCodeExpression,
+        Assert.Contains(
+            "generated_column_drop_named_index_dependency",
+            plan.ClassificationCodeExpression,
             StringComparison.Ordinal);
+
         Assert.Contains("candidate.index_id=sc.stats_id", plan.ClassificationCodeExpression, StringComparison.Ordinal);
-        Assert.Contains("candidate.object_id=sc.object_id", plan.ClassificationCodeExpression,
+        Assert.Contains(
+            "candidate.object_id=sc.object_id",
+            plan.ClassificationCodeExpression,
             StringComparison.Ordinal);
+
         Assert.Contains("candidate.name IN(N'IX_L')", plan.ClassificationCodeExpression, StringComparison.Ordinal);
         Assert.Contains("sys.default_constraints", plan.ClassificationCodeExpression, StringComparison.Ordinal);
         Assert.Contains("sys.foreign_key_columns", plan.ClassificationCodeExpression, StringComparison.Ordinal);
@@ -414,15 +558,25 @@ public sealed partial class SqlServerComputedDropProjectionTests
         // Arrange
         using var context = Context();
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
-        var operation = new SafeMigrationOperation(new DropColumnIntent("L", "nodes"),
+        var operation = new SafeMigrationOperation(
+            new DropColumnIntent("L", "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
-        var native = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.None, false, "generated_column_drop_dependency");
+
+        var native = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.None,
+            false,
+            "generated_column_drop_dependency");
+
         analyzer.CaptureProjectedComputedDropRefusals([operation], [native]);
         var matching = Live(SafeMigrationObservedState.Matching);
 
         // Act
-        var fresh = await analyzer.AnalyzeAsync(context, Array.Empty<SafeMigrationOperation>());
+        var fresh = await analyzer.AnalyzeAsync(
+            context,
+            Array.Empty<SafeMigrationOperation>(),
+            cancellationToken: CancellationToken.None);
+
         var result = analyzer.ValidateProjectedOperation(operation, matching, new Source(null, null));
 
         // Assert
@@ -437,15 +591,23 @@ public sealed partial class SqlServerComputedDropProjectionTests
         // Arrange
         using var context = Context();
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
-        var operation = new SafeMigrationOperation(new DropColumnIntent("L", "nodes"),
+        var operation = new SafeMigrationOperation(
+            new DropColumnIntent("L", "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
-        var native = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.None, false, "generated_column_drop_dependency");
+
+        var native = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.None,
+            false,
+            "generated_column_drop_dependency");
+
         analyzer.CaptureProjectedComputedDropRefusals([operation], [native]);
 
         // Act
-        analyzer.ObserveProviderOperation(new SqlOperation { Sql = "SELECT 1;", });
-        var result = analyzer.ValidateProjectedOperation(operation, Live(SafeMigrationObservedState.Matching),
+        analyzer.ObserveProviderOperation(new SqlOperation { Sql = "SELECT 1;" });
+        var result = analyzer.ValidateProjectedOperation(
+            operation,
+            Live(SafeMigrationObservedState.Matching),
             new Source(null, null, generatedDependency: false));
 
         // Assert
@@ -460,15 +622,23 @@ public sealed partial class SqlServerComputedDropProjectionTests
         // Arrange
         using var context = Context();
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
-        var operation = new SafeMigrationOperation(new DropColumnIntent("L", "nodes"),
+        var operation = new SafeMigrationOperation(
+            new DropColumnIntent("L", "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
-        var native = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.None, false, "generated_column_drop_other_dependency");
+
+        var native = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.None,
+            false,
+            "generated_column_drop_other_dependency");
+
         analyzer.CaptureProjectedComputedDropRefusals([operation], [native]);
         var matching = Live(SafeMigrationObservedState.Matching);
 
         // Act
-        var result = analyzer.ValidateProjectedOperation(operation, matching,
+        var result = analyzer.ValidateProjectedOperation(
+            operation,
+            matching,
             new Source(null, null, generatedDependency: false, newlyCreated: true));
 
         // Assert
@@ -482,17 +652,26 @@ public sealed partial class SqlServerComputedDropProjectionTests
         // Arrange
         using var context = Context();
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
-        var operations = Enumerable.Range(0, 2048).Select(static _ => new SafeMigrationOperation(
-            new DropIndexIntent("IX_L", "nodes"), SafeMigrationPolicy.ThrowIfDifferent)).ToList();
+        var operations = Enumerable
+            .Range(0, 2048)
+            .Select(static _ => new SafeMigrationOperation(
+                new DropIndexIntent("IX_L", "nodes"),
+                SafeMigrationPolicy.ThrowIfDifferent))
+            .ToList();
 
-        var drop = new SafeMigrationOperation(new DropColumnIntent("L", "nodes"),
+        var drop = new SafeMigrationOperation(
+            new DropColumnIntent("L", "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         operations.Add(drop);
-        var method = typeof(SqlServerSafeMigrationProviderAnalyzer).GetMethod("PrepareComputedDropIndexCandidates",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+        var method = typeof(SqlServerSafeMigrationProviderAnalyzer).GetMethod(
+                "PrepareComputedDropIndexCandidates",
+                BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("The bounded predecessor preparation is unavailable.");
-        var field = typeof(SqlServerSafeMigrationProviderAnalyzer).GetField("_computedDropIndexCandidates",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+
+        var field = typeof(SqlServerSafeMigrationProviderAnalyzer).GetField(
+                "_computedDropIndexCandidates",
+                BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("The bounded predecessor inventory is unavailable.");
 
         // Act
@@ -512,20 +691,29 @@ public sealed partial class SqlServerComputedDropProjectionTests
     [InlineData(SafeMigrationObservedState.Matching)]
     [InlineData(SafeMigrationObservedState.Missing)]
     [InlineData(SafeMigrationObservedState.Different)]
-    public void NativeIndexPresenceSurvivesGuardedComputedRemoval(SafeMigrationObservedState? currentState)
+    public void NativeIndexPresenceSurvivesGuardedComputedRemoval(
+        SafeMigrationObservedState? currentState
+    )
     {
         // Arrange
         using var context = Context();
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
         var (index, native) = CaptureIndexWitness(analyzer);
-        var removal = new SafeMigrationOperation(new DropColumnIntent("HasChildren", "nodes"),
+        var removal = new SafeMigrationOperation(
+            new DropColumnIntent("HasChildren", "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var matching = Live(SafeMigrationObservedState.Matching);
-        analyzer.ObserveAcceptedOperation(removal, matching, matching,
+        analyzer.ObserveAcceptedOperation(
+            removal,
+            matching,
+            matching,
             SafeMigrationDecisionPlanner.Plan(removal.Intent.Kind, matching.ObservedState, removal.Policy));
 
         // Act
-        var result = analyzer.ValidateCapturedProjection(index, native,
+        var result = analyzer.ValidateCapturedProjection(
+            index,
+            native,
             new Source(null, null, indexState: currentState));
 
         // Assert
@@ -552,43 +740,65 @@ public sealed partial class SqlServerComputedDropProjectionTests
     [InlineData(6)]
     [InlineData(7)]
     [InlineData(8)]
-    public void NativeIndexFallbackRequiresUnexpiredAcceptedOwnerEpoch(int scenario)
+    public void NativeIndexFallbackRequiresUnexpiredAcceptedOwnerEpoch(
+        int scenario
+    )
     {
         // Arrange
         using var context = Context();
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
         var (index, native) = CaptureIndexWitness(analyzer);
-        var foreignKey = new ExpectedForeignKeyDefinition("FK_parent", "children", ["ParentL"], "nodes", ["L"],
-            principalSchema: scenario == 8 ? "other_schema" : null);
+        var foreignKey = new ExpectedForeignKeyDefinition(
+            "FK_parent",
+            "children",
+            ["ParentL"],
+            "nodes",
+            ["L"],
+            principalSchema: scenario == 8
+                ? "other_schema"
+                : null);
 
         SafeMigrationIntent intent = scenario switch
         {
-            0 => new EnsureIndexIntent(new ExpectedIndexDefinition("IX_L", "nodes", [new(column: "L")])),
+            0 => new EnsureIndexIntent(
+                new ExpectedIndexDefinition("IX_L", "nodes", [new ExpectedIndexKeyDefinition(column: "L")])),
             1 => new DropTableIntent("nodes"),
             2 => new DropSchemaIntent("dbo"),
             3 or 7 or 8 => new EnsureForeignKeyIntent(foreignKey),
-            4 => new EnsureTableIntent(new ExpectedTableDefinition("children",
-                [new("ParentL", typeof(long), true, "bigint")], foreignKeys: [foreignKey]),
+            4 => new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "children",
+                    [new ExpectedColumnDefinition("ParentL", typeof(long), true, "bigint")],
+                    foreignKeys: [foreignKey]),
                 SafeMigrationTableMode.StrictDefinition),
             _ => new DropTableIntent("unrelated"),
         };
 
         var mutation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
-        var state = Live(scenario == 7 ? SafeMigrationObservedState.Different
-            : scenario is 1 or 2 ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Missing);
+        var state = Live(
+            scenario == 7
+                ? SafeMigrationObservedState.Different
+                : scenario is 1 or 2
+                    ? SafeMigrationObservedState.Matching
+                    : SafeMigrationObservedState.Missing);
 
         // Act
         if (scenario == 5)
         {
-            analyzer.ObserveProviderOperation(new SqlOperation { Sql = "SELECT 1;", });
+            analyzer.ObserveProviderOperation(new SqlOperation { Sql = "SELECT 1;" });
         }
         else if (scenario != 6)
         {
-            analyzer.ObserveAcceptedOperation(mutation, state, state,
+            analyzer.ObserveAcceptedOperation(
+                mutation,
+                state,
+                state,
                 SafeMigrationDecisionPlanner.Plan(mutation.Intent.Kind, state.ObservedState, mutation.Policy));
         }
 
-        var result = analyzer.ValidateCapturedProjection(index, native,
+        var result = analyzer.ValidateCapturedProjection(
+            index,
+            native,
             new Source(null, null, newlyCreated: scenario == 6));
 
         // Assert
@@ -603,36 +813,57 @@ public sealed partial class SqlServerComputedDropProjectionTests
         }
     }
 
-    private static SafeMigrationProviderAnalysis Live(SafeMigrationObservedState state)
-        => new(state, SafeMigrationRepairCapability.None, false, "classified_" + state.ToString().ToLowerInvariant());
+    private static SafeMigrationProviderAnalysis Live(
+        SafeMigrationObservedState state
+    )
+        => new(state,
+            SafeMigrationRepairCapability.None,
+            false,
+            "classified_"
+            + state
+                .ToString()
+                .ToLowerInvariant());
 
     private static ExpectedColumnDefinition Flag()
-        => new("HasChildren", typeof(bool), false, "bit",
+        => new(
+            "HasChildren",
+            typeof(bool),
+            false,
+            "bit",
             computedColumnSql: "CONVERT(bit,CASE WHEN [L]>0 THEN 1 ELSE 0 END)");
 
     private static (SafeMigrationOperation Index, SafeMigrationProviderAnalysis Native) CaptureIndexWitness(
         SqlServerSafeMigrationProviderAnalyzer analyzer
     )
     {
-        var index = new SafeMigrationOperation(new DropIndexIntent("IX_L", "nodes"),
+        var index = new SafeMigrationOperation(
+            new DropIndexIntent("IX_L", "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var source = new SafeMigrationOperation(new DropColumnIntent("L", "nodes"),
+        var source = new SafeMigrationOperation(
+            new DropColumnIntent("L", "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var field = typeof(SqlServerSafeMigrationProviderAnalyzer).GetField("_computedDropIndexCandidates",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+        var field = typeof(SqlServerSafeMigrationProviderAnalyzer).GetField(
+                "_computedDropIndexCandidates",
+                BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("The native index witness inventory is unavailable.");
 
-        field.SetValue(analyzer, new Dictionary<SafeMigrationOperation, int[]> { [source] = [0], });
-        var native = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
-            SafeMigrationRepairCapability.None, false, "classified_matching")
+        field.SetValue(analyzer, new Dictionary<SafeMigrationOperation, int[]> { [source] = [0] });
+        var native = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Matching,
+            SafeMigrationRepairCapability.None,
+            false,
+            "classified_matching")
         {
             MatchedObjectName = "IX_L",
         };
 
-        var dependent = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.None, false, "generated_column_drop_named_index_dependency");
+        var dependent = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.None,
+            false,
+            "generated_column_drop_named_index_dependency");
 
         analyzer.CaptureProjectedComputedDropRefusals([index, source], [native, dependent]);
 
@@ -640,60 +871,115 @@ public sealed partial class SqlServerComputedDropProjectionTests
     }
 
     private static SafeMigrationDbContext Context()
-        => new("Server=127.0.0.1,1433;Database=offline_computed_drop;User ID=sa;"
+        => new(
+            "Server=127.0.0.1,1433;Database=offline_computed_drop;User ID=sa;"
             + "Password=unused;TrustServerCertificate=True");
 
-    private static void Capture(SqlServerSafeMigrationProviderAnalyzer analyzer, ExpectedColumnDefinition flag,
-        ExpectedColumnDefinition source, Dictionary<string, int> bindings, bool authored)
+    private static void Capture(
+        SqlServerSafeMigrationProviderAnalyzer analyzer,
+        ExpectedColumnDefinition flag,
+        ExpectedColumnDefinition source,
+        Dictionary<string, int> bindings,
+        bool authored
+    )
     {
         // WHY: Inject only the completed native capture, not an analyzer result.
         // This exercises the real projection hook on ARM without introducing a
         // production test hook or pretending that metadata was queried natively.
-        Captures(analyzer).Add(flag,
-        [
-            new(new SqlServerProjectedKeyColumn("bit", 1, true, true, true, null, true),
-                new Dictionary<string, ExpectedColumnDefinition?> { ["L"] = authored ? source : null, }, "nodes")
-            {
-                LiveOperandIdentities = authored ? null : new Dictionary<string, int> { ["L"] = 7, },
-                CurrentColumnBindings = bindings,
-            },
-        ]);
+        Captures(analyzer)
+            .Add(
+                flag,
+                [
+                    new SqlServerProjectedComputedKeyProof(
+                        new SqlServerProjectedKeyColumn(
+                            "bit",
+                            1,
+                            true,
+                            true,
+                            true,
+                            null,
+                            true),
+                        new Dictionary<string, ExpectedColumnDefinition?>
+                        {
+                            ["L"] = authored
+                                ? source
+                                : null,
+                        },
+                        "nodes")
+                    {
+                        LiveOperandIdentities = authored
+                            ? null
+                            : new Dictionary<string, int> { ["L"] = 7 },
+                        CurrentColumnBindings = bindings,
+                    },
+                ]);
     }
 
     private static Dictionary<ExpectedColumnDefinition, List<SqlServerProjectedComputedKeyProof>> Captures(
         SqlServerSafeMigrationProviderAnalyzer analyzer
     )
     {
-        var field = typeof(SqlServerSafeMigrationProviderAnalyzer).GetField("_projectedComputedKeys",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+        var field = typeof(SqlServerSafeMigrationProviderAnalyzer).GetField(
+                "_projectedComputedKeys",
+                BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("The native computed proof inventory is unavailable.");
 
         return (Dictionary<ExpectedColumnDefinition, List<SqlServerProjectedComputedKeyProof>>)
             (field.GetValue(analyzer) ?? throw new InvalidOperationException("The native capture is unavailable."));
     }
 
-    private sealed class Source(ExpectedColumnDefinition? flag, ExpectedColumnDefinition? source,
-        bool? generatedDependency = null, bool? indexMissing = null, bool newlyCreated = false,
-        SafeMigrationObservedState? indexState = null)
+    private sealed class Source(
+        ExpectedColumnDefinition? flag,
+        ExpectedColumnDefinition? source,
+        bool? generatedDependency = null,
+        bool? indexMissing = null,
+        bool newlyCreated = false,
+        SafeMigrationObservedState? indexState = null
+    )
         : ISafeMigrationProjectedColumnSource, ISafeMigrationProjectedTableSource
     {
-        public bool? HasProjectedGeneratedColumnDependency(string table, string? schema, string column,
-            IEqualityComparer<string> columnComparer) => generatedDependency;
+        public SafeMigrationProviderAnalysis? GetProjectedIndexIdentityAnalysis(
+            ExpectedIndexDefinition definition,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            bool includeConstraintBackingIndexNames = false
+        )
+            => indexState is { } state
+                ? Live(state)
+                : indexMissing is { } missing
+                    ? Live(
+                        missing
+                            ? SafeMigrationObservedState.Missing
+                            : SafeMigrationObservedState.Matching)
+                    : null;
 
-        public SafeMigrationProviderAnalysis? GetProjectedIndexIdentityAnalysis(ExpectedIndexDefinition definition,
-            SafeMigrationProviderAnalysis liveAnalysis, bool includeConstraintBackingIndexNames = false)
-            => indexState is { } state ? Live(state) : indexMissing is { } missing
-                ? Live(missing ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Matching) : null;
-
-        public bool TryGetProjectedColumn(string table, string? schema, string column,
-            [NotNullWhen(true)] out ExpectedColumnDefinition? definition)
+        public bool TryGetProjectedColumn(
+            string table,
+            string? schema,
+            string column,
+            [NotNullWhen(true)] out ExpectedColumnDefinition? definition
+        )
         {
-            definition = flag?.Name == column ? flag : source?.Name == column ? source : null;
+            definition = flag?.Name == column
+                ? flag
+                : source?.Name == column
+                    ? source
+                    : null;
 
             return definition is not null;
         }
 
-        public bool TryGetProjectedTableState(string table, string? schema, out SafeMigrationProjectedTableState state)
+        public bool? HasProjectedGeneratedColumnDependency(
+            string table,
+            string? schema,
+            string column,
+            IEqualityComparer<string> columnComparer
+        ) => generatedDependency;
+
+        public bool TryGetProjectedTableState(
+            string table,
+            string? schema,
+            out SafeMigrationProjectedTableState state
+        )
         {
             state = new SafeMigrationProjectedTableState(newlyCreated, false, false, false);
 

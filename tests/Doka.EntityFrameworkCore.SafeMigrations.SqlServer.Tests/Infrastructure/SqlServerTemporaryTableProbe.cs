@@ -16,7 +16,9 @@ internal static class SqlServerTemporaryTableProbe
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentException.ThrowIfNullOrWhiteSpace(localName);
-        if (localName.Length is < 2 or > 116 || localName[0] != '#' || localName[1] == '#')
+        if (localName.Length is < 2 or > 116
+            || localName[0] != '#'
+            || localName[1] == '#')
         {
             throw new ArgumentException("An exact local temporary table name is required.", nameof(localName));
         }
@@ -28,7 +30,8 @@ internal static class SqlServerTemporaryTableProbe
         // their DDL transactions. OBJECT_ID resolves only this session's local
         // name; quoting and parameters also preserve literal punctuation.
         command.CommandText = "SELECT OBJECT_ID(@qualified_name, N'U');";
-        command.Parameters.Add("@qualified_name", SqlDbType.NVarChar, 258).Value =
+        command.Parameters.Add("@qualified_name", SqlDbType.NVarChar, 258)
+                .Value =
             "tempdb..[" + localName.Replace("]", "]]", StringComparison.Ordinal) + "]";
 
         return command;
@@ -38,16 +41,22 @@ internal static class SqlServerTemporaryTableProbe
     /// <param name="connection">An already-open native session retained through observation.</param>
     /// <param name="localName">The exact local temporary table name.</param>
     /// <param name="transaction">The caller's existing transaction, when present.</param>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     /// <returns>The native identity without substituting objects from another session.</returns>
     internal static async Task<int?> ReadObjectIdAsync(
         SqlConnection connection,
         string localName,
+        CancellationToken cancellationToken,
         SqlTransaction? transaction = null
     )
     {
-        await using var command = CreateObjectIdCommand(connection, localName, transaction);
-        var value = await command.ExecuteScalarAsync(CancellationToken.None);
+        cancellationToken.ThrowIfCancellationRequested();
 
-        return value is null or DBNull ? null : Convert.ToInt32(value, CultureInfo.InvariantCulture);
+        await using var command = CreateObjectIdCommand(connection, localName, transaction);
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+
+        return value is null or DBNull
+            ? null
+            : Convert.ToInt32(value, CultureInfo.InvariantCulture);
     }
 }

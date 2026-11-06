@@ -24,21 +24,29 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var live = Live(SafeMigrationObservedState.Matching);
 
         // Act
-        var analyses = projections.Select(projection => projection.Project(operation, live)).ToArray();
-        var decisions = analyses.Select(analysis => SafeMigrationDecisionPlanner.Plan(
-            kind,
-            analysis.ObservedState,
-            operation.Policy,
-            analysis.RepairCapability)).ToArray();
+        var analyses = projections
+            .Select(projection => projection.Project(operation, live))
+            .ToArray();
+
+        var decisions = analyses
+            .Select(analysis => SafeMigrationDecisionPlanner.Plan(
+                kind,
+                analysis.ObservedState,
+                operation.Policy,
+                analysis.RepairCapability))
+            .ToArray();
 
         // Assert
-        Assert.All(analyses, analysis =>
-        {
-            Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
-            Assert.Equal("projected_prerequisite_missing", analysis.Code);
-            Assert.False(analysis.PostconditionSatisfied);
-            Assert.False(analysis.IsOpaqueProjectionUnknown);
-        });
+        Assert.All(
+            analyses,
+            analysis =>
+            {
+                Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+                Assert.Equal("projected_prerequisite_missing", analysis.Code);
+                Assert.False(analysis.PostconditionSatisfied);
+                Assert.False(analysis.IsOpaqueProjectionUnknown);
+            });
+
         Assert.All(decisions, decision => Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, decision.Action));
     }
 
@@ -66,12 +74,17 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var live = Live(SafeMigrationObservedState.Matching);
 
         // Act
-        var analyses = projections.Select(projection => projection.Project(operation, live)).ToArray();
-        var decisions = analyses.Select(analysis => SafeMigrationDecisionPlanner.Plan(
-            kind,
-            analysis.ObservedState,
-            operation.Policy,
-            analysis.RepairCapability)).ToArray();
+        var analyses = projections
+            .Select(projection => projection.Project(operation, live))
+            .ToArray();
+
+        var decisions = analyses
+            .Select(analysis => SafeMigrationDecisionPlanner.Plan(
+                kind,
+                analysis.ObservedState,
+                operation.Policy,
+                analysis.RepairCapability))
+            .ToArray();
 
         // Assert
         Assert.All(analyses, analysis => Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState));
@@ -91,14 +104,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         ObserveAccepted(projection, new DropTableIntent("parents"), SafeMigrationObservedState.Matching);
 
         var operation = new SafeMigrationOperation(
-            new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition(
-                "fk_items_parents",
-                "items",
-                ["id"],
-                "PARENTS",
-                ["id"],
-                principalSchema: "DBO")),
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition(
+                    "fk_items_parents",
+                    "items",
+                    ["id"],
+                    "PARENTS",
+                    ["id"],
+                    principalSchema: "DBO")),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var sequenceChecks = provider.SequenceChecks;
 
         // Act
@@ -135,7 +150,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var ensureTable = new SafeMigrationOperation(
             new EnsureTableIntent(definition, SafeMigrationTableMode.StrictDefinition),
             SafeMigrationPolicy.ThrowIfDifferent);
-        var ensureColumn = new SafeMigrationOperation(OwnedIntent(SafeMigrationOperationKind.EnsureColumn),
+
+        var ensureColumn = new SafeMigrationOperation(
+            OwnedIntent(SafeMigrationOperationKind.EnsureColumn),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -189,7 +206,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         ObserveAccepted(projection, new DropTableIntent("items"), SafeMigrationObservedState.Matching);
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent(table, Column("id"), schema),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(table, Column("id"), schema),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -207,14 +225,20 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var provider = new ProjectionPrecedenceProbe(sequenceAware: true);
         var projection = new SafeMigrationPreflightProjection(provider);
 
-        Apply(projection, new EnsureTableIntent(
-            new ExpectedTableDefinition("items", [Column("id")]),
-            SafeMigrationTableMode.StrictDefinition));
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("items", [Column("id")]),
+                SafeMigrationTableMode.StrictDefinition));
+
         ObserveAccepted(projection, new RenameTableIntent("items", "renamed"), SafeMigrationObservedState.Matching);
 
-        var source = new SafeMigrationOperation(new EnsureColumnIntent("items", Column("id")),
+        var source = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", Column("id")),
             SafeMigrationPolicy.ThrowIfDifferent);
-        var target = new SafeMigrationOperation(new EnsureColumnIntent("renamed", Column("id")),
+
+        var target = new SafeMigrationOperation(
+            new EnsureColumnIntent("renamed", Column("id")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -244,20 +268,25 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var projection = new SafeMigrationPreflightProjection(provider);
 
         ObserveAccepted(projection, new DropTableIntent("items"), SafeMigrationObservedState.Matching);
-        projection.ObserveProviderPostcondition(sqlOperation
-            ? new SqlOperation { Sql = "SELECT 1;" }
-            : new AlterDatabaseOperation());
+        projection.ObserveProviderPostcondition(
+            sqlOperation
+                ? new SqlOperation { Sql = "SELECT 1;" }
+                : new AlterDatabaseOperation());
 
-        var operation = new SafeMigrationOperation(OwnedIntent(SafeMigrationOperationKind.EnsureColumn),
+        var operation = new SafeMigrationOperation(
+            OwnedIntent(SafeMigrationOperationKind.EnsureColumn),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var analysis = projection.Project(operation, Live(SafeMigrationObservedState.Matching));
 
         // Assert
-        Assert.Equal(sqlOperation || !sequenceAware
-            ? SafeMigrationObservedState.PrerequisiteMissing
-            : SafeMigrationObservedState.Matching, analysis.ObservedState);
+        Assert.Equal(
+            sqlOperation || !sequenceAware
+                ? SafeMigrationObservedState.PrerequisiteMissing
+                : SafeMigrationObservedState.Matching,
+            analysis.ObservedState);
+
         Assert.Equal(sqlOperation || !sequenceAware, analysis.IsOpaqueProjectionUnknown);
     }
 
@@ -276,16 +305,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         ObserveAccepted(projection, new DropTableIntent("items"), SafeMigrationObservedState.Matching);
 
-        var operation = new SafeMigrationOperation(OwnedIntent(SafeMigrationOperationKind.EnsureColumn),
+        var operation = new SafeMigrationOperation(
+            OwnedIntent(SafeMigrationOperationKind.EnsureColumn),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var live = new SafeMigrationProviderAnalysis(
             SafeMigrationObservedState.Unsupported,
             SafeMigrationRepairCapability.None,
             postconditionSatisfied: false,
-            identityMismatch ? "database_qualifier_mismatch" : "unsupported_contract")
+            identityMismatch
+                ? "database_qualifier_mismatch"
+                : "unsupported_contract")
         {
             IsInvariantUnsupported = !identityMismatch,
         };
+
         var sequenceChecks = provider.SequenceChecks;
 
         // Act
@@ -337,13 +371,35 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             new ExpectedForeignKeyDefinition("fk_items_parents", "items", ["id"], "parents", ["id"])),
         SafeMigrationOperationKind.DropForeignKey => new DropForeignKeyIntent("fk_items_parents", "items"),
         SafeMigrationOperationKind.EnsureModelManagedData => new EnsureModelManagedDataIntent(
-            "items", ["id"], ["int"], ["id"], ["int"], new object?[,] { { 1 } }, schema: null, uniqueKeys: null),
+            "items",
+            ["id"],
+            ["int"],
+            ["id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            schema: null,
+            uniqueKeys: null),
         SafeMigrationOperationKind.UpdateModelManagedData => new UpdateModelManagedDataIntent(
-            "items", ["id"], ["int"], new object?[,] { { 1 } }, ["id"], ["int"],
-            new object?[,] { { 1 } }, new object?[,] { { 1 } }, schema: null, uniqueKeys: null),
+            "items",
+            ["id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            new object?[,] { { 1 } },
+            schema: null,
+            uniqueKeys: null),
         SafeMigrationOperationKind.DeleteModelManagedData => new DeleteModelManagedDataIntent(
-            "items", ["id"], ["int"], new object?[,] { { 1 } }, ["id"], ["int"],
-            new object?[,] { { 1 } }, schema: null, foreignKeys: null),
+            "items",
+            ["id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            schema: null,
+            foreignKeys: null),
         SafeMigrationOperationKind.DropTable => new DropTableIntent("items"),
         SafeMigrationOperationKind.RenameTable => new RenameTableIntent("items", "renamed"),
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),

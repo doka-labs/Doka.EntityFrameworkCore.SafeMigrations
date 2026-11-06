@@ -13,7 +13,15 @@ public sealed class MySqlModelManagedDataLiteralTests
         var identifier = Guid.Parse("1458f03f-9acb-4902-bca8-280b613a7c92");
         var previousIdentifier = Guid.Parse("67c8a7f5-1264-4fe4-80ba-c6ed2b2492b4");
         var currentIdentifier = Guid.Parse("5568c996-b609-4082-87d8-f261abc9cb09");
-        var timestamp = new DateTime(2026, 9, 5, 12, 34, 56, DateTimeKind.Utc);
+        var timestamp = new DateTime(
+            2026,
+            9,
+            5,
+            12,
+            34,
+            56,
+            DateTimeKind.Utc);
+
         var operations = new SafeMigrationOperation[]
         {
             new(
@@ -43,7 +51,7 @@ public sealed class MySqlModelManagedDataLiteralTests
                             new DateOnly(2026, 9, 5),
                             new TimeOnly(12, 34, 56),
                             timestamp,
-                            new byte[] { 0x01, 0x02, 0x03, },
+                            new byte[] { 0x01, 0x02, 0x03 },
                             "{\"enabled\":true}",
                             null,
                             42,
@@ -57,11 +65,11 @@ public sealed class MySqlModelManagedDataLiteralTests
                     "typed_rows",
                     ["id"],
                     [guidStoreType],
-                    new object?[,] { { identifier, }, },
+                    new object?[,] { { identifier } },
                     ["symbol", "related_id"],
                     ["char(1)", guidStoreType],
-                    new object?[,] { { 'A', previousIdentifier, }, },
-                    new object?[,] { { 'B', currentIdentifier, }, },
+                    new object?[,] { { 'A', previousIdentifier } },
+                    new object?[,] { { 'B', currentIdentifier } },
                     schema: null,
                     uniqueKeys: null),
                 SafeMigrationPolicy.ThrowIfDifferent),
@@ -70,10 +78,10 @@ public sealed class MySqlModelManagedDataLiteralTests
                     "typed_rows",
                     ["id"],
                     [guidStoreType],
-                    new object?[,] { { identifier, }, },
+                    new object?[,] { { identifier } },
                     ["id", "symbol"],
                     [guidStoreType, "char(1)"],
-                    new object?[,] { { identifier, 'B', }, },
+                    new object?[,] { { identifier, 'B' } },
                     schema: null,
                     foreignKeys: null),
                 SafeMigrationPolicy.ThrowIfDifferent),
@@ -124,19 +132,19 @@ public sealed class MySqlModelManagedDataLiteralTests
                 ["int"],
                 ["id", "payload", "json_like_text"],
                 ["int", "json", "varchar(128)"],
-                new object?[,]
-                {
-                    { 1, "{\"b\":2,\"a\":1}", "{\"b\":2,\"a\":1}" },
-                },
+                new object?[,] { { 1, "{\"b\":2,\"a\":1}", "{\"b\":2,\"a\":1}" } },
                 schema: null,
                 uniqueKeys: null),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var command = Assert.Single(context
-            .GetService<IMigrationsSqlGenerator>()
-            .Generate([operation], context.Model));
+        var command = Assert.Single(
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model));
 
-        var payloads = DecodeHexPayloads(command.CommandText).ToArray();
+        var payloads = DecodeHexPayloads(command.CommandText)
+            .ToArray();
+
         var structuralComparison = isMariaDb
             ? "JSON_EQUALS(doka_actual.`payload`, doka_expected.`t1`)"
             : "doka_actual.`payload` <=> CAST(doka_expected.`t1` AS JSON)";
@@ -144,6 +152,7 @@ public sealed class MySqlModelManagedDataLiteralTests
         Assert.Contains(
             payloads,
             payload => payload.Contains(structuralComparison, StringComparison.Ordinal));
+
         Assert.Contains(
             payloads,
             payload => payload.Contains(
@@ -155,7 +164,11 @@ public sealed class MySqlModelManagedDataLiteralTests
     public void ProviderModelDifferPreservesEverySupportedJsonSeedShapeAsSafeProviderLiterals()
     {
         using var context = CreateJsonSeedContext();
-        var model = context.GetService<IDesignTimeModel>().Model.GetRelationalModel();
+        var model = context
+            .GetService<IDesignTimeModel>()
+            .Model
+            .GetRelationalModel();
+
         var differ = context.GetService<IMigrationsModelDiffer>();
 
         var operations = differ.GetDifferences(source: null, model);
@@ -175,6 +188,7 @@ public sealed class MySqlModelManagedDataLiteralTests
         Assert.All(
             Enumerable.Range(1, insert.Values.GetLength(1) - 1),
             column => Assert.IsType<string>(insert.Values[0, column]));
+
         Assert.Equal("json", intent.ColumnTypes[1]);
         Assert.Equal(insert.Values.GetLength(1), intent.Values.ColumnCount);
     }
@@ -193,6 +207,7 @@ public sealed class MySqlModelManagedDataLiteralTests
             isMariaDb
                 ? MySqlServerVersion.MariaDb(new Version(10, 11, 18))
                 : MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
 
         return new DbContext(options.Options);
@@ -204,6 +219,7 @@ public sealed class MySqlModelManagedDataLiteralTests
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
             MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
 
         return new JsonSeedContext(options.Options);
@@ -252,23 +268,41 @@ public sealed class MySqlModelManagedDataLiteralTests
                 entity.ToTable("json_seed_rows");
                 entity.HasKey(row => row.Id);
 
-                entity.Property(row => row.JsonText).HasColumnType("json");
-                entity.Property(row => row.JsonElement).HasColumnType("json");
-                entity.Property(row => row.JsonDocument).HasColumnType("json");
-                entity.Property(row => row.JsonNode).HasColumnType("json");
-                entity.Property(row => row.JsonObject).HasColumnType("json");
-                entity.Property(row => row.JsonArray).HasColumnType("json");
+                entity
+                    .Property(row => row.JsonText)
+                    .HasColumnType("json");
 
-                entity.HasData(new
-                {
-                    Id = 1,
-                    JsonText = "{\"kind\":\"text\"}",
-                    JsonElement = System.Text.Json.JsonElement.Parse("{\"kind\":\"element\"}"),
-                    JsonDocument = System.Text.Json.JsonDocument.Parse("{\"kind\":\"document\"}"),
-                    JsonNode = System.Text.Json.Nodes.JsonNode.Parse("{\"kind\":\"node\"}"),
-                    JsonObject = System.Text.Json.Nodes.JsonNode.Parse("{\"kind\":\"object\"}")!.AsObject(),
-                    JsonArray = System.Text.Json.Nodes.JsonNode.Parse("[\"array\",5,true]")!.AsArray(),
-                });
+                entity
+                    .Property(row => row.JsonElement)
+                    .HasColumnType("json");
+
+                entity
+                    .Property(row => row.JsonDocument)
+                    .HasColumnType("json");
+
+                entity
+                    .Property(row => row.JsonNode)
+                    .HasColumnType("json");
+
+                entity
+                    .Property(row => row.JsonObject)
+                    .HasColumnType("json");
+
+                entity
+                    .Property(row => row.JsonArray)
+                    .HasColumnType("json");
+
+                entity.HasData(
+                    new
+                    {
+                        Id = 1,
+                        JsonText = "{\"kind\":\"text\"}",
+                        JsonElement = JsonElement.Parse("{\"kind\":\"element\"}"),
+                        JsonDocument = JsonDocument.Parse("{\"kind\":\"document\"}"),
+                        JsonNode = JsonNode.Parse("{\"kind\":\"node\"}"),
+                        JsonObject = JsonNode.Parse("{\"kind\":\"object\"}")!.AsObject(),
+                        JsonArray = JsonNode.Parse("[\"array\",5,true]")!.AsArray(),
+                    });
             });
         }
     }

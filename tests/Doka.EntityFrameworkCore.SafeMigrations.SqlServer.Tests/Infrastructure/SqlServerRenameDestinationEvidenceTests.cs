@@ -16,13 +16,14 @@ public sealed class SqlServerRenameDestinationEvidenceTests
     )
     {
         // Arrange
-        var rename = new SafeMigrationOperation(new RenameTableIntent("source", "destination"),
+        var rename = new SafeMigrationOperation(
+            new RenameTableIntent("source", "destination"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         SafeMigrationOperation[] operations = [rename];
         SafeMigrationProviderAnalysis[] analyses = [Live(SafeMigrationObservedState.Missing)];
         await using var connection = Connection(tableExists, otherObjectExists);
-        var graph = await ReadGraphAsync(connection, operations);
+        var graph = await ReadGraphAsync(connection, operations, cancellationToken: CancellationToken.None);
         var commandsBefore = connection.Submissions.Count;
 
         // Act
@@ -51,32 +52,44 @@ public sealed class SqlServerRenameDestinationEvidenceTests
     )
     {
         // Arrange
-        var rename = new SafeMigrationOperation(new RenameTableIntent("source", "destination"),
+        var rename = new SafeMigrationOperation(
+            new RenameTableIntent("source", "destination"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         SafeMigrationOperation[] operations = [rename];
         SafeMigrationProviderAnalysis[] analyses = [Live(SafeMigrationObservedState.Missing)];
         await using var connection = Connection(tableExists, false);
-        var graph = await ReadGraphAsync(connection, operations);
+        var graph = await ReadGraphAsync(connection, operations, cancellationToken: CancellationToken.None);
         graph.CaptureRenameTargetPresence(operations, analyses);
         var projection = new SafeMigrationPreflightProjection();
-        var source = new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition("source",
-            [new ExpectedColumnDefinition("Id", typeof(int), false, "int")]), SafeMigrationTableMode.StrictDefinition),
+        var source = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "source",
+                    [new ExpectedColumnDefinition("Id", typeof(int), false, "int")]),
+                SafeMigrationTableMode.StrictDefinition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         Accept(projection, source, Live(SafeMigrationObservedState.Missing));
         if (dropTarget)
         {
-            Accept(projection, new SafeMigrationOperation(new DropTableIntent("destination"),
-                SafeMigrationPolicy.ThrowIfDifferent), Live(SafeMigrationObservedState.Matching));
+            Accept(
+                projection,
+                new SafeMigrationOperation(
+                    new DropTableIntent("destination"),
+                    SafeMigrationPolicy.ThrowIfDifferent),
+                Live(SafeMigrationObservedState.Matching));
         }
 
         // Act
         var result = projection.Project(rename, analyses[0]);
 
         // Assert
-        Assert.Equal(tableExists && !dropTarget ? SafeMigrationObservedState.Different
-            : SafeMigrationObservedState.Matching, result.ObservedState);
+        Assert.Equal(
+            tableExists && !dropTarget
+                ? SafeMigrationObservedState.Different
+                : SafeMigrationObservedState.Matching,
+            result.ObservedState);
     }
 
     /// <summary>Unknown graph names are not falsely recorded as proven absent.</summary>
@@ -112,24 +125,34 @@ public sealed class SqlServerRenameDestinationEvidenceTests
     )
     {
         // Arrange
-        var rename = new SafeMigrationOperation(new RenameTableIntent("source", "destination", "dbo", "target"),
+        var rename = new SafeMigrationOperation(
+            new RenameTableIntent("source", "destination", "dbo", "target"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         SafeMigrationOperation[] operations = [rename];
         SafeMigrationProviderAnalysis[] analyses = [Live(SafeMigrationObservedState.Missing)];
         await using var connection = Connection(false, false, intermediateExists, crossSchema: true);
-        var graph = await ReadGraphAsync(connection, operations);
+        var graph = await ReadGraphAsync(connection, operations, cancellationToken: CancellationToken.None);
         graph.CaptureRenameTargetPresence(operations, analyses);
         var projection = new SafeMigrationPreflightProjection();
-        var source = new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition("source",
-            [new ExpectedColumnDefinition("Id", typeof(int), false, "int")], schema: "dbo"),
-            SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent);
+        var source = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "source",
+                    [new ExpectedColumnDefinition("Id", typeof(int), false, "int")],
+                    schema: "dbo"),
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         Accept(projection, source, Live(SafeMigrationObservedState.Missing));
         if (dropIntermediate)
         {
-            Accept(projection, new SafeMigrationOperation(new DropTableIntent("destination", "dbo"),
-                SafeMigrationPolicy.ThrowIfDifferent), Live(SafeMigrationObservedState.Matching));
+            Accept(
+                projection,
+                new SafeMigrationOperation(
+                    new DropTableIntent("destination", "dbo"),
+                    SafeMigrationPolicy.ThrowIfDifferent),
+                Live(SafeMigrationObservedState.Matching));
         }
 
         // Act
@@ -138,8 +161,12 @@ public sealed class SqlServerRenameDestinationEvidenceTests
         // Assert
         Assert.False(analyses[0].RenameTargetExists);
         Assert.Equal(intermediateExists, analyses[0].RenameIntermediateTargetExists);
-        Assert.Equal(intermediateExists && !dropIntermediate ? SafeMigrationObservedState.Different
-            : SafeMigrationObservedState.Matching, result.ObservedState);
+        Assert.Equal(
+            intermediateExists && !dropIntermediate
+                ? SafeMigrationObservedState.Different
+                : SafeMigrationObservedState.Matching,
+            result.ObservedState);
+
         Assert.Equal(2, connection.Submissions.Count);
     }
 
@@ -149,10 +176,12 @@ public sealed class SqlServerRenameDestinationEvidenceTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext("Server=localhost;Database=catalog;Integrated Security=true;");
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
-        var operation = new SafeMigrationOperation(new RenameTableIntent("source", "destination", "dbo", "target"),
+        var operation = new SafeMigrationOperation(
+            new RenameTableIntent("source", "destination", "dbo", "target"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -167,10 +196,14 @@ public sealed class SqlServerRenameDestinationEvidenceTests
         Assert.Contains(finalTarget, plan.StateExpression, StringComparison.Ordinal);
         var rename = runtime.IndexOf("sp_rename", StringComparison.Ordinal);
         var transfer = runtime.IndexOf("TRANSFER", StringComparison.Ordinal);
+
         // WHY: Protected catalog access defers classification into one nested
         // SQL literal; its escaping must not hide the guard's execution order.
-        var guard = runtime.IndexOf(intermediate.Replace("'", "''", StringComparison.Ordinal), StringComparison.Ordinal);
-        var permission = runtime.IndexOf(SqlServerSafeMigrationCatalogSqlBuilder.ExpressionDependencyReadPermission,
+        var guard = runtime.IndexOf(intermediate.Replace("'", "''", StringComparison.Ordinal),
+            StringComparison.Ordinal);
+
+        var permission = runtime.IndexOf(
+            SqlServerSafeMigrationCatalogSqlBuilder.ExpressionDependencyReadPermission,
             StringComparison.Ordinal);
 
         Assert.True(guard >= 0 && rename > guard && transfer > rename);
@@ -178,67 +211,156 @@ public sealed class SqlServerRenameDestinationEvidenceTests
         Assert.True(permission >= 0 && permission < guard);
         Assert.Contains("[dbo].[source]", runtime, StringComparison.Ordinal);
         Assert.Contains("[target] TRANSFER [dbo].[destination]", runtime, StringComparison.Ordinal);
-        Assert.Contains(identifiers, static identifier => identifier.Scope == SqlServerIdentifierScope.SchemaObject
-            && identifier.Schema == "dbo" && identifier.Name == "destination");
+        Assert.Contains(
+            identifiers,
+            static identifier => identifier.Scope == SqlServerIdentifierScope.SchemaObject
+                && identifier.Schema == "dbo"
+                && identifier.Name == "destination");
     }
 
     private static Task<SqlServerProjectedDependencyGraph> ReadGraphAsync(
         CatalogStatementTestConnection connection,
-        IReadOnlyList<SafeMigrationOperation> operations
-    ) => SqlServerProjectedDependencyGraph.ReadAsync(connection, null, operations, 71,
-        static (_, _) => "1=1", static (_, _) => true, static (_, _) => true, CancellationToken.None);
+        IReadOnlyList<SafeMigrationOperation> operations,
+        CancellationToken cancellationToken
+    ) => SqlServerProjectedDependencyGraph.ReadAsync(
+        connection,
+        null,
+        operations,
+        71,
+        static (_, _) => "1=1",
+        static (_, _) => true,
+        static (_, _) => true,
+        cancellationToken);
 
     private static CatalogStatementTestConnection Connection(
         bool targetExists,
         bool otherObjectExists,
         bool intermediateExists = false,
         bool crossSchema = false
-    ) => new(false, (sql, parameters) =>
-    {
-        Assert.Empty(parameters);
-        if (sql.StartsWith("SELECT object_id, parent_object_id", StringComparison.Ordinal))
+    ) => new(
+        false,
+        (sql, parameters) =>
         {
-            return new DataTable { Locale = CultureInfo.InvariantCulture };
-        }
+            Assert.Empty(parameters);
+            if (sql.StartsWith("SELECT object_id, parent_object_id", StringComparison.Ordinal))
+            {
+                return new DataTable { Locale = CultureInfo.InvariantCulture };
+            }
 
-        Assert.StartsWith("SELECT requested.schema_name", sql, StringComparison.Ordinal);
-        var result = new DataTable { Locale = CultureInfo.InvariantCulture };
-        Type[] types = [typeof(string), typeof(string), typeof(string), typeof(string), typeof(int), typeof(int),
-            typeof(byte), typeof(bool), typeof(int), typeof(int), typeof(bool), typeof(bool), typeof(int),
-            typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(string)];
+            Assert.StartsWith("SELECT requested.schema_name", sql, StringComparison.Ordinal);
+            var result = new DataTable { Locale = CultureInfo.InvariantCulture };
+            Type[] types =
+            [
+                typeof(string), typeof(string), typeof(string), typeof(string), typeof(int), typeof(int),
+                typeof(byte), typeof(bool), typeof(int), typeof(int), typeof(bool), typeof(bool), typeof(int),
+                typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(string),
+            ];
 
-        for (var index = 0; index < types.Length; index++)
-        {
-            result.Columns.Add($"column{index}", types[index]);
-        }
+            for (var index = 0; index < types.Length; index++)
+            {
+                result.Columns.Add($"column{index}", types[index]);
+            }
 
-        result.Rows.Add("dbo", "source", DBNull.Value, DBNull.Value, 1, DBNull.Value, DBNull.Value, DBNull.Value,
-            DBNull.Value, DBNull.Value, false, false, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value,
-            DBNull.Value, DBNull.Value, DBNull.Value);
-        result.Rows.Add(crossSchema ? "target" : "dbo", "destination", DBNull.Value, DBNull.Value, 1,
-            targetExists ? 42 : DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, false, false,
-            DBNull.Value, DBNull.Value, DBNull.Value, targetExists || otherObjectExists ? 42 : DBNull.Value,
-            DBNull.Value, DBNull.Value, DBNull.Value);
-        if (crossSchema)
-        {
-            Assert.Contains("(N'dbo', N'destination', CONVERT(nvarchar(128), NULL), CONVERT(nvarchar(128), NULL))",
-                sql, StringComparison.Ordinal);
-            result.Rows.Add("dbo", "destination", DBNull.Value, DBNull.Value, 1,
-                intermediateExists ? 43 : DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value,
-                false, false, DBNull.Value, DBNull.Value, DBNull.Value, intermediateExists ? 43 : DBNull.Value,
-                DBNull.Value, DBNull.Value, DBNull.Value);
-        }
+            result.Rows.Add(
+                "dbo",
+                "source",
+                DBNull.Value,
+                DBNull.Value,
+                1,
+                DBNull.Value,
+                DBNull.Value,
+                DBNull.Value,
+                DBNull.Value,
+                DBNull.Value,
+                false,
+                false,
+                DBNull.Value,
+                DBNull.Value,
+                DBNull.Value,
+                DBNull.Value,
+                DBNull.Value,
+                DBNull.Value,
+                DBNull.Value);
 
-        return result;
-    });
+            result.Rows.Add(
+                crossSchema
+                    ? "target"
+                    : "dbo",
+                "destination",
+                DBNull.Value,
+                DBNull.Value,
+                1,
+                targetExists
+                    ? 42
+                    : DBNull.Value,
+                DBNull.Value,
+                DBNull.Value,
+                DBNull.Value,
+                DBNull.Value,
+                false,
+                false,
+                DBNull.Value,
+                DBNull.Value,
+                DBNull.Value,
+                targetExists || otherObjectExists
+                    ? 42
+                    : DBNull.Value,
+                DBNull.Value,
+                DBNull.Value,
+                DBNull.Value);
+
+            if (crossSchema)
+            {
+                Assert.Contains(
+                    "(N'dbo', N'destination', CONVERT(nvarchar(128), NULL), CONVERT(nvarchar(128), NULL))",
+                    sql,
+                    StringComparison.Ordinal);
+
+                result.Rows.Add(
+                    "dbo",
+                    "destination",
+                    DBNull.Value,
+                    DBNull.Value,
+                    1,
+                    intermediateExists
+                        ? 43
+                        : DBNull.Value,
+                    DBNull.Value,
+                    DBNull.Value,
+                    DBNull.Value,
+                    DBNull.Value,
+                    false,
+                    false,
+                    DBNull.Value,
+                    DBNull.Value,
+                    DBNull.Value,
+                    intermediateExists
+                        ? 43
+                        : DBNull.Value,
+                    DBNull.Value,
+                    DBNull.Value,
+                    DBNull.Value);
+            }
+
+            return result;
+        });
 
     private static void Accept(
         SafeMigrationPreflightProjection projection,
         SafeMigrationOperation operation,
         SafeMigrationProviderAnalysis analysis
-    ) => projection.Observe(operation, analysis, analysis, SafeMigrationDecisionPlanner.Plan(
-        operation.Intent.Kind, analysis.ObservedState, operation.Policy, analysis.RepairCapability));
+    ) => projection.Observe(
+        operation,
+        analysis,
+        analysis,
+        SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            analysis.ObservedState,
+            operation.Policy,
+            analysis.RepairCapability));
 
-    private static SafeMigrationProviderAnalysis Live(SafeMigrationObservedState state)
+    private static SafeMigrationProviderAnalysis Live(
+        SafeMigrationObservedState state
+    )
         => new(state, SafeMigrationRepairCapability.None, false, "classified_test");
 }

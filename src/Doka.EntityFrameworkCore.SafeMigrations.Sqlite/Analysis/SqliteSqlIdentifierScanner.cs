@@ -9,14 +9,18 @@ internal static class SqliteSqlIdentifierScanner
     internal const string WhitespaceCharacters = " \t\n\f\r";
 
     /// <summary>Determines whether a character is native SQL whitespace rather than part of an identifier.</summary>
-    internal static bool IsWhitespace(char value) => value is ' ' or '\t' or '\n' or '\f' or '\r';
+    internal static bool IsWhitespace(
+        char value
+    ) => value is ' ' or '\t' or '\n' or '\f' or '\r';
 
     /// <summary>
     /// Detects unquoted native identifier characters a generic Unicode-whitespace parser would erase.
     /// </summary>
     /// <param name="sql">The complete native SQLite expression source.</param>
     /// <returns>Whether bounded generic parsing cannot certify the original native identifier boundaries.</returns>
-    internal static bool HasNonNativeWhitespace(string sql)
+    internal static bool HasNonNativeWhitespace(
+        string sql
+    )
     {
         var position = 0;
         while (position < sql.Length)
@@ -30,11 +34,19 @@ internal static class SqliteSqlIdentifierScanner
             var character = sql[position];
             if (character is '\'' or '"' or '`' or '[')
             {
-                SkipQuoted(sql, ref position, character, character == '[' ? ']' : character);
+                SkipQuoted(
+                    sql,
+                    ref position,
+                    character,
+                    character == '['
+                        ? ']'
+                        : character);
+
                 continue;
             }
 
-            if (character >= '\u0080' && char.IsWhiteSpace(character))
+            if (character >= '\u0080'
+                && char.IsWhiteSpace(character))
             {
                 return true;
             }
@@ -48,7 +60,7 @@ internal static class SqliteSqlIdentifierScanner
     /// <summary>Determines whether SQL contains an unquoted keyword token.</summary>
     /// <param name="sql">The SQLite SQL text to inspect.</param>
     /// <param name="keyword">The keyword to find.</param>
-    /// <returns><see langword="true"/> when the keyword occurs as a token.</returns>
+    /// <returns><see langword="true" /> when the keyword occurs as a token.</returns>
     public static bool ContainsKeyword(
         string sql,
         string keyword
@@ -58,7 +70,7 @@ internal static class SqliteSqlIdentifierScanner
     /// <param name="sql">The SQLite SQL text to inspect.</param>
     /// <param name="first">The first keyword.</param>
     /// <param name="second">The second keyword.</param>
-    /// <returns><see langword="true"/> when the keyword sequence occurs.</returns>
+    /// <returns><see langword="true" /> when the keyword sequence occurs.</returns>
     public static bool ContainsKeywordSequence(
         string sql,
         string first,
@@ -151,8 +163,8 @@ internal static class SqliteSqlIdentifierScanner
         while (TryReadNextBareWord(sql, ref position, out var start, out var length))
         {
             if (!sql
-                    .AsSpan(start, length)
-                    .Equals(keyword, StringComparison.OrdinalIgnoreCase))
+                .AsSpan(start, length)
+                .Equals(keyword, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -172,7 +184,7 @@ internal static class SqliteSqlIdentifierScanner
     /// <summary>Reads the first identifier that follows a keyword token.</summary>
     /// <param name="sql">The SQLite SQL text to inspect.</param>
     /// <param name="keyword">The keyword that precedes the identifier.</param>
-    /// <returns>The decoded identifier, or <see langword="null"/>.</returns>
+    /// <returns>The decoded identifier, or <see langword="null" />.</returns>
     public static string? ReadIdentifierFollowingKeyword(
         string sql,
         string keyword
@@ -181,7 +193,7 @@ internal static class SqliteSqlIdentifierScanner
     /// <summary>Reads the last identifier that follows a repeated keyword token.</summary>
     /// <param name="sql">The SQLite SQL text to inspect.</param>
     /// <param name="keyword">The repeated keyword that precedes each candidate.</param>
-    /// <returns>The last decoded identifier, or <see langword="null"/>.</returns>
+    /// <returns>The last decoded identifier, or <see langword="null" />.</returns>
     public static string? ReadLastIdentifierFollowingKeyword(
         string sql,
         string keyword
@@ -226,8 +238,8 @@ internal static class SqliteSqlIdentifierScanner
             }
 
             if (!sql
-                    .AsSpan(start, position - start)
-                    .Equals(keyword, StringComparison.OrdinalIgnoreCase))
+                .AsSpan(start, position - start)
+                .Equals(keyword, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -251,7 +263,7 @@ internal static class SqliteSqlIdentifierScanner
     /// <summary>Determines whether SQL references an identifier token.</summary>
     /// <param name="sql">The SQLite SQL text to inspect.</param>
     /// <param name="identifier">The decoded identifier to find.</param>
-    /// <returns><see langword="true"/> when the identifier is referenced.</returns>
+    /// <returns><see langword="true" /> when the identifier is referenced.</returns>
     public static bool ReferencesIdentifier(
         string sql,
         string identifier
@@ -330,7 +342,7 @@ internal static class SqliteSqlIdentifierScanner
 
         var start = position++;
         while (position < sql.Length
-               && IsIdentifierPart(sql[position]))
+            && IsIdentifierPart(sql[position]))
         {
             position++;
         }
@@ -353,7 +365,7 @@ internal static class SqliteSqlIdentifierScanner
 
         position++;
         while (position < sql.Length
-               && IsIdentifierPart(sql[position]))
+            && IsIdentifierPart(sql[position]))
         {
             position++;
         }
@@ -452,7 +464,8 @@ internal static class SqliteSqlIdentifierScanner
             // WHY: SQLite also emits a standalone BOM as TK_SPACE. It is
             // trivia only at token boundaries; embedded BOM bytes remain part
             // of an identifier and must not enter general trimming policies.
-            if (IsWhitespace(sql[position]) || sql[position] == '\uFEFF')
+            if (IsWhitespace(sql[position])
+                || sql[position] == '\uFEFF')
             {
                 position++;
                 continue;
@@ -464,7 +477,7 @@ internal static class SqliteSqlIdentifierScanner
             {
                 position += 2;
                 while (position < sql.Length
-                       && sql[position] != '\n')
+                    && sql[position] != '\n')
                 {
                     position++;
                 }
@@ -478,7 +491,7 @@ internal static class SqliteSqlIdentifierScanner
             {
                 position += 2;
                 while (position + 1 < sql.Length
-                       && !(sql[position] == '*' && sql[position + 1] == '/'))
+                    && !(sql[position] == '*' && sql[position + 1] == '/'))
                 {
                     position++;
                 }

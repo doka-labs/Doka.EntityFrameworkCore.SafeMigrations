@@ -17,43 +17,59 @@ public abstract class SqlServerScaffoldingModelDbContext : DbContext
     {
         // WHY: The x64 CLI gate must exercise computed-column native binding
         // and its composite index from actual compiled generated migrations.
-        modelBuilder.Entity("ScaffoldingGeneratedNode", entity =>
-        {
-            entity.ToTable("scaffolding_generated_nodes", table =>
-                table.HasCheckConstraint("ck_scaffolding_generated_bounds", "[RightBound] > [LeftBound]"));
-            entity.Property<int>("Id").ValueGeneratedNever();
-            entity.HasKey("Id");
-            entity.Property<long>("LeftBound");
-            entity.Property<long>("RightBound");
-            entity.Property<bool>("HasDescendants").HasComputedColumnSql(
-                "CONVERT(bit, CASE WHEN [RightBound] > CASE WHEN [LeftBound] = 9223372036854775807 "
-                + "THEN [LeftBound] ELSE [LeftBound] + 1 END THEN 1 ELSE 0 END)", stored: false);
-            entity.HasIndex("HasDescendants", "LeftBound", "RightBound");
-        });
+        modelBuilder.Entity(
+            "ScaffoldingGeneratedNode",
+            entity =>
+            {
+                entity.ToTable(
+                    "scaffolding_generated_nodes",
+                    table =>
+                        table.HasCheckConstraint("ck_scaffolding_generated_bounds", "[RightBound] > [LeftBound]"));
+
+                entity
+                    .Property<int>("Id")
+                    .ValueGeneratedNever();
+
+                entity.HasKey("Id");
+                entity.Property<long>("LeftBound");
+                entity.Property<long>("RightBound");
+                entity
+                    .Property<bool>("HasDescendants")
+                    .HasComputedColumnSql(
+                        "CONVERT(bit, CASE WHEN [RightBound] > CASE WHEN [LeftBound] = 9223372036854775807 "
+                        + "THEN [LeftBound] ELSE [LeftBound] + 1 END THEN 1 ELSE 0 END)",
+                        stored: false);
+
+                entity.HasIndex("HasDescendants", "LeftBound", "RightBound");
+            });
 
         modelBuilder.Entity<SqlServerScaffoldingUser>(entity =>
         {
             entity.ToTable("scaffolding_users");
             entity.HasKey(user => user.Id);
 
-            entity.Property(user => user.Email)
+            entity
+                .Property(user => user.Email)
                 .HasMaxLength(320)
                 .IsRequired();
 
-            entity.Property(user => user.DisplayName)
+            entity
+                .Property(user => user.DisplayName)
                 .HasMaxLength(120)
                 .IsRequired();
 
-            entity.HasIndex(user => user.Email)
+            entity
+                .HasIndex(user => user.Email)
                 .IsUnique()
                 .IncludeProperties(user => user.DisplayName);
 
-            entity.HasData(new SqlServerScaffoldingUser
-            {
-                Id = 1,
-                Email = "administrator@example.test",
-                DisplayName = "Administrator",
-            });
+            entity.HasData(
+                new SqlServerScaffoldingUser
+                {
+                    Id = 1,
+                    Email = "administrator@example.test",
+                    DisplayName = "Administrator",
+                });
         });
     }
 }
@@ -85,6 +101,7 @@ public sealed class SqlServerSafeMigrationScaffoldingDbContext : SqlServerScaffo
             provider => provider
                 .MigrationsAssembly(typeof(SqlServerSafeMigrationScaffoldingDbContext).Assembly.FullName)
                 .MigrationsHistoryTable("__SqlServerSafeMigrationsHistory"));
+
         optionsBuilder.UseSqlServerSafeMigrations<SqlServerSafeMigrationScaffoldingDbContext>();
     }
 }
@@ -116,6 +133,7 @@ public sealed class SqlServerLegacySafeMigrationScaffoldingDbContext : SqlServer
             provider => provider
                 .MigrationsAssembly(typeof(SqlServerLegacySafeMigrationScaffoldingDbContext).Assembly.FullName)
                 .MigrationsHistoryTable("__SqlServerLegacySafeMigrationsHistory"));
+
         optionsBuilder.UseSqlServerSafeMigrations<SqlServerLegacySafeMigrationScaffoldingDbContext>(options =>
         {
             options.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence);

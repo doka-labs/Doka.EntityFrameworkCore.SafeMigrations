@@ -6,10 +6,13 @@ internal static class Program
     {
         _ = new DbContextOptionsBuilder().UseMySqlSafeMigrations(options =>
             options.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence));
+
         _ = new DbContextOptionsBuilder().UsePostgreSqlSafeMigrations(options =>
             options.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence));
+
         _ = new DbContextOptionsBuilder().UseSqliteSafeMigrations(options =>
             options.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence));
+
         _ = new DbContextOptionsBuilder().UseSqlServerSafeMigrations(options =>
             options.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence));
 

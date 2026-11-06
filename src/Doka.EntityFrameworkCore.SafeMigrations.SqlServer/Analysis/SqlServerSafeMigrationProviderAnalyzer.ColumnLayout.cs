@@ -32,7 +32,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         }
 
         var requested = new Dictionary<(string Schema, string Table), HashSet<string>>();
-        foreach (var column in operations.Select(static operation => operation.Intent).OfType<EnsureColumnIntent>())
+        foreach (var column in operations
+            .Select(static operation => operation.Intent)
+            .OfType<EnsureColumnIntent>())
         {
             RegisterColumnLayoutRequest(requested, column.Schema, column.Table, column.Definition.Name);
             if (SqlServerComputedColumnContract.Expression(column.Definition) is { } expression)
@@ -51,10 +53,12 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         {
             if (operations[ordinal].Intent is RenameTableIntent table
                 && requested.TryGetValue(
-                    (table.NewSchema ?? table.Schema ?? "dbo", table.NewName ?? table.Name), out var targetNames))
+                    (table.NewSchema ?? table.Schema ?? "dbo", table.NewName ?? table.Name),
+                    out var targetNames))
             {
                 RegisterColumnLayoutRequest(requested, table.Schema, table.Name, null);
-                requested[(table.Schema ?? "dbo", table.Name)].UnionWith(targetNames);
+                requested[(table.Schema ?? "dbo", table.Name)]
+                    .UnionWith(targetNames);
             }
         }
 
@@ -70,7 +74,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     RegisterColumnLayoutRequest(requested, column.Schema, column.Table, column.NewName);
                     break;
                 case EnsureIndexIntent index when requested.TryGetValue(
-                    (index.Definition.Schema ?? "dbo", index.Definition.Table), out var names):
+                    (index.Definition.Schema ?? "dbo", index.Definition.Table),
+                    out var names):
                     foreach (var key in index.Definition.Keys)
                     {
                         if (key.Column is not null)
@@ -85,13 +90,17 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     (primary.Definition.Schema ?? "dbo", primary.Definition.Table)):
                     foreach (var name in primary.Definition.Columns)
                     {
-                        RegisterColumnLayoutRequest(requested,
-                            primary.Definition.Schema, primary.Definition.Table, name);
+                        RegisterColumnLayoutRequest(
+                            requested,
+                            primary.Definition.Schema,
+                            primary.Definition.Table,
+                            name);
                     }
 
                     break;
                 case EnsureCheckConstraintIntent check when requested.TryGetValue(
-                    (check.Definition.Schema ?? "dbo", check.Definition.Table), out var checkNames):
+                    (check.Definition.Schema ?? "dbo", check.Definition.Table),
+                    out var checkNames):
                     if (SqlServerSafeMigrationCatalogSqlBuilder.GetCheckRenamePrerequisiteColumns(check.Definition)
                         is { } checkSources)
                     {
@@ -113,12 +122,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         await SafeMigrationCatalogProbeBatch.ReadAsync(
             connection,
             (tables.Length + SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement - 1)
-                / SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
+            / SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
             SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
             commandTimeout,
             (command, offset) =>
             {
-                var chunk = tables.Skip(offset * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+                var chunk = tables
+                    .Skip(offset * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
                     .Take(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
 
                 command.CommandText = "SELECT requested.[schema],requested.[table],"
@@ -126,20 +136,30 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     + "layout.variable_columns,CONVERT(int,layout.clustered_variable_extra),"
                     + "CONVERT(bit,CASE WHEN layout.unknown_columns=0 "
                     + "AND t.max_column_id_used=layout.column_count THEN 1 ELSE 0 END) FROM (VALUES "
-                    + string.Join(",", chunk.Select(static key => "(" + KeyLiteral(key.Schema) + ","
-                        + KeyLiteral(key.Table) + ")")) + ") AS requested([schema],[table]) "
+                    + string.Join(
+                        ",",
+                        chunk.Select(static key => "("
+                            + KeyLiteral(key.Schema)
+                            + ","
+                            + KeyLiteral(key.Table)
+                            + ")"))
+                    + ") AS requested([schema],[table]) "
                     + "JOIN sys.schemas AS s ON s.name=requested.[schema] COLLATE CATALOG_DEFAULT "
                     + "JOIN sys.tables AS t ON t.schema_id=s.schema_id "
                     + "AND t.name=requested.[table] COLLATE CATALOG_DEFAULT "
-                    + "CROSS APPLY (" + SqlServerSafeMigrationCatalogSqlBuilder.BuildColumnLayoutCatalogQuery(
-                        "t.object_id") + ") AS layout;";
+                    + "CROSS APPLY ("
+                    + SqlServerSafeMigrationCatalogSqlBuilder.BuildColumnLayoutCatalogQuery(
+                        "t.object_id")
+                    + ") AS layout;";
 
                 return new SafeMigrationCatalogProbeStatement(1, 0, offset);
             },
             async (reader, offset, _, token) =>
             {
-                var permitted = tables.Skip(offset * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
-                    .Take(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement).ToHashSet();
+                var permitted = tables
+                    .Skip(offset * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+                    .Take(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+                    .ToHashSet();
 
                 while (await reader.ReadAsync(token))
                 {
@@ -152,20 +172,27 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     CaptureProjectedColumnLayout(reader, captured);
                 }
             },
-            cancellationToken, transaction, SqlServerCatalogParameterBindings.MaximumParameters);
+            cancellationToken,
+            transaction,
+            SqlServerCatalogParameterBindings.MaximumParameters);
 
         // WHY: The requested inventory is frozen here. Stream it into bounded chunks
         // instead of retaining a second complete tuple array alongside the catalog maps.
         var bindings = requested.SelectMany(static pair => pair.Value.Select(name =>
             (pair.Key.Schema, pair.Key.Table, Name: name)));
-        using var chunks = bindings.Chunk(SafeMigrationCatalogQueryLimits.MaximumInventoryValues).GetEnumerator();
+
+        using var chunks = bindings
+            .Chunk(SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
+            .GetEnumerator();
+
         var pending = new Dictionary<int, (string Schema, string Table, string Name)[]>();
 
         await SafeMigrationCatalogProbeBatch.ReadAsync(
             connection,
             (requested.Values.Sum(static names => names.Count)
-                + SafeMigrationCatalogQueryLimits.MaximumInventoryValues - 1)
-                / SafeMigrationCatalogQueryLimits.MaximumInventoryValues,
+                + SafeMigrationCatalogQueryLimits.MaximumInventoryValues
+                - 1)
+            / SafeMigrationCatalogQueryLimits.MaximumInventoryValues,
             SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
             commandTimeout,
             (command, offset) =>
@@ -186,9 +213,17 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     + "ELSE 0 END,CONVERT(bit,CASE WHEN EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.indexes i "
                     + "ON i.object_id=ic.object_id AND i.index_id=ic.index_id WHERE i.type=1 AND ic.key_ordinal>0 "
                     + "AND ic.object_id=c.object_id AND ic.column_id=c.column_id) THEN 1 ELSE 0 END),c.name "
-                    + "FROM (VALUES " + string.Join(",", chunk.Select(static item =>
-                        "(" + KeyLiteral(item.Schema) + "," + KeyLiteral(item.Table)
-                            + "," + KeyLiteral(item.Name) + ")"))
+                    + "FROM (VALUES "
+                    + string.Join(
+                        ",",
+                        chunk.Select(static item =>
+                            "("
+                            + KeyLiteral(item.Schema)
+                            + ","
+                            + KeyLiteral(item.Table)
+                            + ","
+                            + KeyLiteral(item.Name)
+                            + ")"))
                     + ") AS requested([schema],[table],[name]) JOIN sys.schemas AS s "
                     + "ON s.name=requested.[schema] COLLATE CATALOG_DEFAULT JOIN sys.tables AS t "
                     + "ON t.schema_id=s.schema_id AND t.name=requested.[table] COLLATE CATALOG_DEFAULT "
@@ -200,7 +235,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             },
             async (reader, offset, _, token) =>
             {
-                var permitted = pending[offset].ToHashSet();
+                var permitted = pending[offset]
+                    .ToHashSet();
+
                 pending.Remove(offset);
 
                 while (await reader.ReadAsync(token))
@@ -213,10 +250,17 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     CaptureProjectedColumnLayoutBinding(reader, captured);
                 }
             },
-            cancellationToken, transaction, SqlServerCatalogParameterBindings.MaximumParameters);
+            cancellationToken,
+            transaction,
+            SqlServerCatalogParameterBindings.MaximumParameters);
 
         await ReadColumnLayoutRowPresenceAsync(
-            connection, transaction, operations, captured, commandTimeout, cancellationToken);
+            connection,
+            transaction,
+            operations,
+            captured,
+            commandTimeout,
+            cancellationToken);
 
         // WHY: A cancelled or malformed capture must not publish partial allocation proof.
         _projectedColumnLayouts.Clear();
@@ -238,8 +282,12 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     )
     {
         captured[(reader.GetString(0), reader.GetString(1))] = new ColumnLayoutState(
-            reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5),
-            reader.GetBoolean(7), reader.GetInt32(6));
+            reader.GetInt32(2),
+            reader.GetInt32(3),
+            reader.GetInt32(4),
+            reader.GetInt32(5),
+            reader.GetBoolean(7),
+            reader.GetInt32(6));
     }
 
     /// <summary>Captures the current requested physical column identity and clustered storage binding.</summary>
@@ -263,6 +311,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 // share the same lifetime, including CI aliases in the stream.
                 layout.Bindings[reader.GetString(6)] = reader.GetInt32(3);
             }
+
             if (reader.GetInt32(4) != 0)
             {
                 layout.VariableWidths[reader.GetInt32(3)] = reader.GetInt32(4);
@@ -285,23 +334,31 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     {
         var prospective = new Dictionary<(string Schema, string Table), ColumnLayoutState>();
         var materialized = new HashSet<(string Schema, string Table)>();
-        var clusteredMutations = operations.Select(static operation => operation.Intent)
+        var clusteredMutations = operations
+            .Select(static operation => operation.Intent)
             .OfType<EnsurePrimaryKeyIntent>()
-            .Select(static primary => (primary.Definition.Schema ?? "dbo", primary.Definition.Table)).ToHashSet();
+            .Select(static primary => (primary.Definition.Schema ?? "dbo", primary.Definition.Table))
+            .ToHashSet();
 
         var renamedSources = new Dictionary<(string Schema, string Table), (string Schema, string Table)>();
-        foreach (var table in operations.Select(static operation => operation.Intent).OfType<RenameTableIntent>())
+        foreach (var table in operations
+            .Select(static operation => operation.Intent)
+            .OfType<RenameTableIntent>())
         {
             var source = (table.Schema ?? "dbo", table.Name);
             renamedSources[(table.NewSchema ?? table.Schema ?? "dbo", table.NewName ?? table.Name)]
                 = renamedSources.GetValueOrDefault(source, source);
         }
 
-        foreach (var column in operations.Select(static operation => operation.Intent).OfType<EnsureColumnIntent>())
+        foreach (var column in operations
+            .Select(static operation => operation.Intent)
+            .OfType<EnsureColumnIntent>())
         {
             var key = (column.Schema ?? "dbo", column.Table);
             key = renamedSources.GetValueOrDefault(key, key);
-            if (!captured.TryGetValue(key, out var live) || live is null || !live.IsKnown
+            if (!captured.TryGetValue(key, out var live)
+                || live is null
+                || !live.IsKnown
                 || live.Bindings.ContainsKey(column.Definition.Name)
                 || !_catalogSqlBuilder.TryGetColumnStorageLayout(column.Definition, out var storage))
             {
@@ -321,9 +378,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             }
         }
 
-        var needed = prospective.Where(pair => materialized.Contains(pair.Key)
-            && (pair.Value.RowCapacityUnproven()
-                || clusteredMutations.Contains(pair.Key) && pair.Value.HasVariableColumns))
+        var needed = prospective
+            .Where(pair => materialized.Contains(pair.Key)
+                && (pair.Value.RowCapacityUnproven()
+                    || (clusteredMutations.Contains(pair.Key) && pair.Value.HasVariableColumns)))
             .Select(static pair => pair.Key);
 
         // WHY: Row presence is read only for near-ceiling materialization.
@@ -334,27 +392,45 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             await using var command = connection.CreateCommand();
             command.Transaction = transaction;
             ApplyCommandTimeout(command, commandTimeout);
-            command.CommandText = string.Join(" ", chunk.Select((key, ordinal) =>
-            {
-                var qualified = _sqlGenerationHelper.DelimitIdentifier(key.Table, key.Schema);
-                var prefix = "SELECT " + KeyLiteral(key.Schema) + "," + KeyLiteral(key.Table) + ",";
-                var select = prefix + "CONVERT(bit,CASE WHEN EXISTS(SELECT TOP(1)1 FROM "
-                    + qualified + ") THEN 1 ELSE 0 END);";
-                var argument = SqlServerSqlStringLiteral.ProcedureArgument(
-                    select, KeyLiteral(select), SqlServerSqlStringLiteral.RequiresExpression(select.AsSpan())
-                        ? "@doka_layout_row_sql" + ordinal.ToString(CultureInfo.InvariantCulture) : string.Empty,
-                    out var declaration);
+            command.CommandText = string.Join(
+                " ",
+                chunk.Select((key, ordinal) =>
+                {
+                    var qualified = _sqlGenerationHelper.DelimitIdentifier(key.Table, key.Schema);
+                    var prefix = "SELECT " + KeyLiteral(key.Schema) + "," + KeyLiteral(key.Table) + ",";
+                    var select = prefix
+                        + "CONVERT(bit,CASE WHEN EXISTS(SELECT TOP(1)1 FROM "
+                        + qualified
+                        + ") THEN 1 ELSE 0 END);";
 
-                // WHY: VIEW DEFINITION does not grant SELECT. Keep unauthorized
-                // table binding inside the guarded dynamic branch and retain
-                // unknown row presence for a structured fail-closed decision.
+                    var argument = SqlServerSqlStringLiteral.ProcedureArgument(
+                        select,
+                        KeyLiteral(select),
+                        SqlServerSqlStringLiteral.RequiresExpression(select.AsSpan())
+                            ? "@doka_layout_row_sql" + ordinal.ToString(CultureInfo.InvariantCulture)
+                            : string.Empty,
+                        out var declaration);
 
-                return "IF HAS_PERMS_BY_NAME(" + KeyLiteral(qualified) + ",N'OBJECT',N'SELECT')=1 "
-                    + (declaration.Length == 0 ? string.Empty : "BEGIN " + declaration)
-                    + "EXEC sys.sp_executesql " + argument + "; "
-                    + (declaration.Length == 0 ? string.Empty : "END ") + "ELSE "
-                    + prefix + "CONVERT(bit,NULL);";
-            }));
+                    // WHY: VIEW DEFINITION does not grant SELECT. Keep unauthorized
+                    // table binding inside the guarded dynamic branch and retain
+                    // unknown row presence for a structured fail-closed decision.
+
+                    return "IF HAS_PERMS_BY_NAME("
+                        + KeyLiteral(qualified)
+                        + ",N'OBJECT',N'SELECT')=1 "
+                        + (declaration.Length == 0
+                            ? string.Empty
+                            : "BEGIN " + declaration)
+                        + "EXEC sys.sp_executesql "
+                        + argument
+                        + "; "
+                        + (declaration.Length == 0
+                            ? string.Empty
+                            : "END ")
+                        + "ELSE "
+                        + prefix
+                        + "CONVERT(bit,NULL);";
+                }));
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             do
@@ -363,11 +439,12 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 {
                     if (captured[(reader.GetString(0), reader.GetString(1))] is { } layout)
                     {
-                        layout.HasRows = reader.IsDBNull(2) ? null : reader.GetBoolean(2);
+                        layout.HasRows = reader.IsDBNull(2)
+                            ? null
+                            : reader.GetBoolean(2);
                     }
                 }
-            }
-            while (await reader.NextResultAsync(cancellationToken));
+            } while (await reader.NextResultAsync(cancellationToken));
         }
     }
 
@@ -396,7 +473,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         SafeMigrationProviderAnalysis analysis
     )
     {
-        if (operation.Intent is not EnsureColumnIntent column || analysis.IsInvariantUnsupported)
+        if (operation.Intent is not EnsureColumnIntent column
+            || analysis.IsInvariantUnsupported)
         {
             return analysis;
         }
@@ -404,16 +482,21 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         var structureUnknown = analysis.IsOpaqueProjectionUnknown
             && analysis.ObservedState == SafeMigrationObservedState.PrerequisiteMissing
             && analysis.Code == "projected_structure_state_unknown";
-        if (!structureUnknown && (analysis.IsOpaqueProjectionUnknown
+
+        if (!structureUnknown
+            && (analysis.IsOpaqueProjectionUnknown
                 || analysis.ObservedState != SafeMigrationObservedState.Missing))
         {
             return analysis;
         }
 
         if (!_projectedColumnLayouts.TryGetValue((column.Schema ?? "dbo", column.Table), out var layout)
-            || layout is null || !_catalogSqlBuilder.TryGetColumnStorageLayout(column.Definition, out var addition))
+            || layout is null
+            || !_catalogSqlBuilder.TryGetColumnStorageLayout(column.Definition, out var addition))
         {
-            return structureUnknown ? analysis : ColumnLayoutFailure("column_layout_unproven");
+            return structureUnknown
+                ? analysis
+                : ColumnLayoutFailure("column_layout_unproven");
         }
 
         if (layout.Bindings.ContainsKey(column.Definition.Name))
@@ -421,13 +504,16 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             return analysis;
         }
 
-        if (SqlServerComputedColumnContract.IsComputed(column.Definition) && column.Definition.IsStored != true)
+        if (SqlServerComputedColumnContract.IsComputed(column.Definition)
+            && column.Definition.IsStored != true)
         {
             // WHY: A virtual expression allocates no row storage. Retained
             // ordinary-column history therefore cannot invalidate its capacity;
             // an unknown identity still remains unknown and the native column
             // count is independently bounded before any ADD can be accepted.
-            return layout.VisibleColumns >= 1024 ? ColumnLayoutFailure("column_limit") : analysis;
+            return layout.VisibleColumns >= 1024
+                ? ColumnLayoutFailure("column_limit")
+                : analysis;
         }
 
         var code = layout.AdditionFailure(addition);
@@ -447,9 +533,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         }
 
         return SqlServerSafeMigrationCatalogSqlBuilder.ColumnAdditionMaterializesRows(column.Definition, addition)
-            && (!layout.RowCapacityKnown || layout.RowCapacityUnproven(addition)) && layout.HasRows != false
-                ? new SafeMigrationProviderAnalysis(SafeMigrationObservedState.DataBlocked,
-                    SafeMigrationRepairCapability.None, false, "column_row_layout_unproven")
+            && (!layout.RowCapacityKnown || layout.RowCapacityUnproven(addition))
+            && layout.HasRows != false
+                ? new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.DataBlocked,
+                    SafeMigrationRepairCapability.None,
+                    false,
+                    "column_row_layout_unproven")
                 : analysis;
     }
 
@@ -459,7 +549,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         SafeMigrationDecision decision
     )
     {
-        if (_projectedColumnLayouts.Count == 0 || !decision.ShouldExecute)
+        if (_projectedColumnLayouts.Count == 0
+            || !decision.ShouldExecute)
         {
             return;
         }
@@ -523,8 +614,12 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 break;
             case RenameTableIntent table:
                 _columnMatchingEvidenceInvalidated = true;
-                TransferProjectedColumnLayout(table.Schema, table.Name,
-                    table.NewSchema ?? table.Schema, table.NewName ?? table.Name);
+                TransferProjectedColumnLayout(
+                    table.Schema,
+                    table.Name,
+                    table.NewSchema ?? table.Schema,
+                    table.NewName ?? table.Name);
+
                 break;
             case ModelManagedDataIntent data:
                 if (_projectedColumnLayouts.TryGetValue((data.Schema ?? "dbo", data.Table), out var seeded)
@@ -537,8 +632,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
                 break;
             case EnsurePrimaryKeyIntent primary:
-                ReserveProjectedClusteredKey(primary.Definition.Schema, primary.Definition.Table,
+                ReserveProjectedClusteredKey(
+                    primary.Definition.Schema,
+                    primary.Definition.Table,
                     primary.Definition.Columns);
+
                 break;
             case EnsureIndexIntent index when operation["SqlServer:Clustered"] is true:
                 InvalidateProjectedClusteredRowProof(index.Definition.Schema, index.Definition.Table);
@@ -562,8 +660,12 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         switch (operation)
         {
             case RenameTableOperation table:
-                TransferProjectedColumnLayout(table.Schema, table.Name,
-                    table.NewSchema ?? table.Schema, table.NewName ?? table.Name);
+                TransferProjectedColumnLayout(
+                    table.Schema,
+                    table.Name,
+                    table.NewSchema ?? table.Schema,
+                    table.NewName ?? table.Name);
+
                 break;
             case RenameColumnOperation column:
                 RenameProjectedLayoutColumn(column.Schema, column.Table, column.Name, column.NewName);
@@ -618,7 +720,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         string table
     )
     {
-        if (_projectedColumnLayouts.TryGetValue((schema ?? "dbo", table), out var layout) && layout is not null
+        if (_projectedColumnLayouts.TryGetValue((schema ?? "dbo", table), out var layout)
+            && layout is not null
             && layout.HasVariableColumns)
         {
             // WHY: A newly clustered variable key cannot use ROW_OVERFLOW_DATA.
@@ -634,7 +737,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         IReadOnlyList<string> columns
     )
     {
-        if (_projectedColumnLayouts.TryGetValue((schema ?? "dbo", table), out var layout) && layout is not null)
+        if (_projectedColumnLayouts.TryGetValue((schema ?? "dbo", table), out var layout)
+            && layout is not null)
         {
             layout.ReserveClusteredKey(columns);
         }
@@ -645,7 +749,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         string table
     )
     {
-        if (_projectedColumnLayouts.TryGetValue((schema ?? "dbo", table), out var layout) && layout is not null)
+        if (_projectedColumnLayouts.TryGetValue((schema ?? "dbo", table), out var layout)
+            && layout is not null)
         {
             layout.HasRows = null;
         }
@@ -656,7 +761,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         string table
     )
     {
-        if (_projectedColumnLayouts.TryGetValue((schema ?? "dbo", table), out var layout) && layout is not null)
+        if (_projectedColumnLayouts.TryGetValue((schema ?? "dbo", table), out var layout)
+            && layout is not null)
         {
             layout.IsKnown = false;
         }
@@ -665,9 +771,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     /// <summary>
     /// Invalidates the original exact-match certificate without discarding unrelated physical identities.
     /// </summary>
-    private void RemoveProjectedMatchingColumnBinding(string? schema, string table, string name)
+    private void RemoveProjectedMatchingColumnBinding(
+        string? schema,
+        string table,
+        string name
+    )
     {
-        if (_projectedColumnLayouts.TryGetValue((schema ?? "dbo", table), out var layout) && layout is not null)
+        if (_projectedColumnLayouts.TryGetValue((schema ?? "dbo", table), out var layout)
+            && layout is not null)
         {
             RemoveProjectedColumnIdentity(layout, name);
         }
@@ -693,7 +804,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         string newName
     )
     {
-        if (_projectedColumnLayouts.TryGetValue((schema ?? "dbo", table), out var layout) && layout is not null
+        if (_projectedColumnLayouts.TryGetValue((schema ?? "dbo", table), out var layout)
+            && layout is not null
             && layout.Bindings.TryGetValue(name, out var identity))
         {
             RemoveProjectedColumnIdentity(layout, name);
@@ -701,14 +813,20 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         }
     }
 
-    private static void RemoveProjectedColumnIdentity(ColumnLayoutState layout, string name)
+    private static void RemoveProjectedColumnIdentity(
+        ColumnLayoutState layout,
+        string name
+    )
     {
         if (!layout.Bindings.TryGetValue(name, out var identity))
         {
             return;
         }
 
-        foreach (var alias in layout.Bindings.Where(pair => pair.Value == identity).Select(static pair => pair.Key)
+        foreach (var alias in layout
+            .Bindings
+            .Where(pair => pair.Value == identity)
+            .Select(static pair => pair.Key)
             .ToArray())
         {
             layout.Bindings.Remove(alias);
@@ -721,7 +839,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         string name
     )
     {
-        if (!_projectedColumnLayouts.TryGetValue((schema ?? "dbo", table), out var layout) || layout is null)
+        if (!_projectedColumnLayouts.TryGetValue((schema ?? "dbo", table), out var layout)
+            || layout is null)
         {
             return;
         }
@@ -733,7 +852,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             return;
         }
 
-        foreach (var alias in layout.Bindings.Where(pair => pair.Value == identity).Select(static pair => pair.Key)
+        foreach (var alias in layout
+            .Bindings
+            .Where(pair => pair.Value == identity)
+            .Select(static pair => pair.Key)
             .ToArray())
         {
             layout.Bindings.Remove(alias);
@@ -741,6 +863,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
         layout.VisibleColumns--;
         layout.IsKnown = false;
+
         // WHY: DROP COLUMN removes the visible column, not necessarily its
         // fixed storage, packed-bit slot, null bitmap bit, or offset metadata.
         // The runtime lineage guard therefore rejects every new allocation,
@@ -762,11 +885,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     )
     {
         private int _allocatedColumns = columns;
-        private long _fixedBytes = fixedBytes;
         private int _bits = bits;
-        private int _variables = variables;
-        private int _nextIdentity = -1;
         private long _clusteredVariableExtra = clusteredVariableExtra;
+        private long _fixedBytes = fixedBytes;
+        private int _nextIdentity = -1;
+        private int _variables = variables;
 
         internal int VisibleColumns { get; set; } = columns;
 
@@ -785,12 +908,16 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         internal HashSet<int> ClusteredVariables { get; } = [];
 
         internal ColumnLayoutState CopyAllocation() => new(
-            _allocatedColumns, checked((int)_fixedBytes), _bits, _variables, IsKnown,
+            _allocatedColumns,
+            checked((int)_fixedBytes),
+            _bits,
+            _variables,
+            IsKnown,
             checked((int)_clusteredVariableExtra))
         {
-            VisibleColumns = this.VisibleColumns,
-            HasRows = this.HasRows,
-            RowCapacityKnown = this.RowCapacityKnown,
+            VisibleColumns = VisibleColumns,
+            HasRows = HasRows,
+            RowCapacityKnown = RowCapacityKnown,
         };
 
         internal void ReserveClusteredKey(
@@ -806,7 +933,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     continue;
                 }
 
-                if (VariableWidths.TryGetValue(identity, out var maximumBytes) && ClusteredVariables.Add(identity))
+                if (VariableWidths.TryGetValue(identity, out var maximumBytes)
+                    && ClusteredVariables.Add(identity))
                 {
                     _clusteredVariableExtra += Math.Max(0, maximumBytes - 24);
                 }
@@ -817,10 +945,28 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             SqlServerSafeMigrationCatalogSqlBuilder.ColumnStorageLayout addition = default
         )
         {
-            var variables = _variables + (addition.IsVariable ? 1 : 0);
-            var addedColumns = addition == default ? 0 : 1;
-            var bytes = _fixedBytes + addition.FixedBytes + (_bits + (addition.IsBit ? 1 : 0) + 7) / 8
-                + 6 + (_allocatedColumns + addedColumns + 7) / 8 + 2 + 26 * variables + _clusteredVariableExtra;
+            var variables = _variables
+                + (addition.IsVariable
+                    ? 1
+                    : 0);
+
+            var addedColumns = addition == default
+                ? 0
+                : 1;
+
+            var bytes = _fixedBytes
+                + addition.FixedBytes
+                + (_bits
+                    + (addition.IsBit
+                        ? 1
+                        : 0)
+                    + 7)
+                / 8
+                + 6
+                + (_allocatedColumns + addedColumns + 7) / 8
+                + 2
+                + 26 * variables
+                + _clusteredVariableExtra;
 
             return variables > 0 && bytes > 8060;
         }
@@ -839,10 +985,20 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 return "column_layout_unproven";
             }
 
-            var rowBytes = _fixedBytes + addition.FixedBytes + (_bits + (addition.IsBit ? 1 : 0) + 7) / 8
-                + 6 + (_allocatedColumns + 8) / 8;
+            var rowBytes = _fixedBytes
+                + addition.FixedBytes
+                + (_bits
+                    + (addition.IsBit
+                        ? 1
+                        : 0)
+                    + 7)
+                / 8
+                + 6
+                + (_allocatedColumns + 8) / 8;
 
-            return rowBytes > 8060 ? "column_fixed_row_limit" : null;
+            return rowBytes > 8060
+                ? "column_fixed_row_limit"
+                : null;
         }
 
         internal void Add(
@@ -865,8 +1021,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             VisibleColumns++;
             _allocatedColumns++;
             _fixedBytes += storage.FixedBytes;
-            _bits += storage.IsBit ? 1 : 0;
-            _variables += storage.IsVariable ? 1 : 0;
+            _bits += storage.IsBit
+                ? 1
+                : 0;
+
+            _variables += storage.IsVariable
+                ? 1
+                : 0;
         }
     }
 }

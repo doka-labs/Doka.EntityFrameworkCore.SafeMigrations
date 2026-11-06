@@ -55,7 +55,13 @@ public sealed class MySqlNullProofEligibilityTests
             MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder)
         {
             DataProbe = new MySqlSafeMigrationDataProbe(
-                "proof_rows", "Value", 800, "`proof_rows`", "`Value`", "fresh_transition", "narrowing"),
+                "proof_rows",
+                "Value",
+                800,
+                "`proof_rows`",
+                "`Value`",
+                "fresh_transition",
+                "narrowing"),
             NullabilityDataProbe = new MySqlSafeMigrationNullabilityDataProbe(
                 "physical_nullable",
                 "physical_same OR " + MySqlSafeMigrationRuntimePlan.TransitionInvariantPlaceholder,
@@ -64,13 +70,23 @@ public sealed class MySqlNullProofEligibilityTests
 
         // Act
         var analysis = plan.RenderStateExpression(
-            static _ => throw new InvalidOperationException(), dataBlocked: false, transitionEligible);
+            static _ => throw new InvalidOperationException(),
+            dataBlocked: false,
+            transitionEligible);
+
         var runtimeInvariant = plan.RenderPreparedNullabilityRepairInvariantExpression([]);
 
         // Assert
-        var transition = transitionEligible ? "TRUE" : "FALSE";
-        Assert.Equal("CASE WHEN (physical_nullable) AND (physical_same OR " + transition
-            + ") THEN (fresh_null_probe) ELSE FALSE END", analysis);
+        var transition = transitionEligible
+            ? "TRUE"
+            : "FALSE";
+
+        Assert.Equal(
+            "CASE WHEN (physical_nullable) AND (physical_same OR "
+            + transition
+            + ") THEN (fresh_null_probe) ELSE FALSE END",
+            analysis);
+
         Assert.Equal("physical_same OR @doka_sm_transition_eligible", runtimeInvariant);
         Assert.DoesNotContain("__DOKA_SM_", analysis, StringComparison.Ordinal);
     }

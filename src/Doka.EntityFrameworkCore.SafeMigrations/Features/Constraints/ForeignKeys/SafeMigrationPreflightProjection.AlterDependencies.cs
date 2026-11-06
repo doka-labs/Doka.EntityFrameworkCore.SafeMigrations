@@ -53,7 +53,8 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         if ((definition.OnDelete != ReferentialAction.SetNull && definition.OnUpdate != ReferentialAction.SetNull)
             || !_projectedForeignKeyOwners.Comparer.Equals(
-                ResolveAlterTable(new TableKey(definition.Table, definition.Schema)), target))
+                ResolveAlterTable(new TableKey(definition.Table, definition.Schema)),
+                target))
         {
             return false;
         }
@@ -123,7 +124,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         return _projectedForeignKeyColumns.TryGetValue(
-                ResolveAlterTable(key), out var referencedColumns)
+                ResolveAlterTable(key),
+                out var referencedColumns)
             && referencedColumns.Contains(column);
     }
 
@@ -146,9 +148,10 @@ internal sealed partial class SafeMigrationPreflightProjection
             var canonical = ResolveAlterTable(table);
             if (!dependencies.TryGetValue(canonical, out var names))
             {
-                names = new HashSet<string>(new IdentifierComparer(
-                    _objectIdentityNormalizer,
-                    _objectIdentityNormalizer?.ColumnIdentifierComparer));
+                names = new HashSet<string>(
+                    new IdentifierComparer(
+                        _objectIdentityNormalizer,
+                        _objectIdentityNormalizer?.ColumnIdentifierComparer));
 
                 dependencies.Add(canonical, names);
             }
@@ -162,7 +165,9 @@ internal sealed partial class SafeMigrationPreflightProjection
     /// <returns>The original physical identity, or the unchanged identity when no rename was accepted.</returns>
     private TableKey ResolveAlterTable(
         TableKey table
-    ) => _renamedTableSources.TryGetValue(table, out var source) ? source : table;
+    ) => _renamedTableSources.TryGetValue(table, out var source)
+        ? source
+        : table;
 
     /// <summary>Refreshes one candidate owner and expires its derived column-dependency index when needed.</summary>
     /// <param name="table">The owner whose accepted FK definitions may have changed.</param>

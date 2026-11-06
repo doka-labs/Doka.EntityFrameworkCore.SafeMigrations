@@ -196,7 +196,7 @@ the folder layout itself is not performance evidence.
 - [SQLite provider](../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite)
 - [SQL Server provider](../../src/Doka.EntityFrameworkCore.SafeMigrations.SqlServer)
 - [Package qualification](../../eng/qualify-packages.sh)
-- [Performance budgets](../../eng/performance-budgets.json)
+- [Benchmark workloads and evidence](../support-and-qualification.md#performance-and-memory)
 
 ### Sources
 

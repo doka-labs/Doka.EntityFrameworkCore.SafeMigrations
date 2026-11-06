@@ -87,7 +87,10 @@ public sealed class SafeMigrationContractPropertyTests
         string? candidate
     )
     {
-        var canonical = Convert.ToHexString(SHA256.HashData(rawDigest ?? [])).ToLowerInvariant();
+        var canonical = Convert
+            .ToHexString(SHA256.HashData(rawDigest ?? []))
+            .ToLowerInvariant();
+
         var expectedToPass = candidate is not null && IsCanonicalFingerprint(candidate);
 
         SafeMigrationContractFingerprint.Validate(canonical, nameof(canonical));
@@ -118,8 +121,8 @@ public sealed class SafeMigrationContractPropertyTests
 
         return parsed
             ? expression is not null
-                && failureCode.Length == 0
-                && SafeMigrationSqlExpressionInspector.IsStructurallyComparable(expression)
+            && failureCode.Length == 0
+            && SafeMigrationSqlExpressionInspector.IsStructurallyComparable(expression)
             : expression is null && failureCode.Length > 0;
     }
 
@@ -165,14 +168,16 @@ public sealed class SafeMigrationContractPropertyTests
     )
     {
         var value = SafeMigrationSql.Identifier("app", identifier);
-        var lower = SafeMigrationSql.Literal((long)literal - 1L);
-        var upper = SafeMigrationSql.Literal((long)literal + 1L);
+        var lower = SafeMigrationSql.Literal(literal - 1L);
+        var upper = SafeMigrationSql.Literal(literal + 1L);
 
         return (shapeSelector % 6) switch
         {
             0 => SafeMigrationSql.Binary(value, binaryOperator, SafeMigrationSql.Literal(literal)),
             1 => SafeMigrationSql.Unary(
-                negated ? SafeMigrationSqlUnaryOperator.Not : SafeMigrationSqlUnaryOperator.Negate,
+                negated
+                    ? SafeMigrationSqlUnaryOperator.Not
+                    : SafeMigrationSqlUnaryOperator.Negate,
                 value),
             2 => SafeMigrationSql.Between(value, lower, upper, negated),
             3 => SafeMigrationSql.In(value, [lower, upper], negated),

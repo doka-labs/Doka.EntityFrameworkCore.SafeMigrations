@@ -64,7 +64,13 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
     {
         // Arrange
         var foreignKey = ForeignKey();
-        var indexes = Capture(foreignKey, occupied: true, projected ? [] : ["covering"]);
+        var indexes = Capture(
+            foreignKey,
+            occupied: true,
+            projected
+                ? []
+                : ["covering"]);
+
         if (projected)
         {
             Apply(indexes, new EnsureIndexIntent(Index("covering", "parent_id")));
@@ -97,12 +103,13 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
                 indexes.ObserveProviderOperation(new SqlOperation { Sql = "SELECT 1" });
                 break;
             case "Unknown":
-                indexes.ObserveProviderOperation(new CreateIndexOperation
-                {
-                    Table = "child",
-                    Name = "unknown",
-                    Columns = ["parent_id"],
-                });
+                indexes.ObserveProviderOperation(
+                    new CreateIndexOperation
+                    {
+                        Table = "child",
+                        Name = "unknown",
+                        Columns = ["parent_id"],
+                    });
 
                 break;
             case "Dropped":
@@ -110,7 +117,11 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
                 break;
             case "WrongOwner":
                 requested = new ExpectedForeignKeyDefinition(
-                    foreignKey.Name, "Child", ["parent_id"], "parent", ["id"]);
+                    foreignKey.Name,
+                    "Child",
+                    ["parent_id"],
+                    "parent",
+                    ["id"]);
 
                 break;
             case "UncapturedShape":
@@ -203,7 +214,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         var operation = Operation(new EnsureIndexIntent(Index("new_cover", "parent_id")));
 
         // Act
-        indexes.ObserveAcceptedOperation(operation, Analysis(state), new(action, code));
+        indexes.ObserveAcceptedOperation(operation, Analysis(state), new SafeMigrationDecision(action, code));
         var result = indexes.CanEnsure(foreignKey);
 
         // Assert
@@ -220,7 +231,11 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
 
         // Act
         var before = indexes.CanEnsure(foreignKey);
-        indexes.ObserveAcceptedOperation(future, Analysis(), new(SafeMigrationAction.Apply, "ApplyMissing"));
+        indexes.ObserveAcceptedOperation(
+            future,
+            Analysis(),
+            new SafeMigrationDecision(SafeMigrationAction.Apply, "ApplyMissing"));
+
         var after = indexes.CanEnsure(foreignKey);
 
         // Assert
@@ -288,7 +303,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         indexes.ObserveAcceptedOperation(
             operation,
             Analysis(SafeMigrationObservedState.Different),
-            new(SafeMigrationAction.Repair, "RepairDifferent"));
+            new SafeMigrationDecision(SafeMigrationAction.Repair, "RepairDifferent"));
 
         var result = indexes.CanEnsure(foreignKey);
 
@@ -315,7 +330,8 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
             "prefix" => new ExpectedIndexKeyDefinition(column: "parent_id", prefixLength: 1),
             "expression" => new ExpectedIndexKeyDefinition(expression: "parent_id + 0"),
             "null_order" => new ExpectedIndexKeyDefinition(
-                column: "parent_id", nullOrder: SafeMigrationIndexNullOrder.First),
+                column: "parent_id",
+                nullOrder: SafeMigrationIndexNullOrder.First),
             _ => new ExpectedIndexKeyDefinition(column: "parent_id"),
         };
 
@@ -323,9 +339,15 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
             "new_cover",
             "child",
             [key],
-            filter: shape == "filter" ? "parent_id IS NOT NULL" : null,
-            includedColumns: shape == "included" ? ["other"] : null,
-            method: shape == "hash" ? "HASH" : null);
+            filter: shape == "filter"
+                ? "parent_id IS NOT NULL"
+                : null,
+            includedColumns: shape == "included"
+                ? ["other"]
+                : null,
+            method: shape == "hash"
+                ? "HASH"
+                : null);
 
         // Act
         Apply(indexes, new EnsureIndexIntent(index));
@@ -354,7 +376,9 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
 
         indexes.Capture(foreignKey, localNameOccupied: true, []);
         var index = new ExpectedIndexDefinition(
-            "new_cover", "child", [new ExpectedIndexKeyDefinition(column: "parent_id", sortOrder: sortOrder)]);
+            "new_cover",
+            "child",
+            [new ExpectedIndexKeyDefinition(column: "parent_id", sortOrder: sortOrder)]);
 
         // Act
         Apply(indexes, new EnsureIndexIntent(index));
@@ -375,8 +399,9 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         var foreignKey = ForeignKey();
         var indexes = Capture(foreignKey, occupied: true);
         SafeMigrationIntent key = kind == "primary"
-            ? new EnsurePrimaryKeyIntent(new("pk_child", "child", ["parent_id"]))
-            : new EnsureUniqueConstraintIntent(new("uq_child", "child", ["parent_id"]));
+            ? new EnsurePrimaryKeyIntent(new ExpectedPrimaryKeyDefinition("pk_child", "child", ["parent_id"]))
+            : new EnsureUniqueConstraintIntent(
+                new ExpectedUniqueConstraintDefinition("uq_child", "child", ["parent_id"]));
 
         // Act
         Apply(indexes, key);
@@ -435,13 +460,21 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         var source = new ExpectedColumnDefinition("parent_id", typeof(int), sourceNullable, storeType: "int");
         var target = new ExpectedColumnDefinition("parent_id", typeof(int), !sourceNullable, storeType: "int");
         var operation = new SafeMigrationOperation(
-            new AlterColumnIntent("child", target, source), SafeMigrationPolicy.RepairIfSafe);
+            new AlterColumnIntent("child", target, source),
+            SafeMigrationPolicy.RepairIfSafe);
 
         var analysis = new SafeMigrationProviderAnalysis(
-            SafeMigrationObservedState.Different, SafeMigrationRepairCapability.Safe, false, "CapturedSafeRepair");
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            false,
+            "CapturedSafeRepair");
 
         // Act
-        indexes.ObserveAcceptedOperation(operation, analysis, new(SafeMigrationAction.Repair, "RepairDifferent"));
+        indexes.ObserveAcceptedOperation(
+            operation,
+            analysis,
+            new SafeMigrationDecision(SafeMigrationAction.Repair, "RepairDifferent"));
+
         var covering = indexes.CanEnsure(foreignKey);
         var unsafeRisk = indexes.HasUnsafeMultiValuedIndex(foreignKey);
         var unrelatedRisk = indexes.HasUnsafeMultiValuedIndex(ForeignKey("other_id"));
@@ -466,17 +499,34 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         var indexes = Capture(foreignKey, occupied: true, "covering");
         indexes.Capture(foreignKey, localNameOccupied: true, [], ["unsafe_mvi"]);
         var source = new ExpectedColumnDefinition(
-            "parent_id", typeof(string), isNullable: false, storeType: "varchar(32)", maxLength: 32,
+            "parent_id",
+            typeof(string),
+            isNullable: false,
+            storeType: "varchar(32)",
+            maxLength: 32,
             collation: new SafeMigrationCollationIdentifier("utf8mb4_bin"));
 
-        var annotatedColumn = new AlterColumnOperation { Table = "child", Name = "parent_id" };
+        var annotatedColumn = new AlterColumnOperation
+        {
+            Table = "child",
+            Name = "parent_id",
+        };
+
         annotatedColumn["MySql:UnreviewedStorageFacet"] = "changed";
         var target = new ExpectedColumnDefinition(
-            "parent_id", typeof(string), isNullable: true,
-            storeType: difference == "Storage" ? "varchar(64)" : "varchar(32)",
-            maxLength: difference == "Storage" ? 64 : 32,
+            "parent_id",
+            typeof(string),
+            isNullable: true,
+            storeType: difference == "Storage"
+                ? "varchar(64)"
+                : "varchar(32)",
+            maxLength: difference == "Storage"
+                ? 64
+                : 32,
             collation: new SafeMigrationCollationIdentifier(
-                difference == "Collation" ? "utf8mb4_general_ci" : "utf8mb4_bin"))
+                difference == "Collation"
+                    ? "utf8mb4_general_ci"
+                    : "utf8mb4_bin"))
         {
             ProviderAnnotations = difference == "Annotation"
                 ? SafeMigrationProviderAnnotation.Capture(annotatedColumn)
@@ -484,14 +534,26 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         };
 
         var operation = new SafeMigrationOperation(
-            new AlterColumnIntent("child", target, difference == "MissingOldDefinition" ? null : source),
+            new AlterColumnIntent(
+                "child",
+                target,
+                difference == "MissingOldDefinition"
+                    ? null
+                    : source),
             SafeMigrationPolicy.RepairIfSafe);
 
         var analysis = new SafeMigrationProviderAnalysis(
-            SafeMigrationObservedState.Different, SafeMigrationRepairCapability.Safe, false, "CapturedSafeRepair");
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            false,
+            "CapturedSafeRepair");
 
         // Act
-        indexes.ObserveAcceptedOperation(operation, analysis, new(SafeMigrationAction.Repair, "RepairDifferent"));
+        indexes.ObserveAcceptedOperation(
+            operation,
+            analysis,
+            new SafeMigrationDecision(SafeMigrationAction.Repair, "RepairDifferent"));
+
         var covering = indexes.CanEnsure(foreignKey);
         var unsafeRisk = indexes.HasUnsafeMultiValuedIndex(foreignKey);
 
@@ -516,7 +578,10 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
             SafeMigrationPolicy.RepairIfSafe);
 
         var analysis = new SafeMigrationProviderAnalysis(
-            SafeMigrationObservedState.Different, SafeMigrationRepairCapability.Safe, false, "CapturedSafeRepair");
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            false,
+            "CapturedSafeRepair");
 
         if (certified)
         {
@@ -524,7 +589,11 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         }
 
         // Act
-        indexes.ObserveAcceptedOperation(operation, analysis, new(SafeMigrationAction.Repair, "RepairDifferent"));
+        indexes.ObserveAcceptedOperation(
+            operation,
+            analysis,
+            new SafeMigrationDecision(SafeMigrationAction.Repair, "RepairDifferent"));
+
         var covering = indexes.CanEnsure(foreignKey);
         var unsafeRisk = indexes.HasUnsafeMultiValuedIndex(foreignKey);
         var unrelatedRisk = indexes.HasUnsafeMultiValuedIndex(ForeignKey("other_id"));
@@ -547,11 +616,18 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
             SafeMigrationPolicy.RepairIfSafe);
 
         var analysis = new SafeMigrationProviderAnalysis(
-            SafeMigrationObservedState.Different, SafeMigrationRepairCapability.Safe, false, "CapturedSafeRepair")
+                SafeMigrationObservedState.Different,
+                SafeMigrationRepairCapability.Safe,
+                false,
+                "CapturedSafeRepair")
             .WithRepairPreservesPhysicalKeys();
 
         // Act
-        indexes.ObserveAcceptedOperation(operation, analysis, new(SafeMigrationAction.Repair, "RepairDifferent"));
+        indexes.ObserveAcceptedOperation(
+            operation,
+            analysis,
+            new SafeMigrationDecision(SafeMigrationAction.Repair, "RepairDifferent"));
+
         var covering = indexes.CanEnsure(foreignKey);
         var unsafeRisk = indexes.HasUnsafeMultiValuedIndex(foreignKey);
 
@@ -574,18 +650,27 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
     {
         // Arrange
         var foreignKey = ForeignKey();
-        var indexes = Capture(foreignKey, occupied: true, capturedCoverage ? ["covering"] : []);
+        var indexes = Capture(
+            foreignKey,
+            occupied: true,
+            capturedCoverage
+                ? ["covering"]
+                : []);
+
         indexes.Capture(foreignKey, localNameOccupied: true, [], ["unsafe_mvi"]);
         var operation = new SafeMigrationOperation(
             new EnsureColumnIntent("child", new ExpectedColumnDefinition("parent_id", typeof(int), isNullable: true)),
             SafeMigrationPolicy.RepairIfSafe);
 
         var analysis = new SafeMigrationProviderAnalysis(
-            SafeMigrationObservedState.Different, SafeMigrationRepairCapability.Safe, false, "CapturedSafeRepair")
+                SafeMigrationObservedState.Different,
+                SafeMigrationRepairCapability.Safe,
+                false,
+                "CapturedSafeRepair")
             .WithRepairPreservesPhysicalKeys();
 
         // Act
-        indexes.ObserveAcceptedOperation(operation, analysis, new(action, "Nonexecuting"));
+        indexes.ObserveAcceptedOperation(operation, analysis, new SafeMigrationDecision(action, "Nonexecuting"));
         var covering = indexes.CanEnsure(foreignKey);
         var unsafeRisk = indexes.HasUnsafeMultiValuedIndex(foreignKey);
         var unrelatedRisk = indexes.HasUnsafeMultiValuedIndex(ForeignKey("other_id"));
@@ -622,7 +707,11 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         var foreignKey = ForeignKey();
         var indexes = Capture(foreignKey, occupied: false, "covering");
         MigrationOperation operation = rename
-            ? new RenameIndexOperation { Name = "covering", NewName = "other" }
+            ? new RenameIndexOperation
+            {
+                Name = "covering",
+                NewName = "other",
+            }
             : new DropIndexOperation { Name = "covering" };
 
         // Act
@@ -679,7 +768,8 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         var indexes = Capture(foreignKey, occupied: true, "old_cover");
         Apply(indexes, new DropTableIntent("child"));
         var table = new ExpectedTableDefinition(
-            "child", [new ExpectedColumnDefinition("parent_id", typeof(int), isNullable: true)]);
+            "child",
+            [new ExpectedColumnDefinition("parent_id", typeof(int), isNullable: true)]);
 
         // Act
         Apply(indexes, new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition));
@@ -702,8 +792,10 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         var indexes = Capture(foreignKey, occupied: true);
         var table = new ExpectedTableDefinition(
             "child",
-            [new ExpectedColumnDefinition("parent_id", typeof(int), isNullable: true),
-                new ExpectedColumnDefinition("old_parent_id", typeof(int), isNullable: true)],
+            [
+                new ExpectedColumnDefinition("parent_id", typeof(int), isNullable: true),
+                new ExpectedColumnDefinition("old_parent_id", typeof(int), isNullable: true),
+            ],
             uniqueConstraints: [new ExpectedUniqueConstraintDefinition(foreignKey.Name, "child", [inlineColumn])]);
 
         // Act
@@ -721,10 +813,14 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         var foreignKey = ForeignKey();
         var indexes = Capture(foreignKey, occupied: true);
         var table = new ExpectedTableDefinition(
-            "child", [new ExpectedColumnDefinition("parent_id", typeof(int), isNullable: true)]);
+            "child",
+            [new ExpectedColumnDefinition("parent_id", typeof(int), isNullable: true)]);
 
         var analysis = new SafeMigrationProviderAnalysis(
-            SafeMigrationObservedState.Missing, SafeMigrationRepairCapability.None, false, "DeferredRows")
+            SafeMigrationObservedState.Missing,
+            SafeMigrationRepairCapability.None,
+            false,
+            "DeferredRows")
         {
             RequiresLiveDataProof = true,
         };
@@ -733,7 +829,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         indexes.ObserveAcceptedOperation(
             Operation(new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition)),
             analysis,
-            new(SafeMigrationAction.Apply, "ApplyMissing"));
+            new SafeMigrationDecision(SafeMigrationAction.Apply, "ApplyMissing"));
 
         var result = indexes.CanEnsure(foreignKey);
 
@@ -747,7 +843,12 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         // Arrange
         var foreignKey = ForeignKey();
         var renamed = new ExpectedForeignKeyDefinition(
-            "fk_child_parent", "renamed_child", ["parent_id"], "parent", ["id"]);
+            "fk_child_parent",
+            "renamed_child",
+            ["parent_id"],
+            "parent",
+            ["id"]);
+
         var indexes = Capture(foreignKey, occupied: true, "covering");
         Apply(indexes, new RenameTableIntent("child", "renamed_child"));
 
@@ -766,14 +867,20 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         // Arrange
         var foreignKey = ForeignKey();
         var indexes = new MySqlProjectedForeignKeySupportingIndexes(
-            static schema => schema is null or "current_db" ? null : schema,
+            static schema => schema is null or "current_db"
+                ? null
+                : schema,
             isMariaDb: false);
 
         indexes.Capture(foreignKey, localNameOccupied: true, ["Covering"]);
         Apply(indexes, new DropIndexIntent("COVERING", "child", "current_db"));
         Apply(indexes, new EnsureIndexIntent(Index("fresh", "PARENT_ID")));
         var caseChangedTable = new ExpectedForeignKeyDefinition(
-            "fk_child_parent", "Child", ["parent_id"], "parent", ["id"]);
+            "fk_child_parent",
+            "Child",
+            ["parent_id"],
+            "parent",
+            ["id"]);
 
         // Act
         var matchingOwner = indexes.CanEnsure(foreignKey);
@@ -892,7 +999,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         var operation = Operation(new DropIndexIntent("unsafe_mvi", "child"));
 
         // Act
-        indexes.ObserveAcceptedOperation(operation, Analysis(), new(action, "NotApplied"));
+        indexes.ObserveAcceptedOperation(operation, Analysis(), new SafeMigrationDecision(action, "NotApplied"));
         var result = indexes.HasUnsafeMultiValuedIndex(foreignKey);
 
         // Assert
@@ -1020,12 +1127,13 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         var foreignKey = ForeignKey();
         var indexes = CaptureUnsafe(foreignKey, "unsafe_mvi");
         Apply(indexes, new DropIndexIntent("unsafe_mvi", "child"));
-        indexes.ObserveProviderOperation(new CreateIndexOperation
-        {
-            Name = "new_index",
-            Table = "child",
-            Columns = ["parent_id"],
-        });
+        indexes.ObserveProviderOperation(
+            new CreateIndexOperation
+            {
+                Name = "new_index",
+                Table = "child",
+                Columns = ["parent_id"],
+            });
 
         // Act
         var result = indexes.HasUnsafeMultiValuedIndex(foreignKey);
@@ -1043,7 +1151,8 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         indexes.ObserveProviderOperation(new SqlOperation { Sql = "SELECT 1" });
         Apply(indexes, new DropTableIntent("child"));
         var table = new ExpectedTableDefinition(
-            "child", [new ExpectedColumnDefinition("parent_id", typeof(int), isNullable: true)]);
+            "child",
+            [new ExpectedColumnDefinition("parent_id", typeof(int), isNullable: true)]);
 
         // Act
         Apply(indexes, new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition));
@@ -1060,13 +1169,14 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         var foreignKey = ForeignKey();
         var indexes = CaptureUnsafe(foreignKey, "unsafe_mvi");
         var table = new ExpectedTableDefinition(
-            "child", [new ExpectedColumnDefinition("parent_id", typeof(int), isNullable: true)]);
+            "child",
+            [new ExpectedColumnDefinition("parent_id", typeof(int), isNullable: true)]);
 
         // Act
         indexes.ObserveAcceptedOperation(
             Operation(new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition)),
             Analysis(SafeMigrationObservedState.Matching),
-            new(SafeMigrationAction.NoOp, "NoOpMatching"));
+            new SafeMigrationDecision(SafeMigrationAction.NoOp, "NoOpMatching"));
 
         var result = indexes.HasUnsafeMultiValuedIndex(foreignKey);
 
@@ -1159,10 +1269,16 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
     {
         // Arrange
         var foreignKey = new ExpectedForeignKeyDefinition(
-            "fk_child_parent", "Child", ["parent_id"], "parent", ["id"]);
+            "fk_child_parent",
+            "Child",
+            ["parent_id"],
+            "parent",
+            ["id"]);
 
         var indexes = new MySqlProjectedForeignKeySupportingIndexes(
-            static schema => schema, isMariaDb: false, static table => table.ToLowerInvariant());
+            static schema => schema,
+            isMariaDb: false,
+            static table => table.ToLowerInvariant());
 
         indexes.Capture(foreignKey, localNameOccupied: true, ["old_cover"], ["unsafe_mvi"]);
         Apply(indexes, new DropForeignKeyIntent(foreignKey.Name, "CHILD"));
@@ -1172,8 +1288,13 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         // Act
         var beforeCover = indexes.CanEnsure(foreignKey);
         var remainingRisk = indexes.HasUnsafeMultiValuedIndex(foreignKey);
-        Apply(indexes, new EnsureIndexIntent(new ExpectedIndexDefinition(
-            "new_cover", "CHILD", [new ExpectedIndexKeyDefinition(column: "parent_id")])));
+        Apply(
+            indexes,
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "new_cover",
+                    "CHILD",
+                    [new ExpectedIndexKeyDefinition(column: "parent_id")])));
 
         var afterCover = indexes.CanEnsure(foreignKey);
 
@@ -1185,8 +1306,16 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
 
     private static ExpectedForeignKeyDefinition ForeignKey(
         params string[] columns
-    ) => new("fk_child_parent", "child", columns.Length == 0 ? ["parent_id"] : columns,
-        "parent", columns.Length == 0 ? ["id"] : columns);
+    ) => new(
+        "fk_child_parent",
+        "child",
+        columns.Length == 0
+            ? ["parent_id"]
+            : columns,
+        "parent",
+        columns.Length == 0
+            ? ["id"]
+            : columns);
 
     private static ExpectedIndexDefinition Index(
         string name,
@@ -1230,5 +1359,7 @@ public sealed class MySqlProjectedForeignKeySupportingIndexesTests
         MySqlProjectedForeignKeySupportingIndexes indexes,
         SafeMigrationIntent intent
     ) => indexes.ObserveAcceptedOperation(
-        Operation(intent), Analysis(), new(SafeMigrationAction.Apply, "ApplyMissing"));
+        Operation(intent),
+        Analysis(),
+        new SafeMigrationDecision(SafeMigrationAction.Apply, "ApplyMissing"));
 }

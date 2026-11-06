@@ -8,38 +8,64 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("none")]
     [InlineData("delete")]
     [InlineData("model")]
-    public void RequiredSqlNullAddBlockedRowsDoNotSurviveEarlierDml(string mutation)
+    public void RequiredSqlNullAddBlockedRowsDoNotSurviveEarlierDml(
+        string mutation
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        var target = new ExpectedColumnDefinition("value", typeof(int), false, "int",
+        var target = new ExpectedColumnDefinition(
+            "value",
+            typeof(int),
+            false,
+            "int",
             defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(null)));
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", target),
+
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", target),
             SafeMigrationPolicy.RepairIfSafe);
-        var live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.DataBlocked,
-            SafeMigrationRepairCapability.None, false, "classified_data_blocked")
+
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.DataBlocked,
+            SafeMigrationRepairCapability.None,
+            false,
+            "classified_data_blocked")
         {
             RequiresLiveDataProof = true,
         };
 
-        var modelOperation = new SafeMigrationOperation(new EnsureModelManagedDataIntent("other",
-            ["id"], ["int"], ["id"], ["int"], new object?[,] { { 1 } }, null, null),
+        var modelOperation = new SafeMigrationOperation(
+            new EnsureModelManagedDataIntent(
+                "other",
+                ["id"],
+                ["int"],
+                ["id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                null,
+                null),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var modelLive = Live(SafeMigrationObservedState.Missing);
-        var modelDecision = SafeMigrationDecisionPlanner.Plan(modelOperation.Intent.Kind, modelLive.ObservedState,
-            modelOperation.Policy, modelLive.RepairCapability);
+        var modelDecision = SafeMigrationDecisionPlanner.Plan(
+            modelOperation.Intent.Kind,
+            modelLive.ObservedState,
+            modelOperation.Policy,
+            modelLive.RepairCapability);
+
         var mutated = mutation != "none";
 
         // Act
         if (mutation == "delete")
         {
-            projection.ObserveProviderPostcondition(new DeleteDataOperation
-            {
-                Table = "items",
-                KeyColumns = ["id"],
-                KeyColumnTypes = ["int"],
-                KeyValues = new object?[,] { { 1 } },
-            });
+            projection.ObserveProviderPostcondition(
+                new DeleteDataOperation
+                {
+                    Table = "items",
+                    KeyColumns = ["id"],
+                    KeyColumnTypes = ["int"],
+                    KeyValues = new object?[,] { { 1 } },
+                });
         }
         else if (mutation == "model")
         {
@@ -49,9 +75,18 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var result = projection.Project(operation, live);
 
         // Assert
-        Assert.Equal(mutated ? SafeMigrationObservedState.PrerequisiteMissing
-            : SafeMigrationObservedState.DataBlocked, result.ObservedState);
-        Assert.Equal(mutated ? "projected_data_state_unknown" : "classified_data_blocked", result.Code);
+        Assert.Equal(
+            mutated
+                ? SafeMigrationObservedState.PrerequisiteMissing
+                : SafeMigrationObservedState.DataBlocked,
+            result.ObservedState);
+
+        Assert.Equal(
+            mutated
+                ? "projected_data_state_unknown"
+                : "classified_data_blocked",
+            result.Code);
+
         Assert.Equal(SafeMigrationRepairCapability.None, result.RepairCapability);
         if (!mutated)
         {
@@ -67,35 +102,67 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void AcceptedEnsureTargetUsesOnlyProviderColumnNameIdentity(bool ignoreColumnCase, bool changeFacet)
+    public void AcceptedEnsureTargetUsesOnlyProviderColumnNameIdentity(
+        bool ignoreColumnCase,
+        bool changeFacet
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection(
             objectIdentityNormalizer: new ForeignKeyMemberIdentityNormalizer(ignoreColumnCase));
-        var first = new SafeMigrationOperation(new EnsureColumnIntent("items", Column("Id")),
+
+        var first = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", Column("Id")),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var live = Live(SafeMigrationObservedState.Missing);
         var firstResult = projection.Project(first, live);
-        var firstDecision = SafeMigrationDecisionPlanner.Plan(first.Intent.Kind, firstResult.ObservedState,
-            first.Policy, firstResult.RepairCapability);
-        var target = new ExpectedColumnDefinition("id", typeof(int), false, "int",
-            comment: changeFacet ? "reviewed" : null);
-        var second = new SafeMigrationOperation(new EnsureColumnIntent("items", target),
+        var firstDecision = SafeMigrationDecisionPlanner.Plan(
+            first.Intent.Kind,
+            firstResult.ObservedState,
+            first.Policy,
+            firstResult.RepairCapability);
+
+        var target = new ExpectedColumnDefinition(
+            "id",
+            typeof(int),
+            false,
+            "int",
+            comment: changeFacet
+                ? "reviewed"
+                : null);
+
+        var second = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", target),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
         projection.Observe(first, live, firstResult, firstDecision);
         var result = projection.Project(second, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(second.Intent.Kind, result.ObservedState,
-            second.Policy, result.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            second.Intent.Kind,
+            result.ObservedState,
+            second.Policy,
+            result.RepairCapability);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, firstDecision.Action);
-        Assert.Equal(!ignoreColumnCase ? SafeMigrationObservedState.Missing
-            : changeFacet ? SafeMigrationObservedState.Different : SafeMigrationObservedState.Matching,
+        Assert.Equal(
+            !ignoreColumnCase
+                ? SafeMigrationObservedState.Missing
+                : changeFacet
+                    ? SafeMigrationObservedState.Different
+                    : SafeMigrationObservedState.Matching,
             result.ObservedState);
-        Assert.Equal(!ignoreColumnCase ? SafeMigrationAction.Apply
-            : changeFacet ? SafeMigrationAction.RejectDifferent : SafeMigrationAction.NoOp, decision.Action);
+
+        Assert.Equal(
+            !ignoreColumnCase
+                ? SafeMigrationAction.Apply
+                : changeFacet
+                    ? SafeMigrationAction.RejectDifferent
+                    : SafeMigrationAction.NoOp,
+            decision.Action);
+
         Assert.Equal(SafeMigrationRepairCapability.None, result.RepairCapability);
     }
 
@@ -106,12 +173,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Arrange
         var projection = new SafeMigrationPreflightProjection(
             objectIdentityNormalizer: new ForeignKeyMemberIdentityNormalizer(ignoreColumnCase: true));
-        Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items", [Column("Id")]),
-            SafeMigrationTableMode.StrictDefinition));
-        var matching = new SafeMigrationOperation(new EnsureColumnIntent("items", Column("id")),
+
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("items", [Column("Id")]),
+                SafeMigrationTableMode.StrictDefinition));
+
+        var matching = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", Column("id")),
             SafeMigrationPolicy.RepairIfSafe);
-        var otherOwner = new SafeMigrationOperation(new EnsureColumnIntent("ITEMS", Column("id")),
+
+        var otherOwner = new SafeMigrationOperation(
+            new EnsureColumnIntent("ITEMS", Column("id")),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var missing = Live(SafeMigrationObservedState.Missing);
 
         // Act
@@ -131,30 +207,66 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(true, "none")]
     [InlineData(true, "source")]
     [InlineData(true, "target")]
-    public void AcceptedAlterSourceUsesOnlyProviderColumnNameIdentity(bool ignoreColumnCase, string drift)
+    public void AcceptedAlterSourceUsesOnlyProviderColumnNameIdentity(
+        bool ignoreColumnCase,
+        string drift
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection(
             objectIdentityNormalizer: new ForeignKeyMemberIdentityNormalizer(ignoreColumnCase));
+
         Apply(projection, new EnsureColumnIntent("items", Column("Id")));
-        var old = new ExpectedColumnDefinition("id", typeof(int), false, "int",
-            comment: drift == "source" ? "unproven" : null);
-        var target = new ExpectedColumnDefinition("id", typeof(int), true, drift == "target" ? "bigint" : "int");
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("items", target, old),
+        var old = new ExpectedColumnDefinition(
+            "id",
+            typeof(int),
+            false,
+            "int",
+            comment: drift == "source"
+                ? "unproven"
+                : null);
+
+        var target = new ExpectedColumnDefinition(
+            "id",
+            typeof(int),
+            true,
+            drift == "target"
+                ? "bigint"
+                : "int");
+
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent("items", target, old),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
         var result = projection.Project(operation, Live(SafeMigrationObservedState.Missing));
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, result.ObservedState,
-            operation.Policy, result.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            result.ObservedState,
+            operation.Policy,
+            result.RepairCapability);
 
         // Assert
-        Assert.Equal(ignoreColumnCase ? SafeMigrationObservedState.Different
-            : SafeMigrationObservedState.PrerequisiteMissing, result.ObservedState);
-        Assert.Equal(ignoreColumnCase && drift == "none" ? SafeMigrationRepairCapability.Safe
-            : SafeMigrationRepairCapability.None, result.RepairCapability);
-        Assert.Equal(!ignoreColumnCase ? SafeMigrationAction.RejectPrerequisiteMissing
-            : drift == "none" ? SafeMigrationAction.Repair : SafeMigrationAction.RejectDifferent, decision.Action);
+        Assert.Equal(
+            ignoreColumnCase
+                ? SafeMigrationObservedState.Different
+                : SafeMigrationObservedState.PrerequisiteMissing,
+            result.ObservedState);
+
+        Assert.Equal(
+            ignoreColumnCase && drift == "none"
+                ? SafeMigrationRepairCapability.Safe
+                : SafeMigrationRepairCapability.None,
+            result.RepairCapability);
+
+        Assert.Equal(
+            !ignoreColumnCase
+                ? SafeMigrationAction.RejectPrerequisiteMissing
+                : drift == "none"
+                    ? SafeMigrationAction.Repair
+                    : SafeMigrationAction.RejectDifferent,
+            decision.Action);
+
         if (!ignoreColumnCase)
         {
             Assert.Equal("projected_structure_state_unknown", result.Code);
@@ -166,17 +278,27 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ForeignKeyDropColumnReuseRemainsDisabledWithoutProviderCertificate(bool matching)
+    public void ForeignKeyDropColumnReuseRemainsDisabledWithoutProviderCertificate(
+        bool matching
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        ObserveAccepted(projection, new DropForeignKeyIntent("fk_reference", "items"),
+        ObserveAccepted(
+            projection,
+            new DropForeignKeyIntent("fk_reference", "items"),
             SafeMigrationObservedState.Matching);
+
         var operation = ForeignKeyDropNullabilityRelaxation();
         var live = new SafeMigrationProviderAnalysis(
-            matching ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
-            matching ? SafeMigrationRepairCapability.None : SafeMigrationRepairCapability.Safe,
-            matching, "captured_column_proof");
+            matching
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different,
+            matching
+                ? SafeMigrationRepairCapability.None
+                : SafeMigrationRepairCapability.Safe,
+            matching,
+            "captured_column_proof");
 
         // Act
         var result = projection.Project(operation, live);
@@ -192,11 +314,17 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        var drop = new SafeMigrationOperation(new DropForeignKeyIntent("fk_reference", "items"),
+        var drop = new SafeMigrationOperation(
+            new DropForeignKeyIntent("fk_reference", "items"),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var rejected = Live(SafeMigrationObservedState.Unsupported);
-        var rejection = SafeMigrationDecisionPlanner.Plan(drop.Intent.Kind, rejected.ObservedState,
-            drop.Policy, rejected.RepairCapability);
+        var rejection = SafeMigrationDecisionPlanner.Plan(
+            drop.Intent.Kind,
+            rejected.ObservedState,
+            drop.Policy,
+            rejected.RepairCapability);
+
         var operation = ForeignKeyDropNullabilityRelaxation();
         var live = AlterProof();
 
@@ -215,11 +343,17 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        ObserveAccepted(projection, new DropForeignKeyIntent("fk_reference", "items"),
+        ObserveAccepted(
+            projection,
+            new DropForeignKeyIntent("fk_reference", "items"),
             SafeMigrationObservedState.Matching);
+
         var operation = ForeignKeyDropNullabilityRelaxation();
-        var live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
-            SafeMigrationRepairCapability.None, false, "unsupported_column")
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Unsupported,
+            SafeMigrationRepairCapability.None,
+            false,
+            "unsupported_column")
         {
             IsInvariantUnsupported = true,
         };
@@ -236,52 +370,115 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ColumnCaseRenameKeepsDependentMembersAndOwnerIdentityCoherent(bool ignoreColumnCase)
+    public void ColumnCaseRenameKeepsDependentMembersAndOwnerIdentityCoherent(
+        bool ignoreColumnCase
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection(
             objectIdentityNormalizer: new ForeignKeyMemberIdentityNormalizer(ignoreColumnCase));
+
         var source = ColumnRenameTable("items", "owner_id", "fk_self");
         var otherOwner = ColumnRenameTable("ITEMS", "owner_id", "fk_other_self");
         Apply(projection, new EnsureTableIntent(source, SafeMigrationTableMode.StrictDefinition));
         Apply(projection, new EnsureTableIntent(otherOwner, SafeMigrationTableMode.StrictDefinition));
-        Apply(projection, new EnsureIndexIntent(new ExpectedIndexDefinition("ix_owner", "items",
-            [new ExpectedIndexKeyDefinition("owner_id")], includedColumns: ["id"])));
-        Apply(projection, new EnsureIndexIntent(new ExpectedIndexDefinition("ix_include", "items",
-            [new ExpectedIndexKeyDefinition("id")], includedColumns: ["owner_id"])));
-        var child = new ExpectedTableDefinition("child", [Column("owner_ref")], foreignKeys:
-        [
-            new ExpectedForeignKeyDefinition("fk_parent", "child", ["owner_ref"], "items", ["owner_id"]),
-        ]);
+        Apply(
+            projection,
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ix_owner",
+                    "items",
+                    [new ExpectedIndexKeyDefinition("owner_id")],
+                    includedColumns: ["id"])));
+
+        Apply(
+            projection,
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ix_include",
+                    "items",
+                    [new ExpectedIndexKeyDefinition("id")],
+                    includedColumns: ["owner_id"])));
+
+        var child = new ExpectedTableDefinition(
+            "child",
+            [Column("owner_ref")],
+            foreignKeys:
+            [
+                new ExpectedForeignKeyDefinition("fk_parent", "child", ["owner_ref"], "items", ["owner_id"]),
+            ]);
 
         Apply(projection, new EnsureTableIntent(child, SafeMigrationTableMode.StrictDefinition));
-        var rename = new SafeMigrationOperation(new RenameColumnIntent("OWNER_ID", table: "items", newName: "actor_id"),
+        var rename = new SafeMigrationOperation(
+            new RenameColumnIntent("OWNER_ID", table: "items", newName: "actor_id"),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var live = Live(SafeMigrationObservedState.Missing);
         var result = projection.Project(rename, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(rename.Intent.Kind, result.ObservedState,
-            rename.Policy, result.RepairCapability);
-        var expectedColumn = ignoreColumnCase ? "actor_id" : "owner_id";
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            rename.Intent.Kind,
+            result.ObservedState,
+            rename.Policy,
+            result.RepairCapability);
+
+        var expectedColumn = ignoreColumnCase
+            ? "actor_id"
+            : "owner_id";
 
         // Act
         projection.Observe(rename, live, result, decision);
-        var tableResult = projection.Project(new SafeMigrationOperation(new EnsureTableIntent(
-            ColumnRenameTable("items", expectedColumn, "fk_self"), SafeMigrationTableMode.StrictDefinition),
-            SafeMigrationPolicy.ThrowIfDifferent), live);
-        var indexResult = projection.Project(new SafeMigrationOperation(new EnsureIndexIntent(
-            new ExpectedIndexDefinition("ix_owner", "items", [new ExpectedIndexKeyDefinition(expectedColumn)],
-                includedColumns: ["id"])), SafeMigrationPolicy.ThrowIfDifferent), live);
-        var includedResult = projection.Project(new SafeMigrationOperation(new EnsureIndexIntent(
-            new ExpectedIndexDefinition("ix_include", "items", [new ExpectedIndexKeyDefinition("id")],
-                includedColumns: [expectedColumn])), SafeMigrationPolicy.ThrowIfDifferent), live);
-        var childResult = projection.Project(new SafeMigrationOperation(new EnsureForeignKeyIntent(
-            new ExpectedForeignKeyDefinition("fk_parent", "child", ["owner_ref"], "items", [expectedColumn])),
-            SafeMigrationPolicy.ThrowIfDifferent), live);
-        var ownerResult = projection.Project(new SafeMigrationOperation(new EnsureTableIntent(
-            otherOwner, SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent), live);
+        var tableResult = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureTableIntent(
+                    ColumnRenameTable("items", expectedColumn, "fk_self"),
+                    SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            live);
+
+        var indexResult = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureIndexIntent(
+                    new ExpectedIndexDefinition(
+                        "ix_owner",
+                        "items",
+                        [new ExpectedIndexKeyDefinition(expectedColumn)],
+                        includedColumns: ["id"])),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            live);
+
+        var includedResult = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureIndexIntent(
+                    new ExpectedIndexDefinition(
+                        "ix_include",
+                        "items",
+                        [new ExpectedIndexKeyDefinition("id")],
+                        includedColumns: [expectedColumn])),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            live);
+
+        var childResult = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureForeignKeyIntent(
+                    new ExpectedForeignKeyDefinition("fk_parent", "child", ["owner_ref"], "items", [expectedColumn])),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            live);
+
+        var ownerResult = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureTableIntent(
+                    otherOwner,
+                    SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            live);
 
         // Assert
-        Assert.Equal(ignoreColumnCase ? SafeMigrationAction.Apply : SafeMigrationAction.NoOp, decision.Action);
+        Assert.Equal(
+            ignoreColumnCase
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.NoOp,
+            decision.Action);
+
         Assert.Equal(SafeMigrationObservedState.Matching, tableResult.ObservedState);
         Assert.Equal(SafeMigrationObservedState.Matching, indexResult.ObservedState);
         Assert.Equal(SafeMigrationObservedState.Matching, includedResult.ObservedState);
@@ -294,37 +491,82 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ColumnCaseRenameUpdatesStructuredExpressionWithoutChangingQualifiers(bool qualified)
+    public void ColumnCaseRenameUpdatesStructuredExpressionWithoutChangingQualifiers(
+        bool qualified
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection(
             objectIdentityNormalizer: new ForeignKeyMemberIdentityNormalizer(ignoreColumnCase: true));
-        var schema = qualified ? "OWNER_ID" : null;
+
+        var schema = qualified
+            ? "OWNER_ID"
+            : null;
+
         var sourceExpression = qualified
             ? SafeMigrationSql.Identifier("OWNER_ID", "items", "owner_id")
             : SafeMigrationSql.Identifier("owner_id");
+
         var targetExpression = qualified
             ? SafeMigrationSql.Identifier("OWNER_ID", "items", "actor_id")
             : SafeMigrationSql.Identifier("actor_id");
-        var computed = new ExpectedColumnDefinition("calculated", typeof(int), true, "int",
-            isStored: false, computedExpression: sourceExpression);
-        Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items",
-            [Column("owner_id"), computed], schema: schema), SafeMigrationTableMode.StrictDefinition));
-        var rename = new SafeMigrationOperation(new RenameColumnIntent("OWNER_ID", table: "items", newName: "actor_id",
-            schema: schema),
+
+        var computed = new ExpectedColumnDefinition(
+            "calculated",
+            typeof(int),
+            true,
+            "int",
+            isStored: false,
+            computedExpression: sourceExpression);
+
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "items",
+                    [Column("owner_id"), computed],
+                    schema: schema),
+                SafeMigrationTableMode.StrictDefinition));
+
+        var rename = new SafeMigrationOperation(
+            new RenameColumnIntent(
+                "OWNER_ID",
+                table: "items",
+                newName: "actor_id",
+                schema: schema),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var live = Live(SafeMigrationObservedState.Missing);
         var result = projection.Project(rename, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(rename.Intent.Kind, result.ObservedState,
-            rename.Policy, result.RepairCapability);
-        var targetColumn = new ExpectedColumnDefinition("calculated", typeof(int), true, "int", isStored: false,
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            rename.Intent.Kind,
+            result.ObservedState,
+            rename.Policy,
+            result.RepairCapability);
+
+        var targetColumn = new ExpectedColumnDefinition(
+            "calculated",
+            typeof(int),
+            true,
+            "int",
+            isStored: false,
             computedExpression: targetExpression);
-        var ensure = new SafeMigrationOperation(new EnsureColumnIntent("items", targetColumn, schema),
+
+        var ensure = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", targetColumn, schema),
             SafeMigrationPolicy.RepairIfSafe);
-        var stale = new SafeMigrationOperation(new EnsureColumnIntent("items", computed, schema),
+
+        var stale = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", computed, schema),
             SafeMigrationPolicy.RepairIfSafe);
-        var expectedTable = new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition("items",
-            [Column("actor_id"), targetColumn], schema: schema), SafeMigrationTableMode.StrictDefinition),
+
+        var expectedTable = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "items",
+                    [Column("actor_id"), targetColumn],
+                    schema: schema),
+                SafeMigrationTableMode.StrictDefinition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -347,25 +589,48 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ColumnCaseRenameKeepsOpaqueExpressionFailClosed(bool providerFragment)
+    public void ColumnCaseRenameKeepsOpaqueExpressionFailClosed(
+        bool providerFragment
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection(
             objectIdentityNormalizer: new ForeignKeyMemberIdentityNormalizer(ignoreColumnCase: true));
+
         var expression = providerFragment
             ? SafeMigrationSql.ProviderFragment("anonymous", "owner_id + 1")
             : SafeMigrationSql.Opaque("owner_id + 1");
-        var computed = new ExpectedColumnDefinition("calculated", typeof(int), true, "int",
-            isStored: false, computedExpression: expression);
-        Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items",
-            [Column("owner_id"), computed]), SafeMigrationTableMode.StrictDefinition));
-        var rename = new SafeMigrationOperation(new RenameColumnIntent("OWNER_ID", table: "items", newName: "actor_id"),
+
+        var computed = new ExpectedColumnDefinition(
+            "calculated",
+            typeof(int),
+            true,
+            "int",
+            isStored: false,
+            computedExpression: expression);
+
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "items",
+                    [Column("owner_id"), computed]),
+                SafeMigrationTableMode.StrictDefinition));
+
+        var rename = new SafeMigrationOperation(
+            new RenameColumnIntent("OWNER_ID", table: "items", newName: "actor_id"),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var live = Live(SafeMigrationObservedState.Missing);
         var result = projection.Project(rename, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(rename.Intent.Kind, result.ObservedState,
-            rename.Policy, result.RepairCapability);
-        var ensure = new SafeMigrationOperation(new EnsureColumnIntent("items", computed),
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            rename.Intent.Kind,
+            result.ObservedState,
+            rename.Policy,
+            result.RepairCapability);
+
+        var ensure = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", computed),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
@@ -379,15 +644,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     }
 
     /// <summary>Builds an anonymous valid self-reference with distinct table and member identities.</summary>
-    private static ExpectedTableDefinition ColumnRenameTable(string table, string column, string foreignKeyName) => new(
-        table, [Column(column), Column("id")],
+    private static ExpectedTableDefinition ColumnRenameTable(
+        string table,
+        string column,
+        string foreignKeyName
+    ) => new(
+        table,
+        [Column(column), Column("id")],
         primaryKey: new ExpectedPrimaryKeyDefinition("pk_owner", table, [column]),
         uniqueConstraints: [new ExpectedUniqueConstraintDefinition("uq_owner", table, [column])],
         foreignKeys: [new ExpectedForeignKeyDefinition(foreignKeyName, table, [column], table, [column])]);
 
     /// <summary>Creates an anonymous exact-layout nullability relaxation.</summary>
     private static SafeMigrationOperation ForeignKeyDropNullabilityRelaxation() => new(
-        new AlterColumnIntent("items",
+        new AlterColumnIntent(
+            "items",
             new ExpectedColumnDefinition("reference_id", typeof(Guid), true, "char(36)"),
             new ExpectedColumnDefinition("reference_id", typeof(Guid), false, "char(36)")),
         SafeMigrationPolicy.RepairIfSafe);

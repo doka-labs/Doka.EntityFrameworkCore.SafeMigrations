@@ -41,7 +41,9 @@ public sealed class SqlServerServiceCompositionTests
             table => new { Id = table.Column<int>(type: "int", nullable: false) });
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
 
         // Assert
         var command = Assert.Single(commands);
@@ -80,11 +82,13 @@ public sealed class SqlServerServiceCompositionTests
 
         // Act
         var exception = await Record.ExceptionAsync(() =>
-            context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-                context,
-                builder.Operations,
-                new SafeMigrationRunOptions("sqlserver-cancelled"),
-                cancellation.Token));
+            context
+                .GetService<ISafeMigrationRunner>()
+                .AnalyzeAsync(
+                    context,
+                    builder.Operations,
+                    new SafeMigrationRunOptions("sqlserver-cancelled"),
+                    cancellation.Token));
 
         // Assert
         Assert.IsAssignableFrom<OperationCanceledException>(exception);

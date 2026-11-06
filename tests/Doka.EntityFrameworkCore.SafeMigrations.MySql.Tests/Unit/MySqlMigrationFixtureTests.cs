@@ -21,7 +21,9 @@ public sealed class MySqlMigrationFixtureTests
         var idGenerator = context.GetService<IMigrationsIdGenerator>();
 
         // Act
-        var ids = typeof(MySqlMigrationFixtureTests).Assembly.GetTypes()
+        var ids = typeof(MySqlMigrationFixtureTests)
+            .Assembly
+            .GetTypes()
             .Where(static type => typeof(Migration).IsAssignableFrom(type))
             .SelectMany(static type => type.GetCustomAttributes(typeof(MigrationAttribute), inherit: false))
             .Cast<MigrationAttribute>()

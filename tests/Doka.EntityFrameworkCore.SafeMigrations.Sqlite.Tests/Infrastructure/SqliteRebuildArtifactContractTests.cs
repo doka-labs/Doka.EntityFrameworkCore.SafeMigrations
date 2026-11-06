@@ -11,7 +11,9 @@ public sealed class SqliteRebuildArtifactContractTests
     {
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = new SqliteSafeMigrationTestContext(connection);
-        var model = context.GetService<IDesignTimeModel>().Model;
+        var model = context.GetService<IDesignTimeModel>()
+            .Model;
+
         var contract = SqliteRebuildArtifactContract.FromModel(model);
         var table = CreateDriftedTable(drift);
         var snapshot = Snapshot(table);
@@ -60,7 +62,8 @@ public sealed class SqliteRebuildArtifactContractTests
         };
 
         var contract = SqliteRebuildArtifactContract.FromModel(
-            context.GetService<IDesignTimeModel>().Model,
+            context.GetService<IDesignTimeModel>()
+                .Model,
             [operation]);
 
         var table = RebuildTable(includeCode: false);
@@ -85,14 +88,18 @@ public sealed class SqliteRebuildArtifactContractTests
         "different_primary_key_name" => RebuildTable(primaryKeyName: "pk_legacy"),
         "different_primary_key_collation" => RebuildTable(
             primaryKeyKeys: [Key("Id", collation: "NOCASE")]),
-        "unmanaged_unique" => RebuildTable(uniqueConstraints:
+        "unmanaged_unique" => RebuildTable(
+            uniqueConstraints:
             [Unique("uq_rebuild_entities_code", "Code"), UniqueComposite("uq_rebuild_entities_legacy", "Id", "Code")]),
         "different_unique_name" => RebuildTable(uniqueConstraints: [Unique("uq_legacy", "Code")]),
-        "different_unique_collation" => RebuildTable(uniqueConstraints:
+        "different_unique_collation" => RebuildTable(
+            uniqueConstraints:
             [Unique("uq_rebuild_entities_code", "Code", collation: "NOCASE")]),
-        "unmanaged_check" => RebuildTable(checks:
+        "unmanaged_check" => RebuildTable(
+            checks:
             [Check("ck_rebuild_entities_code", "length(\"Code\") > 0"), Check("ck_legacy", "Id > 10")]),
-        "different_check_name" => RebuildTable(checks:
+        "different_check_name" => RebuildTable(
+            checks:
             [Check("ck_legacy", "length(\"Code\") > 0")]),
         "different_foreign_key_name" => ConstraintChildTable(
             indexes: [Index("ix_constraint_children_parent_id", "ParentId")],
@@ -185,7 +192,9 @@ public sealed class SqliteRebuildArtifactContractTests
     ) => new(
         ordinal,
         name,
-        name == "Id" || name == "ParentId" ? "INTEGER" : "TEXT",
+        name == "Id" || name == "ParentId"
+            ? "INTEGER"
+            : "TEXT",
         isNullable,
         DefaultSql: null,
         primaryKeyOrdinal,
@@ -203,7 +212,16 @@ public sealed class SqliteRebuildArtifactContractTests
         Unique: false,
         Origin: "c",
         Partial: false,
-        [new SqliteIndexKeySnapshot(0, 0, column, Expression: null, Descending: false, "BINARY", IsKey: true)],
+        [
+            new SqliteIndexKeySnapshot(
+                0,
+                0,
+                column,
+                Expression: null,
+                Descending: false,
+                "BINARY",
+                IsKey: true),
+        ],
         Filter: null,
         $"CREATE INDEX \"{name}\" ON \"unused\" (\"{column}\")");
 

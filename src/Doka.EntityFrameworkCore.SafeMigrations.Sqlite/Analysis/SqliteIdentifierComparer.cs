@@ -5,10 +5,10 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 /// </summary>
 internal sealed class SqliteIdentifierComparer : StringComparer
 {
+    private SqliteIdentifierComparer() { }
+
     /// <summary>Gets the shared SQLite identifier comparer.</summary>
     public static SqliteIdentifierComparer Instance { get; } = new();
-
-    private SqliteIdentifierComparer() { }
 
     /// <inheritdoc />
     public override int Compare(
@@ -144,5 +144,7 @@ internal sealed class SqliteIdentifierComparer : StringComparer
     /// <returns>The folded character.</returns>
     public static char FoldAscii(
         char value
-    ) => value is >= 'A' and <= 'Z' ? (char)(value + ('a' - 'A')) : value;
+    ) => value is >= 'A' and <= 'Z'
+        ? (char)(value + ('a' - 'A'))
+        : value;
 }

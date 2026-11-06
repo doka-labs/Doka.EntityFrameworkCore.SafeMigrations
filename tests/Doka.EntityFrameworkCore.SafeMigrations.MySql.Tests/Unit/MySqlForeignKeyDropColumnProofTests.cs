@@ -8,7 +8,9 @@ public sealed class MySqlForeignKeyDropColumnProofTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void AcceptedForeignKeyDropsRetainExactColumnCertificate(bool matching)
+    public void AcceptedForeignKeyDropsRetainExactColumnCertificate(
+        bool matching
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -22,10 +24,18 @@ public sealed class MySqlForeignKeyDropColumnProofTests
         var result = projection.Project(operation, live);
 
         // Assert
-        Assert.Equal(matching ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
+        Assert.Equal(
+            matching
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different,
             result.ObservedState);
-        Assert.Equal(matching ? SafeMigrationRepairCapability.None : SafeMigrationRepairCapability.Safe,
+
+        Assert.Equal(
+            matching
+                ? SafeMigrationRepairCapability.None
+                : SafeMigrationRepairCapability.Safe,
             result.RepairCapability);
+
         Assert.Equal(matching, result.PostconditionSatisfied);
         Assert.Same(live, result);
     }
@@ -46,19 +56,36 @@ public sealed class MySqlForeignKeyDropColumnProofTests
         // Arrange
         using var context = CreateContext();
         var projection = CreateProjection(context);
-        var index = new SafeMigrationOperation(new EnsureIndexIntent(new ExpectedIndexDefinition(
-            "ix_left", "items", [new ExpectedIndexKeyDefinition("left_id")])),
+        var index = new SafeMigrationOperation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ix_left",
+                    "items",
+                    [new ExpectedIndexKeyDefinition("left_id")])),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var matchingIndex = ColumnProof(matching: true);
-        projection.Observe(index, matchingIndex, matchingIndex, SafeMigrationDecisionPlanner.Plan(
-            index.Intent.Kind, matchingIndex.ObservedState, index.Policy, matchingIndex.RepairCapability));
+        projection.Observe(
+            index,
+            matchingIndex,
+            matchingIndex,
+            SafeMigrationDecisionPlanner.Plan(
+                index.Intent.Kind,
+                matchingIndex.ObservedState,
+                index.Policy,
+                matchingIndex.RepairCapability));
+
         Accept(projection, new DropForeignKeyIntent("fk_left", "items"));
         Accept(projection, new DropForeignKeyIntent("fk_right", "items"));
         var first = NullabilityChange("left_id", nullableSource);
         var firstLive = ColumnProof(requiresRows: nullableSource);
         var firstResult = projection.Project(first, firstLive);
-        var firstDecision = SafeMigrationDecisionPlanner.Plan(first.Intent.Kind, firstResult.ObservedState,
-            first.Policy, firstResult.RepairCapability);
+        var firstDecision = SafeMigrationDecisionPlanner.Plan(
+            first.Intent.Kind,
+            firstResult.ObservedState,
+            first.Policy,
+            firstResult.RepairCapability);
+
         var sibling = NullabilityChange("right_id", nullableSource);
         var siblingLive = ColumnProof(matchingSibling, requiresRows: nullableSource);
 
@@ -68,10 +95,18 @@ public sealed class MySqlForeignKeyDropColumnProofTests
 
         // Assert
         Assert.Equal(SafeMigrationAction.Repair, firstDecision.Action);
-        Assert.Equal(matchingSibling ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
+        Assert.Equal(
+            matchingSibling
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different,
             result.ObservedState);
-        Assert.Equal(matchingSibling ? SafeMigrationRepairCapability.None : SafeMigrationRepairCapability.Safe,
+
+        Assert.Equal(
+            matchingSibling
+                ? SafeMigrationRepairCapability.None
+                : SafeMigrationRepairCapability.Safe,
             result.RepairCapability);
+
         Assert.Same(siblingLive, result);
     }
 
@@ -89,7 +124,10 @@ public sealed class MySqlForeignKeyDropColumnProofTests
     [InlineData("data", false)]
     [InlineData("data", true)]
     [InlineData("backfill", true)]
-    public void ForeignKeyDropNullabilityContinuationRetainsProofBoundaries(string mutation, bool nullableSource)
+    public void ForeignKeyDropNullabilityContinuationRetainsProofBoundaries(
+        string mutation,
+        bool nullableSource
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -97,34 +135,69 @@ public sealed class MySqlForeignKeyDropColumnProofTests
         Accept(projection, new DropForeignKeyIntent("fk_left", "items"));
         var first = NullabilityChange("left_id", nullableSource);
         var firstLive = mutation == "backfill"
-            ? new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-                SafeMigrationRepairCapability.Safe, false, "captured_backfill") { RepairMutatesData = true }
+            ? new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.Different,
+                SafeMigrationRepairCapability.Safe,
+                false,
+                "captured_backfill") { RepairMutatesData = true }
             : ColumnProof(requiresRows: nullableSource);
-        var firstResult = mutation == "backfill" ? firstLive : projection.Project(first, firstLive);
-        var firstDecision = SafeMigrationDecisionPlanner.Plan(first.Intent.Kind, firstResult.ObservedState,
-            first.Policy, firstResult.RepairCapability);
+
+        var firstResult = mutation == "backfill"
+            ? firstLive
+            : projection.Project(first, firstLive);
+
+        var firstDecision = SafeMigrationDecisionPlanner.Plan(
+            first.Intent.Kind,
+            firstResult.ObservedState,
+            first.Policy,
+            firstResult.RepairCapability);
+
         projection.Observe(first, firstLive, firstResult, firstDecision);
         var later = NullabilityChange("right_id", nullableSource);
 
         switch (mutation)
         {
             case "facet":
-                later = new SafeMigrationOperation(new AlterColumnIntent("items",
-                    GuidColumn(!nullableSource, comment: "changed", name: "right_id"),
-                    GuidColumn(nullableSource, name: "right_id")), SafeMigrationPolicy.RepairIfSafe);
+                later = new SafeMigrationOperation(
+                    new AlterColumnIntent(
+                        "items",
+                        GuidColumn(!nullableSource, comment: "changed", name: "right_id"),
+                        GuidColumn(nullableSource, name: "right_id")),
+                    SafeMigrationPolicy.RepairIfSafe);
+
                 break;
             case "dependency":
-                Accept(projection, new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition(
-                    "fk_added", "items", ["right_id"], "parent", ["id"])));
+                Accept(
+                    projection,
+                    new EnsureForeignKeyIntent(
+                        new ExpectedForeignKeyDefinition(
+                            "fk_added",
+                            "items",
+                            ["right_id"],
+                            "parent",
+                            ["id"])));
+
                 break;
             case "incoming-dependency":
-                Accept(projection, new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition(
-                    "fk_added", "child", ["id"], "items", ["right_id"])));
+                Accept(
+                    projection,
+                    new EnsureForeignKeyIntent(
+                        new ExpectedForeignKeyDefinition(
+                            "fk_added",
+                            "child",
+                            ["id"],
+                            "items",
+                            ["right_id"])));
+
                 break;
             case "retarget":
-                later = new SafeMigrationOperation(new AlterColumnIntent("items",
-                    GuidColumn(nullableSource, name: "left_id"), GuidColumn(!nullableSource, name: "left_id")),
+                later = new SafeMigrationOperation(
+                    new AlterColumnIntent(
+                        "items",
+                        GuidColumn(nullableSource, name: "left_id"),
+                        GuidColumn(!nullableSource, name: "left_id")),
                     SafeMigrationPolicy.RepairIfSafe);
+
                 break;
             case "data":
                 Invalidate(projection, "data");
@@ -155,32 +228,55 @@ public sealed class MySqlForeignKeyDropColumnProofTests
     [InlineData("guid-format", false)]
     [InlineData("generation", false)]
     [InlineData("source-comment", false)]
-    public void ForeignKeyDropTighteningAcceptsOnlyKnownBooleanReviewMarker(string mutation, bool expected)
+    public void ForeignKeyDropTighteningAcceptsOnlyKnownBooleanReviewMarker(
+        string mutation,
+        bool expected
+    )
     {
         // Arrange
         using var context = CreateContext();
         var projection = CreateProjection(context);
         Accept(projection, new DropForeignKeyIntent("fk_reference", "items"));
-        var source = MarkedGuidColumn(nullable: true,
+        var source = MarkedGuidColumn(
+            nullable: true,
             includeMarker: mutation is "changed-true" or "changed-false" or "removed" or "source-invalid",
-            marker: mutation == "source-invalid" ? "true" : mutation != "changed-true",
-            comment: mutation == "source-comment" ? "changed" : null);
-        var target = MarkedGuidColumn(nullable: false, includeMarker: mutation != "removed",
-            marker: mutation == "text-marker" ? "true" : mutation == "null-marker" ? null
-                : mutation is not "added-false" and not "changed-false",
+            marker: mutation == "source-invalid"
+                ? "true"
+                : mutation != "changed-true",
+            comment: mutation == "source-comment"
+                ? "changed"
+                : null);
+
+        var target = MarkedGuidColumn(
+            nullable: false,
+            includeMarker: mutation != "removed",
+            marker: mutation == "text-marker"
+                ? "true"
+                : mutation == "null-marker"
+                    ? null
+                    : mutation is not "added-false" and not "changed-false",
             extraUnknown: mutation == "unknown",
-            guidFormat: mutation == "guid-format" ? DokaMySqlGuidFormat.Binary16 : DokaMySqlGuidFormat.Char36,
-            generation: mutation == "generation" ? MySqlValueGenerationStrategy.None
+            guidFormat: mutation == "guid-format"
+                ? DokaMySqlGuidFormat.Binary16
+                : DokaMySqlGuidFormat.Char36,
+            generation: mutation == "generation"
+                ? MySqlValueGenerationStrategy.None
                 : MySqlValueGenerationStrategy.ClientGuid);
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("items", target, source),
+
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent("items", target, source),
             SafeMigrationPolicy.RepairIfSafe);
+
         var live = ColumnProof(requiresRows: true);
 
         // Act
         var result = projection.Project(operation, live);
 
         // Assert
-        Assert.Equal(expected ? SafeMigrationRepairCapability.Safe : SafeMigrationRepairCapability.None,
+        Assert.Equal(
+            expected
+                ? SafeMigrationRepairCapability.Safe
+                : SafeMigrationRepairCapability.None,
             result.RepairCapability);
     }
 
@@ -210,34 +306,62 @@ public sealed class MySqlForeignKeyDropColumnProofTests
         // Arrange
         using var context = CreateContext();
         var projection = CreateProjection(context);
-        var accepted = MarkedGuidColumn(mutation == "nullability" ? !nullableSource : nullableSource,
-            includeMarker: acceptedMarker, marker: mutation == "malformed-marker" ? "true" : true,
-            extraUnknown: mutation == "unknown", comment: mutation == "comment" ? "changed" : null,
-            generation: mutation == "generation" ? MySqlValueGenerationStrategy.None
+        var accepted = MarkedGuidColumn(
+            mutation == "nullability"
+                ? !nullableSource
+                : nullableSource,
+            includeMarker: acceptedMarker,
+            marker: mutation == "malformed-marker"
+                ? "true"
+                : true,
+            extraUnknown: mutation == "unknown",
+            comment: mutation == "comment"
+                ? "changed"
+                : null,
+            generation: mutation == "generation"
+                ? MySqlValueGenerationStrategy.None
                 : MySqlValueGenerationStrategy.ClientGuid);
-        var ensure = new SafeMigrationOperation(new EnsureColumnIntent("items", accepted),
+
+        var ensure = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", accepted),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var ensureLive = ColumnProof(matching: true);
         var ensureResult = projection.Project(ensure, ensureLive);
-        var ensureDecision = SafeMigrationDecisionPlanner.Plan(ensure.Intent.Kind, ensureResult.ObservedState,
-            ensure.Policy, ensureResult.RepairCapability);
+        var ensureDecision = SafeMigrationDecisionPlanner.Plan(
+            ensure.Intent.Kind,
+            ensureResult.ObservedState,
+            ensure.Policy,
+            ensureResult.RepairCapability);
+
         projection.Observe(ensure, ensureLive, ensureResult, ensureDecision);
-        var drop = new SafeMigrationOperation(new DropForeignKeyIntent("fk_reference", "items"),
+        var drop = new SafeMigrationOperation(
+            new DropForeignKeyIntent("fk_reference", "items"),
             SafeMigrationPolicy.ThrowIfDifferent);
-        var dropLive = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
-            SafeMigrationRepairCapability.None, false, "captured_foreign_key")
+
+        var dropLive = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Matching,
+            SafeMigrationRepairCapability.None,
+            false,
+            "captured_foreign_key")
         {
             MatchedObjectName = "fk_reference",
         };
 
         var dropResult = projection.Project(drop, dropLive);
-        var dropDecision = SafeMigrationDecisionPlanner.Plan(drop.Intent.Kind, dropResult.ObservedState,
-            drop.Policy, dropResult.RepairCapability);
+        var dropDecision = SafeMigrationDecisionPlanner.Plan(
+            drop.Intent.Kind,
+            dropResult.ObservedState,
+            drop.Policy,
+            dropResult.RepairCapability);
+
         projection.Observe(drop, dropLive, dropResult, dropDecision);
         var source = MarkedGuidColumn(nullableSource, includeMarker: !acceptedMarker, marker: true);
         var target = MarkedGuidColumn(!nullableSource, includeMarker: !acceptedMarker, marker: true);
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("items", target, source),
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent("items", target, source),
             SafeMigrationPolicy.RepairIfSafe);
+
         var live = ColumnProof(requiresRows: nullableSource);
 
         // Act
@@ -246,8 +370,12 @@ public sealed class MySqlForeignKeyDropColumnProofTests
         // Assert
         Assert.Equal(SafeMigrationAction.NoOp, ensureDecision.Action);
         Assert.Equal(SafeMigrationAction.Apply, dropDecision.Action);
-        Assert.Equal(expected ? SafeMigrationRepairCapability.Safe : SafeMigrationRepairCapability.None,
+        Assert.Equal(
+            expected
+                ? SafeMigrationRepairCapability.Safe
+                : SafeMigrationRepairCapability.None,
             result.RepairCapability);
+
         if (expected)
         {
             Assert.Same(live, result);
@@ -260,7 +388,10 @@ public sealed class MySqlForeignKeyDropColumnProofTests
     [Theory]
     [InlineData("OWNER_ID", "owner_id")]
     [InlineData("Owner_Id", "OWNER_id")]
-    public void ForeignKeyDropMixedCaseColumnHistoryCannotRestoreStaleMatching(string firstName, string laterName)
+    public void ForeignKeyDropMixedCaseColumnHistoryCannotRestoreStaleMatching(
+        string firstName,
+        string laterName
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -269,16 +400,23 @@ public sealed class MySqlForeignKeyDropColumnProofTests
         var first = NullabilityChange(firstName, nullableSource: true);
         var firstLive = ColumnProof(requiresRows: true);
         var firstResult = projection.Project(first, firstLive);
-        var firstDecision = SafeMigrationDecisionPlanner.Plan(first.Intent.Kind, firstResult.ObservedState,
-            first.Policy, firstResult.RepairCapability);
+        var firstDecision = SafeMigrationDecisionPlanner.Plan(
+            first.Intent.Kind,
+            firstResult.ObservedState,
+            first.Policy,
+            firstResult.RepairCapability);
+
         projection.Observe(first, firstLive, firstResult, firstDecision);
         var later = NullabilityChange(laterName, nullableSource: false);
         var originalMatching = ColumnProof(matching: true);
 
         // Act
         var result = projection.Project(later, originalMatching);
-        var decision = SafeMigrationDecisionPlanner.Plan(later.Intent.Kind, result.ObservedState,
-            later.Policy, result.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            later.Intent.Kind,
+            result.ObservedState,
+            later.Policy,
+            result.RepairCapability);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Repair, firstDecision.Action);
@@ -292,19 +430,32 @@ public sealed class MySqlForeignKeyDropColumnProofTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ForeignKeyDropKnownSourceCaseComparisonRetainsDefaultContract(bool defaultDrift)
+    public void ForeignKeyDropKnownSourceCaseComparisonRetainsDefaultContract(
+        bool defaultDrift
+    )
     {
         // Arrange
         using var context = CreateContext();
         var projection = CreateProjection(context);
-        var accepted = GuidColumn(true, name: "owner_id",
-            defaultValue: defaultDrift ? SafeMigrationDefaultValue.Literal(Guid.Empty) : null);
-        var ensure = new SafeMigrationOperation(new EnsureColumnIntent("items", accepted),
+        var accepted = GuidColumn(
+            true,
+            name: "owner_id",
+            defaultValue: defaultDrift
+                ? SafeMigrationDefaultValue.Literal(Guid.Empty)
+                : null);
+
+        var ensure = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", accepted),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var matching = ColumnProof(matching: true);
         var ensureResult = projection.Project(ensure, matching);
-        var ensureDecision = SafeMigrationDecisionPlanner.Plan(ensure.Intent.Kind, ensureResult.ObservedState,
-            ensure.Policy, ensureResult.RepairCapability);
+        var ensureDecision = SafeMigrationDecisionPlanner.Plan(
+            ensure.Intent.Kind,
+            ensureResult.ObservedState,
+            ensure.Policy,
+            ensureResult.RepairCapability);
+
         projection.Observe(ensure, matching, ensureResult, ensureDecision);
         Accept(projection, new DropForeignKeyIntent("fk_owner", "items"));
         var operation = NullabilityChange("OWNER_ID", nullableSource: true);
@@ -315,7 +466,10 @@ public sealed class MySqlForeignKeyDropColumnProofTests
 
         // Assert
         Assert.Equal(SafeMigrationAction.NoOp, ensureDecision.Action);
-        Assert.Equal(defaultDrift ? SafeMigrationRepairCapability.None : SafeMigrationRepairCapability.Safe,
+        Assert.Equal(
+            defaultDrift
+                ? SafeMigrationRepairCapability.None
+                : SafeMigrationRepairCapability.Safe,
             result.RepairCapability);
     }
 
@@ -327,24 +481,40 @@ public sealed class MySqlForeignKeyDropColumnProofTests
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
-    public void ForeignKeyDropEnsureReusesOnlyCurrentProviderColumnProof(bool nullableSource, bool matching)
+    public void ForeignKeyDropEnsureReusesOnlyCurrentProviderColumnProof(
+        bool nullableSource,
+        bool matching
+    )
     {
         // Arrange
         using var context = CreateContext();
         var projection = CreateProjection(context);
         var source = MarkedGuidColumn(nullableSource, includeMarker: true, marker: true);
-        var initial = new SafeMigrationOperation(new EnsureColumnIntent("items", source),
+        var initial = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", source),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var initialLive = ColumnProof(matching: true);
         var initialResult = projection.Project(initial, initialLive);
-        var initialDecision = SafeMigrationDecisionPlanner.Plan(initial.Intent.Kind, initialResult.ObservedState,
-            initial.Policy, initialResult.RepairCapability);
+        var initialDecision = SafeMigrationDecisionPlanner.Plan(
+            initial.Intent.Kind,
+            initialResult.ObservedState,
+            initial.Policy,
+            initialResult.RepairCapability);
+
         projection.Observe(initial, initialLive, initialResult, initialDecision);
         Accept(projection, new DropForeignKeyIntent("fk_reference", "items"));
-        var target = MarkedGuidColumn(matching ? nullableSource : !nullableSource,
-            includeMarker: false, marker: null);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", target),
+        var target = MarkedGuidColumn(
+            matching
+                ? nullableSource
+                : !nullableSource,
+            includeMarker: false,
+            marker: null);
+
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", target),
             SafeMigrationPolicy.RepairIfSafe);
+
         var live = ColumnProof(matching, requiresRows: nullableSource && !matching);
 
         // Act
@@ -352,10 +522,18 @@ public sealed class MySqlForeignKeyDropColumnProofTests
 
         // Assert
         Assert.Equal(SafeMigrationAction.NoOp, initialDecision.Action);
-        Assert.Equal(matching ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
+        Assert.Equal(
+            matching
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different,
             result.ObservedState);
-        Assert.Equal(matching ? SafeMigrationRepairCapability.None : SafeMigrationRepairCapability.Safe,
+
+        Assert.Equal(
+            matching
+                ? SafeMigrationRepairCapability.None
+                : SafeMigrationRepairCapability.Safe,
             result.RepairCapability);
+
         Assert.Equal(live.Code, result.Code);
         Assert.Equal(live.RequiresLiveDataProof, result.RequiresLiveDataProof);
         Assert.Equal(live.RepairMutatesData, result.RepairMutatesData);
@@ -386,27 +564,49 @@ public sealed class MySqlForeignKeyDropColumnProofTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ForeignKeyDropEnsurePreservesSiblingProofOnlyForKnownNullabilityChange(bool defaultChange)
+    public void ForeignKeyDropEnsurePreservesSiblingProofOnlyForKnownNullabilityChange(
+        bool defaultChange
+    )
     {
         // Arrange
         using var context = CreateContext();
         var projection = CreateProjection(context);
         var source = GuidColumn(true, name: "left_id");
-        var initial = new SafeMigrationOperation(new EnsureColumnIntent("items", source),
+        var initial = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", source),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var matching = ColumnProof(matching: true);
         var initialResult = projection.Project(initial, matching);
-        projection.Observe(initial, matching, initialResult, SafeMigrationDecisionPlanner.Plan(
-            initial.Intent.Kind, initialResult.ObservedState, initial.Policy, initialResult.RepairCapability));
+        projection.Observe(
+            initial,
+            matching,
+            initialResult,
+            SafeMigrationDecisionPlanner.Plan(
+                initial.Intent.Kind,
+                initialResult.ObservedState,
+                initial.Policy,
+                initialResult.RepairCapability));
+
         Accept(projection, new DropForeignKeyIntent("fk_left", "items"));
-        var target = GuidColumn(false, name: "left_id",
-            defaultValue: defaultChange ? SafeMigrationDefaultValue.Literal(Guid.Empty) : null);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", target),
+        var target = GuidColumn(
+            false,
+            name: "left_id",
+            defaultValue: defaultChange
+                ? SafeMigrationDefaultValue.Literal(Guid.Empty)
+                : null);
+
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", target),
             SafeMigrationPolicy.RepairIfSafe);
+
         var live = ColumnProof(requiresRows: true);
         var result = projection.Project(operation, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, result.ObservedState,
-            operation.Policy, result.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            result.ObservedState,
+            operation.Policy,
+            result.RepairCapability);
 
         // Act
         projection.Observe(operation, live, result, decision);
@@ -414,7 +614,10 @@ public sealed class MySqlForeignKeyDropColumnProofTests
 
         // Assert
         Assert.Equal(SafeMigrationAction.Repair, decision.Action);
-        Assert.Equal(defaultChange ? SafeMigrationRepairCapability.None : SafeMigrationRepairCapability.Safe,
+        Assert.Equal(
+            defaultChange
+                ? SafeMigrationRepairCapability.None
+                : SafeMigrationRepairCapability.Safe,
             sibling.RepairCapability);
     }
 
@@ -428,18 +631,30 @@ public sealed class MySqlForeignKeyDropColumnProofTests
     [InlineData("data-blocked")]
     [InlineData("unsupported")]
     [InlineData("unsupported-target")]
-    public void ForeignKeyDropEnsureRejectsInvalidatedOrUnsupportedColumnProof(string mutation)
+    public void ForeignKeyDropEnsureRejectsInvalidatedOrUnsupportedColumnProof(
+        string mutation
+    )
     {
         // Arrange
         using var context = CreateContext();
         var projection = CreateProjection(context);
         var source = GuidColumn(true);
-        var initial = new SafeMigrationOperation(new EnsureColumnIntent("items", source),
+        var initial = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", source),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var matching = ColumnProof(matching: true);
         var initialResult = projection.Project(initial, matching);
-        projection.Observe(initial, matching, initialResult, SafeMigrationDecisionPlanner.Plan(
-            initial.Intent.Kind, initialResult.ObservedState, initial.Policy, initialResult.RepairCapability));
+        projection.Observe(
+            initial,
+            matching,
+            initialResult,
+            SafeMigrationDecisionPlanner.Plan(
+                initial.Intent.Kind,
+                initialResult.ObservedState,
+                initial.Policy,
+                initialResult.RepairCapability));
+
         Accept(projection, new DropForeignKeyIntent("fk_reference", "items"));
         if (mutation is "data" or "raw")
         {
@@ -453,20 +668,39 @@ public sealed class MySqlForeignKeyDropColumnProofTests
 
         if (mutation == "target")
         {
-            var changed = new SafeMigrationOperation(new AlterColumnIntent("items",
-                GuidColumn(false), source), SafeMigrationPolicy.RepairIfSafe);
+            var changed = new SafeMigrationOperation(
+                new AlterColumnIntent(
+                    "items",
+                    GuidColumn(false),
+                    source),
+                SafeMigrationPolicy.RepairIfSafe);
+
             var changedLive = ColumnProof(requiresRows: true);
             var changedResult = projection.Project(changed, changedLive);
-            projection.Observe(changed, changedLive, changedResult, SafeMigrationDecisionPlanner.Plan(
-                changed.Intent.Kind, changedResult.ObservedState, changed.Policy, changedResult.RepairCapability));
+            projection.Observe(
+                changed,
+                changedLive,
+                changedResult,
+                SafeMigrationDecisionPlanner.Plan(
+                    changed.Intent.Kind,
+                    changedResult.ObservedState,
+                    changed.Policy,
+                    changedResult.RepairCapability));
         }
 
         var target = GuidColumn(mutation == "target", annotation: mutation == "unsupported-target");
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", target),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", target),
             SafeMigrationPolicy.RepairIfSafe);
+
         var live = mutation is "data-blocked" or "unsupported"
-            ? new SafeMigrationProviderAnalysis(mutation == "data-blocked" ? SafeMigrationObservedState.DataBlocked
-                : SafeMigrationObservedState.Unsupported, SafeMigrationRepairCapability.None, false, "provider_blocker")
+            ? new SafeMigrationProviderAnalysis(
+                mutation == "data-blocked"
+                    ? SafeMigrationObservedState.DataBlocked
+                    : SafeMigrationObservedState.Unsupported,
+                SafeMigrationRepairCapability.None,
+                false,
+                "provider_blocker")
             : ColumnProof(requiresRows: true);
 
         // Act
@@ -485,7 +719,9 @@ public sealed class MySqlForeignKeyDropColumnProofTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ForeignKeyDropAcceptsCapturedGuidBackfillWithoutRetainingLaterCertificates(bool marker)
+    public void ForeignKeyDropAcceptsCapturedGuidBackfillWithoutRetainingLaterCertificates(
+        bool marker
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -508,18 +744,27 @@ public sealed class MySqlForeignKeyDropColumnProofTests
         }
 
         var target = SafeMigrationExpectedDefinitionFactory.From(targetOperation);
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("items", target, source),
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent("items", target, source),
             SafeMigrationPolicy.RepairIfSafe);
-        var live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.Safe, false, "captured_guid_backfill")
+
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            false,
+            "captured_guid_backfill")
         {
             RepairMutatesData = true,
             RequiresLiveDataProof = true,
         };
 
         var result = projection.Project(operation, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, result.ObservedState,
-            operation.Policy, result.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            result.ObservedState,
+            operation.Policy,
+            result.RepairCapability);
+
         var later = NullabilityChange("right_id", nullableSource: true);
 
         // Act
@@ -542,7 +787,9 @@ public sealed class MySqlForeignKeyDropColumnProofTests
     [InlineData("storage")]
     [InlineData("no-default")]
     [InlineData("after-sibling")]
-    public void ForeignKeyDropGuidBackfillRetainsProviderContractBoundaries(string mutation)
+    public void ForeignKeyDropGuidBackfillRetainsProviderContractBoundaries(
+        string mutation
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -555,7 +802,11 @@ public sealed class MySqlForeignKeyDropColumnProofTests
             var siblingLive = ColumnProof();
             var siblingResult = projection.Project(sibling, siblingLive);
             var siblingDecision = SafeMigrationDecisionPlanner.Plan(
-                sibling.Intent.Kind, siblingResult.ObservedState, sibling.Policy, siblingResult.RepairCapability);
+                sibling.Intent.Kind,
+                siblingResult.ObservedState,
+                sibling.Policy,
+                siblingResult.RepairCapability);
+
             siblingAction = siblingDecision.Action;
             projection.Observe(sibling, siblingLive, siblingResult, siblingDecision);
         }
@@ -572,17 +823,29 @@ public sealed class MySqlForeignKeyDropColumnProofTests
             annotationSource.AddAnnotation(MySqlSafeMigrationColumnMetadata.ExplicitBackfillAnnotation, "true");
         }
 
-        var target = new ExpectedColumnDefinition("reference_id", typeof(Guid), false,
-            mutation == "storage" ? "binary(16)" : "char(36)",
-            defaultValue: mutation == "no-default" ? null : SafeMigrationDefaultValue.Literal(Guid.Empty))
+        var target = new ExpectedColumnDefinition(
+            "reference_id",
+            typeof(Guid),
+            false,
+            mutation == "storage"
+                ? "binary(16)"
+                : "char(36)",
+            defaultValue: mutation == "no-default"
+                ? null
+                : SafeMigrationDefaultValue.Literal(Guid.Empty))
         {
             ProviderAnnotations = SafeMigrationProviderAnnotation.Capture(annotationSource),
         };
 
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("items", target, source),
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent("items", target, source),
             SafeMigrationPolicy.RepairIfSafe);
-        var live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.Safe, false, "captured_guid_backfill")
+
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            false,
+            "captured_guid_backfill")
         {
             RepairMutatesData = true,
             RequiresLiveDataProof = true,
@@ -641,24 +904,48 @@ public sealed class MySqlForeignKeyDropColumnProofTests
     [InlineData("target-annotation")]
     [InlineData("source-target-annotation")]
     [InlineData("same-nullability")]
-    public void ForeignKeyDropDoesNotAuthorizeAnotherColumnContract(string drift)
+    public void ForeignKeyDropDoesNotAuthorizeAnotherColumnContract(
+        string drift
+    )
     {
         // Arrange
         using var context = CreateContext();
         var projection = CreateProjection(context);
         Accept(projection, new DropForeignKeyIntent("fk_reference", "items"));
-        var source = GuidColumn(false, storeType: drift == "source-type" ? "binary(16)" : "char(36)",
+        var source = GuidColumn(
+            false,
+            storeType: drift == "source-type"
+                ? "binary(16)"
+                : "char(36)",
             annotation: drift == "source-target-annotation");
-        var target = GuidColumn(drift != "same-nullability",
-            storeType: drift == "target-type" ? "binary(16)" : "char(36)",
-            maxLength: drift == "target-length" ? 36 : null,
-            collation: drift == "target-collation" ? new SafeMigrationCollationIdentifier("ascii_bin") : null,
-            defaultValue: drift == "target-default" ? SafeMigrationDefaultValue.Literal(Guid.Empty) : null,
-            comment: drift == "target-comment" ? "changed" : null,
+
+        var target = GuidColumn(
+            drift != "same-nullability",
+            storeType: drift == "target-type"
+                ? "binary(16)"
+                : "char(36)",
+            maxLength: drift == "target-length"
+                ? 36
+                : null,
+            collation: drift == "target-collation"
+                ? new SafeMigrationCollationIdentifier("ascii_bin")
+                : null,
+            defaultValue: drift == "target-default"
+                ? SafeMigrationDefaultValue.Literal(Guid.Empty)
+                : null,
+            comment: drift == "target-comment"
+                ? "changed"
+                : null,
             annotation: drift is "target-annotation" or "source-target-annotation");
 
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("items", target,
-            drift == "source-missing" ? null : source), SafeMigrationPolicy.RepairIfSafe);
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "items",
+                target,
+                drift == "source-missing"
+                    ? null
+                    : source),
+            SafeMigrationPolicy.RepairIfSafe);
 
         // Act
         var result = projection.Project(operation, ColumnProof());
@@ -674,11 +961,23 @@ public sealed class MySqlForeignKeyDropColumnProofTests
         // Arrange
         using var context = CreateContext();
         var projection = CreateProjection(context);
-        var ensure = new SafeMigrationOperation(new EnsureColumnIntent("items",
-            GuidColumn(false, storeType: "binary(16)")), SafeMigrationPolicy.ThrowIfDifferent);
+        var ensure = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "items",
+                GuidColumn(false, storeType: "binary(16)")),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         var matching = ColumnProof(matching: true);
-        projection.Observe(ensure, matching, matching, SafeMigrationDecisionPlanner.Plan(
-            ensure.Intent.Kind, matching.ObservedState, ensure.Policy, matching.RepairCapability));
+        projection.Observe(
+            ensure,
+            matching,
+            matching,
+            SafeMigrationDecisionPlanner.Plan(
+                ensure.Intent.Kind,
+                matching.ObservedState,
+                ensure.Policy,
+                matching.RepairCapability));
+
         Accept(projection, new DropForeignKeyIntent("fk_reference", "items"));
 
         // Act
@@ -704,7 +1003,10 @@ public sealed class MySqlForeignKeyDropColumnProofTests
     [InlineData("index-drop", false)]
     [InlineData("foreign-key-add", false)]
     [InlineData("incoming-foreign-key", false)]
-    public void ForeignKeyDropCannotReviveAnInvalidatedColumnCertificate(string mutation, bool beforeDrop)
+    public void ForeignKeyDropCannotReviveAnInvalidatedColumnCertificate(
+        string mutation,
+        bool beforeDrop
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -734,13 +1036,18 @@ public sealed class MySqlForeignKeyDropColumnProofTests
     [Theory]
     [InlineData(SafeMigrationObservedState.DataBlocked)]
     [InlineData(SafeMigrationObservedState.Unsupported)]
-    public void ForeignKeyDropRetainsIndependentColumnBlocker(SafeMigrationObservedState state)
+    public void ForeignKeyDropRetainsIndependentColumnBlocker(
+        SafeMigrationObservedState state
+    )
     {
         // Arrange
         using var context = CreateContext();
         var projection = CreateProjection(context);
         Accept(projection, new DropForeignKeyIntent("fk_reference", "items"));
-        var live = new SafeMigrationProviderAnalysis(state, SafeMigrationRepairCapability.None, false,
+        var live = new SafeMigrationProviderAnalysis(
+            state,
+            SafeMigrationRepairCapability.None,
+            false,
             "independent_column_blocker");
 
         // Act
@@ -752,7 +1059,9 @@ public sealed class MySqlForeignKeyDropColumnProofTests
     }
 
     /// <summary>Builds the real provider projection without connecting to a server.</summary>
-    private static SafeMigrationPreflightProjection CreateProjection(DbContext context)
+    private static SafeMigrationPreflightProjection CreateProjection(
+        DbContext context
+    )
     {
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
 
@@ -763,7 +1072,10 @@ public sealed class MySqlForeignKeyDropColumnProofTests
     }
 
     /// <summary>Records one accepted safe removal or explicitly supplied anonymous constraint.</summary>
-    private static void Accept(SafeMigrationPreflightProjection projection, SafeMigrationIntent intent)
+    private static void Accept(
+        SafeMigrationPreflightProjection projection,
+        SafeMigrationIntent intent
+    )
     {
         var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
         var live = new SafeMigrationProviderAnalysis(
@@ -771,29 +1083,41 @@ public sealed class MySqlForeignKeyDropColumnProofTests
                 or SafeMigrationOperationKind.DropPrimaryKey
                 or SafeMigrationOperationKind.DropIndex
                 or SafeMigrationOperationKind.DropColumn
-                    ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Missing,
-            SafeMigrationRepairCapability.None, false, "accepted_operation")
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Missing,
+            SafeMigrationRepairCapability.None,
+            false,
+            "accepted_operation")
         {
             MatchedObjectName = intent.ObjectName,
         };
 
-        var decision = SafeMigrationDecisionPlanner.Plan(intent.Kind, live.ObservedState,
-            operation.Policy, live.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            intent.Kind,
+            live.ObservedState,
+            operation.Policy,
+            live.RepairCapability);
+
         projection.Observe(operation, live, live, decision);
     }
 
     /// <summary>Models unrelated or local effects that an immutable provider proof cannot cover.</summary>
-    private static void Invalidate(SafeMigrationPreflightProjection projection, string mutation)
+    private static void Invalidate(
+        SafeMigrationPreflightProjection projection,
+        string mutation
+    )
     {
         switch (mutation)
         {
             case "data":
-                projection.ObserveProviderPostcondition(new InsertDataOperation
-                {
-                    Table = "other",
-                    Columns = ["id"],
-                    Values = new object?[,] { { 1 } },
-                });
+                projection.ObserveProviderPostcondition(
+                    new InsertDataOperation
+                    {
+                        Table = "other",
+                        Columns = ["id"],
+                        Values = new object?[,] { { 1 } },
+                    });
+
                 break;
             case "raw":
                 projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1" });
@@ -805,22 +1129,26 @@ public sealed class MySqlForeignKeyDropColumnProofTests
                 Accept(projection, new DropColumnIntent("other", "items"));
                 break;
             case "column-alter":
-                projection.ObserveProviderPostcondition(new AlterColumnOperation
-                {
-                    Table = "items",
-                    Name = "other",
-                    ClrType = typeof(int),
-                    ColumnType = "int",
-                    IsNullable = true,
-                });
+                projection.ObserveProviderPostcondition(
+                    new AlterColumnOperation
+                    {
+                        Table = "items",
+                        Name = "other",
+                        ClrType = typeof(int),
+                        ColumnType = "int",
+                        IsNullable = true,
+                    });
+
                 break;
             case "column-rename":
-                projection.ObserveProviderPostcondition(new RenameColumnOperation
-                {
-                    Table = "items",
-                    Name = "reference_id",
-                    NewName = "renamed",
-                });
+                projection.ObserveProviderPostcondition(
+                    new RenameColumnOperation
+                    {
+                        Table = "items",
+                        Name = "reference_id",
+                        NewName = "renamed",
+                    });
+
                 break;
             case "key-drop":
                 Accept(projection, new DropPrimaryKeyIntent("pk_items", "items"));
@@ -829,12 +1157,28 @@ public sealed class MySqlForeignKeyDropColumnProofTests
                 Accept(projection, new DropIndexIntent("ix_other", "items"));
                 break;
             case "foreign-key-add":
-                Accept(projection, new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition(
-                    "fk_added", "items", ["reference_id"], "parent", ["id"])));
+                Accept(
+                    projection,
+                    new EnsureForeignKeyIntent(
+                        new ExpectedForeignKeyDefinition(
+                            "fk_added",
+                            "items",
+                            ["reference_id"],
+                            "parent",
+                            ["id"])));
+
                 break;
             case "incoming-foreign-key":
-                Accept(projection, new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition(
-                    "fk_added", "child", ["id"], "items", ["reference_id"])));
+                Accept(
+                    projection,
+                    new EnsureForeignKeyIntent(
+                        new ExpectedForeignKeyDefinition(
+                            "fk_added",
+                            "child",
+                            ["id"],
+                            "items",
+                            ["reference_id"])));
+
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(mutation));
@@ -843,10 +1187,14 @@ public sealed class MySqlForeignKeyDropColumnProofTests
 
     /// <summary>Creates the exact declaration pair used by the original source-bound proof.</summary>
     private static SafeMigrationOperation Relaxation() => new(
-        new AlterColumnIntent("items", GuidColumn(true), GuidColumn(false)), SafeMigrationPolicy.RepairIfSafe);
+        new AlterColumnIntent("items", GuidColumn(true), GuidColumn(false)),
+        SafeMigrationPolicy.RepairIfSafe);
 
     /// <summary>Creates an exact same-facet nullability change for one anonymous sibling column.</summary>
-    private static SafeMigrationOperation NullabilityChange(string name, bool nullableSource) => new(
+    private static SafeMigrationOperation NullabilityChange(
+        string name,
+        bool nullableSource
+    ) => new(
         new AlterColumnIntent("items", GuidColumn(!nullableSource, name: name), GuidColumn(nullableSource, name: name)),
         SafeMigrationPolicy.RepairIfSafe);
 
@@ -860,10 +1208,19 @@ public sealed class MySqlForeignKeyDropColumnProofTests
         string? comment = null,
         bool annotation = false,
         string name = "reference_id"
-    ) => new(name, typeof(Guid), nullable, storeType, maxLength: maxLength,
-        collation: collation, comment: comment, defaultValue: defaultValue)
+    ) => new(
+        name,
+        typeof(Guid),
+        nullable,
+        storeType,
+        maxLength: maxLength,
+        collation: collation,
+        comment: comment,
+        defaultValue: defaultValue)
     {
-        ProviderAnnotations = annotation ? DriftAnnotations() : [],
+        ProviderAnnotations = annotation
+            ? DriftAnnotations()
+            : [],
     };
 
     /// <summary>Captures anonymous provider metadata through the production immutability boundary.</summary>
@@ -912,10 +1269,18 @@ public sealed class MySqlForeignKeyDropColumnProofTests
     }
 
     /// <summary>Represents an exact independently captured live column certificate, not authored evidence.</summary>
-    private static SafeMigrationProviderAnalysis ColumnProof(bool matching = false, bool requiresRows = false) => new(
-        matching ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
-        matching ? SafeMigrationRepairCapability.None : SafeMigrationRepairCapability.Safe,
-        matching, "source_bound_column_proof")
+    private static SafeMigrationProviderAnalysis ColumnProof(
+        bool matching = false,
+        bool requiresRows = false
+    ) => new(
+        matching
+            ? SafeMigrationObservedState.Matching
+            : SafeMigrationObservedState.Different,
+        matching
+            ? SafeMigrationRepairCapability.None
+            : SafeMigrationRepairCapability.Safe,
+        matching,
+        "source_bound_column_proof")
     {
         RequiresLiveDataProof = requiresRows,
     };
@@ -924,7 +1289,8 @@ public sealed class MySqlForeignKeyDropColumnProofTests
     private static DbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<DbContext>()
-            .UseMySql("Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
+            .UseMySql(
+                "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
                 MySqlServerVersion.MySql(new Version(8, 4, 11)))
             .UseMySqlSafeMigrations()
             .Options;

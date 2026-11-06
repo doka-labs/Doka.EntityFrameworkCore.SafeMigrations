@@ -9,13 +9,15 @@ internal sealed partial class SafeMigrationPreflightProjection
     )
         where T : class
     {
-        private readonly IdentifierComparer _identifierComparer = new(objectIdentityNormalizer, memberComparer);
-
         private readonly Dictionary<string, PhysicalDefinition> _aliases = new(
             new IdentifierComparer(objectIdentityNormalizer, memberComparer));
 
+        private readonly IdentifierComparer _identifierComparer = new(objectIdentityNormalizer, memberComparer);
+
         private readonly HashSet<string> _missingNames =
             new(new IdentifierComparer(objectIdentityNormalizer, memberComparer));
+
+        private readonly HashSet<T> _mutatedSemanticDefinitions = new(semanticComparer);
 
         private readonly Dictionary<string, PhysicalDefinition> _physicalDefinitions =
             new(new IdentifierComparer(objectIdentityNormalizer, memberComparer));
@@ -23,14 +25,14 @@ internal sealed partial class SafeMigrationPreflightProjection
         private readonly Dictionary<string, T> _removedDefinitions =
             new(new IdentifierComparer(objectIdentityNormalizer, memberComparer));
 
-        private readonly HashSet<string> _unresolvedMissingNames =
-            new(new IdentifierComparer(objectIdentityNormalizer, memberComparer));
-
         // WHY: A semantic NoOp is an alias for an existing physical object, not
         // another object. Keeping that binding lets one drop invalidate every
         // alias without hiding a distinct physical object with the same shape.
         private readonly Dictionary<T, HashSet<PhysicalDefinition>> _semanticDefinitions = new(semanticComparer);
-        private readonly HashSet<T> _mutatedSemanticDefinitions = new(semanticComparer);
+
+        private readonly HashSet<string> _unresolvedMissingNames =
+            new(new IdentifierComparer(objectIdentityNormalizer, memberComparer));
+
         private HashSet<T>? _unboundDefinitions;
         private bool _unboundIdentityInvalidated;
 
@@ -336,7 +338,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             [NotNullWhen(true)] out T? definition
         )
         {
-            definition = _physicalDefinitions.TryGetValue(name, out var physical) ? physical.Definition : null;
+            definition = _physicalDefinitions.TryGetValue(name, out var physical)
+                ? physical.Definition
+                : null;
 
             return definition is not null;
         }
@@ -381,7 +385,9 @@ internal sealed partial class SafeMigrationPreflightProjection
                 // exact physical bindings in the same owner remain authoritative.
                 _unboundDefinitions?.Clear();
                 _unboundIdentityInvalidated = true;
-                IdentityUnknownOriginOrdinal = removalOrdinal >= 0 ? removalOrdinal : IdentityUnknownOriginOrdinal;
+                IdentityUnknownOriginOrdinal = removalOrdinal >= 0
+                    ? removalOrdinal
+                    : IdentityUnknownOriginOrdinal;
             }
 
             if (RemovePhysical(physicalName, out _))

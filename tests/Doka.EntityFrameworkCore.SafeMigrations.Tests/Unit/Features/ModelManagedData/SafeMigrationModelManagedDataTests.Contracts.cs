@@ -11,7 +11,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
         var columns = new[] { "id", "payload" };
         var columnTypes = new[] { "int", "varbinary(32)" };
         var uniqueColumns = new[] { "payload" };
-        var uniqueKeys = new[] { new ExpectedModelManagedDataUniqueKeyDefinition(uniqueColumns), };
+        var uniqueKeys = new[] { new ExpectedModelManagedDataUniqueKeyDefinition(uniqueColumns) };
         var values = new object?[,] { { 1, bytes } };
 
         var intent = new EnsureModelManagedDataIntent(
@@ -39,7 +39,10 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Assert.Equal(["int"], intent.KeyColumnTypes);
         Assert.Equal(["id", "payload"], intent.Columns);
         Assert.Equal(["int", "varbinary(32)"], intent.ColumnTypes);
-        Assert.Equal(["payload"], Assert.Single(intent.UniqueKeys).Columns);
+        Assert.Equal(["payload"],
+            Assert.Single(intent.UniqueKeys)
+                .Columns);
+
         Assert.Equal(new byte[] { 1, 2, 3 }, intent.Values.GetValue(0, 1));
     }
 
@@ -69,15 +72,35 @@ public sealed partial class SafeMigrationModelManagedDataTests
                 guid,
                 new DateOnly(2026, 9, 2),
                 new TimeOnly(12, 34, 56),
-                new DateTime(2026, 9, 2, 12, 34, 56, DateTimeKind.Utc),
-                new DateTimeOffset(2026, 9, 2, 12, 34, 56, TimeSpan.FromHours(2)),
+                new DateTime(
+                    2026,
+                    9,
+                    2,
+                    12,
+                    34,
+                    56,
+                    DateTimeKind.Utc),
+                new DateTimeOffset(
+                    2026,
+                    9,
+                    2,
+                    12,
+                    34,
+                    56,
+                    TimeSpan.FromHours(2)),
                 TimeSpan.FromMinutes(17),
                 ModelManagedDataTestValue.Second,
             },
         };
 
-        var columns = Enumerable.Range(0, values.GetLength(1)).Select(index => $"c{index}").ToArray();
-        var types = Enumerable.Repeat("provider_type", values.GetLength(1)).ToArray();
+        var columns = Enumerable
+            .Range(0, values.GetLength(1))
+            .Select(index => $"c{index}")
+            .ToArray();
+
+        var types = Enumerable
+            .Repeat("provider_type", values.GetLength(1))
+            .ToArray();
 
         var intent = new EnsureModelManagedDataIntent(
             "value_contract",
@@ -115,29 +138,88 @@ public sealed partial class SafeMigrationModelManagedDataTests
     {
         var operations = new[]
         {
-            EnsureOperation("identity", "roles", "int", 1, "varchar(64)", "private-administrator", reverseRows: false),
             EnsureOperation(
-                "other", "roles", "int", 1, "varchar(64)", "private-administrator", reverseRows: false),
+                "identity",
+                "roles",
+                "int",
+                1,
+                "varchar(64)",
+                "private-administrator",
+                reverseRows: false),
             EnsureOperation(
-                "identity", "other_roles", "int", 1, "varchar(64)", "private-administrator", reverseRows: false),
+                "other",
+                "roles",
+                "int",
+                1,
+                "varchar(64)",
+                "private-administrator",
+                reverseRows: false),
             EnsureOperation(
-                "identity", "roles", "bigint", 1L, "varchar(64)", "private-administrator", reverseRows: false),
-            EnsureOperation("identity", "roles", "int", 3, "varchar(64)", "private-administrator", reverseRows: false),
-            EnsureOperation("identity", "roles", "int", 1, "varchar(128)", "private-administrator", reverseRows: false),
-            EnsureOperation("identity", "roles", "int", 1, "varchar(64)", "private-owner", reverseRows: false),
-            EnsureOperation("identity", "roles", "int", 1, "varchar(64)", "private-administrator", reverseRows: true),
+                "identity",
+                "other_roles",
+                "int",
+                1,
+                "varchar(64)",
+                "private-administrator",
+                reverseRows: false),
+            EnsureOperation(
+                "identity",
+                "roles",
+                "bigint",
+                1L,
+                "varchar(64)",
+                "private-administrator",
+                reverseRows: false),
+            EnsureOperation(
+                "identity",
+                "roles",
+                "int",
+                3,
+                "varchar(64)",
+                "private-administrator",
+                reverseRows: false),
+            EnsureOperation(
+                "identity",
+                "roles",
+                "int",
+                1,
+                "varchar(128)",
+                "private-administrator",
+                reverseRows: false),
+            EnsureOperation(
+                "identity",
+                "roles",
+                "int",
+                1,
+                "varchar(64)",
+                "private-owner",
+                reverseRows: false),
+            EnsureOperation(
+                "identity",
+                "roles",
+                "int",
+                1,
+                "varchar(64)",
+                "private-administrator",
+                reverseRows: true),
         };
 
         var fingerprints = operations
             .Select(operation => SafeMigrationContractFingerprint.Create([operation]))
             .ToArray();
 
-        Assert.Equal(fingerprints.Length, fingerprints.Distinct(StringComparer.Ordinal).Count());
-        Assert.All(fingerprints, fingerprint =>
-        {
-            Assert.DoesNotContain("private-administrator", fingerprint, StringComparison.Ordinal);
-            Assert.DoesNotContain("private-owner", fingerprint, StringComparison.Ordinal);
-        });
+        Assert.Equal(fingerprints.Length,
+            fingerprints
+                .Distinct(StringComparer.Ordinal)
+                .Count());
+
+        Assert.All(
+            fingerprints,
+            fingerprint =>
+            {
+                Assert.DoesNotContain("private-administrator", fingerprint, StringComparison.Ordinal);
+                Assert.DoesNotContain("private-owner", fingerprint, StringComparison.Ordinal);
+            });
     }
 
     [Fact]
@@ -154,6 +236,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
             new object?[,] { { 1 } },
             schema: null,
             uniqueKeys: null));
+
         Assert.Throws<ArgumentException>(() => new EnsureModelManagedDataIntent(
             "roles",
             ["id"],
@@ -163,6 +246,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
             new object?[,] { { 1, secret } },
             schema: null,
             uniqueKeys: null));
+
         Assert.Throws<ArgumentException>(() => new UpdateModelManagedDataIntent(
             "roles",
             ["id"],
@@ -209,14 +293,23 @@ public sealed partial class SafeMigrationModelManagedDataTests
             [Insert("roles", ["id", "name"], ["int", "varchar(64)"], values)],
             [Delete("roles", ["id"], ["int"], inverseKeys)]);
 
-        Assert.Equal([128, 128, 1], rowBoundResult
-            .Cast<EnsureModelManagedDataScaffoldingOperation>()
-            .Select(operation => operation.Intent.RowCount));
+        Assert.Equal(
+            [128, 128, 1],
+            rowBoundResult
+                .Cast<EnsureModelManagedDataScaffoldingOperation>()
+                .Select(operation => operation.Intent.RowCount));
 
         const int cellBoundRows = 200;
         const int managedColumnCount = 40;
-        var cellColumns = Enumerable.Range(0, managedColumnCount).Select(index => $"c{index}").ToArray();
-        var cellTypes = Enumerable.Repeat("int", managedColumnCount).ToArray();
+        var cellColumns = Enumerable
+            .Range(0, managedColumnCount)
+            .Select(index => $"c{index}")
+            .ToArray();
+
+        var cellTypes = Enumerable
+            .Repeat("int", managedColumnCount)
+            .ToArray();
+
         var cellValues = new object?[cellBoundRows, managedColumnCount];
         var cellKeys = new object?[cellBoundRows, 1];
         for (var row = 0; row < cellBoundRows; row++)
@@ -224,7 +317,9 @@ public sealed partial class SafeMigrationModelManagedDataTests
             cellKeys[row, 0] = row;
             for (var column = 0; column < managedColumnCount; column++)
             {
-                cellValues[row, column] = column == 0 ? row : column;
+                cellValues[row, column] = column == 0
+                    ? row
+                    : column;
             }
         }
 
@@ -232,13 +327,22 @@ public sealed partial class SafeMigrationModelManagedDataTests
             [Insert("cell_bound", cellColumns, cellTypes, cellValues)],
             [Delete("cell_bound", ["c0"], ["int"], cellKeys)]);
 
-        Assert.Equal([99, 99, 2], cellBoundResult
-            .Cast<EnsureModelManagedDataScaffoldingOperation>()
-            .Select(operation => operation.Intent.RowCount));
+        Assert.Equal(
+            [99, 99, 2],
+            cellBoundResult
+                .Cast<EnsureModelManagedDataScaffoldingOperation>()
+                .Select(operation => operation.Intent.RowCount));
 
         var oversizedColumnCount = SafeMigrationModelManagedDataLimits.MaximumCellsPerOperation;
-        var oversizedColumns = Enumerable.Range(0, oversizedColumnCount).Select(index => $"c{index}").ToArray();
-        var oversizedTypes = Enumerable.Repeat("int", oversizedColumnCount).ToArray();
+        var oversizedColumns = Enumerable
+            .Range(0, oversizedColumnCount)
+            .Select(index => $"c{index}")
+            .ToArray();
+
+        var oversizedTypes = Enumerable
+            .Repeat("int", oversizedColumnCount)
+            .ToArray();
+
         var oversizedValues = new object?[1, oversizedColumnCount];
         oversizedValues[0, 0] = 0;
 
@@ -306,8 +410,8 @@ public sealed partial class SafeMigrationModelManagedDataTests
     )
     {
         var rows = reverseRows
-            ? new object?[,] { { 2, "second" }, { key, value } }
-            : new object?[,] { { key, value }, { 2, "second" } };
+            ? new[,] { { 2, "second" }, { key, value } }
+            : new[,] { { key, value }, { 2, "second" } };
 
         return Operation(
             new EnsureModelManagedDataIntent(

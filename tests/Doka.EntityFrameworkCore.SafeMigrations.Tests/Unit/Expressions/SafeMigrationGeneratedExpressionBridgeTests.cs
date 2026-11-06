@@ -55,7 +55,9 @@ public sealed class SafeMigrationGeneratedExpressionBridgeTests
         builder.AddCheckConstraintIfNotExists("ck_nodes_bounds", "nodes", "`right_bound` > `left_bound`");
 
         var operation = Assert.IsType<SafeMigrationOperation>(Assert.Single(builder.Operations));
-        var definition = Assert.IsType<EnsureCheckConstraintIntent>(operation.Intent).Definition;
+        var definition = Assert.IsType<EnsureCheckConstraintIntent>(operation.Intent)
+            .Definition;
+
         Assert.NotNull(definition.Expression);
         Assert.Null(definition.Sql);
     }
@@ -67,7 +69,10 @@ public sealed class SafeMigrationGeneratedExpressionBridgeTests
         const string sql = "`right_bound` > `left_bound`";
         var raw = new ExpectedCheckConstraintDefinition("ck_nodes_bounds", "nodes", sql);
         var captured = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
-            "ck_nodes_bounds", "nodes", sql, schema: null);
+            "ck_nodes_bounds",
+            "nodes",
+            sql,
+            schema: null);
 
         var equivalent = SafeMigrationSemanticDefinitionComparers.CheckConstraint.Equals(raw, captured);
 

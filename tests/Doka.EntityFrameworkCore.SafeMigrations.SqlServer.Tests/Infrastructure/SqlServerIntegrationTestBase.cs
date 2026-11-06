@@ -16,7 +16,10 @@ public abstract class SqlServerIntegrationTestBase : IAsyncLifetime, IClassFixtu
     /// </summary>
     protected SqlServerIntegrationTestBase(
         SqlServerContainerFixture fixture
-    ) => Fixture = fixture;
+    )
+    {
+        Fixture = fixture;
+    }
 
     /// <summary>
     /// Gets the fixture used to create a database per test.
@@ -65,7 +68,7 @@ public abstract class SqlServerIntegrationTestBase : IAsyncLifetime, IClassFixtu
     /// <param name="cancellationToken">The token cancelling database creation.</param>
     /// <returns>The unpooled connection string scoped to the new database.</returns>
     protected async Task<string> CreateDatabaseAsync(
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         var connectionString = await Fixture.CreateDatabaseAsync(cancellationToken);
@@ -86,10 +89,13 @@ public abstract class SqlServerIntegrationTestBase : IAsyncLifetime, IClassFixtu
     /// <summary>
     /// Generates and executes migration commands individually for direct provider contracts.
     /// </summary>
+    /// <param name="context">The context supplying the generator and database connection.</param>
+    /// <param name="operations">The migration operations executed in order.</param>
+    /// <param name="cancellationToken">The token cancelling migration command execution.</param>
     protected static async Task ExecuteOperationsAsync(
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         var generator = context.GetService<IMigrationsSqlGenerator>();
@@ -105,10 +111,13 @@ public abstract class SqlServerIntegrationTestBase : IAsyncLifetime, IClassFixtu
     /// <summary>
     /// Executes setup SQL outside the SafeMigrations generator.
     /// </summary>
+    /// <param name="connectionString">The isolated database to configure.</param>
+    /// <param name="sql">The setup statement to execute.</param>
+    /// <param name="cancellationToken">The token cancelling the connection or command.</param>
     protected static async Task ExecuteSqlAsync(
         string connectionString,
         string sql,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         await using var connection = new SqlConnection(connectionString);
@@ -123,10 +132,14 @@ public abstract class SqlServerIntegrationTestBase : IAsyncLifetime, IClassFixtu
     /// <summary>
     /// Reads a scalar integer from the test database.
     /// </summary>
+    /// <param name="connectionString">The isolated database to inspect.</param>
+    /// <param name="sql">The scalar query to execute.</param>
+    /// <param name="cancellationToken">The token cancelling the connection or query.</param>
+    /// <returns>The scalar result converted to an integer.</returns>
     protected static async Task<int> ScalarIntAsync(
         string connectionString,
         string sql,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         await using var connection = new SqlConnection(connectionString);

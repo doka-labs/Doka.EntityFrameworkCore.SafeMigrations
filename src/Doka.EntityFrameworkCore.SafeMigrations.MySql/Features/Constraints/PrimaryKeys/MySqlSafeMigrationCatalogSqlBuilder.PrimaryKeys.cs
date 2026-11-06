@@ -16,26 +16,26 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             definition.Columns);
 
         return Plan(
-            $"CASE WHEN NOT {BaseTableExists(definition.Table)} THEN 'prerequisite_missing' "
-            + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
-            + $"WHEN NOT {exists} AND NOT ({physicallyAchievable}) THEN 'unsupported' "
-            + $"WHEN NOT {exists} THEN 'missing' "
-            + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
-            matching) with
-        {
-            UnsupportedCode = definition.Columns.Count > MySqlProjectedIndexPhysicalShape.MaximumKeyParts
-                ? "primary_key_too_many_columns"
-                : "primary_key_exceeds_physical_limit",
+                $"CASE WHEN NOT {BaseTableExists(definition.Table)} THEN 'prerequisite_missing' "
+                + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
+                + $"WHEN NOT {exists} AND NOT ({physicallyAchievable}) THEN 'unsupported' "
+                + $"WHEN NOT {exists} THEN 'missing' "
+                + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
+                matching) with
+            {
+                UnsupportedCode = definition.Columns.Count > MySqlProjectedIndexPhysicalShape.MaximumKeyParts
+                    ? "primary_key_too_many_columns"
+                    : "primary_key_exceeds_physical_limit",
 
-            // WHY: The old PRIMARY can conceal invalid rows for a different
-            // replacement. Capture that independent evidence before any DROP;
-            // matching keys and absent keys do not scan their rows again here.
-            ClassificationCodeExpression = requiresReplacementRows
-                ? $"CASE WHEN {exists} AND NOT ({matching}) THEN "
+                // WHY: The old PRIMARY can conceal invalid rows for a different
+                // replacement. Capture that independent evidence before any DROP;
+                // matching keys and absent keys do not scan their rows again here.
+                ClassificationCodeExpression = requiresReplacementRows
+                    ? $"CASE WHEN {exists} AND NOT ({matching}) THEN "
                     + $"CASE WHEN {dataBlocked} THEN 'primary_key_replacement_data_blocked' "
                     + "ELSE 'key_replacement_data_safe' END ELSE NULL END"
-                : null,
-        };
+                    : null,
+            };
     }
 
     private MySqlSafeMigrationRuntimePlan BuildDropPrimaryKey(

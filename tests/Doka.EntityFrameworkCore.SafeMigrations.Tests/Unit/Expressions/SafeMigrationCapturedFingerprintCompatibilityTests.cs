@@ -16,7 +16,10 @@ public sealed class SafeMigrationCapturedFingerprintCompatibilityTests
     [InlineData("structured_check", "1250fd6cfb7089cb7ac8473ac22c0c7e685d4aa432c756cb30fe59c7941779c8")]
     [InlineData("ordinary_column", "b59596e9a1eb7dd6ae8d587bea87df039ff91f2b10b809f5b22bad4603bd16e4")]
     [InlineData("provider_owned", "917b4d9ffbade971b2c3bd18cc7dd9afbc2d4d26242f76756e8338f02920b01a")]
-    public void UncapturedContractsRetainLegacyFingerprint(string contract, string expected)
+    public void UncapturedContractsRetainLegacyFingerprint(
+        string contract,
+        string expected
+    )
     {
         // Arrange
         var operations = CreateContract(contract);
@@ -34,7 +37,10 @@ public sealed class SafeMigrationCapturedFingerprintCompatibilityTests
     [Theory]
     [InlineData("captured_computed", "3a84e6837d4c26437d08d45492db1f6d4da7336a4d64e806c16018a810d74e01")]
     [InlineData("captured_check", "dbb80c391210d9142e921a9eaa919d42ceb6ac786788a7c2d39a885997210570")]
-    public void CapturedGeneratedContractsDoNotReuseLegacyFingerprint(string contract, string legacy)
+    public void CapturedGeneratedContractsDoNotReuseLegacyFingerprint(
+        string contract,
+        string legacy
+    )
     {
         // Arrange
         var operations = CreateContract(contract);
@@ -52,7 +58,9 @@ public sealed class SafeMigrationCapturedFingerprintCompatibilityTests
     [Theory]
     [InlineData("source_value  >  1")]
     [InlineData("(source_value > 1)")]
-    public void CapturedCheckFormattingIsNotGeneralSourceEquivalence(string sql)
+    public void CapturedCheckFormattingIsNotGeneralSourceEquivalence(
+        string sql
+    )
     {
         // Arrange
         var plain = CaptureCheck("source_value > 1");
@@ -65,7 +73,8 @@ public sealed class SafeMigrationCapturedFingerprintCompatibilityTests
         // Assert
         Assert.True(equivalentTrees);
         Assert.False(equivalentDefinitions);
-        Assert.NotEqual(Fingerprint(new EnsureCheckConstraintIntent(plain)),
+        Assert.NotEqual(
+            Fingerprint(new EnsureCheckConstraintIntent(plain)),
             Fingerprint(new EnsureCheckConstraintIntent(changed)));
     }
 
@@ -74,7 +83,9 @@ public sealed class SafeMigrationCapturedFingerprintCompatibilityTests
     [Theory]
     [InlineData("source_value  +  1")]
     [InlineData("(source_value + 1)")]
-    public void ComputedFormattingDoesNotIntroduceANewRepairPermission(string sql)
+    public void ComputedFormattingDoesNotIntroduceANewRepairPermission(
+        string sql
+    )
     {
         // Arrange
         var legacyPlain = RawComputed("source_value + 1");
@@ -95,16 +106,21 @@ public sealed class SafeMigrationCapturedFingerprintCompatibilityTests
         Assert.False(capturedRepair);
     }
 
-    private static IReadOnlyList<MigrationOperation> CreateContract(string contract)
+    private static IReadOnlyList<MigrationOperation> CreateContract(
+        string contract
+    )
     {
         if (contract == "provider_owned")
         {
-            return [new SqlOperation { Sql = "SELECT 1", }, new AddCheckConstraintOperation
-            {
-                Name = "ck_items",
-                Table = "items",
-                Sql = "source_value > 1",
-            },];
+            return
+            [
+                new SqlOperation { Sql = "SELECT 1" }, new AddCheckConstraintOperation
+                {
+                    Name = "ck_items",
+                    Table = "items",
+                    Sql = "source_value > 1",
+                },
+            ];
         }
 
         SafeMigrationIntent intent = contract switch
@@ -115,8 +131,12 @@ public sealed class SafeMigrationCapturedFingerprintCompatibilityTests
             "raw_computed" => new EnsureColumnIntent("items", RawComputed("source_value + 1")),
             "raw_check" => new EnsureCheckConstraintIntent(
                 new ExpectedCheckConstraintDefinition("ck_items", "items", "source_value > 1")),
-            "structured_computed" => new EnsureColumnIntent("items",
-                new ExpectedColumnDefinition("computed_value", typeof(long), true,
+            "structured_computed" => new EnsureColumnIntent(
+                "items",
+                new ExpectedColumnDefinition(
+                    "computed_value",
+                    typeof(long),
+                    true,
                     computedExpression: SafeMigrationSql.Literal(1))),
             "structured_check" => new EnsureCheckConstraintIntent(
                 ExpectedCheckConstraintDefinition.FromExpression("ck_items", "items", SafeMigrationSql.Literal(true))),
@@ -129,29 +149,40 @@ public sealed class SafeMigrationCapturedFingerprintCompatibilityTests
         return [new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent)];
     }
 
-    private static ExpectedColumnDefinition RawComputed(string sql) =>
+    private static ExpectedColumnDefinition RawComputed(
+        string sql
+    ) =>
         new("computed_value", typeof(long), true, computedColumnSql: sql);
 
-    private static ExpectedColumnDefinition CaptureColumn(string? computedSql = null, string? defaultSql = null) =>
-        SafeMigrationExpectedDefinitionFactory.From(new AddColumnOperation
-        {
-            Name = "computed_value",
-            Table = "items",
-            ClrType = typeof(long),
-            IsNullable = true,
-            ComputedColumnSql = computedSql,
-            DefaultValueSql = defaultSql,
-        });
+    private static ExpectedColumnDefinition CaptureColumn(
+        string? computedSql = null,
+        string? defaultSql = null
+    ) =>
+        SafeMigrationExpectedDefinitionFactory.From(
+            new AddColumnOperation
+            {
+                Name = "computed_value",
+                Table = "items",
+                ClrType = typeof(long),
+                IsNullable = true,
+                ComputedColumnSql = computedSql,
+                DefaultValueSql = defaultSql,
+            });
 
-    private static ExpectedCheckConstraintDefinition CaptureCheck(string sql) =>
-        SafeMigrationExpectedDefinitionFactory.From(new AddCheckConstraintOperation
-        {
-            Name = "ck_items",
-            Table = "items",
-            Sql = sql,
-        });
+    private static ExpectedCheckConstraintDefinition CaptureCheck(
+        string sql
+    ) =>
+        SafeMigrationExpectedDefinitionFactory.From(
+            new AddCheckConstraintOperation
+            {
+                Name = "ck_items",
+                Table = "items",
+                Sql = sql,
+            });
 
-    private static string Fingerprint(SafeMigrationIntent intent) =>
+    private static string Fingerprint(
+        SafeMigrationIntent intent
+    ) =>
         SafeMigrationContractFingerprint.Create(
             [new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent)]);
 }

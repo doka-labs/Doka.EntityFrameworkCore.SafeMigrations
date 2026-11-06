@@ -13,7 +13,9 @@ public sealed class PostgreSqlGeneratedDropEvidenceTests
 
         // Act
         var result = PostgreSqlSafeMigrationProviderAnalyzer.DecodeGeneratedDropCompleteness(
-            intent, SafeMigrationObservedState.Matching, ref code);
+            intent,
+            SafeMigrationObservedState.Matching,
+            ref code);
 
         // Assert
         Assert.True(result);
@@ -29,15 +31,23 @@ public sealed class PostgreSqlGeneratedDropEvidenceTests
     [InlineData(SafeMigrationObservedState.Unsupported, true)]
     [InlineData(SafeMigrationObservedState.PrerequisiteMissing, true)]
     [InlineData(SafeMigrationObservedState.Matching, false)]
-    public void WrongStateOrIntentRejectsPrivateCompletenessCode(SafeMigrationObservedState state, bool drop)
+    public void WrongStateOrIntentRejectsPrivateCompletenessCode(
+        SafeMigrationObservedState state,
+        bool drop
+    )
     {
         // Arrange
-        SafeMigrationIntent intent = drop ? new DropColumnIntent("source", "items") : new EnsureSchemaIntent("items");
+        SafeMigrationIntent intent = drop
+            ? new DropColumnIntent("source", "items")
+            : new EnsureSchemaIntent("items");
+
         var code = PostgreSqlSafeMigrationCatalogSqlBuilder.EmptyGeneratedDropSetCode;
 
         // Act
         var failure = Record.Exception(() => PostgreSqlSafeMigrationProviderAnalyzer.DecodeGeneratedDropCompleteness(
-            intent, state, ref code));
+            intent,
+            state,
+            ref code));
 
         // Assert
         Assert.IsType<InvalidOperationException>(failure);
@@ -51,7 +61,9 @@ public sealed class PostgreSqlGeneratedDropEvidenceTests
     [InlineData("classified_missing")]
     [InlineData("generated_column_drop_empty_set_proof_suffix")]
     [InlineData("GENERATED_COLUMN_DROP_EMPTY_SET_PROOF")]
-    public void OtherCodesRemainUnchangedWithoutCompleteness(string code)
+    public void OtherCodesRemainUnchangedWithoutCompleteness(
+        string code
+    )
     {
         // Arrange
         var original = code;
@@ -59,7 +71,9 @@ public sealed class PostgreSqlGeneratedDropEvidenceTests
 
         // Act
         var result = PostgreSqlSafeMigrationProviderAnalyzer.DecodeGeneratedDropCompleteness(
-            intent, SafeMigrationObservedState.Matching, ref code);
+            intent,
+            SafeMigrationObservedState.Matching,
+            ref code);
 
         // Assert
         Assert.False(result);

@@ -15,7 +15,10 @@ internal sealed class MySqlSafeMigrationDiagnosticCommand : MigrationCommand
         MySqlSafeMigrationRuntimeDiagnostic diagnostic,
         MigrationsSqlGeneratorDependencies dependencies,
         IRelationalCommand metadataCommand
-    ) : base(metadataCommand, dependencies.CurrentContext.Context, original.CommandLogger,
+    ) : base(
+        metadataCommand,
+        dependencies.CurrentContext.Context,
+        original.CommandLogger,
         original.TransactionSuppressed)
     {
         ArgumentNullException.ThrowIfNull(original);
@@ -76,11 +79,17 @@ internal sealed class MySqlSafeMigrationDiagnosticCommand : MigrationCommand
     }
 
     /// <summary>Formats context once on failure; successful execution does not build human-readable messages.</summary>
-    private SafeMigrationExecutionException CreateFailure(MySqlException exception)
+    private SafeMigrationExecutionException CreateFailure(
+        MySqlException exception
+    )
     {
         _diagnostic.TryReadFailure(exception, out var guardCode, out var reasonSlot);
 
-        return new SafeMigrationExecutionException(_diagnostic.Context, guardCode, _diagnostic.Ordinal,
-            exception, _diagnostic.GetReasonCode(reasonSlot));
+        return new SafeMigrationExecutionException(
+            _diagnostic.Context,
+            guardCode,
+            _diagnostic.Ordinal,
+            exception,
+            _diagnostic.GetReasonCode(reasonSlot));
     }
 }

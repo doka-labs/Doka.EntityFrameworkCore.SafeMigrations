@@ -4,16 +4,17 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
 {
     private const string PreparedSetupStatement = "PREPARE doka_sm_statement FROM @doka_sm_sql;";
+
     private const string PreparedSetupGroup = PreparedSetupStatement
         + "EXECUTE doka_sm_statement;DEALLOCATE PREPARE doka_sm_statement;";
 
     private readonly Dictionary<string, CommandCategory> _categories = new(StringComparer.Ordinal);
     private readonly object _gate = new();
-    private string? _setupInjection;
-    private Action? _setupStarted;
     private bool _injectCompactedPrepareGroup;
     private bool _injectDataProbeGroup;
     private bool _injectNullabilityProbeGroup;
+    private string? _setupInjection;
+    private Action? _setupStarted;
 
     /// <summary>Gets the number of started commands across all observed categories.</summary>
     public long CommandCount { get; private set; }
@@ -116,7 +117,6 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
     {
         lock (_gate)
         {
-
             return new
             {
                 CommandCount,
@@ -334,8 +334,8 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
                 var assignmentPrefix = _injectNullabilityProbeGroup
                     ? "SET @doka_sm_column_repair_eligible ="
                     : _injectDataProbeGroup
-                    ? "SET @doka_sm_sql = CASE WHEN @doka_sm_data_probe_required"
-                    : "SET @doka_sm_sql =";
+                        ? "SET @doka_sm_sql = CASE WHEN @doka_sm_data_probe_required"
+                        : "SET @doka_sm_sql =";
 
                 var assignmentOffset = command.CommandText.IndexOf(assignmentPrefix, StringComparison.Ordinal);
                 var offset = assignmentOffset < 0
@@ -357,9 +357,10 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
                     CompleteSetupInjection(command);
                 }
             }
-            else if (ReadRuntimeCommandText(command.CommandText).StartsWith(
-                         "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`",
-                         StringComparison.Ordinal))
+            else if (ReadRuntimeCommandText(command.CommandText)
+                .StartsWith(
+                    "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`",
+                    StringComparison.Ordinal))
             {
                 // WHY: Inject after real setup rather than suppress execution so acquired resources must be unwound.
                 command.CommandText += "\n" + _setupInjection;
@@ -465,9 +466,14 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
 
     /// <summary>Ignores only the exact leading diagnostic marker without copying the measured SQL payload.</summary>
     /// <param name="sql">The actual dispatched command, potentially beginning with owned correlation metadata.</param>
-    private static ReadOnlySpan<char> ReadRuntimeCommandText(string sql)
+    private static ReadOnlySpan<char> ReadRuntimeCommandText(
+        string sql
+    )
     {
-        var commandText = sql.AsSpan().TrimStart();
+        var commandText = sql
+            .AsSpan()
+            .TrimStart();
+
         if (!MySqlSafeMigrationRuntimeDiagnostic.TryReadMarker(sql, out _, out _))
         {
             return commandText;
@@ -477,7 +483,8 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
         // the canonical decoder first validates the complete ordinal and correlation token.
         var markerEnd = commandText.IndexOf("*/", StringComparison.Ordinal) + 2;
 
-        return commandText[markerEnd..].TrimStart();
+        return commandText[markerEnd..]
+            .TrimStart();
     }
 
     /// <summary>Attributes a mixed setup dispatch once rather than inventing per-statement durations.</summary>
@@ -499,13 +506,16 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
         var offset = 0;
         while (offset < sql.Length)
         {
-            var assignmentOffset = sql[offset..].IndexOf("SET @doka_sm_", StringComparison.Ordinal);
+            var assignmentOffset = sql[offset..]
+                .IndexOf("SET @doka_sm_", StringComparison.Ordinal);
+
             if (assignmentOffset < 0)
             {
                 break;
             }
 
             offset += assignmentOffset;
+
             // WHY: Owned dynamic SQL is hex-encoded. Inspect only emitted assignment markers;
             // PREPARE/EXECUTE/DEALLOCATE stay with their assignment's command-level measurement.
             category = CombineSetupCategories(category, ClassifySetupAssignment(sql[offset..]));
@@ -540,16 +550,20 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
             || sql.StartsWith("SET @doka_sm_column_repair_eligible =", StringComparison.Ordinal)
             || sql.StartsWith("SET @doka_sm_sql = CASE WHEN @doka_sm_data_probe_required", StringComparison.Ordinal)
             || sql.StartsWith("SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CASE", StringComparison.Ordinal)
-            || sql.StartsWith("SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x"
-                + "53454C4543542043415345205748454E204E4F5420434F414C455343452828", StringComparison.Ordinal))
+            || sql.StartsWith(
+                "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x"
+                + "53454C4543542043415345205748454E204E4F5420434F414C455343452828",
+                StringComparison.Ordinal))
         {
             return "column_data_probe";
         }
 
         if (sql.StartsWith("SET @doka_sm_state =", StringComparison.Ordinal)
             || sql.StartsWith("SET @doka_sm_repair_ok =", StringComparison.Ordinal)
-            || sql.StartsWith("SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x"
-                + "53454C4543542028", StringComparison.Ordinal))
+            || sql.StartsWith(
+                "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x"
+                + "53454C4543542028",
+                StringComparison.Ordinal))
         {
             return "state_classification_repair";
         }
@@ -567,7 +581,9 @@ internal sealed class MySqlRuntimeCommandInterceptor : DbCommandInterceptor
     private static string CombineSetupCategories(
         string? current,
         string next
-    ) => current is null || current == next ? next : "owned_setup_batch";
+    ) => current is null || current == next
+        ? next
+        : "owned_setup_batch";
 
     /// <summary>Stores bounded aggregate counters for one command purpose.</summary>
     private sealed class CommandCategory

@@ -773,7 +773,7 @@ cannot be bounded.
 Facet-isolation tests mutate every serialized relational family independently.
 Golden digests run in separate provider test processes and again under the
 committed EF/Npgsql dependency graph. The exact model-differ plus fingerprint path
-used by `SafeMigrationRunner` has provider-specific duration/allocation budgets.
+used by `SafeMigrationRunner` has provider-specific BenchmarkDotNet workloads.
 
 Postflight re-runs the live classifier without preflight projection. It walks
 the ordered safe contract backwards and treats the final writer for one exact
@@ -1394,17 +1394,20 @@ claims. See [MySQL/MariaDB runtime boundaries](mysql-mariadb-ddl-behavior.md#ses
 
 The repository measures construction, planning, all provider generators, and
 report serialization at 1, 100, and 1000 operations, plus blocker-view
-selection across 50,000 assessments, against allocation comparison limits and
-coarse wall-clock ceilings in schema-versioned Core,
-MySQL/MariaDB, PostgreSQL, SQLite, and SQL Server sets in `eng/performance-budgets.json`; missing,
-duplicate, unknown, and orphaned measurements fail the run. The broad duration
-ceilings provide regression evidence rather than a cross-machine pass guarantee.
-All five CI benchmark sets use `--report-only`: numeric overruns retain false
-JSON verdicts without blocking qualification. Configuration, execution and
-output failures remain fatal; strict manual comparison remains available by
-omitting that flag. The repository separately measures
-the canonical snapshot initialization, `IMigrationsModelDiffer` comparison,
-and model fingerprint path used by the runner.
+selection across 50,000 assessments. Core, MySQL/MariaDB, PostgreSQL, SQLite,
+and SQL Server have independent BenchmarkDotNet 0.15.8 executables, with 56
+default parameterized cases in total. Canonical snapshot initialization,
+`IMigrationsModelDiffer` comparison and the runner's model fingerprint path
+remain separate workloads. Compile-linked configuration and a thin entry
+adapter select workloads and validate native full JSON evidence; BenchmarkDotNet
+owns timing, statistics and process-wide managed allocation diagnostics.
+There is no repository timer, median sampler, custom result schema or benchmark
+budget evaluator. CI uses all-case `Dry` execution/export smoke, not a
+statistical performance comparison. Numeric results cannot fail qualification;
+invalid configuration, generated-build/execution errors, missing/failed selected
+cases and missing/invalid evidence still fail. Full measurement runs and old
+thread-local reports have different methodologies; see
+[performance and memory](support-and-qualification.md#performance-and-memory).
 
 Provider integration tests measure 20 complete pooled runner calls against 100
 expected tables in clean and noisy catalogs. The noisy catalog adds 1,000
@@ -1417,8 +1420,8 @@ server-side exclusion of foreign child objects remain mandatory. Invalid
 measurements, execution exceptions and evidence-output failures are not
 converted into timing verdicts or suppressed.
 
-Construction budgets and live comparisons are informational regression
-evidence. The live measurements retain same-runner relative context, not an
+Benchmark measurements and live comparisons are informational evidence.
+The live measurements retain same-runner relative context, not an
 absolute cross-machine throughput promise or a hardware-dependent CI gate.
 
 ## Verification surfaces

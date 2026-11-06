@@ -34,16 +34,23 @@ public sealed partial class SqlServerModelManagedDataCancellationTests : SqlServ
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.identity_roles (Id int IDENTITY(1,1) NOT NULL "
             + "CONSTRAINT PK_identity_roles PRIMARY KEY, Caption nvarchar(80) NOT NULL); "
             + "CREATE TABLE dbo.identity_probe (Id int IDENTITY(1,1) NOT NULL "
-            + "CONSTRAINT PK_identity_probe PRIMARY KEY);");
+            + "CONSTRAINT PK_identity_probe PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
+
         await using var session = new SqlConnection(connectionString);
         await session.OpenAsync();
         var originalConnectionId = session.ClientConnectionId;
-        var readinessResource = "doka_identity_ready_" + Guid.NewGuid().ToString("N");
+        var readinessResource = "doka_identity_ready_"
+            + Guid
+                .NewGuid()
+                .ToString("N");
+
         var pauseInterceptor = new SqlServerIdentityInsertPauseInterceptor(readinessResource);
         await using var observer = new SqlConnection(connectionString);
         await observer.OpenAsync();
@@ -62,13 +69,28 @@ public sealed partial class SqlServerModelManagedDataCancellationTests : SqlServ
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel(
-            "identity_roles", ["Id"], ["int"], ["Id", "Caption"], ["int", "nvarchar(80)"],
+            "identity_roles",
+            ["Id"],
+            ["int"],
+            ["Id", "Caption"],
+            ["int", "nvarchar(80)"],
             new object?[,] { { 7, "Administrator" } });
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model,
-            executeMigrationCommand ? MigrationsSqlGenerationOptions.Default : MigrationsSqlGenerationOptions.Script);
-        var seedCommand = Assert.Single(commands, static command =>
-            command.CommandText.Contains("DECLARE @doka_identity_insert", StringComparison.Ordinal));
-        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(
+                builder.Operations,
+                context.Model,
+                executeMigrationCommand
+                    ? MigrationsSqlGenerationOptions.Default
+                    : MigrationsSqlGenerationOptions.Script);
+
+        var seedCommand = Assert.Single(
+            commands,
+            static command =>
+                command.CommandText.Contains("DECLARE @doka_identity_insert", StringComparison.Ordinal));
+
+        var connection = context.GetService<IRelationalConnection>();
 
         foreach (var command in commands.Where(command => !ReferenceEquals(command, seedCommand)))
         {
@@ -96,7 +118,10 @@ public sealed partial class SqlServerModelManagedDataCancellationTests : SqlServ
         using var readinessDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
         // Act
-        var markerInitiallyAvailable = await pauseInterceptor.CanAcquireMarkerAsync(observer);
+        var markerInitiallyAvailable = await pauseInterceptor.CanAcquireMarkerAsync(
+            observer,
+            cancellationToken: readinessDeadline.Token);
+
         var execution = executeMigrationCommand
             ? seedCommand.ExecuteNonQueryAsync(connection, cancellationToken: cancellation.Token)
             : context.Database.ExecuteSqlRawAsync(seedCommand.CommandText, cancellation.Token);
@@ -104,20 +129,30 @@ public sealed partial class SqlServerModelManagedDataCancellationTests : SqlServ
         // WHY: The lock is acquired only after ON, and a separate session observes it without an INFO token.
         // This proves the attention reaches a running identity-enabled batch, not work canceled before ON.
         var readinessFailure = await Record.ExceptionAsync(() => pauseInterceptor.WaitUntilReadyAsync(
-            observer, execution, readinessDeadline.Token));
+            observer,
+            execution,
+            readinessDeadline.Token));
 
         var cancelRequestFailure = await Record.ExceptionAsync(() =>
-            cancellation.CancelAsync().WaitAsync(TimeSpan.FromSeconds(10)));
+            cancellation
+                .CancelAsync()
+                .WaitAsync(TimeSpan.FromSeconds(10)));
 
         var cancellationFailure = await Record.ExceptionAsync(() => execution.WaitAsync(TimeSpan.FromSeconds(30)));
 
         if (!execution.IsCompleted)
         {
-            throw new InvalidOperationException("Client attention did not complete within the recovery deadline.",
+            throw new InvalidOperationException(
+                "Client attention did not complete within the recovery deadline.",
                 cancellationFailure);
         }
 
-        var markerHeldAfterAttention = !await pauseInterceptor.CanAcquireMarkerAsync(observer);
+        // WHY: The operation token is deliberately cancelled. Recovery observations must still complete
+        // independently to prove that attention left the caller-owned session in the expected state.
+        var markerHeldAfterAttention = !await pauseInterceptor.CanAcquireMarkerAsync(
+            observer,
+            cancellationToken: CancellationToken.None);
+
         Exception? explicitIdentityFailure = null;
 
         if (!requiresCallerRecovery)
@@ -139,6 +174,7 @@ public sealed partial class SqlServerModelManagedDataCancellationTests : SqlServ
             await context.Database.ExecuteSqlRawAsync(
                 "SET IDENTITY_INSERT dbo.identity_roles OFF;",
                 CancellationToken.None);
+
             await context.Database.ExecuteSqlRawAsync(
                 "SET IDENTITY_INSERT dbo.identity_probe ON; "
                 + "INSERT INTO dbo.identity_probe (Id) VALUES (12); "
@@ -150,10 +186,16 @@ public sealed partial class SqlServerModelManagedDataCancellationTests : SqlServ
             "EXEC sys.sp_releaseapplock @Resource = @resource, @LockOwner = N'Session';",
             [new SqlParameter("@resource", SqlDbType.NVarChar, 255) { Value = readinessResource }],
             CancellationToken.None);
-        var markerReleased = await pauseInterceptor.CanAcquireMarkerAsync(observer);
+
+        var markerReleased = await pauseInterceptor.CanAcquireMarkerAsync(
+            observer,
+            cancellationToken: CancellationToken.None);
+
         var quarantineFailure = Record.Exception(() =>
         {
-            context.GetService<IMigrationsSqlGenerator>().Generate([], context.Model);
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([], context.Model);
         });
 
         if (transaction is not null)
@@ -161,11 +203,20 @@ public sealed partial class SqlServerModelManagedDataCancellationTests : SqlServ
             await transaction.RollbackAsync(CancellationToken.None);
         }
 
-        var seedCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.identity_roles;");
+        var seedCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.identity_roles;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(executeMigrationCommand ? 1 : 0,
-            commands.OfType<SqlServerSafeMigrationIdentityInsertCommand>().Count());
+        Assert.Equal(
+            executeMigrationCommand
+                ? 1
+                : 0,
+            commands
+                .OfType<SqlServerSafeMigrationIdentityInsertCommand>()
+                .Count());
+
         Assert.True(markerInitiallyAvailable);
         Assert.Null(readinessFailure);
         Assert.Null(cancelRequestFailure);
@@ -188,16 +239,23 @@ public sealed partial class SqlServerModelManagedDataCancellationTests : SqlServ
 
         if (inheritedIdentityInsert)
         {
-            Assert.Equal(8107, Assert.IsType<SqlException>(inheritedIdentityFailure).Number);
+            Assert.Equal(8107,
+                Assert.IsType<SqlException>(inheritedIdentityFailure)
+                    .Number);
         }
 
         if (requiresCallerRecovery)
         {
-            Assert.Equal(8107, Assert.IsType<SqlException>(probeFailure).Number);
+            Assert.Equal(8107,
+                Assert.IsType<SqlException>(probeFailure)
+                    .Number);
         }
         else
         {
-            Assert.Equal(544, Assert.IsType<SqlException>(explicitIdentityFailure).Number);
+            Assert.Equal(544,
+                Assert.IsType<SqlException>(explicitIdentityFailure)
+                    .Number);
+
             Assert.Null(probeFailure);
         }
     }

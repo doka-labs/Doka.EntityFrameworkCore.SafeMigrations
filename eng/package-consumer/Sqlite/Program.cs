@@ -1,3 +1,5 @@
+using Doka.EntityFrameworkCore.SafeMigrations.Sqlite.PackageConsumer;
+
 const string designTimeReferenceAttributeName =
     "Microsoft.EntityFrameworkCore.Design.DesignTimeServicesReferenceAttribute";
 
@@ -43,8 +45,10 @@ var designTimeReferences = Assembly
     .ToArray();
 
 var hasExpectedDesignTimeReference = designTimeReferences is [{ ConstructorArguments.Count: 2 }]
-    && designTimeReferences[0].ConstructorArguments[0].Value is string typeName
-    && designTimeReferences[0].ConstructorArguments[1].Value is string referencedProvider
+    && designTimeReferences[0]
+        .ConstructorArguments[0].Value is string typeName
+    && designTimeReferences[0]
+        .ConstructorArguments[1].Value is string referencedProvider
     && typeName == designTimeServicesTypeName
     && referencedProvider == providerName;
 
@@ -90,8 +94,10 @@ static int VerifyDatabase(
     {
         using var connection = new SqliteConnection(settings.ConnectionString);
         connection.Open();
-        Doka.EntityFrameworkCore.SafeMigrations.Sqlite.PackageConsumer.ToolingDatabaseVerifier.Verify(
-            connection, migrationId, transitionMigrationId);
+        ToolingDatabaseVerifier.Verify(
+            connection,
+            migrationId,
+            transitionMigrationId);
     }
     catch (Exception exception) when (exception is InvalidOperationException or SqliteException)
     {
@@ -122,12 +128,14 @@ internal sealed class PackageScaffoldingDbContext : DbContext
         ModelBuilder modelBuilder
     )
     {
-        modelBuilder.Entity<PackageScaffoldingEntity>().HasData(
-            new PackageScaffoldingEntity
-            {
-                Id = 1,
-                Name = "package-consumer",
-            });
+        modelBuilder
+            .Entity<PackageScaffoldingEntity>()
+            .HasData(
+                new PackageScaffoldingEntity
+                {
+                    Id = 1,
+                    Name = "package-consumer",
+                });
     }
 }
 

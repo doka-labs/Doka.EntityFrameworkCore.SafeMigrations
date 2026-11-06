@@ -1,3 +1,6 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Compiles generated consumer sources against the exact assemblies restored by the test project.</summary>
@@ -8,20 +11,26 @@ internal static class MySqlGeneratedMigrationCompiler
     /// </summary>
     /// <param name="sources">Complete migration, metadata or snapshot compilation units.</param>
     /// <returns>The generated assembly containing the consumer's executable migration.</returns>
-    internal static Assembly Compile(params string[] sources)
+    internal static Assembly Compile(
+        params string[] sources
+    )
     {
-        var compilation = Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create(
-            "GeneratedMySqlMigration_" + Guid.NewGuid().ToString("N"),
-            sources.Select(static source => Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(source)),
+        var compilation = CSharpCompilation.Create(
+            "GeneratedMySqlMigration_"
+            + Guid
+                .NewGuid()
+                .ToString("N"),
+            sources.Select(static source => CSharpSyntaxTree.ParseText(source)),
             CreateReferences(),
-            new Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions(
-                Microsoft.CodeAnalysis.OutputKind.DynamicallyLinkedLibrary));
+            new CSharpCompilationOptions(
+                OutputKind.DynamicallyLinkedLibrary));
 
         using var output = new MemoryStream();
         var emitted = compilation.Emit(output);
         if (!emitted.Success)
         {
-            throw new InvalidOperationException("Generated MySQL migration did not compile: "
+            throw new InvalidOperationException(
+                "Generated MySQL migration did not compile: "
                 + string.Join(Environment.NewLine, emitted.Diagnostics));
         }
 
@@ -29,7 +38,7 @@ internal static class MySqlGeneratedMigrationCompiler
     }
 
     /// <summary>Preserves the same published runtime references in Rider and command-line test hosts.</summary>
-    private static IEnumerable<Microsoft.CodeAnalysis.MetadataReference> CreateReferences()
+    private static IEnumerable<MetadataReference> CreateReferences()
     {
         var platformPaths = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
             .Split(Path.PathSeparator);
@@ -46,7 +55,8 @@ internal static class MySqlGeneratedMigrationCompiler
             typeof(MySqlGeneratedMigrationCompiler).Assembly.Location,
         ]);
 
-        return paths.Distinct(StringComparer.Ordinal)
-            .Select(static path => Microsoft.CodeAnalysis.MetadataReference.CreateFromFile(path));
+        return paths
+            .Distinct(StringComparer.Ordinal)
+            .Select(static path => MetadataReference.CreateFromFile(path));
     }
 }

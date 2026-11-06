@@ -2,9 +2,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 {
-    private Dictionary<SafeMigrationOperation, GeneratedColumnSourceProof>? _generatedColumnSourceProofs;
-    private HashSet<(string? Schema, string Table, string Column)>? _changedGeneratedColumnSources;
     private HashSet<(string? Schema, string Table)>? _changedGeneratedColumnOwners;
+    private HashSet<(string? Schema, string Table, string Column)>? _changedGeneratedColumnSources;
+    private Dictionary<SafeMigrationOperation, GeneratedColumnSourceProof>? _generatedColumnSourceProofs;
     private bool _generatedColumnSourcesUnknown;
 
     /// <summary>Binds only actual native qualified results to their exact generated-column operations.</summary>
@@ -18,6 +18,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         _changedGeneratedColumnSources = null;
         _changedGeneratedColumnOwners = null;
         _generatedColumnSourcesUnknown = false;
+
         // WHY: Keep captured proofs and plan slots tied to the exact owning operation ordinal.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -79,7 +80,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             return null;
         }
 
-        return GeneratedColumnSourcesAreCurrent(proof, columns) ? null : GeneratedColumnDependencyUnproven();
+        return GeneratedColumnSourcesAreCurrent(proof, columns)
+            ? null
+            : GeneratedColumnDependencyUnproven();
     }
 
     /// <summary>Qualifies generated targets and newly supplied dependencies after neutral projection.</summary>
@@ -97,13 +100,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         if (projected.ObservedState is SafeMigrationObservedState.Missing or SafeMigrationObservedState.Matching)
         {
-            return GeneratedColumnSourcesAreCurrent(proof, columns) ? projected : GeneratedColumnDependencyUnproven();
+            return GeneratedColumnSourcesAreCurrent(proof, columns)
+                ? projected
+                : GeneratedColumnDependencyUnproven();
         }
 
         if (projected is
             {
                 ObservedState: SafeMigrationObservedState.PrerequisiteMissing,
-                Code: "projected_structure_state_unknown"
+                Code: "projected_structure_state_unknown",
             }
             && proof.LiveMatchingAnalysis is { } matching
             && !_generatedColumnSourcesUnknown
@@ -121,16 +126,16 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         }
 
         if (projected is
-        {
-            ObservedState: SafeMigrationObservedState.Unsupported,
-            IsInvariantUnsupported: false,
-            Code: "generated_column_nullability",
-        }
+                {
+                    ObservedState: SafeMigrationObservedState.Unsupported,
+                    IsInvariantUnsupported: false,
+                    Code: "generated_column_nullability",
+                }
                 or
-        {
-            ObservedState: SafeMigrationObservedState.PrerequisiteMissing,
-            Code: "generated_column_dependency_missing",
-        }
+                {
+                    ObservedState: SafeMigrationObservedState.PrerequisiteMissing,
+                    Code: "generated_column_dependency_missing",
+                }
             && GeneratedColumnSourcesAreCurrent(proof, columns))
         {
             // WHY: This dynamic native result proves an absent generated target,
@@ -277,14 +282,16 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         string table,
         string? schema,
         string name
-    ) => (_changedGeneratedColumnSources ??= new(PhysicalMemberComparer)).Add(
+    ) => (_changedGeneratedColumnSources ??=
+        new HashSet<(string? Schema, string Table, string Column)>(PhysicalMemberComparer)).Add(
         (NormalizeProofSchema(schema), table, name));
 
     /// <summary>Invalidates source fallback across physical owner lifetimes.</summary>
     private void OwnerChanged(
         string table,
         string? schema
-    ) => (_changedGeneratedColumnOwners ??= new(PhysicalOwnerComparer)).Add((NormalizeProofSchema(schema), table));
+    ) => (_changedGeneratedColumnOwners ??= new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer)).Add(
+        (NormalizeProofSchema(schema), table));
 
     /// <summary>Retains a precise rejection code instead of inventing a live generated-column certificate.</summary>
     private static SafeMigrationProviderAnalysis GeneratedColumnDependencyUnproven() => new(

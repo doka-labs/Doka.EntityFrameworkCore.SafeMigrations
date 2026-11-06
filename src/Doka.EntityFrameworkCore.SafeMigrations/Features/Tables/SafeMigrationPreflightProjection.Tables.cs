@@ -159,6 +159,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         {
             _renamedTableSources.Remove(key);
             _projectedMissingTables.Remove(key);
+
             // WHY: Row mutations belong to the old physical lifetime, not a
             // newly created relation that happens to reuse the same name.
             _projectedDataMutationTables.Remove(key);
@@ -179,7 +180,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
             var table = new ProjectedTable(
                 intent.Definition,
-                dataMutationVersion: _providerDataMutationVersion,
+                dataMutationVersion: DataMutationVersion,
                 objectIdentityNormalizer: _objectIdentityNormalizer,
                 sharesUniqueIndexIdentity: SharesUniqueConstraintAndIndexIdentity)
             {
@@ -191,7 +192,7 @@ internal sealed partial class SafeMigrationPreflightProjection
 
             var prerequisites = new ProjectedPrerequisites(
                 newlyCreated: true,
-                dataMutationVersion: _providerDataMutationVersion,
+                dataMutationVersion: DataMutationVersion,
                 objectIdentityNormalizer: _objectIdentityNormalizer,
                 sharesUniqueIndexIdentity: SharesUniqueConstraintAndIndexIdentity)
             {
@@ -245,6 +246,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                 key,
                 new ProjectedPrerequisites(
                     newlyCreated: false,
+
                     // WHY: Matching proves that the table exists; it does not
                     // re-establish row-level safety after provider data DML.
                     dataMutationVersion: 0,
@@ -301,7 +303,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             var targetSchema = intent.NewSchema ?? intent.Schema;
             var target = new TableKey(targetTable, targetSchema);
             RenameModelManagedTable(source, target);
-            var physicalSource = _renamedTableSources.Remove(source, out var originalSource) ? originalSource : source;
+            var physicalSource = _renamedTableSources.Remove(source, out var originalSource)
+                ? originalSource
+                : source;
 
             _renamedTableSources[target] = physicalSource;
             if (_projectedUnknownPhysicalKeys.Remove(source))
@@ -340,7 +344,9 @@ internal sealed partial class SafeMigrationPreflightProjection
         if (_renamedTableAnalyzer is not null)
         {
             var target = new TableKey(intent.NewName ?? intent.Name, intent.NewSchema ?? intent.Schema);
-            var physical = _renamedTableSources.Remove(source, out var original) ? original : source;
+            var physical = _renamedTableSources.Remove(source, out var original)
+                ? original
+                : source;
 
             _renamedTableSources[target] = physical;
             if (_projectedUnknownPhysicalKeys.Remove(source))
@@ -420,10 +426,13 @@ internal sealed partial class SafeMigrationPreflightProjection
             string? schema
         )
         {
-            var oldTable = _table;
-            var oldSchema = _schema;
+            var oldTable = Table;
+            var oldSchema = Schema;
 
-            PrimaryKey = PrimaryKey is null ? null : Copy(PrimaryKey, table: table, schema: schema);
+            PrimaryKey = PrimaryKey is null
+                ? null
+                : Copy(PrimaryKey, table: table, schema: schema);
+
             ReplaceValues(UniqueConstraints, value => Copy(value, table: table, schema: schema));
             ReplaceValues(CheckConstraints, value => Copy(value, table: table, schema: schema));
             ReplaceValues(
@@ -438,10 +447,11 @@ internal sealed partial class SafeMigrationPreflightProjection
                     principalSchema: SameIdentity(value.PrincipalTable, value.PrincipalSchema, oldTable, oldSchema)
                         ? schema
                         : value.PrincipalSchema));
+
             ReplaceValues(Indexes, value => Copy(value, table: table, schema: schema));
 
-            _table = table;
-            _schema = schema;
+            Table = table;
+            Schema = schema;
         }
 
         public void RenamePrincipalTable(

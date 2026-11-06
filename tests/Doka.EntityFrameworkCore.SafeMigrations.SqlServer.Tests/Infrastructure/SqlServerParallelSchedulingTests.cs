@@ -11,11 +11,17 @@ public sealed class SqlServerParallelSchedulingTests
         var assembly = typeof(SqlServerTestFramework).Assembly;
 
         // Act
-        var behavior = Assert.Single(assembly.GetCustomAttributes(typeof(CollectionBehaviorAttribute), false)
-            .Cast<CollectionBehaviorAttribute>());
-        var behaviorData = Assert.Single(assembly.GetCustomAttributesData(),
+        var behavior = Assert.Single(
+            assembly
+                .GetCustomAttributes(typeof(CollectionBehaviorAttribute), false)
+                .Cast<CollectionBehaviorAttribute>());
+
+        var behaviorData = Assert.Single(
+            assembly.GetCustomAttributesData(),
             attribute => attribute.AttributeType == typeof(CollectionBehaviorAttribute));
-        var framework = Assert.Single(assembly.GetCustomAttributesData(),
+
+        var framework = Assert.Single(
+            assembly.GetCustomAttributesData(),
             attribute => attribute.AttributeType == typeof(TestFrameworkAttribute));
 
         // Assert
@@ -23,8 +29,12 @@ public sealed class SqlServerParallelSchedulingTests
         Assert.Equal(4, behavior.MaxParallelThreads);
         Assert.Equal((int)CollectionBehavior.CollectionPerClass, behaviorData.ConstructorArguments[0].Value);
         Assert.Equal(typeof(SqlServerTestFramework).FullName, framework.ConstructorArguments[0].Value);
-        Assert.Equal(assembly.GetName().Name, framework.ConstructorArguments[1].Value);
-        Assert.Equal(typeof(SharedContainerTestFramework<SqlServerContainerFixture>),
+        Assert.Equal(assembly.GetName()
+                .Name,
+            framework.ConstructorArguments[1].Value);
+
+        Assert.Equal(
+            typeof(SharedContainerTestFramework<SqlServerContainerFixture>),
             typeof(SqlServerTestFramework).BaseType);
     }
 
@@ -36,21 +46,40 @@ public sealed class SqlServerParallelSchedulingTests
         var assemblyTypes = typeof(SqlServerTestFramework).Assembly.GetTypes();
 
         // Act
-        var liveClasses = assemblyTypes.Where(type => !type.IsAbstract
-            && typeof(SqlServerIntegrationTestBase).IsAssignableFrom(type)).ToArray();
-        var exclusiveClasses = liveClasses.Where(type => type
-            .GetCustomAttributes(typeof(CollectionAttribute), false).Length != 0).ToArray();
-        var collectionOwners = assemblyTypes.Where(type =>
-            typeof(ICollectionFixture<SqlServerContainerFixture>).IsAssignableFrom(type)).ToArray();
-        var allocationCollection = Assert.Single(typeof(SqlServerSafeMigrationAllocationIntegrationTests)
-            .GetCustomAttributesData(), attribute => attribute.AttributeType == typeof(CollectionAttribute));
-        var exclusiveDefinition = Assert.Single(typeof(ProcessWideTestGroup)
-            .GetCustomAttributes(typeof(CollectionDefinitionAttribute), false).Cast<CollectionDefinitionAttribute>());
+        var liveClasses = assemblyTypes
+            .Where(type => !type.IsAbstract
+                && typeof(SqlServerIntegrationTestBase).IsAssignableFrom(type))
+            .ToArray();
+
+        var exclusiveClasses = liveClasses
+            .Where(type => type
+                    .GetCustomAttributes(typeof(CollectionAttribute), false)
+                    .Length
+                != 0)
+            .ToArray();
+
+        var collectionOwners = assemblyTypes
+            .Where(type =>
+                typeof(ICollectionFixture<SqlServerContainerFixture>).IsAssignableFrom(type))
+            .ToArray();
+
+        var allocationCollection = Assert.Single(
+            typeof(SqlServerSafeMigrationAllocationIntegrationTests)
+                .GetCustomAttributesData(),
+            attribute => attribute.AttributeType == typeof(CollectionAttribute));
+
+        var exclusiveDefinition = Assert.Single(
+            typeof(ProcessWideTestGroup)
+                .GetCustomAttributes(typeof(CollectionDefinitionAttribute), false)
+                .Cast<CollectionDefinitionAttribute>());
 
         // Assert
         Assert.True(liveClasses.Length >= 52);
-        Assert.All(liveClasses, type => Assert.True(
-            typeof(IClassFixture<SqlServerContainerFixture>).IsAssignableFrom(type)));
+        Assert.All(
+            liveClasses,
+            type => Assert.True(
+                typeof(IClassFixture<SqlServerContainerFixture>).IsAssignableFrom(type)));
+
         Assert.Equal([typeof(SqlServerSafeMigrationAllocationIntegrationTests)], exclusiveClasses);
         Assert.Equal(ProcessWideTestGroup.Name, allocationCollection.ConstructorArguments[0].Value);
         Assert.True(exclusiveDefinition.DisableParallelization);
@@ -65,8 +94,12 @@ public sealed class SqlServerParallelSchedulingTests
         var helperBase = typeof(SqlServerSafeMigrationIntegrationTests);
 
         // Act
-        var declaredTests = helperBase.GetMethods()
-            .Where(method => method.GetCustomAttributes(typeof(FactAttribute), true).Length != 0).ToArray();
+        var declaredTests = helperBase
+            .GetMethods()
+            .Where(method => method.GetCustomAttributes(typeof(FactAttribute), true)
+                    .Length
+                != 0)
+            .ToArray();
 
         // Assert
         Assert.True(helperBase.IsAbstract);
@@ -94,7 +127,8 @@ public sealed class SqlServerParallelSchedulingTests
 
         // Act
         var required = SharedContainerFixtureSelection.RequiresFixture<SqlServerContainerFixture>(
-            selectedClass, skipReason);
+            selectedClass,
+            skipReason);
 
         // Assert
         Assert.Equal(expected, required);
@@ -117,15 +151,24 @@ public sealed class SqlServerParallelSchedulingTests
 
             throw new InvalidOperationException("An inactive selection constructed a SQL Server container.");
         });
+
         var selectedClass = allSkippedLiveCases
             ? typeof(SqlServerSafeMigrationBasicIntegrationTests)
             : typeof(SqlServerOperationMatrixCoverageTests);
-        var skipReason = allSkippedLiveCases ? "unsupported architecture" : null;
+
+        var skipReason = allSkippedLiveCases
+            ? "unsupported architecture"
+            : null;
+
         var required = SharedContainerFixtureSelection.RequiresFixture<SqlServerContainerFixture>(
-            selectedClass, skipReason);
+            selectedClass,
+            skipReason);
 
         // Act
-        await Task.WhenAll(lifecycle.InitializeAsync(required), lifecycle.InitializeAsync(required));
+        await Task.WhenAll(
+            lifecycle.InitializeAsync(required, CancellationToken.None),
+            lifecycle.InitializeAsync(required, CancellationToken.None));
+
         await Task.WhenAll(lifecycle.DisposeAsync(), lifecycle.DisposeAsync());
 
         // Assert
@@ -146,9 +189,12 @@ public sealed class SqlServerParallelSchedulingTests
 
         // Act
         var factRequiresFixture = SharedContainerFixtureSelection.RequiresFixture<SqlServerContainerFixture>(
-            typeof(SqlServerSafeMigrationBasicIntegrationTests), fact.Skip);
+            typeof(SqlServerSafeMigrationBasicIntegrationTests),
+            fact.Skip);
+
         var theoryRequiresFixture = SharedContainerFixtureSelection.RequiresFixture<SqlServerContainerFixture>(
-            typeof(SqlServerSafeMigrationColumnLayoutIntegrationTests), theory.Skip);
+            typeof(SqlServerSafeMigrationColumnLayoutIntegrationTests),
+            theory.Skip);
 
         // Assert
         Assert.Equal(nativeHost, factRequiresFixture);

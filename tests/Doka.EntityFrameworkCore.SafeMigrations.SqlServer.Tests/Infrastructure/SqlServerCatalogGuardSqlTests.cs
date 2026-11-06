@@ -18,7 +18,9 @@ public sealed class SqlServerCatalogGuardSqlTests
         // Arrange
         var plan = new SqlServerSafeMigrationRuntimePlan(
             "CASE WHEN @proof = 1 THEN N'matching' ELSE N'different' END",
-            "0", SafeMigrationRepairCapability.None, "0")
+            "0",
+            SafeMigrationRepairCapability.None,
+            "0")
         {
             RequiresDelayedBinding = true,
             CatalogPreambleSql = "DECLARE @proof bit = 1; DECLARE @label nvarchar(20) = N'O''Brien';",
@@ -35,11 +37,17 @@ public sealed class SqlServerCatalogGuardSqlTests
         Assert.True(dynamicStart >= 0);
         Assert.True(fallbackStart > dynamicStart);
         var dynamicSql = sql[(dynamicStart + dynamicPrefix.Length)..fallbackStart];
-        Assert.StartsWith("DECLARE @proof bit = 1; DECLARE @label nvarchar(20) = N''O''''Brien'';\n"
+        Assert.StartsWith(
+            "DECLARE @proof bit = 1; DECLARE @label nvarchar(20) = N''O''''Brien'';\n"
             + "SELECT @doka_ordinal,",
-            dynamicSql, StringComparison.Ordinal);
-        Assert.Contains("CASE WHEN @proof = 1 THEN N''matching'' ELSE N''different'' END",
-            dynamicSql, StringComparison.Ordinal);
+            dynamicSql,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "CASE WHEN @proof = 1 THEN N''matching'' ELSE N''different'' END",
+            dynamicSql,
+            StringComparison.Ordinal);
+
         Assert.DoesNotContain("@proof", sql[..dynamicStart], StringComparison.Ordinal);
         Assert.DoesNotContain("@proof", sql[fallbackStart..], StringComparison.Ordinal);
     }
@@ -52,7 +60,8 @@ public sealed class SqlServerCatalogGuardSqlTests
     {
         // Arrange
         var preamble = "DECLARE @proof nvarchar(max) = N'"
-            + new string('\'', SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes / 2) + "';";
+            + new string('\'', SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes / 2)
+            + "';";
 
         var plan = new SqlServerSafeMigrationRuntimePlan("N'matching'", "0", SafeMigrationRepairCapability.None, "0")
         {
@@ -66,8 +75,11 @@ public sealed class SqlServerCatalogGuardSqlTests
 
         // Assert
         Assert.True(Encoding.UTF8.GetByteCount(preamble) < SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes);
-        Assert.Contains("operation 379 exceeds a bounded query limit",
-            Assert.IsType<InvalidOperationException>(observed).Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "operation 379 exceeds a bounded query limit",
+            Assert.IsType<InvalidOperationException>(observed)
+                .Message,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -84,16 +96,22 @@ public sealed class SqlServerCatalogGuardSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("catalog_guard_items",
-            new ExpectedColumnDefinition("Value", clrType, true, storeType)), SafeMigrationPolicy.ThrowIfDifferent);
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "catalog_guard_items",
+                new ExpectedColumnDefinition("Value", clrType, true, storeType)),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var plan = catalog.Build(operation);
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
-        Assert.Contains("JOIN sys.types ty ON ty.user_type_id = c.user_type_id",
-            plan.StateExpression, StringComparison.Ordinal);
+        Assert.Contains(
+            "JOIN sys.types ty ON ty.user_type_id = c.user_type_id",
+            plan.StateExpression,
+            StringComparison.Ordinal);
+
         Assert.Contains("ty.is_user_defined = 0", plan.StateExpression, StringComparison.Ordinal);
         Assert.Contains("ty.is_assembly_type = 0", plan.StateExpression, StringComparison.Ordinal);
         Assert.Contains("ty.is_user_defined = 0", plan.Postcondition, StringComparison.Ordinal);
@@ -123,18 +141,37 @@ public sealed class SqlServerCatalogGuardSqlTests
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
         Assert.True(plan.RequiresDelayedBinding);
-        Assert.Contains("JOIN sys.types ty ON ty.user_type_id = c.user_type_id",
-            plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
-        Assert.Equal(1,
-            plan.StateEvaluationGuardExpression.Split("ty.is_user_defined = 0", StringSplitOptions.None).Length - 1);
-        Assert.Equal(1,
-            plan.StateEvaluationGuardExpression.Split("ty.is_assembly_type = 0", StringSplitOptions.None).Length - 1);
-        Assert.Contains("(N'Id', N'int', CAST(NULL AS int), CAST(NULL AS int), CAST(NULL AS int))",
-            plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
-        Assert.Contains("(N'Value', N'nvarchar', 160, CAST(NULL AS int), CAST(NULL AS int))",
-            plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
+        Assert.Contains(
+            "JOIN sys.types ty ON ty.user_type_id = c.user_type_id",
+            plan.StateEvaluationGuardExpression,
+            StringComparison.Ordinal);
+
+        Assert.Equal(
+            1,
+            plan.StateEvaluationGuardExpression.Split("ty.is_user_defined = 0")
+                .Length
+            - 1);
+
+        Assert.Equal(
+            1,
+            plan.StateEvaluationGuardExpression.Split("ty.is_assembly_type = 0")
+                .Length
+            - 1);
+
+        Assert.Contains(
+            "(N'Id', N'int', CAST(NULL AS int), CAST(NULL AS int), CAST(NULL AS int))",
+            plan.StateEvaluationGuardExpression,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "(N'Value', N'nvarchar', 160, CAST(NULL AS int), CAST(NULL AS int))",
+            plan.StateEvaluationGuardExpression,
+            StringComparison.Ordinal);
+
         Assert.Contains("c.name = expected.name", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
-        Assert.Contains("WHERE CASE WHEN c.column_id IS NOT NULL", plan.StateEvaluationGuardExpression,
+        Assert.Contains(
+            "WHERE CASE WHEN c.column_id IS NOT NULL",
+            plan.StateEvaluationGuardExpression,
             StringComparison.Ordinal);
     }
 
@@ -148,14 +185,36 @@ public sealed class SqlServerCatalogGuardSqlTests
     )
         => operationKind switch
         {
-            "ensure" => new EnsureModelManagedDataIntent("catalog_guard_items", ["Id"], ["int"],
-                ["Id", "Value"], ["int", "nvarchar(80)"], new object?[,] { { 1, "target" } }, null, null),
-            "update" => new UpdateModelManagedDataIntent("catalog_guard_items", ["Id"], ["int"],
-                new object?[,] { { 1 } }, ["Value"], ["nvarchar(80)"],
-                new object?[,] { { "source" } }, new object?[,] { { "target" } }, null, null),
-            "delete" => new DeleteModelManagedDataIntent("catalog_guard_items", ["Id"], ["int"],
-                new object?[,] { { 1 } }, ["Id", "Value"], ["int", "nvarchar(80)"],
-                new object?[,] { { 1, "source" } }, null, []),
+            "ensure" => new EnsureModelManagedDataIntent(
+                "catalog_guard_items",
+                ["Id"],
+                ["int"],
+                ["Id", "Value"],
+                ["int", "nvarchar(80)"],
+                new object?[,] { { 1, "target" } },
+                null,
+                null),
+            "update" => new UpdateModelManagedDataIntent(
+                "catalog_guard_items",
+                ["Id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                ["Value"],
+                ["nvarchar(80)"],
+                new object?[,] { { "source" } },
+                new object?[,] { { "target" } },
+                null,
+                null),
+            "delete" => new DeleteModelManagedDataIntent(
+                "catalog_guard_items",
+                ["Id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                ["Id", "Value"],
+                ["int", "nvarchar(80)"],
+                new object?[,] { { 1, "source" } },
+                null,
+                []),
             _ => throw new ArgumentOutOfRangeException(nameof(operationKind)),
         };
 }

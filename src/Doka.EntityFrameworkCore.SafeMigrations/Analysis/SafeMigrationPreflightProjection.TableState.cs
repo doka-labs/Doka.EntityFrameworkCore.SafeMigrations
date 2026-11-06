@@ -5,10 +5,8 @@ internal sealed partial class SafeMigrationPreflightProjection
     private sealed partial class ProjectedTable : ISafeMigrationProjectedAlterTable
     {
         private readonly List<string> _columnOrder;
-        private readonly ISafeMigrationProviderObjectIdentityNormalizer? _objectIdentityNormalizer;
-        private string _table;
-        private string? _schema;
         private readonly string? _comment;
+        private readonly ISafeMigrationProviderObjectIdentityNormalizer? _objectIdentityNormalizer;
 
         public ProjectedTable(
             ExpectedTableDefinition definition,
@@ -22,8 +20,8 @@ internal sealed partial class SafeMigrationPreflightProjection
                 objectIdentityNormalizer?.FoldUnquotedCapturedSqlIdentifiers == true);
 
             _objectIdentityNormalizer = objectIdentityNormalizer;
-            _table = definition.Table;
-            _schema = definition.Schema;
+            Table = definition.Table;
+            Schema = definition.Schema;
             _comment = definition.Comment;
             _columnOrder = definition
                 .Columns
@@ -42,7 +40,9 @@ internal sealed partial class SafeMigrationPreflightProjection
                 static value => value.Name,
                 new IdentifierComparer(
                     objectIdentityNormalizer,
-                    sharesUniqueIndexIdentity ? objectIdentityNormalizer?.IndexIdentifierComparer : null));
+                    sharesUniqueIndexIdentity
+                        ? objectIdentityNormalizer?.IndexIdentifierComparer
+                        : null));
 
             CheckConstraints = definition.CheckConstraints.ToDictionary(static value => value.Name, identifierComparer);
 
@@ -60,9 +60,9 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         public ExpectedTableDefinition Definition =>
             new(
-                _table,
+                Table,
                 _columnOrder.Select(name => Columns[name]),
-                _schema,
+                Schema,
                 _comment,
                 PrimaryKey,
                 UniqueConstraints.Values,
@@ -75,11 +75,9 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         public bool CanReuseCreationCharacterSet { get; init; } = true;
 
-        public string Table => _table;
+        public string Table { get; private set; }
 
-        public string? Schema => _schema;
-
-        public ExpectedPrimaryKeyDefinition? PrimaryKey { get; set; }
+        public string? Schema { get; private set; }
 
         public Dictionary<string, ExpectedUniqueConstraintDefinition> UniqueConstraints { get; }
 
@@ -88,6 +86,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         public Dictionary<string, ExpectedForeignKeyDefinition> ForeignKeys { get; }
 
         public Dictionary<string, ExpectedIndexDefinition> Indexes { get; }
+
+        public ExpectedPrimaryKeyDefinition? PrimaryKey { get; set; }
 
         IEnumerable<ExpectedColumnDefinition> ISafeMigrationProjectedAlterTable.Columns => Columns.Values;
 
@@ -119,7 +119,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             string source,
             string target
         ) => values
-            .Select(value => Columns.Comparer.Equals(value, source) ? target : value)
+            .Select(value => Columns.Comparer.Equals(value, source)
+                ? target
+                : value)
             .ToArray();
 
         private bool SameIdentity(
@@ -153,12 +155,18 @@ internal sealed partial class SafeMigrationPreflightProjection
             value.Collation,
             value.Comment,
             value.DefaultValue,
-            replaceComputed ? computedColumnSql : computedColumnSql ?? value.ComputedColumnSql,
+            replaceComputed
+                ? computedColumnSql
+                : computedColumnSql ?? value.ComputedColumnSql,
             value.IsStored,
-            replaceComputed ? computedExpression : computedExpression ?? value.ComputedExpression)
+            replaceComputed
+                ? computedExpression
+                : computedExpression ?? value.ComputedExpression)
         {
             ProviderAnnotations = value.ProviderAnnotations,
-            CapturedComputedSql = replaceComputed ? capturedComputedSql : value.CapturedComputedSql,
+            CapturedComputedSql = replaceComputed
+                ? capturedComputedSql
+                : value.CapturedComputedSql,
         };
 
         private static ExpectedPrimaryKeyDefinition Copy(
@@ -185,9 +193,17 @@ internal sealed partial class SafeMigrationPreflightProjection
             bool replaceExpression = false
         )
         {
-            var selectedSql = replaceExpression ? sql : sql ?? value.Sql;
-            var selectedExpression = replaceExpression ? expression : expression ?? value.Expression;
-            var selectedCapturedSql = replaceExpression ? capturedSql : value.CapturedSql;
+            var selectedSql = replaceExpression
+                ? sql
+                : sql ?? value.Sql;
+
+            var selectedExpression = replaceExpression
+                ? expression
+                : expression ?? value.Expression;
+
+            var selectedCapturedSql = replaceExpression
+                ? capturedSql
+                : value.CapturedSql;
 
             if (selectedSql is not null)
             {
@@ -250,18 +266,24 @@ internal sealed partial class SafeMigrationPreflightProjection
             keys ?? value.Keys,
             schema ?? value.Schema,
             value.Unique,
-            replaceFilter ? filter : filter ?? value.Filter,
+            replaceFilter
+                ? filter
+                : filter ?? value.Filter,
             includedColumns ?? value.IncludedColumns,
             value.Method,
             value.NullsDistinct,
-            replaceFilter ? structuredFilter : structuredFilter ?? value.StructuredFilter);
+            replaceFilter
+                ? structuredFilter
+                : structuredFilter ?? value.StructuredFilter);
 
         private ExpectedIndexKeyDefinition Copy(
             ExpectedIndexKeyDefinition value,
             string source,
             string target
         ) => new(
-            value.Column is not null && Columns.Comparer.Equals(value.Column, source) ? target : value.Column,
+            value.Column is not null && Columns.Comparer.Equals(value.Column, source)
+                ? target
+                : value.Column,
             expression: null,
             value.SortOrder,
             value.NullOrder,

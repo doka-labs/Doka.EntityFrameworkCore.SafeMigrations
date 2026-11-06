@@ -1,3 +1,5 @@
+using MySqlGuidFormat = MySqlConnector.MySqlGuidFormat;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 public sealed class MySqlSafeMigrationOptionsBuilderExtensionsTests
@@ -18,11 +20,12 @@ public sealed class MySqlSafeMigrationOptionsBuilderExtensionsTests
 
         using var context = new DbContext(options);
         var effective = new MySqlConnectionStringBuilder(
-            context.Database.GetDbConnection().ConnectionString);
+            context.Database.GetDbConnection()
+                .ConnectionString);
 
         Assert.True(effective.AllowUserVariables);
         Assert.False(effective.UseAffectedRows);
-        Assert.Equal(MySqlConnector.MySqlGuidFormat.Binary16, effective.GuidFormat);
+        Assert.Equal(MySqlGuidFormat.Binary16, effective.GuidFormat);
     }
 
     [Fact]
@@ -34,11 +37,12 @@ public sealed class MySqlSafeMigrationOptionsBuilderExtensionsTests
 
         using var context = new DbContext(optionsBuilder.Options);
         var effective = new MySqlConnectionStringBuilder(
-            context.Database.GetDbConnection().ConnectionString);
+            context.Database.GetDbConnection()
+                .ConnectionString);
 
         Assert.True(effective.AllowUserVariables);
         Assert.False(effective.UseAffectedRows);
-        Assert.Equal(MySqlConnector.MySqlGuidFormat.Binary16, effective.GuidFormat);
+        Assert.Equal(MySqlGuidFormat.Binary16, effective.GuidFormat);
     }
 
     [Fact]
@@ -47,7 +51,7 @@ public sealed class MySqlSafeMigrationOptionsBuilderExtensionsTests
         var connectionString = new MySqlConnectionStringBuilder(OwnedConnectionString)
         {
             AllowUserVariables = false,
-            GuidFormat = MySqlConnector.MySqlGuidFormat.Binary16,
+            GuidFormat = MySqlGuidFormat.Binary16,
         }.ConnectionString;
 
         using var connection = new MySqlConnection(connectionString);
@@ -59,7 +63,7 @@ public sealed class MySqlSafeMigrationOptionsBuilderExtensionsTests
 
         Assert.Contains("AllowUserVariables=true", exception.Message, StringComparison.Ordinal);
         Assert.Equal(connectionString, connection.ConnectionString);
-        Assert.Equal(System.Data.ConnectionState.Closed, connection.State);
+        Assert.Equal(ConnectionState.Closed, connection.State);
     }
 
     [Theory]
@@ -93,7 +97,7 @@ public sealed class MySqlSafeMigrationOptionsBuilderExtensionsTests
         var connectionString = new MySqlConnectionStringBuilder(OwnedConnectionString)
         {
             AllowUserVariables = false,
-            GuidFormat = MySqlConnector.MySqlGuidFormat.Binary16,
+            GuidFormat = MySqlGuidFormat.Binary16,
         }.ConnectionString;
 
         using var connection = new MySqlConnection(connectionString);
@@ -105,7 +109,7 @@ public sealed class MySqlSafeMigrationOptionsBuilderExtensionsTests
 
         Assert.Contains("AllowUserVariables=true", exception.Message, StringComparison.Ordinal);
         Assert.Equal(connectionString, connection.ConnectionString);
-        Assert.Equal(System.Data.ConnectionState.Closed, connection.State);
+        Assert.Equal(ConnectionState.Closed, connection.State);
     }
 
     [Fact]
@@ -114,7 +118,7 @@ public sealed class MySqlSafeMigrationOptionsBuilderExtensionsTests
         var connectionString = new MySqlConnectionStringBuilder(OwnedConnectionString)
         {
             AllowUserVariables = true,
-            GuidFormat = MySqlConnector.MySqlGuidFormat.Binary16,
+            GuidFormat = MySqlGuidFormat.Binary16,
         }.ConnectionString;
 
         using var dataSource = new MySqlDataSourceBuilder(connectionString).Build();
@@ -125,11 +129,12 @@ public sealed class MySqlSafeMigrationOptionsBuilderExtensionsTests
 
         using var context = new DbContext(options);
         var effective = new MySqlConnectionStringBuilder(
-            context.Database.GetDbConnection().ConnectionString);
+            context.Database.GetDbConnection()
+                .ConnectionString);
 
         Assert.True(effective.AllowUserVariables);
         Assert.False(effective.UseAffectedRows);
-        Assert.Equal(MySqlConnector.MySqlGuidFormat.Binary16, effective.GuidFormat);
+        Assert.Equal(MySqlGuidFormat.Binary16, effective.GuidFormat);
     }
 
     [Fact]
@@ -138,7 +143,7 @@ public sealed class MySqlSafeMigrationOptionsBuilderExtensionsTests
         var connectionString = new MySqlConnectionStringBuilder(OwnedConnectionString)
         {
             AllowUserVariables = false,
-            GuidFormat = MySqlConnector.MySqlGuidFormat.Binary16,
+            GuidFormat = MySqlGuidFormat.Binary16,
         }.ConnectionString;
 
         using var dataSource = new MySqlDataSourceBuilder(connectionString).Build();

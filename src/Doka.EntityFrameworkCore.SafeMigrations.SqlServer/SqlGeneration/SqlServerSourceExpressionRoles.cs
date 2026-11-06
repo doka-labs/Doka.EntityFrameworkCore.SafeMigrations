@@ -4,13 +4,20 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 internal static class SqlServerSourceExpressionRoles
 {
     /// <summary>Whether an original parsed source expression occupies a native scalar position.</summary>
-    internal static bool IsNativeScalar(SafeMigrationSqlExpression expression) => IsScalar(expression, depth: 0);
+    internal static bool IsNativeScalar(
+        SafeMigrationSqlExpression expression
+    ) => IsScalar(expression, depth: 0);
 
     /// <summary>Whether an original parsed source expression occupies a native search-condition position.</summary>
-    internal static bool IsNativePredicate(SafeMigrationSqlExpression expression) => IsPredicate(expression, depth: 0);
+    internal static bool IsNativePredicate(
+        SafeMigrationSqlExpression expression
+    ) => IsPredicate(expression, depth: 0);
 
     /// <summary>Retains source roles through every scalar child, rather than trusting the outer node alone.</summary>
-    private static bool IsScalar(SafeMigrationSqlExpression expression, int depth)
+    private static bool IsScalar(
+        SafeMigrationSqlExpression expression,
+        int depth
+    )
     {
         if (depth > SafeMigrationSqlExpressionParser.MaximumDepth)
         {
@@ -38,7 +45,10 @@ internal static class SqlServerSourceExpressionRoles
     }
 
     /// <summary>Requires a search condition wherever native SQL does not permit a scalar BIT or integer.</summary>
-    private static bool IsPredicate(SafeMigrationSqlExpression expression, int depth)
+    private static bool IsPredicate(
+        SafeMigrationSqlExpression expression,
+        int depth
+    )
     {
         if (depth > SafeMigrationSqlExpressionParser.MaximumDepth)
         {
@@ -56,11 +66,12 @@ internal static class SqlServerSourceExpressionRoles
             SafeMigrationSqlBinaryExpression
             {
                 Operator: >= SafeMigrationSqlBinaryOperator.Equal
-                    and <= SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+                and <= SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
             } binary => IsScalar(binary.Left, depth + 1) && IsScalar(binary.Right, depth + 1),
             SafeMigrationSqlNullTestExpression test => IsScalar(test.Operand, depth + 1),
             SafeMigrationSqlBetweenExpression between => IsScalar(between.Operand, depth + 1)
-                && IsScalar(between.Lower, depth + 1) && IsScalar(between.Upper, depth + 1),
+                && IsScalar(between.Lower, depth + 1)
+                && IsScalar(between.Upper, depth + 1),
             SafeMigrationSqlInExpression list => IsScalar(list.Operand, depth + 1)
                 && AreScalars(list.Values, depth + 1),
             _ => false,
@@ -68,13 +79,17 @@ internal static class SqlServerSourceExpressionRoles
     }
 
     /// <summary>Every WHEN is native predicate SQL; every selected result is native scalar SQL.</summary>
-    private static bool IsCase(SafeMigrationSqlCaseExpression expression, int depth)
+    private static bool IsCase(
+        SafeMigrationSqlCaseExpression expression,
+        int depth
+    )
     {
         // WHY: Whole-method role checks measured faster with snapshot enumeration for larger CASE branches.
         // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var clause in expression.WhenClauses)
         {
-            if (!IsPredicate(clause.Condition, depth) || !IsScalar(clause.Result, depth))
+            if (!IsPredicate(clause.Condition, depth)
+                || !IsScalar(clause.Result, depth))
             {
                 return false;
             }
@@ -86,7 +101,10 @@ internal static class SqlServerSourceExpressionRoles
     /// <summary>
     /// Checks argument and IN-list roles without allocating an enumerator or intermediate collection.
     /// </summary>
-    private static bool AreScalars(IReadOnlyList<SafeMigrationSqlExpression> expressions, int depth)
+    private static bool AreScalars(
+        IReadOnlyList<SafeMigrationSqlExpression> expressions,
+        int depth
+    )
     {
         // WHY: Indexing avoids an interface enumerator at each recursive argument-list check.
         // ReSharper disable once ForCanBeConvertedToForeach

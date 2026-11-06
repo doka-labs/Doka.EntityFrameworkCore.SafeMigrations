@@ -103,25 +103,38 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
         var original = CreateColumn(typeof(Guid), storeType: null, DokaMySqlGuidFormat.Uuid);
         original.IsNullable = true;
         var builder = new MigrationBuilder(safeContext.Database.ProviderName!);
-        builder.AddColumnIfNotExistsFromModel(operationFactory: operationBuilder => operationBuilder
-            .AddColumn<Guid>("native_id", "native_uuid_contract", nullable: true)
-            .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Uuid));
+        builder.AddColumnIfNotExistsFromModel(
+            operationFactory: operationBuilder => operationBuilder
+                .AddColumn<Guid>("native_id", "native_uuid_contract", nullable: true)
+                .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Uuid));
+
         // WHY: Typed metadata permits an inferred store type, but the ordinary
         // Doka column renderer delegates that inference to its Binary16 default.
         // Real property opt-in supplies an explicit uuid type through the model.
         const string inferredColumn = "`native_id` binary(16)";
 
-        var nativeSql = string.Concat(nativeContext.GetService<IMigrationsSqlGenerator>()
-            .Generate([original], nativeContext.Model).Select(static command => command.CommandText));
+        var nativeSql = string.Concat(
+            nativeContext
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([original], nativeContext.Model)
+                .Select(static command => command.CommandText));
 
-        var safeSql = string.Concat(safeContext.GetService<IMigrationsSqlGenerator>()
-            .Generate(builder.Operations, safeContext.Model).Select(static command => command.CommandText));
+        var safeSql = string.Concat(
+            safeContext
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate(builder.Operations, safeContext.Model)
+                .Select(static command => command.CommandText));
 
-        Assert.Equal(DokaMySqlGuidFormat.Uuid, original.GetMySqlMigrationMetadata().GuidFormat);
+        Assert.Equal(DokaMySqlGuidFormat.Uuid,
+            original.GetMySqlMigrationMetadata()
+                .GuidFormat);
+
         Assert.Contains(inferredColumn, nativeSql, StringComparison.Ordinal);
         Assert.Contains(Convert.ToHexString(Encoding.UTF8.GetBytes(inferredColumn)), safeSql, StringComparison.Ordinal);
         Assert.DoesNotContain(
-            Convert.ToHexString(Encoding.UTF8.GetBytes("`native_id` uuid")), safeSql, StringComparison.Ordinal);
+            Convert.ToHexString(Encoding.UTF8.GetBytes("`native_id` uuid")),
+            safeSql,
+            StringComparison.Ordinal);
     }
 
     /// <summary>The native mapping uses canonical text transport, not the connector's binary GUID reader.</summary>
@@ -135,7 +148,10 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
     {
         using var context = new NativeGuidContext(CreateOptions<NativeGuidContext>());
         var property = context.Model.FindEntityType(typeof(NativeGuidRecord))!
-            .FindProperty(nullable ? nameof(NativeGuidRecord.OptionalId) : nameof(NativeGuidRecord.Id))!;
+            .FindProperty(
+                nullable
+                    ? nameof(NativeGuidRecord.OptionalId)
+                    : nameof(NativeGuidRecord.Id))!;
 
         using var command = new MySqlCommand();
         var mapping = property.GetRelationalTypeMapping();
@@ -146,6 +162,7 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
         Assert.Equal("uuid", mapping.StoreType);
         Assert.Null(property.GetMaxLength());
         Assert.Null(property.IsFixedLength());
+
         // WHY: GuidToStringConverter contributes a 36-character transport
         // hint; StoreTypePostfix.None keeps the database type unsized UUID.
         Assert.Equal(36, mapping.Size);
@@ -167,11 +184,19 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
         var characterProperty = entity.FindProperty(nameof(NativeGuidRecord.CharacterId))!;
 
         Assert.Equal("binary(16)", implicitProperty.GetColumnType());
-        Assert.Equal(DokaMySqlGuidFormat.Binary16, implicitProperty.FindAnnotation("Doka:MySql:GuidFormat")?.Value);
+        Assert.Equal(DokaMySqlGuidFormat.Binary16,
+            implicitProperty.FindAnnotation("Doka:MySql:GuidFormat")
+                ?.Value);
+
         Assert.Equal("binary(16)", binaryProperty.GetColumnType());
-        Assert.Equal(DokaMySqlGuidFormat.Binary16, binaryProperty.FindAnnotation("Doka:MySql:GuidFormat")?.Value);
+        Assert.Equal(DokaMySqlGuidFormat.Binary16,
+            binaryProperty.FindAnnotation("Doka:MySql:GuidFormat")
+                ?.Value);
+
         Assert.Equal("char(36)", characterProperty.GetColumnType());
-        Assert.Equal(DokaMySqlGuidFormat.Char36, characterProperty.FindAnnotation("Doka:MySql:GuidFormat")?.Value);
+        Assert.Equal(DokaMySqlGuidFormat.Char36,
+            characterProperty.FindAnnotation("Doka:MySql:GuidFormat")
+                ?.Value);
     }
 
     /// <summary>A global native default does not rewrite explicitly configured legacy GUID properties.</summary>
@@ -186,11 +211,19 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
         var characterProperty = entity.FindProperty(nameof(NativeGuidRecord.CharacterId))!;
 
         Assert.Equal("uuid", implicitProperty.GetColumnType());
-        Assert.Equal(DokaMySqlGuidFormat.Uuid, implicitProperty.FindAnnotation("Doka:MySql:GuidFormat")?.Value);
+        Assert.Equal(DokaMySqlGuidFormat.Uuid,
+            implicitProperty.FindAnnotation("Doka:MySql:GuidFormat")
+                ?.Value);
+
         Assert.Equal("binary(16)", binaryProperty.GetColumnType());
-        Assert.Equal(DokaMySqlGuidFormat.Binary16, binaryProperty.FindAnnotation("Doka:MySql:GuidFormat")?.Value);
+        Assert.Equal(DokaMySqlGuidFormat.Binary16,
+            binaryProperty.FindAnnotation("Doka:MySql:GuidFormat")
+                ?.Value);
+
         Assert.Equal("char(36)", characterProperty.GetColumnType());
-        Assert.Equal(DokaMySqlGuidFormat.Char36, characterProperty.FindAnnotation("Doka:MySql:GuidFormat")?.Value);
+        Assert.Equal(DokaMySqlGuidFormat.Char36,
+            characterProperty.FindAnnotation("Doka:MySql:GuidFormat")
+                ?.Value);
     }
 
     /// <summary>Application-owned 16-byte converters remain byte values under every GUID default.</summary>
@@ -231,7 +264,8 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
 
         Assert.Contains(
             "MariaDB 10.7",
-            Assert.IsType<NotSupportedException>(exception).Message,
+            Assert.IsType<NotSupportedException>(exception)
+                .Message,
             StringComparison.Ordinal);
     }
 
@@ -252,22 +286,25 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
             CreateOptions<PlainContext>(serverVersion: UnsupportedVersion(useMariaDb)));
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AddColumnIfNotExistsFromModel(operationFactory: operationBuilder =>
-        {
-            var column = operationBuilder.AddColumn<Guid>(
-                "native_id",
-                "native_uuid_contract",
-                type: "uuid",
-                nullable: true);
-
-            if (annotateFormat)
+        builder.AddColumnIfNotExistsFromModel(
+            operationFactory: operationBuilder =>
             {
-                column.Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Uuid);
-            }
+                var column = operationBuilder.AddColumn<Guid>(
+                    "native_id",
+                    "native_uuid_contract",
+                    type: "uuid",
+                    nullable: true);
 
-        });
+                if (annotateFormat)
+                {
+                    column.Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Uuid);
+                }
+            });
 
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
+
         var sql = string.Concat(commands.Select(static command => command.CommandText));
 
         Assert.NotEmpty(commands);
@@ -303,7 +340,8 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
 
         Assert.Contains(
             "MariaDB 10.7",
-            Assert.IsType<NotSupportedException>(exception).Message,
+            Assert.IsType<NotSupportedException>(exception)
+                .Message,
             StringComparison.Ordinal);
     }
 
@@ -333,7 +371,8 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
         DokaMySqlGuidFormat? defaultFormat = null,
         MySqlServerVersion? serverVersion = null,
         bool registerSafeMigrations = true
-    ) where TContext : DbContext
+    )
+        where TContext : DbContext
     {
         var builder = new DbContextOptionsBuilder<TContext>();
         builder.UseInternalServiceProvider(_services);
@@ -372,10 +411,21 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
         )
         {
             var entity = modelBuilder.Entity<NativeGuidRecord>();
-            entity.Property(value => value.Id).HasMySqlGuidFormat(DokaMySqlGuidFormat.Uuid);
-            entity.Property(value => value.OptionalId).HasMySqlGuidFormat(DokaMySqlGuidFormat.Uuid);
-            entity.Property(value => value.BinaryId).HasMySqlGuidFormat(DokaMySqlGuidFormat.Binary16);
-            entity.Property(value => value.CharacterId).HasMySqlGuidFormat(DokaMySqlGuidFormat.Char36);
+            entity
+                .Property(value => value.Id)
+                .HasMySqlGuidFormat(DokaMySqlGuidFormat.Uuid);
+
+            entity
+                .Property(value => value.OptionalId)
+                .HasMySqlGuidFormat(DokaMySqlGuidFormat.Uuid);
+
+            entity
+                .Property(value => value.BinaryId)
+                .HasMySqlGuidFormat(DokaMySqlGuidFormat.Binary16);
+
+            entity
+                .Property(value => value.CharacterId)
+                .HasMySqlGuidFormat(DokaMySqlGuidFormat.Char36);
         }
     }
 
@@ -383,7 +433,9 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
     private sealed class DefaultGuidContext(DbContextOptions<DefaultGuidContext> options) : DbContext(options)
     {
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.Entity<NativeGuidRecord>();
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        ) => modelBuilder.Entity<NativeGuidRecord>();
     }
 
     /// <summary>Separates an application converter from provider-owned GUID mappings.</summary>
@@ -392,14 +444,19 @@ public sealed class MySqlNativeUuidContractTests : IDisposable
         /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
-        ) => modelBuilder.Entity<ConvertedGuidRecord>().Property(value => value.ConvertedId).HasConversion<byte[]>();
+        ) => modelBuilder
+            .Entity<ConvertedGuidRecord>()
+            .Property(value => value.ConvertedId)
+            .HasConversion<byte[]>();
     }
 
     /// <summary>Supplies a valid model for direct public type-mapping capability probes.</summary>
     private sealed class PlainContext(DbContextOptions<PlainContext> options) : DbContext(options)
     {
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.Entity<PlainRecord>();
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        ) => modelBuilder.Entity<PlainRecord>();
     }
 
     /// <summary>Stores the independently configured GUID properties.</summary>

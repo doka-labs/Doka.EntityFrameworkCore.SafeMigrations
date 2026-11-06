@@ -5,7 +5,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
     /// <summary>Binds each proof only to a provider-owned result variable within this operation.</summary>
     /// <param name="plan">The unbound runtime contract.</param>
     /// <returns>The same plan when no binary proof is required, otherwise an operation-local binding.</returns>
-    private static MySqlSafeMigrationRuntimePlan BindRuntimeBinaryDefaults(MySqlSafeMigrationRuntimePlan plan)
+    private static MySqlSafeMigrationRuntimePlan BindRuntimeBinaryDefaults(
+        MySqlSafeMigrationRuntimePlan plan
+    )
     {
         if (plan.BinaryDefaultProofs.Count == 0)
         {
@@ -13,6 +15,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         }
 
         var proofs = new MySqlSafeMigrationBinaryDefaultProof[plan.BinaryDefaultProofs.Count];
+
         // WHY: Fill each bound proof slot using the matching original proof ordinal.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -44,16 +47,22 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         }
 
         var eligibility = new string[plan.BinaryDefaultProofs.Count];
+
         // WHY: Fill each bound proof slot using the matching original proof ordinal.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < eligibility.Length; ordinal++)
         {
             eligibility[ordinal] = MySqlSafeMigrationRuntimePlan.RenderPreparedBinaryDefaultEligibilityExpression(
-                plan.BinaryDefaultProofs[ordinal], values);
+                plan.BinaryDefaultProofs[ordinal],
+                values);
         }
 
         return MySqlSafeMigrationBinaryDefaultProof.BuildEvaluationSql(
-            plan.BinaryDefaultProofs, eligibility, executionGuard, PreparedStatementName, "@doka_sm_sql");
+            plan.BinaryDefaultProofs,
+            eligibility,
+            executionGuard,
+            PreparedStatementName,
+            "@doka_sm_sql");
     }
 }

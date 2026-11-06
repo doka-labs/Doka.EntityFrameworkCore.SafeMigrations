@@ -11,23 +11,36 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         ExpectedColumnDefinition target
     )
     {
-        if (GetUnsupportedColumnFeature(source) is not null || GetUnsupportedColumnFeature(target) is not null
-            || !TryGetColumnType(source, out var oldType) || !TryGetColumnType(target, out var newType)
+        if (GetUnsupportedColumnFeature(source) is not null
+            || GetUnsupportedColumnFeature(target) is not null
+            || !TryGetColumnType(source, out var oldType)
+            || !TryGetColumnType(target, out var newType)
             || !CanonicalIntegerType(source.ClrType, oldType.Name)
             || !CanonicalIntegerType(target.ClrType, newType.Name)
             || IntegerWidth(oldType.Name) >= IntegerWidth(newType.Name)
-            || source.Name != target.Name || source.IsUnicode != target.IsUnicode
-            || source.MaxLength != target.MaxLength || source.IsFixedLength != target.IsFixedLength
-            || source.Precision != target.Precision || source.Scale != target.Scale
-            || source.IsRowVersion || target.IsRowVersion
-            || source.Collation is not null || target.Collation is not null
-            || source.Comment is not null || target.Comment is not null
-            || source.ComputedColumnSql is not null || target.ComputedColumnSql is not null
-            || source.ComputedExpression is not null || target.ComputedExpression is not null
-            || source.IsStored is not null || target.IsStored is not null
+            || source.Name != target.Name
+            || source.IsUnicode != target.IsUnicode
+            || source.MaxLength != target.MaxLength
+            || source.IsFixedLength != target.IsFixedLength
+            || source.Precision != target.Precision
+            || source.Scale != target.Scale
+            || source.IsRowVersion
+            || target.IsRowVersion
+            || source.Collation is not null
+            || target.Collation is not null
+            || source.Comment is not null
+            || target.Comment is not null
+            || source.ComputedColumnSql is not null
+            || target.ComputedColumnSql is not null
+            || source.ComputedExpression is not null
+            || target.ComputedExpression is not null
+            || source.IsStored is not null
+            || target.IsStored is not null
             || !TryGetIdentity(source, out var oldIdentity, out var oldSeed, out var oldIncrement)
             || !TryGetIdentity(target, out var newIdentity, out var newSeed, out var newIncrement)
-            || oldIdentity != newIdentity || oldSeed != newSeed || oldIncrement != newIncrement
+            || oldIdentity != newIdentity
+            || oldSeed != newSeed
+            || oldIncrement != newIncrement
             || source.DefaultValue.Kind != target.DefaultValue.Kind)
         {
             return false;
@@ -39,11 +52,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         return source.DefaultValue.Kind switch
         {
             SafeMigrationDefaultValueKind.None => true,
-            SafeMigrationDefaultValueKind.Literal => source.DefaultValue.IsNullLiteral
-                && target.DefaultValue.IsNullLiteral
-                || source.DefaultValue.LiteralValue is not null && target.DefaultValue.LiteralValue is not null
+            SafeMigrationDefaultValueKind.Literal => (source.DefaultValue.IsNullLiteral
+                    && target.DefaultValue.IsNullLiteral)
+                || (source.DefaultValue.LiteralValue is not null
+                    && target.DefaultValue.LiteralValue is not null
                     && Convert.ToDecimal(source.DefaultValue.LiteralValue, CultureInfo.InvariantCulture)
-                        == Convert.ToDecimal(target.DefaultValue.LiteralValue, CultureInfo.InvariantCulture),
+                    == Convert.ToDecimal(target.DefaultValue.LiteralValue, CultureInfo.InvariantCulture)),
             _ => DefaultExpression(source) == DefaultExpression(target),
         };
     }
@@ -65,19 +79,25 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var matchingProof = Bit(matching);
         var oldMatches = $"({ColumnMatches(intent.Table, intent.Schema, source)}) AND ({commentAbsent})";
         var layout = BuildIntegerWideningStoragePredicate(intent, reservedBytes);
-        var dependencies = orderedCapture ? ImmutableIntegerWideningDependencies(intent)
-            : ColumnHasDependencies(intent.Table, intent.Schema, intent.Definition.Name,
+        var dependencies = orderedCapture
+            ? ImmutableIntegerWideningDependencies(intent)
+            : ColumnHasDependencies(
+                intent.Table,
+                intent.Schema,
+                intent.Definition.Name,
                 allowAutomaticStatistics: true,
                 allowInlineDefault: source.DefaultValue.Kind != SafeMigrationDefaultValueKind.None);
 
         var requiresRows = source.IsNullable && !intent.Definition.IsNullable;
         var unsafeRows = requiresRows
             ? $"EXISTS (SELECT TOP (1) 1 FROM {QualifiedTable(intent.Table, intent.Schema)} "
-                + $"WHERE {Delimited(intent.Definition.Name)} IS NULL)" : "1 = 0";
+            + $"WHERE {Delimited(intent.Definition.Name)} IS NULL)"
+            : "1 = 0";
 
         var canRead = requiresRows
             ? $"COALESCE(HAS_PERMS_BY_NAME({Literal(QualifiedTable(intent.Table, intent.Schema))}, "
-                + "N'OBJECT', N'SELECT'), 0) = 1" : "1 = 1";
+            + "N'OBJECT', N'SELECT'), 0) = 1"
+            : "1 = 1";
 
         // WHY: ALTER COLUMN can rewrite rows without emitting UPDATE DML.
         // SQL Server still requires UPDATE permission for that engine work;
@@ -94,27 +114,31 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + $"WHEN {exists} AND NOT ({canWrite}) AND NOT ({matching}) "
             + "THEN N'column_alter_write_permission' ELSE NULL END";
 
-        return Plan($"CASE WHEN NOT {exists} THEN N'prerequisite_missing' WHEN {matching} THEN N'matching' "
-            + $"WHEN {oldMatches} AND ({layout}) AND NOT ({dependencies}) AND ({unsafeRows}) "
-            + "THEN N'data_blocked' ELSE N'different' END", matchingProof,
-            SafeMigrationRepairCapability.Safe, Bit(repair)) with
-        {
-            RequiresDelayedBinding = requiresRows,
-            RequiresExpressionDependencyRead = true,
-            MayRequireNullabilityDataProof = requiresRows,
-            RequiresLiveDataProof = requiresRows,
-            RepairOperationalImpact = SafeMigrationOperationalImpact.TableRewritePossible,
-            StateEvaluationGuardExpression = Bit(metadataGuard),
-            StateEvaluationGuardFailureExpression = "N'unsupported'",
-            ClassificationCodeExpression = $"CASE WHEN NOT ({canRead}) THEN N'column_nullability_data_unproven' "
+        return Plan(
+                $"CASE WHEN NOT {exists} THEN N'prerequisite_missing' WHEN {matching} THEN N'matching' "
+                + $"WHEN {oldMatches} AND ({layout}) AND NOT ({dependencies}) AND ({unsafeRows}) "
+                + "THEN N'data_blocked' ELSE N'different' END",
+                matchingProof,
+                SafeMigrationRepairCapability.Safe,
+                Bit(repair)) with
+            {
+                RequiresDelayedBinding = requiresRows,
+                RequiresExpressionDependencyRead = true,
+                MayRequireNullabilityDataProof = requiresRows,
+                RequiresLiveDataProof = requiresRows,
+                RepairOperationalImpact = SafeMigrationOperationalImpact.TableRewritePossible,
+                StateEvaluationGuardExpression = Bit(metadataGuard),
+                StateEvaluationGuardFailureExpression = "N'unsupported'",
+                ClassificationCodeExpression = $"CASE WHEN NOT ({canRead}) THEN N'column_nullability_data_unproven' "
                 + $"WHEN {exists} AND NOT ({canWrite}) AND NOT ({matching}) "
                 + "THEN N'column_alter_write_permission' "
                 + $"WHEN {matching} THEN NULL "
                 + $"WHEN NOT ({layout}) THEN N'column_widening_storage_unproven' ELSE NULL END",
-            PrerequisiteFailureCodeExpression = permissionFailure,
-            PostApplySql = intent.Definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.None
-                ? null : BuildDefaultStampSql(intent.Table, intent.Schema, intent.Definition),
-        };
+                PrerequisiteFailureCodeExpression = permissionFailure,
+                PostApplySql = intent.Definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.None
+                    ? null
+                    : BuildDefaultStampSql(intent.Table, intent.Schema, intent.Definition),
+            };
     }
 
     /// <summary>Captures exact source, immutable blockers, and optional NULL evidence before accepted drops.</summary>
@@ -125,12 +149,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         AlterColumnIntent intent,
         int reservedBytes
     )
-        => QualifyExpressionDependencyRead(BuildIntegerWidening(intent, orderedCapture: true, reservedBytes) with
-        {
-            PhysicalTableSupportExpression = BuildPhysicalTableSupportExpression(intent),
-            DefaultValueSupportExpression = BuildDefaultValueSupportExpression(intent),
-            PrerequisiteExpression = BuildPrerequisiteExpression(intent),
-        });
+        => QualifyExpressionDependencyRead(
+            BuildIntegerWidening(intent, orderedCapture: true, reservedBytes) with
+            {
+                PhysicalTableSupportExpression = BuildPhysicalTableSupportExpression(intent),
+                DefaultValueSupportExpression = BuildDefaultValueSupportExpression(intent),
+                PrerequisiteExpression = BuildPrerequisiteExpression(intent),
+            });
 
     /// <summary>Gets the fixed scalar growth of an already eligible widening.</summary>
     internal int IntegerWideningGrowth(
@@ -193,7 +218,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + "N'uniqueidentifier',N'varbinary',N'varchar') THEN 1 ELSE 0 END),0) AS unknown_columns "
             + $"FROM sys.columns c JOIN sys.types ty ON ty.user_type_id=c.user_type_id WHERE c.object_id={id}";
 
-        return "EXISTS(SELECT 1 FROM sys.tables t CROSS APPLY (" + query + ") layout "
+        return "EXISTS(SELECT 1 FROM sys.tables t CROSS APPLY ("
+            + query
+            + ") layout "
             + $"WHERE t.object_id={id} AND t.max_column_id_used=layout.column_count AND layout.unknown_columns=0 "
             + "AND NOT EXISTS(SELECT 1 FROM sys.indexes i JOIN sys.partition_schemes ps "
             + "ON ps.data_space_id=i.data_space_id WHERE i.object_id=t.object_id AND i.index_id IN(0,1)) "
@@ -210,11 +237,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string type
     ) => type switch
     {
-        "tinyint" => 1,
-        "smallint" => 2,
-        "int" => 4,
-        "bigint" => 8,
-        _ => 0,
+        "tinyint" => 1, "smallint" => 2, "int" => 4, "bigint" => 8, _ => 0,
     };
 
     private static bool CanonicalIntegerType(

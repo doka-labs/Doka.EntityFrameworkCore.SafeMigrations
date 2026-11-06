@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ModelManagedDataTypedLiterals migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlModelManagedDataTypedLiteralsIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlModelManagedDataTypedLiteralsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlModelManagedDataTypedLiteralsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlModelManagedDataTypedLiteralsIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     [Theory]
     [InlineData(SafeMigrationScaffoldingMode.Strict, DokaMySqlGuidFormat.Char36)]
@@ -20,7 +22,10 @@ public sealed partial class MySqlModelManagedDataTypedLiteralsIntegrationTests :
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var storeType = GuidStoreType(guidFormat);
-        var maximumLength = guidFormat == DokaMySqlGuidFormat.Binary16 ? 16 : 36;
+        var maximumLength = guidFormat == DokaMySqlGuidFormat.Binary16
+            ? 16
+            : 36;
+
         var identifier = Guid.Parse("1458f03f-9acb-4902-bca8-280b613a7c92");
 
         var ensure = new MigrationBuilder(context.Database.ProviderName!);
@@ -41,13 +46,14 @@ public sealed partial class MySqlModelManagedDataTypedLiteralsIntegrationTests :
                 state = table.Column<int>(type: "int", nullable: false),
             },
             table => table.PrimaryKey("pk_typed_model_rows", value => value.id));
+
         _ = ensure.EnsureModelManagedDataFromModel(
             "typed_model_rows",
             ["id"],
             [storeType],
             ["id", "symbol", "state"],
             [storeType, "char(1)", "int"],
-            new object?[,] { { identifier, 'A', SafeMigrationScaffoldingWorkItemKind.Task, }, });
+            new object?[,] { { identifier, 'A', SafeMigrationScaffoldingWorkItemKind.Task } });
 
         var runner = context.GetService<ISafeMigrationRunner>();
         var ensurePreflight = await runner.AnalyzeAsync(
@@ -69,11 +75,11 @@ public sealed partial class MySqlModelManagedDataTypedLiteralsIntegrationTests :
             "typed_model_rows",
             ["id"],
             [storeType],
-            new object?[,] { { identifier, }, },
+            new object?[,] { { identifier } },
             ["symbol", "state"],
             ["char(1)", "int"],
-            new object?[,] { { 'A', SafeMigrationScaffoldingWorkItemKind.Task, }, },
-            new object?[,] { { 'B', SafeMigrationScaffoldingWorkItemKind.External, }, });
+            new object?[,] { { 'A', SafeMigrationScaffoldingWorkItemKind.Task } },
+            new object?[,] { { 'B', SafeMigrationScaffoldingWorkItemKind.External } });
 
         var updatePreflight = await runner.AnalyzeAsync(
             context,
@@ -94,10 +100,10 @@ public sealed partial class MySqlModelManagedDataTypedLiteralsIntegrationTests :
             "typed_model_rows",
             ["id"],
             [storeType],
-            new object?[,] { { identifier, }, },
+            new object?[,] { { identifier } },
             ["id", "symbol", "state"],
             [storeType, "char(1)", "int"],
-            new object?[,] { { identifier, 'B', SafeMigrationScaffoldingWorkItemKind.External, }, });
+            new object?[,] { { identifier, 'B', SafeMigrationScaffoldingWorkItemKind.External } });
 
         var deletePreflight = await runner.AnalyzeAsync(
             context,
@@ -118,12 +124,27 @@ public sealed partial class MySqlModelManagedDataTypedLiteralsIntegrationTests :
         Assert.Equal(SafeMigrationAction.NoOp, ensureReplay.Assessments[^1].Action);
         Assert.Equal(
             SafeMigrationObservedState.TransitionReady,
-            Assert.Single(updatePreflight.Assessments).ObservedState);
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(updateReplay.Assessments).ObservedState);
+            Assert.Single(updatePreflight.Assessments)
+                .ObservedState);
+
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(updateReplay.Assessments)
+                .ObservedState);
+
         Assert.Equal(
             SafeMigrationObservedState.TransitionReady,
-            Assert.Single(deletePreflight.Assessments).ObservedState);
-        Assert.Equal(SafeMigrationObservedState.Missing, Assert.Single(deleteReplay.Assessments).ObservedState);
-        Assert.Equal(0, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `typed_model_rows`;"));
+            Assert.Single(deletePreflight.Assessments)
+                .ObservedState);
+
+        Assert.Equal(SafeMigrationObservedState.Missing,
+            Assert.Single(deleteReplay.Assessments)
+                .ObservedState);
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `typed_model_rows`;",
+                cancellationToken: CancellationToken.None));
     }
 }

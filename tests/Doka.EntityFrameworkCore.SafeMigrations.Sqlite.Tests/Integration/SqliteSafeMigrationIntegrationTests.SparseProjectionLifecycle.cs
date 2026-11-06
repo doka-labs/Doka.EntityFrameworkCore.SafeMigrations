@@ -9,46 +9,62 @@ public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task IndexEnsureThenRepeatedDrop_LeavesNoPhysicalIndex(bool createTable)
+    public async Task IndexEnsureThenRepeatedDrop_LeavesNoPhysicalIndex(
+        bool createTable
+    )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         if (!createTable)
         {
-            await ExecuteSqlAsync(connection,
+            await ExecuteSqlAsync(
+                connection,
                 "CREATE TABLE projection_index (Id INTEGER NOT NULL, Code TEXT NULL); "
-                + "INSERT INTO projection_index (Id, Code) VALUES (1, 'preserve');");
+                + "INSERT INTO projection_index (Id, Code) VALUES (1, 'preserve');",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (createTable)
         {
-            builder.CreateTableIfNotExists("projection_index", table => new
-            {
-                Id = table.Column<int>(type: "INTEGER", nullable: false),
-                Code = table.Column<string>(type: "TEXT", nullable: true),
-            });
+            builder.CreateTableIfNotExists(
+                "projection_index",
+                table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false),
+                    Code = table.Column<string>(type: "TEXT", nullable: true),
+                });
         }
 
         builder.CreateIndexIfNotExists("ix_projection_code", "projection_index", ["Code"]);
         builder.DropIndexIfExists("ix_projection_code", "projection_index");
         builder.DropIndexIfExists("ix_projection_code", "projection_index");
         var runner = context.GetService<ISafeMigrationRunner>();
-        var indexOrdinal = createTable ? 1 : 0;
+        var indexOrdinal = createTable
+            ? 1
+            : 0;
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-index-sparse-lifecycle"));
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-index-sparse-lifecycle"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-index-sparse-postflight"));
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-index-sparse-postflight"),
+            cancellationToken: CancellationToken.None);
 
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
-        var remainingRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM projection_index WHERE Id = 1 AND Code = 'preserve';");
+        var remainingRows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM projection_index WHERE Id = 1 AND Code = 'preserve';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -56,9 +72,15 @@ public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[indexOrdinal + 1].Action);
         Assert.Equal(SafeMigrationAction.NoOp, report.Assessments[indexOrdinal + 2].Action);
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.DoesNotContain(snapshot.Tables["projection_index"].Indexes,
+        Assert.DoesNotContain(
+            snapshot.Tables["projection_index"].Indexes,
             index => index.Name == "ix_projection_code");
-        Assert.Equal(createTable ? 0 : 1, remainingRows);
+
+        Assert.Equal(
+            createTable
+                ? 0
+                : 1,
+            remainingRows);
     }
 
     /// <summary>An accepted live-index drop cannot be executed again from stale matching evidence.</summary>
@@ -66,11 +88,14 @@ public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
     public async Task ExistingIndexRepeatedDrop_ProjectsMissingForTheSecondDrop()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection,
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE projection_index (Id INTEGER NOT NULL, Code TEXT NULL); "
             + "CREATE INDEX ix_projection_code ON projection_index (Code); "
-            + "INSERT INTO projection_index (Id, Code) VALUES (1, 'preserve');");
+            + "INSERT INTO projection_index (Id, Code) VALUES (1, 'preserve');",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropIndexIfExists("ix_projection_code", "projection_index");
@@ -79,13 +104,18 @@ public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-live-index-repeated-drop"));
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-live-index-repeated-drop"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
-        var remainingRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM projection_index WHERE Id = 1 AND Code = 'preserve';");
+        var remainingRows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM projection_index WHERE Id = 1 AND Code = 'preserve';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -103,11 +133,14 @@ public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
     public async Task StandaloneCheckRepeatedEnsure_AddsOnePhysicalConstraintAndReplays()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection,
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, "
             + "CONSTRAINT pk_constraint_parents PRIMARY KEY (Id)); "
-            + "INSERT INTO constraint_parents (Id) VALUES (1);");
+            + "INSERT INTO constraint_parents (Id) VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists("ck_constraint_parents_positive", "constraint_parents", "Id > 0");
@@ -116,23 +149,35 @@ public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-standalone-check-evidence"));
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-standalone-check-evidence"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-standalone-check-postflight"));
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-standalone-check-postflight"),
+            cancellationToken: CancellationToken.None);
 
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
-        var remainingRows = await ScalarIntAsync(connection, "SELECT COUNT(*) FROM constraint_parents WHERE Id = 1;");
+        var remainingRows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM constraint_parents WHERE Id = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
         Assert.Equal(SafeMigrationAction.NoOp, report.Assessments[1].Action);
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.Equal("ck_constraint_parents_positive",
-            Assert.Single(snapshot.Tables["constraint_parents"].Checks).Name);
+        Assert.Equal(
+            "ck_constraint_parents_positive",
+            Assert.Single(snapshot.Tables["constraint_parents"].Checks)
+                .Name);
+
         Assert.Equal(1, remainingRows);
     }
 
@@ -143,34 +188,58 @@ public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
     public async Task StandaloneCheckConflictingEnsure_RejectsBeforeAnyConstraintIsApplied()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection,
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, "
             + "CONSTRAINT pk_constraint_parents PRIMARY KEY (Id)); "
-            + "INSERT INTO constraint_parents (Id) VALUES (1);");
+            + "INSERT INTO constraint_parents (Id) VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists("ck_constraint_parents_positive", "constraint_parents", "Id > 0");
         builder.AddCheckConstraintIfNotExists("ck_constraint_parents_positive", "constraint_parents", "Id < 10");
         var runner = context.GetService<ISafeMigrationRunner>();
-        var schemaVersion = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var schemaVersion = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-standalone-check-conflict"));
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-standalone-check-conflict"),
+            cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
-        var remainingRows = await ScalarIntAsync(connection, "SELECT COUNT(*) FROM constraint_parents WHERE Id = 1;");
-        var finalSchemaVersion = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var remainingRows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM constraint_parents WHERE Id = 1;",
+            cancellationToken: CancellationToken.None);
+
+        var finalSchemaVersion = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
         Assert.Equal(SafeMigrationObservedState.Different, report.Assessments[1].ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[1].Action);
-        Assert.Contains("different", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains(
+            "different",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
+
         Assert.Empty(snapshot.Tables["constraint_parents"].Checks);
         Assert.Equal(1, remainingRows);
         Assert.Equal(schemaVersion, finalSchemaVersion);
@@ -181,34 +250,56 @@ public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
     public async Task EnsuredColumnRenameToOccupiedLiveTarget_RejectsWithoutOverwritingEitherColumn()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection,
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE projection_rename (Id INTEGER NOT NULL, Source TEXT NULL, Target TEXT NULL); "
-            + "INSERT INTO projection_rename (Id, Source, Target) VALUES (1, 'source', 'target');");
+            + "INSERT INTO projection_rename (Id, Source, Target) VALUES (1, 'source', 'target');",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<string>("Source", "projection_rename", type: "TEXT", nullable: true);
         builder.RenameColumnIfExists("Source", "projection_rename", "Target");
         var runner = context.GetService<ISafeMigrationRunner>();
-        var schemaVersion = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var schemaVersion = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-column-rename-live-collision"));
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-column-rename-live-collision"),
+            cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
-        var remainingRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM projection_rename WHERE Id = 1 AND Source = 'source' AND Target = 'target';");
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            cancellationToken: CancellationToken.None));
 
-        var finalSchemaVersion = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var remainingRows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM projection_rename WHERE Id = 1 AND Source = 'source' AND Target = 'target';",
+            cancellationToken: CancellationToken.None);
+
+        var finalSchemaVersion = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.NoOp, report.Assessments[0].Action);
         Assert.Equal(SafeMigrationObservedState.Different, report.Assessments[1].ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[1].Action);
-        Assert.Contains("different", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains(
+            "different",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
+
         Assert.Equal(1, remainingRows);
         Assert.Equal(schemaVersion, finalSchemaVersion);
     }
@@ -218,12 +309,15 @@ public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
     public async Task DroppedSourceAndTargetThenRename_RemainsNoOpAndPreservesUnrelatedRows()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection,
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE structural_posts (Id INTEGER NOT NULL, AuthorId INTEGER NULL, Title TEXT NOT NULL, "
             + "Source TEXT NULL, Target TEXT NULL, CONSTRAINT pk_structural_posts PRIMARY KEY (Id)); "
             + "INSERT INTO structural_posts (Id, AuthorId, Title, Source, Target) "
-            + "VALUES (1, NULL, 'preserve', 'source', 'target');");
+            + "VALUES (1, NULL, 'preserve', 'source', 'target');",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteStructuralSequenceTestContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("Source", "structural_posts");
@@ -233,13 +327,18 @@ public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-column-rename-both-dropped"));
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-column-rename-both-dropped"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
-        var remainingRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM structural_posts WHERE Id = 1 AND AuthorId IS NULL AND Title = 'preserve';");
+        var remainingRows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM structural_posts WHERE Id = 1 AND AuthorId IS NULL AND Title = 'preserve';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -257,7 +356,7 @@ public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
     public async Task CreatedTableColumnRenameToFreeTarget_AppliesAndPreservesTheFinalContract()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -269,14 +368,18 @@ public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
             },
             mode: SafeMigrationTableMode.ConvergenceContainer,
             policy: SafeMigrationPolicy.ExistenceOnly);
+
         builder.RenameColumnIfExists("Source", "projection_rename", "Target");
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-created-column-rename"));
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-created-column-rename"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
 
         // Assert
@@ -284,6 +387,9 @@ public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[1].Action);
         Assert.DoesNotContain("Source", snapshot.Tables["projection_rename"].Columns.Keys);
         Assert.Contains("Target", snapshot.Tables["projection_rename"].Columns.Keys);
-        Assert.Equal("TEXT", snapshot.Tables["projection_rename"].Columns["Target"].StoreType);
+        Assert.Equal("TEXT",
+            snapshot
+                .Tables["projection_rename"]
+                .Columns["Target"].StoreType);
     }
 }

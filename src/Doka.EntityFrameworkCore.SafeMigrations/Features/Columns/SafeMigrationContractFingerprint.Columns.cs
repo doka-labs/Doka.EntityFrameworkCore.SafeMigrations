@@ -125,7 +125,11 @@ public static partial class SafeMigrationContractFingerprint
             return;
         }
 
-        writer.Add(literal.GetType().FullName ?? literal.GetType().Name);
+        writer.Add(literal.GetType()
+                .FullName
+            ?? literal.GetType()
+                .Name);
+
         switch (literal)
         {
             case byte[] bytes:

@@ -16,7 +16,10 @@ public sealed class MySqlCapturedExpressionContractTests
     [InlineData("CHAR(8)", true)]
     [InlineData("decimal(12, 2)", true)]
     [InlineData("DATETIME(6)", true)]
-    public void CapturedCastQualificationRetainsNativeTargetGrammar(string target, bool accepted)
+    public void CapturedCastQualificationRetainsNativeTargetGrammar(
+        string target,
+        bool accepted
+    )
     {
         // Arrange
         var sql = $"CAST(id AS {target})";
@@ -27,7 +30,11 @@ public sealed class MySqlCapturedExpressionContractTests
 
         // Assert
         Assert.True(captured);
-        Assert.Equal(accepted ? null : "captured_expression_cast_target_unverified", failure);
+        Assert.Equal(
+            accepted
+                ? null
+                : "captured_expression_cast_target_unverified",
+            failure);
     }
 
     /// <summary>Foreign quote delimiters are rejected in identifier roles, not inside actual quoted tokens.</summary>
@@ -41,7 +48,10 @@ public sealed class MySqlCapturedExpressionContractTests
     [InlineData("'\"' = '\"'", true)]
     [InlineData("`a\"[b]` > 0", true)]
     [InlineData("'A''[B]' = 'A''[B]'", true)]
-    public void CapturedQuoteQualificationUsesTokenRoles(string sql, bool accepted)
+    public void CapturedQuoteQualificationUsesTokenRoles(
+        string sql,
+        bool accepted
+    )
     {
         // Arrange
         var captured = SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var expression);
@@ -51,7 +61,11 @@ public sealed class MySqlCapturedExpressionContractTests
 
         // Assert
         Assert.True(captured);
-        Assert.Equal(accepted ? null : "captured_expression_dialect_unverified", failure);
+        Assert.Equal(
+            accepted
+                ? null
+                : "captured_expression_dialect_unverified",
+            failure);
     }
 
     /// <summary>Supplementary captured text is rejected only for the engine with a proven lossy catalog.</summary>
@@ -59,7 +73,9 @@ public sealed class MySqlCapturedExpressionContractTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void CapturedSupplementaryBoundaryIsEngineSpecific(bool isMariaDb)
+    public void CapturedSupplementaryBoundaryIsEngineSpecific(
+        bool isMariaDb
+    )
     {
         // Arrange
         const string sql = "'\U0001F642'";
@@ -70,6 +86,10 @@ public sealed class MySqlCapturedExpressionContractTests
 
         // Assert
         Assert.True(captured);
-        Assert.Equal(isMariaDb ? "captured_expression_literal_catalog_unverifiable" : null, failure);
+        Assert.Equal(
+            isMariaDb
+                ? "captured_expression_literal_catalog_unverifiable"
+                : null,
+            failure);
     }
 }

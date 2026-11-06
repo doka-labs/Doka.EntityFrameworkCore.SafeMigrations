@@ -2,54 +2,21 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 
 internal sealed partial class SqliteSafeMigrationProviderAnalyzer
 {
-    private SqliteCatalogSnapshot? _dropProjectionSnapshot;
-    private Dictionary<SafeMigrationOperation, SafeMigrationProviderAnalysis>? _dropProjectionAnalyses;
     private Dictionary<string, HashSet<string>>? _acceptedColumnDrops;
-    private bool _dropProjectionExpired;
     private int _currentOperationOrdinal = -1;
+    private Dictionary<SafeMigrationOperation, SafeMigrationProviderAnalysis>? _dropProjectionAnalyses;
+    private bool _dropProjectionExpired;
+    private SqliteCatalogSnapshot? _dropProjectionSnapshot;
     private int? _rebuildRowMutationOrdinal;
 
-    /// <summary>Starts one catalog-bound window shared by optional preflight and mandatory runtime guards.</summary>
-    /// <param name="snapshot">The immutable native catalog captured for this invocation.</param>
-    internal void ResetDropOnlyProjection(SqliteCatalogSnapshot snapshot)
-    {
-        _dropProjectionSnapshot = snapshot;
-        _dropProjectionAnalyses = null;
-        _acceptedColumnDrops = null;
-        _dropProjectionExpired = false;
-        _currentOperationOrdinal = -1;
-        _rebuildRowMutationOrdinal = null;
-    }
-
     /// <inheritdoc />
-    public void SetCurrentOperationOrdinal(int operationOrdinal)
+    public void SetCurrentOperationOrdinal(
+        int operationOrdinal
+    )
     {
         ArgumentOutOfRangeException.ThrowIfNegative(operationOrdinal);
 
         _currentOperationOrdinal = operationOrdinal;
-    }
-
-    /// <summary>Captures immutable native facts without treating existing tables as newly created or empty.</summary>
-    private void CaptureDropOnlyProjection(SafeMigrationOperation operation, SafeMigrationProviderAnalysis analysis)
-    {
-        if ((operation.Intent is EnsureColumnIntent { Definition.ComputedExpression: not null }
-                && analysis.ObservedState == SafeMigrationObservedState.Matching)
-            || (operation.Intent is EnsureIndexIntent index && IsSimpleIndex(index.Definition)
-                && analysis.ObservedState == SafeMigrationObservedState.Missing))
-        {
-            CaptureDropProjectionEvidence(operation, analysis);
-        }
-    }
-
-    /// <summary>
-    /// Reuses one reference-keyed capture for conditional ownership and row refusals or native baselines.
-    /// </summary>
-    private void CaptureDropProjectionEvidence(SafeMigrationOperation operation, SafeMigrationProviderAnalysis analysis)
-    {
-        _dropProjectionAnalyses ??= new Dictionary<SafeMigrationOperation, SafeMigrationProviderAnalysis>(
-            ReferenceEqualityComparer.Instance);
-
-        _dropProjectionAnalyses[operation] = analysis;
     }
 
     /// <inheritdoc />
@@ -66,8 +33,11 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             && _dropProjectionAnalyses?.TryGetValue(operation, out var rebuildBlocker) == true
             && rebuildBlocker.ObservedState is SafeMigrationObservedState.Unsupported
                 or SafeMigrationObservedState.DataBlocked
-            && (SafeMigrationDecisionPlanner.PlanAction(operation.Intent.Kind, projectedAnalysis.ObservedState,
-                    operation.Policy, projectedAnalysis.RepairCapability)
+            && (SafeMigrationDecisionPlanner.PlanAction(
+                        operation.Intent.Kind,
+                        projectedAnalysis.ObservedState,
+                        operation.Policy,
+                        projectedAnalysis.RepairCapability)
                     is SafeMigrationAction.Apply or SafeMigrationAction.Repair
                 || (rebuildBlocker.ObservedState == SafeMigrationObservedState.DataBlocked
                     && projectedAnalysis.ObservedState == SafeMigrationObservedState.DataBlocked
@@ -83,10 +53,15 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
                 // WHY: A typed repair, backfill or cascading DROP may change the
                 // rows, unlike unrelated metadata. Neither the old refusal nor
                 // optimistic source presence proves the current relationship.
-                return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
-                    SafeMigrationRepairCapability.None, postconditionSatisfied: false, "projected_data_state_unknown")
+                return new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.PrerequisiteMissing,
+                    SafeMigrationRepairCapability.None,
+                    postconditionSatisfied: false,
+                    "projected_data_state_unknown")
                 {
-                    ProviderDeferredOriginOrdinal = mutationOrdinal >= 0 ? mutationOrdinal : null,
+                    ProviderDeferredOriginOrdinal = mutationOrdinal >= 0
+                        ? mutationOrdinal
+                        : null,
                 };
             }
 
@@ -98,13 +73,15 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             return ValidateGeneratedColumnDrop(operation, drop, projectedAnalysis, columns);
         }
 
-        if (_dropProjectionExpired || projectedAnalysis.Code != "projected_structure_state_unknown"
+        if (_dropProjectionExpired
+            || projectedAnalysis.Code != "projected_structure_state_unknown"
             || _dropProjectionAnalyses is not { } capturedAnalyses
             || !capturedAnalyses.TryGetValue(operation, out var captured)
             || SqliteSafeMigrationOperationClassifier.TableName(operation.Intent) is not { } owner
             || _acceptedColumnDrops is not { } acceptedDrops
             || !acceptedDrops.TryGetValue(owner, out var dropped)
-            || _dropProjectionSnapshot is not { } snapshot || !snapshot.Tables.TryGetValue(owner, out var table))
+            || _dropProjectionSnapshot is not { } snapshot
+            || !snapshot.Tables.TryGetValue(owner, out var table))
         {
             return projectedAnalysis;
         }
@@ -135,6 +112,118 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             : captured;
     }
 
+    /// <inheritdoc />
+    public void ObserveAcceptedOperation(
+        SafeMigrationOperation operation,
+        SafeMigrationProviderAnalysis liveAnalysis,
+        SafeMigrationProviderAnalysis analysis,
+        SafeMigrationDecision decision
+    )
+    {
+        if (decision.Action is not (SafeMigrationAction.Apply or SafeMigrationAction.Repair))
+        {
+            return;
+        }
+
+        if (operation.Intent is ModelManagedDataIntent or DropTableIntent or AlterColumnIntent
+            || analysis.RepairMutatesData)
+        {
+            // WHY: Row effects have a separate lifetime from generated-source
+            // metadata. A DROP can cascade, while a repair may backfill values
+            // and fire triggers outside the directly authored owner.
+            _rebuildRowMutationOrdinal = _currentOperationOrdinal;
+        }
+
+        if (!_dropProjectionExpired
+            && operation.Intent is DropColumnIntent drop
+            && analysis.ObservedState == SafeMigrationObservedState.Matching)
+        {
+            _acceptedColumnDrops ??= new Dictionary<string, HashSet<string>>(s_identifierComparer);
+            if (!_acceptedColumnDrops.TryGetValue(drop.Table, out var columns))
+            {
+                columns = new HashSet<string>(s_identifierComparer);
+                _acceptedColumnDrops.Add(drop.Table, columns);
+            }
+
+            _ = columns.Add(drop.Name);
+
+            return;
+        }
+
+        if (operation.Intent is EnsureIndexIntent index
+            && IsSimpleIndex(index.Definition))
+        {
+            // WHY: A simple index creates no column or row mutation. Subsequent
+            // index observations still consult Core's accepted identity before
+            // using the immutable native Missing certificate.
+            return;
+        }
+
+        _dropProjectionExpired = true;
+    }
+
+    /// <inheritdoc />
+    public void ObserveProviderOperation(
+        MigrationOperation operation
+    )
+    {
+        // WHY: Ordinary provider commands have no accepted safe rebuild proof.
+        // Even a later DROP cannot revive catalog facts invalidated by raw SQL.
+        _dropProjectionExpired = true;
+        if (operation is DropTableOperation or AlterColumnOperation
+            || !SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(operation))
+        {
+            // WHY: Typed DML and unknown provider commands need live row proof.
+            // Known row-independent structural commands must not erase a proven
+            // orphan merely because they invalidate unrelated layout metadata.
+            _rebuildRowMutationOrdinal = _currentOperationOrdinal;
+        }
+    }
+
+    /// <summary>Starts one catalog-bound window shared by optional preflight and mandatory runtime guards.</summary>
+    /// <param name="snapshot">The immutable native catalog captured for this invocation.</param>
+    internal void ResetDropOnlyProjection(
+        SqliteCatalogSnapshot snapshot
+    )
+    {
+        _dropProjectionSnapshot = snapshot;
+        _dropProjectionAnalyses = null;
+        _acceptedColumnDrops = null;
+        _dropProjectionExpired = false;
+        _currentOperationOrdinal = -1;
+        _rebuildRowMutationOrdinal = null;
+    }
+
+    /// <summary>Captures immutable native facts without treating existing tables as newly created or empty.</summary>
+    private void CaptureDropOnlyProjection(
+        SafeMigrationOperation operation,
+        SafeMigrationProviderAnalysis analysis
+    )
+    {
+        if ((operation.Intent is EnsureColumnIntent { Definition.ComputedExpression: not null }
+                && analysis.ObservedState == SafeMigrationObservedState.Matching)
+            || (operation.Intent is EnsureIndexIntent index
+                && IsSimpleIndex(index.Definition)
+                && analysis.ObservedState == SafeMigrationObservedState.Missing))
+        {
+            CaptureDropProjectionEvidence(operation, analysis);
+        }
+    }
+
+    /// <summary>
+    /// Reuses one reference-keyed capture for conditional ownership and row refusals or native baselines.
+    /// </summary>
+    private void CaptureDropProjectionEvidence(
+        SafeMigrationOperation operation,
+        SafeMigrationProviderAnalysis analysis
+    )
+    {
+        _dropProjectionAnalyses ??= new Dictionary<SafeMigrationOperation, SafeMigrationProviderAnalysis>(
+            ReferenceEqualityComparer.Instance);
+
+        _dropProjectionAnalyses[operation] = analysis;
+    }
+
     /// <summary>Combines native surviving expressions with only accepted, same-lifetime prefix removals.</summary>
     private SafeMigrationProviderAnalysis ValidateGeneratedColumnDrop(
         SafeMigrationOperation operation,
@@ -156,7 +245,10 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
 
         var projectedTables = columns as ISafeMigrationProjectedTableSource;
         var dependency = projectedTables?.HasProjectedGeneratedColumnDependency(
-            drop.Table, drop.Schema, drop.Name, s_identifierComparer);
+            drop.Table,
+            drop.Schema,
+            drop.Name,
+            s_identifierComparer);
 
         if (dependency == true)
         {
@@ -217,7 +309,8 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         var unproven = false;
         foreach (var candidate in table.Columns.Values)
         {
-            if (s_identifierComparer.Equals(candidate.Name, column) || dropped?.Contains(candidate.Name) == true
+            if (s_identifierComparer.Equals(candidate.Name, column)
+                || dropped?.Contains(candidate.Name) == true
                 || (candidate.GeneratedSql is null && candidate.HiddenKind is not (2 or 3)))
             {
                 continue;
@@ -243,67 +336,27 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             }
 
             if (SafeMigrationSqlExpressionInspector.ReferencesColumnIdentifier(
-                    expression, column, s_identifierComparer))
+                expression,
+                column,
+                s_identifierComparer))
             {
                 return Unsupported("generated_column_drop_dependency");
             }
         }
 
-        return unproven ? Unsupported("generated_column_drop_unproven") : null;
-    }
-
-    /// <inheritdoc />
-    public void ObserveAcceptedOperation(
-        SafeMigrationOperation operation,
-        SafeMigrationProviderAnalysis liveAnalysis,
-        SafeMigrationProviderAnalysis analysis,
-        SafeMigrationDecision decision
-    )
-    {
-        if (decision.Action is not (SafeMigrationAction.Apply or SafeMigrationAction.Repair))
-        {
-            return;
-        }
-
-        if (operation.Intent is ModelManagedDataIntent or DropTableIntent or AlterColumnIntent
-            || analysis.RepairMutatesData)
-        {
-            // WHY: Row effects have a separate lifetime from generated-source
-            // metadata. A DROP can cascade, while a repair may backfill values
-            // and fire triggers outside the directly authored owner.
-            _rebuildRowMutationOrdinal = _currentOperationOrdinal;
-        }
-
-        if (!_dropProjectionExpired && operation.Intent is DropColumnIntent drop
-            && analysis.ObservedState == SafeMigrationObservedState.Matching)
-        {
-            _acceptedColumnDrops ??= new Dictionary<string, HashSet<string>>(s_identifierComparer);
-            if (!_acceptedColumnDrops.TryGetValue(drop.Table, out var columns))
-            {
-                columns = new HashSet<string>(s_identifierComparer);
-                _acceptedColumnDrops.Add(drop.Table, columns);
-            }
-
-            _ = columns.Add(drop.Name);
-
-            return;
-        }
-
-        if (operation.Intent is EnsureIndexIntent index && IsSimpleIndex(index.Definition))
-        {
-            // WHY: A simple index creates no column or row mutation. Subsequent
-            // index observations still consult Core's accepted identity before
-            // using the immutable native Missing certificate.
-            return;
-        }
-
-        _dropProjectionExpired = true;
+        return unproven
+            ? Unsupported("generated_column_drop_unproven")
+            : null;
     }
 
     /// <summary>Separates row-independent native index creation from expressions, filters and uniqueness.</summary>
-    private static bool IsSimpleIndex(ExpectedIndexDefinition definition)
+    private static bool IsSimpleIndex(
+        ExpectedIndexDefinition definition
+    )
     {
-        if (definition.Unique || definition.Filter is not null || definition.StructuredFilter is not null)
+        if (definition.Unique
+            || definition.Filter is not null
+            || definition.StructuredFilter is not null)
         {
             return false;
         }
@@ -328,29 +381,14 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
     {
         foreach (var key in definition.Keys)
         {
-            if (key.Column is not { } column || !HasRetainedColumnSource(table, dropped, column, null))
+            if (key.Column is not { } column
+                || !HasRetainedColumnSource(table, dropped, column, null))
             {
                 return false;
             }
         }
 
         return true;
-    }
-
-    /// <inheritdoc />
-    public void ObserveProviderOperation(MigrationOperation operation)
-    {
-        // WHY: Ordinary provider commands have no accepted safe rebuild proof.
-        // Even a later DROP cannot revive catalog facts invalidated by raw SQL.
-        _dropProjectionExpired = true;
-        if (operation is DropTableOperation or AlterColumnOperation
-            || !SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(operation))
-        {
-            // WHY: Typed DML and unknown provider commands need live row proof.
-            // Known row-independent structural commands must not erase a proven
-            // orphan merely because they invalidate unrelated layout metadata.
-            _rebuildRowMutationOrdinal = _currentOperationOrdinal;
-        }
     }
 
     /// <summary>Rejects both directly dropped columns and transitive generated dependencies.</summary>
@@ -361,7 +399,8 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         HashSet<string>? visited
     )
     {
-        if (dropped.Contains(column) || !table.Columns.TryGetValue(column, out var source))
+        if (dropped.Contains(column)
+            || !table.Columns.TryGetValue(column, out var source))
         {
             return false;
         }

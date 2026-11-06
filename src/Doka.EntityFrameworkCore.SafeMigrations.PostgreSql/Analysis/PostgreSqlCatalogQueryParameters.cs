@@ -4,13 +4,14 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 internal sealed class PostgreSqlCatalogQueryParameters
 {
     private readonly Func<DbParameter> _createParameter;
+    private readonly Dictionary<string, string> _parameters = new(StringComparer.Ordinal);
     private readonly DbParameterCollection _parametersCollection;
     private readonly IRelationalTypeMappingSource? _typeMappingSource;
-    private readonly Dictionary<string, string> _parameters = new(StringComparer.Ordinal);
+
     private readonly Dictionary<PostgreSqlCatalogParameterValue, string> _typedParameters = new(
         PostgreSqlCatalogParameterValueComparer.Instance);
+
     private readonly List<string> _values = [];
-    private int _utf8PayloadBytes;
 
     /// <summary>Creates parameter accounting for a caller-owned sequential catalog command.</summary>
     /// <param name="command">The command supplying provider parameters and their physical collection.</param>
@@ -46,11 +47,11 @@ internal sealed class PostgreSqlCatalogQueryParameters
     public int Count => _values.Count;
 
     /// <summary>Gets the estimated UTF-8 parameter payload including per-binding metadata.</summary>
-    public int Utf8PayloadBytes => _utf8PayloadBytes;
+    public int Utf8PayloadBytes { get; private set; }
 
     /// <summary>Captures the parameter count and payload before one candidate statement is built.</summary>
     /// <returns>The exact prefix retained if the candidate exceeds a query bound.</returns>
-    public Checkpoint Capture() => new(_values.Count, _utf8PayloadBytes);
+    public Checkpoint Capture() => new(_values.Count, Utf8PayloadBytes);
 
     /// <summary>Restores the captured prefix without changing retained parameter identities or mappings.</summary>
     /// <param name="checkpoint">The earlier parameter count and payload to restore.</param>
@@ -59,8 +60,8 @@ internal sealed class PostgreSqlCatalogQueryParameters
     )
     {
         if ((uint)checkpoint.Count > (uint)_values.Count
-            || (uint)checkpoint.Utf8PayloadBytes > (uint)_utf8PayloadBytes
-            || (checkpoint.Count == _values.Count && checkpoint.Utf8PayloadBytes != _utf8PayloadBytes))
+            || (uint)checkpoint.Utf8PayloadBytes > (uint)Utf8PayloadBytes
+            || (checkpoint.Count == _values.Count && checkpoint.Utf8PayloadBytes != Utf8PayloadBytes))
         {
             throw new ArgumentOutOfRangeException(nameof(checkpoint));
         }
@@ -71,6 +72,7 @@ internal sealed class PostgreSqlCatalogQueryParameters
         }
 
         var retained = new DbParameter[checkpoint.Count];
+
         // WHY: Restore each retained parameter at its original collection ordinal.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -92,7 +94,7 @@ internal sealed class PostgreSqlCatalogQueryParameters
         _values.RemoveRange(checkpoint.Count, _values.Count - checkpoint.Count);
         _parameters.Clear();
         _typedParameters.Clear();
-        _utf8PayloadBytes = checkpoint.Utf8PayloadBytes;
+        Utf8PayloadBytes = checkpoint.Utf8PayloadBytes;
     }
 
     /// <summary>Interns a catalog string and returns its provider parameter marker.</summary>
@@ -114,7 +116,7 @@ internal sealed class PostgreSqlCatalogQueryParameters
         _parametersCollection.Add(parameter);
         _parameters.Add(value, name);
         _values.Add(value);
-        _utf8PayloadBytes += Encoding.UTF8.GetByteCount(value) + 32;
+        Utf8PayloadBytes += Encoding.UTF8.GetByteCount(value) + 32;
 
         return name;
     }
@@ -160,7 +162,7 @@ internal sealed class PostgreSqlCatalogQueryParameters
         _parametersCollection.Add(parameter);
         _typedParameters.Add(candidate, name);
         _values.Add(name);
-        _utf8PayloadBytes += EstimatePayloadBytes(value) + 32;
+        Utf8PayloadBytes += EstimatePayloadBytes(value) + 32;
 
         return name;
     }
@@ -169,10 +171,7 @@ internal sealed class PostgreSqlCatalogQueryParameters
         object? value
     ) => value switch
     {
-        null => 4,
-        string text => Encoding.UTF8.GetByteCount(text),
-        byte[] bytes => bytes.Length,
-        _ => 32,
+        null => 4, string text => Encoding.UTF8.GetByteCount(text), byte[] bytes => bytes.Length, _ => 32,
     };
 
     /// <summary>Identifies the exact parameter prefix retained before a candidate was constructed.</summary>

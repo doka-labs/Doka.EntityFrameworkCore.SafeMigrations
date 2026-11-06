@@ -46,19 +46,21 @@ public sealed class SafeMigrationDefaultValue
     public SafeMigrationDefaultValueKind Kind { get; }
 
     /// <summary>
-    /// Gets a defensive copy of the literal value when <see cref="Kind"/> is
-    /// <see cref="SafeMigrationDefaultValueKind.Literal"/>.
+    /// Gets a defensive copy of the literal value when <see cref="Kind" /> is
+    /// <see cref="SafeMigrationDefaultValueKind.Literal" />.
     /// </summary>
     public object? LiteralValue => CloneLiteral(_literalValue);
 
     /// <summary>
-    /// Gets the SQL expression when <see cref="Kind"/> is
-    /// <see cref="SafeMigrationDefaultValueKind.Sql"/>.
+    /// Gets the SQL expression when <see cref="Kind" /> is
+    /// <see cref="SafeMigrationDefaultValueKind.Sql" />.
     /// </summary>
     public string? SqlExpression { get; }
 
     /// <summary>Gets the structured SQL expression when one was supplied.</summary>
     public SafeMigrationSqlExpression? StructuredExpression { get; }
+
+    internal bool IsNullLiteral => Kind == SafeMigrationDefaultValueKind.Literal && _literalValue is null;
 
     /// <summary>Creates a typed literal default.</summary>
     /// <param name="value">The literal value. A null value means SQL NULL.</param>
@@ -107,8 +109,6 @@ public sealed class SafeMigrationDefaultValue
 
     internal object? GetLiteralValue() => CloneLiteral(_literalValue);
 
-    internal bool IsNullLiteral => Kind == SafeMigrationDefaultValueKind.Literal && _literalValue is null;
-
     private static bool IsSupportedLiteral(
         object? value
     ) => value is null
@@ -138,5 +138,7 @@ public sealed class SafeMigrationDefaultValue
 
     private static object? CloneLiteral(
         object? value
-    ) => value is byte[] bytes ? bytes.ToArray() : value;
+    ) => value is byte[] bytes
+        ? bytes.ToArray()
+        : value;
 }

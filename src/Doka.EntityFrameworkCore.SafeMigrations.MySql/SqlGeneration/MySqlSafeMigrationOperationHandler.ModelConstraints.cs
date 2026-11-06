@@ -59,7 +59,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
     {
         var result = new Dictionary<ModelTableKey, IReadOnlyList<ExpectedIndexDefinition>>();
         foreach (var table in model.GetRelationalModel()
-                     .Tables)
+            .Tables)
         {
             var indexes = table
                 .Indexes
@@ -119,13 +119,13 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
 
         var keys = index
             .Columns
-            .Select((
-                column,
-                ordinal
-            ) => new ExpectedIndexKeyDefinition(
+            .Select((column,
+                ordinal) => new ExpectedIndexKeyDefinition(
                 column: column.Name,
                 sortOrder: ModelSortOrder(index.IsDescending, ordinal),
-                prefixLength: prefixLengths?[ordinal] is > 0 ? prefixLengths[ordinal] : null))
+                prefixLength: prefixLengths?[ordinal] is > 0
+                    ? prefixLengths[ordinal]
+                    : null))
             .ToArray();
 
         return new ExpectedIndexDefinition(index.Name, table.Name, keys, table.Schema, index.IsUnique, index.Filter);
@@ -137,6 +137,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
     ) => sortOrders switch
     {
         null => SafeMigrationIndexSortOrder.ProviderDefault,
+
         // EF represents IsDescending() without arguments as an empty vector,
         // meaning every key is descending rather than no key being descending.
         { Count: 0 } => SafeMigrationIndexSortOrder.Descending,

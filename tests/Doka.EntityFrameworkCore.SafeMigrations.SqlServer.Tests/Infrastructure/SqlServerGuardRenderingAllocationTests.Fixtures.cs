@@ -12,14 +12,28 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
     {
         if (managedData)
         {
-            return new SafeMigrationOperation(new EnsureModelManagedDataIntent("O'Brien", ["Id"], ["int"],
-                ["Id", "Caption"], ["int", "nvarchar(80)"],
-                new object?[,] { { 7, "O'Brien \uD83D\uDE80" } }, null, null), policy);
+            return new SafeMigrationOperation(
+                new EnsureModelManagedDataIntent(
+                    "O'Brien",
+                    ["Id"],
+                    ["int"],
+                    ["Id", "Caption"],
+                    ["int", "nvarchar(80)"],
+                    new object?[,] { { 7, "O'Brien \uD83D\uDE80" } },
+                    null,
+                    null),
+                policy);
         }
 
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.SqlServer");
-        builder.EnsureColumn("O'Brien", new ExpectedColumnDefinition("Caption", typeof(string), true,
-            "nvarchar(80)"), policy);
+        builder.EnsureColumn(
+            "O'Brien",
+            new ExpectedColumnDefinition(
+                "Caption",
+                typeof(string),
+                true,
+                "nvarchar(80)"),
+            policy);
 
         return Assert.IsType<SafeMigrationOperation>(Assert.Single(builder.Operations));
     }
@@ -52,7 +66,11 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
     )
     {
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
-        var command = dependencies.CommandBuilderFactory.Create().Append(sql).Build();
+        var command = dependencies
+            .CommandBuilderFactory
+            .Create()
+            .Append(sql)
+            .Build();
 
         return new MigrationCommand(command, context, dependencies.Logger);
     }
@@ -103,12 +121,15 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
         }
 
         public int Count => _commands.Count;
-        public MigrationCommand this[int index] => _commands[index];
+
+        public MigrationCommand this[
+            int index
+        ] => _commands[index];
 
         public IEnumerator<MigrationCommand> GetEnumerator()
             => throw new InvalidOperationException("The prepared batch must be indexed without enumeration.");
 
-        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     /// <summary>Records delegated provider execution without opening the fixture connection.</summary>

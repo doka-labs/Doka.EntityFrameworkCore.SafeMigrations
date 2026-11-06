@@ -12,7 +12,8 @@ public sealed class SqlServerTemporalLiteralFilterTypingTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
         var literal = new SafeMigrationSqlLiteralExpression(new DateTime(1753, 1, 1));

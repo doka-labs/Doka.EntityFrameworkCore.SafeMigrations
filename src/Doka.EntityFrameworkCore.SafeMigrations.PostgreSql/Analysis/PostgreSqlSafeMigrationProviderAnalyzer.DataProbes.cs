@@ -20,6 +20,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         var results = new PostgreSqlDataProbeResult?[operations.Count];
         var identities = new PostgreSqlDataProbeIdentity?[operations.Count];
         var candidates = new Dictionary<PostgreSqlDataProbeIdentity, PostgreSqlDataProbeCandidate>();
+
         // WHY: Retain probe identities at their original non-short-circuited ordinals.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -53,6 +54,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 (operation.Intent as AlterColumnIntent)?.OldDefinition);
 
             identities[ordinal] = identity;
+
             // WHY: Row probes consume only the immutable column/length identity.
             // Keeping the discovery probe's rendered narrowing predicate here
             // would retain SQL for every candidate beyond the bounded window.
@@ -116,16 +118,15 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             candidates.Count,
             SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
             commandTimeout,
-            (
-                command,
-                offset
-            ) =>
+            (command,
+                offset) =>
             {
                 var count = Math.Min(
                     SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
                     candidates.Count - offset);
 
                 var selections = new List<string>(count);
+
                 // WHY: Build only this bounded candidate window while preserving global ordinals.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery

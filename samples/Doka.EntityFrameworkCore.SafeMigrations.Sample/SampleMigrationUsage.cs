@@ -7,7 +7,7 @@ internal static class SampleMigrationUsage
     /// table shapes across existing application instances.
     /// </summary>
     /// <param name="migrationBuilder">The migration builder that receives the operations.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="migrationBuilder"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="migrationBuilder" /> is null.</exception>
     public static void BuildUpOperations(
         MigrationBuilder migrationBuilder
     )
@@ -65,7 +65,7 @@ internal static class SampleMigrationUsage
 
     /// <summary>Builds representative PostgreSQL maintenance operations.</summary>
     /// <param name="migrationBuilder">The migration builder that receives the operations.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="migrationBuilder"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="migrationBuilder" /> is null.</exception>
     public static void BuildPostgreSqlMaintenanceOperations(
         MigrationBuilder migrationBuilder
     )

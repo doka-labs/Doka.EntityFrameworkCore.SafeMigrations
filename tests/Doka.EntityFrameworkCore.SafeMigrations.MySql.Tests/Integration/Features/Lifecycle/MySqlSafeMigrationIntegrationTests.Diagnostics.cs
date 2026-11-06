@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the Diagnostics migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlDiagnosticsIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlDiagnosticsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlDiagnosticsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlDiagnosticsIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     [Fact]
     public async Task PreflightDiagnostics_DistinguishForeignKeyActionsAndIndexShape()
@@ -21,7 +23,8 @@ public sealed partial class MySqlDiagnosticsIntegrationTests : MySqlSafeMigratio
             + "PRIMARY KEY (`id`), "
             + "CONSTRAINT `fk_diagnostic_dependent_principal` FOREIGN KEY (`principal_id`) "
             + "REFERENCES `diagnostic_principal` (`id`) ON UPDATE CASCADE ON DELETE CASCADE, "
-            + "INDEX `ix_diagnostic_dependent_values` (`second_value`(4), `first_value`));");
+            + "INDEX `ix_diagnostic_dependent_values` (`second_value`(4), `first_value`));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -35,6 +38,7 @@ public sealed partial class MySqlDiagnosticsIntegrationTests : MySqlSafeMigratio
                 onUpdate: ReferentialAction.NoAction,
                 onDelete: ReferentialAction.Restrict),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.EnsureIndex(
             new ExpectedIndexDefinition(
                 "ix_diagnostic_dependent_values",
@@ -91,8 +95,16 @@ public sealed partial class MySqlDiagnosticsIntegrationTests : MySqlSafeMigratio
             ", ",
             dependentColumns.Select(column => $"`{column}` int NOT NULL"));
 
-        var reversedPrincipalKeys = string.Join(", ", principalColumns.Reverse().Select(column => $"`{column}`"));
-        var reversedDependentKeys = string.Join(", ", dependentColumns.Reverse().Select(column => $"`{column}`"));
+        var reversedPrincipalKeys = string.Join(", ",
+            principalColumns
+                .Reverse()
+                .Select(column => $"`{column}`"));
+
+        var reversedDependentKeys = string.Join(", ",
+            dependentColumns
+                .Reverse()
+                .Select(column => $"`{column}`"));
+
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
 
         await ExecuteSqlAsync(
@@ -103,7 +115,8 @@ public sealed partial class MySqlDiagnosticsIntegrationTests : MySqlSafeMigratio
             + "PRIMARY KEY (`id`), "
             + "CONSTRAINT `fk_long_diagnostic` FOREIGN KEY "
             + $"({reversedDependentKeys}) REFERENCES `long_diagnostic_principal` ({reversedPrincipalKeys}), "
-            + $"INDEX `ix_long_diagnostic` ({reversedDependentKeys}));");
+            + $"INDEX `ix_long_diagnostic` ({reversedDependentKeys}));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -115,6 +128,7 @@ public sealed partial class MySqlDiagnosticsIntegrationTests : MySqlSafeMigratio
                 "long_diagnostic_principal",
                 principalColumns),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.EnsureIndex(
             new ExpectedIndexDefinition(
                 "ix_long_diagnostic",
@@ -130,21 +144,24 @@ public sealed partial class MySqlDiagnosticsIntegrationTests : MySqlSafeMigratio
                 new SafeMigrationRunOptions("long-typed-diagnostics"),
                 CancellationToken.None);
 
-        var differences = report.Assessments
+        var differences = report
+            .Assessments
             .SelectMany(static assessment => assessment.Differences)
             .Where(static difference => difference.Facet is "foreign_key_column_order" or "index_key_order")
             .ToArray();
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(2, differences.Length);
-        Assert.All(differences, static difference =>
-        {
-            Assert.StartsWith("sha256:", difference.Expected, StringComparison.Ordinal);
-            Assert.StartsWith("sha256:", difference.Actual, StringComparison.Ordinal);
-            Assert.NotEqual(difference.Expected, difference.Actual);
-            Assert.InRange(difference.Expected.Length, 1, 256);
-            Assert.InRange(difference.Actual.Length, 1, 256);
-        });
+        Assert.All(
+            differences,
+            static difference =>
+            {
+                Assert.StartsWith("sha256:", difference.Expected, StringComparison.Ordinal);
+                Assert.StartsWith("sha256:", difference.Actual, StringComparison.Ordinal);
+                Assert.NotEqual(difference.Expected, difference.Actual);
+                Assert.InRange(difference.Expected.Length, 1, 256);
+                Assert.InRange(difference.Actual.Length, 1, 256);
+            });
     }
 
     [Fact]
@@ -156,7 +173,8 @@ public sealed partial class MySqlDiagnosticsIntegrationTests : MySqlSafeMigratio
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `diagnostic_defaults` (`value` varchar(40) NULL DEFAULT '{liveDefault}');");
+            $"CREATE TABLE `diagnostic_defaults` (`value` varchar(40) NULL DEFAULT '{liveDefault}');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);

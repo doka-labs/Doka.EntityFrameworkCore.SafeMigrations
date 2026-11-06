@@ -15,11 +15,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         if (definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Literal)
         {
             return IsDefaultValueRepresentable(definition.DefaultValue.LiteralValue, storeType, definition.IsNullable)
-                ? null : SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode;
+                ? null
+                : SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode;
         }
 
         var expression = GetDefaultSqlExpression(definition);
-        if (expression is null || _expressionRenderer.GetUnsupportedFeature(expression) is not null)
+        if (expression is null
+            || _expressionRenderer.GetUnsupportedFeature(expression) is not null)
         {
             return "default_expression_unproven";
         }
@@ -46,7 +48,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
 
         return definition.DefaultValue.SqlExpression is { } sql
-            && SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var parsed) ? parsed : null;
+            && SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var parsed)
+                ? parsed
+                : null;
     }
 
     private string? GetDefaultExpressionFeature(
@@ -90,8 +94,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 {
                     return null;
                 }
-            }
-            while (true);
+            } while (true);
         }
         finally
         {
@@ -117,7 +120,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 return (literal.StoreType is null
                         || IsDefaultValueRepresentable(literal.Value, literal.StoreType, nullable))
                     && IsDefaultValueRepresentable(literal.Value, storeType, nullable)
-                        ? null : SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode;
+                        ? null
+                        : SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode;
 
             case SafeMigrationSqlCastExpression { Operand: SafeMigrationSqlLiteralExpression literal } cast:
                 // WHY: A single typed constant cast has a bounded input domain.
@@ -133,13 +137,16 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     ?? GetDefaultLeafFeature(literal, storeType, nullable);
 
             case SafeMigrationSqlCurrentValueExpression current:
-                return IsCompatibleCurrentTemporalType(current.Value, storeType) ? null : "default_expression_unproven";
+                return IsCompatibleCurrentTemporalType(current.Value, storeType)
+                    ? null
+                    : "default_expression_unproven";
 
             case SafeMigrationSqlFunctionExpression function
                 when SqlServerSafeMigrationSqlExpressionRenderer.IsCurrentTemporalFunction(function.Name):
                 return function.Arguments.Count == 0
                     && IsCompatibleCurrentTemporalType(SafeMigrationSqlCurrentValue.Timestamp, storeType)
-                        ? null : "default_expression_unproven";
+                        ? null
+                        : "default_expression_unproven";
 
             default:
                 return "default_expression_unproven";
@@ -160,7 +167,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 {
                     case SafeMigrationSqlLiteralExpression { Value: not null }:
                     case SafeMigrationSqlCastExpression
-                        { Operand: SafeMigrationSqlLiteralExpression { Value: not null } }:
+                    {
+                        Operand: SafeMigrationSqlLiteralExpression { Value: not null },
+                    }:
                     case SafeMigrationSqlCurrentValueExpression:
                         return true;
 
@@ -184,21 +193,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 {
                     return false;
                 }
-            }
-            while (true);
+            } while (true);
         }
         finally
         {
             pending.Dispose();
         }
     }
-
-    /// <summary>Resumes one COALESCE branch without changing its established nullable-input contract.</summary>
-    private readonly record struct DefaultExpressionFrame(
-        SafeMigrationSqlExpression Expression,
-        bool Nullable,
-        int Index = 0
-    );
 
     private static bool IsCompatibleCurrentTemporalType(
         SafeMigrationSqlCurrentValue value,
@@ -213,7 +214,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         return value == SafeMigrationSqlCurrentValue.Time
             ? target.Name == "time"
             : target.Name is "date" or "datetime" or "datetime2" or "datetimeoffset" or "smalldatetime"
-                || value == SafeMigrationSqlCurrentValue.Timestamp && target.Name == "time";
+            || (value == SafeMigrationSqlCurrentValue.Timestamp && target.Name == "time");
     }
 
     private bool IsDefaultValueRepresentable(
@@ -244,13 +245,25 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             string or char => target.IsCharacter,
             byte[] => target.Name is "binary" or "varbinary",
             Guid => target.Name == "uniqueidentifier",
-            DateTime or DateOnly or DateTimeOffset => target.Name is "date" or "datetime" or "datetime2"
-                or "datetimeoffset" or "smalldatetime",
+            DateTime or DateOnly or DateTimeOffset => target.Name is "date"
+                or "datetime"
+                or "datetime2"
+                or "datetimeoffset"
+                or "smalldatetime",
             TimeOnly or TimeSpan => target.Name == "time",
             float or double => target.Name is "float" or "real",
             bool or byte or sbyte or short or ushort or int or uint or long or ulong or decimal or Enum
-                => target.Name is "bigint" or "bit" or "decimal" or "float" or "int" or "money" or "numeric"
-                    or "real" or "smallint" or "smallmoney" or "tinyint",
+                => target.Name is "bigint"
+                    or "bit"
+                    or "decimal"
+                    or "float"
+                    or "int"
+                    or "money"
+                    or "numeric"
+                    or "real"
+                    or "smallint"
+                    or "smallmoney"
+                    or "tinyint",
             _ => false,
         };
     }
@@ -271,34 +284,41 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             predicates.Add(BuildColumnDefaultSupportPredicate(definition));
         }
 
-        return predicates.Count == 0 ? null : Bit(string.Join(" AND ", predicates));
+        return predicates.Count == 0
+            ? null
+            : Bit(string.Join(" AND ", predicates));
     }
 
     private static IReadOnlyList<ExpectedColumnDefinition> GetAuthoredColumnDefinitions(
         SafeMigrationIntent intent
     ) => intent switch
-        {
-            EnsureTableIntent table => table.Definition.Columns,
-            EnsureColumnIntent column => [column.Definition],
-            AlterColumnIntent column => column.OldDefinition is null
-                ? [column.Definition] : new[] { column.Definition, column.OldDefinition },
-            _ => Array.Empty<ExpectedColumnDefinition>(),
-        };
+    {
+        EnsureTableIntent table => table.Definition.Columns,
+        EnsureColumnIntent column => [column.Definition],
+        AlterColumnIntent column => column.OldDefinition is null
+            ? [column.Definition]
+            : new[] { column.Definition, column.OldDefinition },
+        _ => Array.Empty<ExpectedColumnDefinition>(),
+    };
 
     private string? BuildColumnCollationSupportExpression(
         SafeMigrationIntent intent
     )
     {
-        var names = GetAuthoredColumnDefinitions(intent).Select(static column => column.Collation)
-            .OfType<SafeMigrationCollationIdentifier>().Select(static collation => collation.Name)
-            .Distinct(StringComparer.Ordinal).ToArray();
+        var names = GetAuthoredColumnDefinitions(intent)
+            .Select(static column => column.Collation)
+            .OfType<SafeMigrationCollationIdentifier>()
+            .Select(static collation => collation.Name)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
         if (names.Length == 0)
         {
             return null;
         }
 
-        return Bit("NOT EXISTS (SELECT 1 FROM (VALUES "
+        return Bit(
+            "NOT EXISTS (SELECT 1 FROM (VALUES "
             + string.Join(", ", names.Select(name => "(" + Literal(name) + ")"))
             + ") expected(name) WHERE NOT EXISTS (SELECT 1 FROM sys.fn_helpcollations() installed "
             + "WHERE installed.name = expected.name))");
@@ -314,14 +334,19 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var storeType = definition.StoreType ?? mapping.StoreType;
         if (definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Literal)
         {
-            return BuildDefaultLiteralSupportPredicate(definition.DefaultValue.LiteralValue, storeType,
+            return BuildDefaultLiteralSupportPredicate(
+                definition.DefaultValue.LiteralValue,
+                storeType,
                 definition.Collation?.Name);
         }
 
         var expression = GetDefaultSqlExpression(definition)
             ?? throw new NotSupportedException("SQL Server has no proven default expression.");
 
-        return BuildDefaultExpressionSupportPredicate(expression, storeType, definition.IsNullable,
+        return BuildDefaultExpressionSupportPredicate(
+            expression,
+            storeType,
+            definition.IsNullable,
             definition.Collation?.Name);
     }
 
@@ -339,14 +364,16 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         if (definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Literal)
         {
-            return definition.DefaultValue.LiteralValue is null ? null
+            return definition.DefaultValue.LiteralValue is null
+                ? null
                 : Bit(BuildColumnDefaultSupportPredicate(definition));
         }
 
         var expression = GetDefaultSqlExpression(definition);
 
         return expression is not null && IsNonNullDefaultExpression(expression)
-            ? Bit(BuildColumnDefaultSupportPredicate(definition)) : null;
+            ? Bit(BuildColumnDefaultSupportPredicate(definition))
+            : null;
     }
 
     private string BuildDefaultLiteralSupportPredicate(
@@ -363,7 +390,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // a destination-only roundtrip cannot recover an already lost glyph.
 
         return $"({scalar}) AND ({encoded})"
-            + (collation is null ? string.Empty : $" AND ({ManagedAnsiValueRepresentationGuard(value, storeType)})");
+            + (collation is null
+                ? string.Empty
+                : $" AND ({ManagedAnsiValueRepresentationGuard(value, storeType)})");
     }
 
     private string BuildDefaultExpressionSupportPredicate(
@@ -407,16 +436,19 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 }
                 else
                 {
-                    builder.Append(BuildDefaultLeafSupportPredicate(
-                        current.Expression, storeType, current.Nullable, collation));
+                    builder.Append(
+                        BuildDefaultLeafSupportPredicate(
+                            current.Expression,
+                            storeType,
+                            current.Nullable,
+                            collation));
                 }
 
                 if (!pending.TryPop(out current))
                 {
                     return builder.ToString();
                 }
-            }
-            while (true);
+            } while (true);
         }
         finally
         {
@@ -434,9 +466,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     {
         if (expression is SafeMigrationSqlLiteralExpression { Value: null }
             || expression is SafeMigrationSqlCastExpression
-                { Operand: SafeMigrationSqlLiteralExpression { Value: null } })
+            {
+                Operand: SafeMigrationSqlLiteralExpression { Value: null },
+            })
         {
-            return nullable ? "1 = 1" : "1 = 0";
+            return nullable
+                ? "1 = 1"
+                : "1 = 0";
         }
 
         // WHY: Each inner conversion must itself be non-throwing. Wrapping a
@@ -446,17 +482,21 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         {
             SafeMigrationSqlLiteralExpression literal => NonThrowingDefaultLiteral(literal, storeType),
             SafeMigrationSqlCastExpression { Operand: SafeMigrationSqlLiteralExpression literal } cast
-                => NonThrowingScalarConversion(NonThrowingDefaultLiteral(literal, cast.StoreType),
-                    literal.Value, cast.StoreType),
-            SafeMigrationSqlCurrentValueExpression current => "TRY_CAST(SYSDATETIME() AS " + (current.Value switch
-            {
-                SafeMigrationSqlCurrentValue.Date => "date",
-                SafeMigrationSqlCurrentValue.Time
-                    => $"time({(current.Precision ?? 6).ToString(CultureInfo.InvariantCulture)})",
-                SafeMigrationSqlCurrentValue.Timestamp
-                    => $"datetime2({(current.Precision ?? 6).ToString(CultureInfo.InvariantCulture)})",
-                _ => throw new ArgumentOutOfRangeException(nameof(expression)),
-            }) + ")",
+                => NonThrowingScalarConversion(
+                    NonThrowingDefaultLiteral(literal, cast.StoreType),
+                    literal.Value,
+                    cast.StoreType),
+            SafeMigrationSqlCurrentValueExpression current => "TRY_CAST(SYSDATETIME() AS "
+                + current.Value switch
+                {
+                    SafeMigrationSqlCurrentValue.Date => "date",
+                    SafeMigrationSqlCurrentValue.Time
+                        => $"time({(current.Precision ?? 6).ToString(CultureInfo.InvariantCulture)})",
+                    SafeMigrationSqlCurrentValue.Timestamp
+                        => $"datetime2({(current.Precision ?? 6).ToString(CultureInfo.InvariantCulture)})",
+                    _ => throw new ArgumentOutOfRangeException(nameof(expression)),
+                }
+                + ")",
             SafeMigrationSqlFunctionExpression => _expressionRenderer.Render(expression),
             _ => throw new NotSupportedException("SQL Server has no proven default conversion operand."),
         };
@@ -493,7 +533,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     {
         var raw = ManagedValueLiteral(expression.Value, expression.StoreType ?? fallbackStoreType);
 
-        return expression.StoreType is null ? raw
+        return expression.StoreType is null
+            ? raw
             : NonThrowingScalarConversion(raw, expression.Value, expression.StoreType);
     }
 
@@ -506,10 +547,21 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // WHY: TRY_CAST has a documented large-input limitation. Intrinsic
         // same-family LOB conversion does not parse values or overflow; the
         // separate capacity and encoding predicates still prove exact storage.
-        var intrinsic = value is string { Length: > 4_000 } && IsCharacterManagedStoreType(storeType)
-            || value is byte[] { Length: > 8_000 }
-                && storeType.Trim().Equals("varbinary(max)", StringComparison.OrdinalIgnoreCase);
+        var intrinsic = (value is string { Length: > 4_000 } && IsCharacterManagedStoreType(storeType))
+            || (value is byte[] { Length: > 8_000 }
+                && storeType
+                    .Trim()
+                    .Equals("varbinary(max)", StringComparison.OrdinalIgnoreCase));
 
-        return intrinsic ? $"CONVERT({storeType}, ({operand}))" : $"TRY_CAST(({operand}) AS {storeType})";
+        return intrinsic
+            ? $"CONVERT({storeType}, ({operand}))"
+            : $"TRY_CAST(({operand}) AS {storeType})";
     }
+
+    /// <summary>Resumes one COALESCE branch without changing its established nullable-input contract.</summary>
+    private readonly record struct DefaultExpressionFrame(
+        SafeMigrationSqlExpression Expression,
+        bool Nullable,
+        int Index = 0
+    );
 }

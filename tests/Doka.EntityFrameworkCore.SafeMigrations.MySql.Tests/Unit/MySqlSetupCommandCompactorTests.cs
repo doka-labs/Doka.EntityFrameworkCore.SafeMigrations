@@ -10,7 +10,9 @@ public sealed class MySqlSetupCommandCompactorTests
     [InlineData("DO 2; -- trailing comment")]
     [InlineData("")]
     [InlineData(" \r\n")]
-    public void UnterminatedOwnedFragmentsRemainIndependent(string independent)
+    public void UnterminatedOwnedFragmentsRemainIndependent(
+        string independent
+    )
     {
         // Arrange
         string[] setup = ["DO 0;", "DO 1;", independent, "DO 3;", "DO 4;"];
@@ -40,7 +42,10 @@ public sealed class MySqlSetupCommandCompactorTests
     {
         // Arrange
         string[] setup = ["DO 0;", "DO 1;", blank, "DO 3;", "DO 4;"];
-        var fragments = setup.Select(static sql => new MySqlSafeMigrationSetupFragment(sql)).ToArray();
+        var fragments = setup
+            .Select(static sql => new MySqlSafeMigrationSetupFragment(sql))
+            .ToArray();
+
         var body = new string(' ', 100) + "DO 0;";
         string[] cleanup = ["DO 0;", "DO 0;"];
 
@@ -54,7 +59,9 @@ public sealed class MySqlSetupCommandCompactorTests
         // Assert
         Assert.Contains(blank, compacted);
         Assert.Equal(string.Concat(setup), string.Concat(compacted));
-        Assert.Equal("setupCommands", Assert.IsType<ArgumentException>(exception).ParamName);
+        Assert.Equal("setupCommands",
+            Assert.IsType<ArgumentException>(exception)
+                .ParamName);
     }
 
     /// <summary>Owned setup is combined without adding delimiters or changing statement order.</summary>
@@ -123,7 +130,11 @@ public sealed class MySqlSetupCommandCompactorTests
 
         // Act
         var compacted = MySqlSafeMigrationSetupCommandCompactor.Compact(
-            setup, new string('x', 100), ["DO 0;"], providerSetupOffset: 2, providerSetupCount: 2);
+            setup,
+            new string('x', 100),
+            ["DO 0;"],
+            providerSetupOffset: 2,
+            providerSetupCount: 2);
 
         // Assert
         Assert.Equal(expected, compacted);
@@ -141,7 +152,11 @@ public sealed class MySqlSetupCommandCompactorTests
 
         // Act
         var compacted = MySqlSafeMigrationSetupCommandCompactor.Compact(
-            setup, "SELECT original_body;", cleanup, providerSetupOffset: 2, providerSetupCount: 0);
+            setup,
+            "SELECT original_body;",
+            cleanup,
+            providerSetupOffset: 2,
+            providerSetupCount: 0);
 
         // Assert
         Assert.Equal("DO 1;DO 2;", Assert.Single(compacted));
@@ -175,9 +190,13 @@ public sealed class MySqlSetupCommandCompactorTests
         Assert.Single(scope.Fragments, fragment => fragment.Kind == MySqlMigrationCommandFragmentKind.Setup);
         Assert.Single(scope.Fragments, fragment => fragment.Kind == MySqlMigrationCommandFragmentKind.Body);
         Assert.Equal(
-            original.Fragments.Where(fragment => fragment.Kind == MySqlMigrationCommandFragmentKind.Cleanup)
+            original
+                .Fragments
+                .Where(fragment => fragment.Kind == MySqlMigrationCommandFragmentKind.Cleanup)
                 .Select(fragment => fragment.CommandText.ToString()),
-            scope.Fragments.Where(fragment => fragment.Kind == MySqlMigrationCommandFragmentKind.Cleanup)
+            scope
+                .Fragments
+                .Where(fragment => fragment.Kind == MySqlMigrationCommandFragmentKind.Cleanup)
                 .Select(fragment => fragment.CommandText.ToString()));
     }
 
@@ -190,12 +209,16 @@ public sealed class MySqlSetupCommandCompactorTests
     )
     {
         // Arrange
-        var setup = Enumerable.Repeat("DO 0;", setupCount).ToArray();
+        var setup = Enumerable
+            .Repeat("DO 0;", setupCount)
+            .ToArray();
 
         // Act
         var compacted = Compact(setup, new string('x', 100));
         var exception = Record.Exception(() => MySqlMigrationCommandSpec.CreateScoped(
-            compacted, new string('x', 100), ["DO 0;", "DO 0;"]));
+            compacted,
+            new string('x', 100),
+            ["DO 0;", "DO 0;"]));
 
         // Assert
         Assert.Same(setup, compacted);
@@ -212,7 +235,9 @@ public sealed class MySqlSetupCommandCompactorTests
         // Act
         var compacted = Compact(setup, "DO 0;");
         var exception = Record.Exception(() => MySqlMigrationCommandSpec.CreateScoped(
-            compacted, "DO 0;", ["DO 0;", "DO 0;"]));
+            compacted,
+            "DO 0;",
+            ["DO 0;", "DO 0;"]));
 
         // Assert
         Assert.Same(setup, compacted);
@@ -224,7 +249,10 @@ public sealed class MySqlSetupCommandCompactorTests
     public void ExactOriginalFragmentBoundIsAccepted()
     {
         // Arrange
-        var setup = Enumerable.Repeat("DO 0;", 125).ToArray();
+        var setup = Enumerable
+            .Repeat("DO 0;", 125)
+            .ToArray();
+
         var body = new string('x', 100);
 
         // Act
@@ -261,15 +289,25 @@ public sealed class MySqlSetupCommandCompactorTests
     [InlineData(6)]
     [InlineData(9)]
     [InlineData(10)]
-    public void FusedControlsRetainExactOriginalFragmentAdmission(int fusedFragments)
+    public void FusedControlsRetainExactOriginalFragmentAdmission(
+        int fusedFragments
+    )
     {
         // Arrange
-        var setup = Enumerable.Repeat("DO 0;", 125 - fusedFragments).ToArray();
+        var setup = Enumerable
+            .Repeat("DO 0;", 125 - fusedFragments)
+            .ToArray();
+
         var body = new string('x', 100);
 
         // Act
         var compacted = MySqlSafeMigrationSetupCommandCompactor.Compact(
-            setup, body, ["DO 0;", "DO 0;"], setup.Length, 0, fusedFragments);
+            setup,
+            body,
+            ["DO 0;", "DO 0;"],
+            setup.Length,
+            0,
+            fusedFragments);
 
         var scope = MySqlMigrationCommandSpec.CreateScoped(compacted, body, ["DO 0;", "DO 0;"]);
 
@@ -287,15 +325,27 @@ public sealed class MySqlSetupCommandCompactorTests
     [InlineData(9)]
     [InlineData(10)]
     [InlineData(int.MaxValue)]
-    public void FusedControlsRejectOriginalFragmentOverflow(int fusedFragments)
+    public void FusedControlsRejectOriginalFragmentOverflow(
+        int fusedFragments
+    )
     {
         // Arrange
-        var count = fusedFragments == int.MaxValue ? 1 : 126 - fusedFragments;
-        var setup = Enumerable.Repeat("DO 0;", count).ToArray();
+        var count = fusedFragments == int.MaxValue
+            ? 1
+            : 126 - fusedFragments;
+
+        var setup = Enumerable
+            .Repeat("DO 0;", count)
+            .ToArray();
 
         // Act
         var exception = Record.Exception(() => MySqlSafeMigrationSetupCommandCompactor.Compact(
-            setup, "DO 0;", ["DO 0;", "DO 0;"], setup.Length, 0, fusedFragments));
+            setup,
+            "DO 0;",
+            ["DO 0;", "DO 0;"],
+            setup.Length,
+            0,
+            fusedFragments));
 
         // Assert
         Assert.IsType<ArgumentException>(exception);
@@ -310,7 +360,12 @@ public sealed class MySqlSetupCommandCompactorTests
 
         // Act
         var exception = Record.Exception(() => MySqlSafeMigrationSetupCommandCompactor.Compact(
-            setup, "DO 0;", ["DO 0;"], 1, 0, fusedSetupFragmentCount: -1));
+            setup,
+            "DO 0;",
+            ["DO 0;"],
+            1,
+            0,
+            fusedSetupFragmentCount: -1));
 
         // Assert
         Assert.IsType<ArgumentOutOfRangeException>(exception);
@@ -322,7 +377,10 @@ public sealed class MySqlSetupCommandCompactorTests
     [Theory]
     [InlineData(1_048_576, true)]
     [InlineData(1_048_577, false)]
-    public void FusedControlsRetainOriginalTextAdmission(int textLength, bool accepted)
+    public void FusedControlsRetainOriginalTextAdmission(
+        int textLength,
+        bool accepted
+    )
     {
         // Arrange
         string[] setup = [new string(' ', textLength - 20) + "DO 0;"];
@@ -332,7 +390,12 @@ public sealed class MySqlSetupCommandCompactorTests
         var exception = Record.Exception(() =>
         {
             var compacted = MySqlSafeMigrationSetupCommandCompactor.Compact(
-                setup, "DO 0;", ["DO 0;", "DO 0;"], 1, 0, fusedSetupFragmentCount: 3);
+                setup,
+                "DO 0;",
+                ["DO 0;", "DO 0;"],
+                1,
+                0,
+                fusedSetupFragmentCount: 3);
 
             scope = MySqlMigrationCommandSpec.CreateScoped(compacted, "DO 0;", ["DO 0;", "DO 0;"]);
         });
@@ -467,7 +530,11 @@ public sealed class MySqlSetupCommandCompactorTests
 
         // Act
         var exception = Record.Exception(() => MySqlSafeMigrationSetupCommandCompactor.Compact(
-            setup, "DO 0;", ["DO 0;"], offset, count));
+            setup,
+            "DO 0;",
+            ["DO 0;"],
+            offset,
+            count));
 
         // Assert
         Assert.IsType<ArgumentOutOfRangeException>(exception);

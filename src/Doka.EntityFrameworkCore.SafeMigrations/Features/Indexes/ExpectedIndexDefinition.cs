@@ -32,9 +32,15 @@ public sealed class ExpectedIndexKeyDefinition
         Expression = SafeMigrationDefinitionValidator.Optional(expression, nameof(expression));
         StructuredExpression = structuredExpression;
 
-        var expressionCount = (Column is null ? 0 : 1)
-            + (Expression is null ? 0 : 1)
-            + (StructuredExpression is null ? 0 : 1);
+        var expressionCount = (Column is null
+                ? 0
+                : 1)
+            + (Expression is null
+                ? 0
+                : 1)
+            + (StructuredExpression is null
+                ? 0
+                : 1);
 
         if (expressionCount != 1)
         {

@@ -16,11 +16,13 @@ public sealed class SqlServerSafeMigrationIncludedIndexesIntegrationTests : SqlS
     public async Task IncludedIndex_AppliesAndReplaysWithPhysicalIncludeFacet()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.covering_users (Id int NOT NULL, Email nvarchar(320) NOT NULL, "
-            + "DisplayName nvarchar(120) NOT NULL);");
+            + "DisplayName nvarchar(120) NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexWithIncludesIfNotExistsFromModel(
@@ -30,8 +32,8 @@ public sealed class SqlServerSafeMigrationIncludedIndexesIntegrationTests : SqlS
             ["DisplayName"]);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var includedColumnCount = await ScalarIntAsync(
             connectionString,
@@ -40,12 +42,14 @@ public sealed class SqlServerSafeMigrationIncludedIndexesIntegrationTests : SqlS
             + "JOIN sys.columns AS c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
             + "WHERE i.object_id = OBJECT_ID(N'dbo.covering_users', N'U') "
             + "AND i.name = N'IX_covering_users_Email' "
-            + "AND ic.is_included_column = 1 AND c.name = N'DisplayName';");
+            + "AND ic.is_included_column = 1 AND c.name = N'DisplayName';",
+            cancellationToken: CancellationToken.None);
 
         var indexCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.covering_users', N'U') "
-            + "AND name = N'IX_covering_users_Email';");
+            + "AND name = N'IX_covering_users_Email';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, includedColumnCount);
@@ -59,12 +63,14 @@ public sealed class SqlServerSafeMigrationIncludedIndexesIntegrationTests : SqlS
     public async Task IncludedIndex_MissingIncludeFacetIsDifferent()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.covering_users (Id int NOT NULL, Email nvarchar(320) NOT NULL, "
             + "DisplayName nvarchar(120) NOT NULL); "
-            + "CREATE INDEX IX_covering_users_Email ON dbo.covering_users (Email);");
+            + "CREATE INDEX IX_covering_users_Email ON dbo.covering_users (Email);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexWithIncludesIfNotExistsFromModel(
@@ -74,17 +80,21 @@ public sealed class SqlServerSafeMigrationIncludedIndexesIntegrationTests : SqlS
             ["DisplayName"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-included-index-drift"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-included-index-drift"),
+                cancellationToken: CancellationToken.None);
 
         var includedColumnCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.indexes AS i "
             + "JOIN sys.index_columns AS ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id "
             + "WHERE i.object_id = OBJECT_ID(N'dbo.covering_users', N'U') "
-            + "AND i.name = N'IX_covering_users_Email' AND ic.is_included_column = 1;");
+            + "AND i.name = N'IX_covering_users_Email' AND ic.is_included_column = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);

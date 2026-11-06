@@ -36,12 +36,14 @@ internal interface ISafeMigrationProjectedColumnAnalyzer
     /// <param name="intent">The unchanged, accepted mutation contract.</param>
     /// <returns>True only for provider-qualified metadata changes, never a complete key or row proof.</returns>
     /// <remarks>
-    /// Core applies this result only to <see cref="EnsureIndexIntent"/>, <see cref="DropPrimaryKeyIntent"/>,
-    /// <see cref="DropForeignKeyIntent"/> and surviving members of <see cref="DropColumnIntent"/>.
+    /// Core applies this result only to <see cref="EnsureIndexIntent" />, <see cref="DropPrimaryKeyIntent" />,
+    /// <see cref="DropForeignKeyIntent" /> and surviving members of <see cref="DropColumnIntent" />.
     /// Other intent kinds cannot opt into source preservation
     /// through this callback; their separate projection contracts remain authoritative.
     /// </remarks>
-    bool PreservesIntrinsicColumnSources(SafeMigrationIntent intent) => false;
+    bool PreservesIntrinsicColumnSources(
+        SafeMigrationIntent intent
+    ) => false;
 
     /// <summary>Certifies an exact live Alter result after accepted column-preserving key changes.</summary>
     /// <param name="intent">The independently analyzed source and target contract.</param>

@@ -2,9 +2,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 {
+    private Dictionary<(string? Schema, string Table, string Column), bool>? _generatedIndexDroppedMembers;
     private Dictionary<SafeMigrationOperation, GeneratedIndexIdentityProof>? _generatedIndexIdentityProofs;
     private HashSet<(string? Schema, string Table)>? _generatedIndexNamespaceUnknownOwners;
-    private Dictionary<(string? Schema, string Table, string Column), bool>? _generatedIndexDroppedMembers;
 
     /// <summary>Releases namespace and accepted-member lifetime evidence between independent analyses.</summary>
     private void ClearGeneratedIndexIdentityFacts()
@@ -49,7 +49,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
             if (generated is null
                 || operation.Intent is not EnsureIndexIntent index
-                || memberChanges?.Contains((NormalizeProofSchema(index.Definition.Schema), index.Definition.Table)) != true
+                || memberChanges?.Contains((NormalizeProofSchema(index.Definition.Schema), index.Definition.Table))
+                != true
                 || !IsGeneratedIndexRecoveryCandidate(index.Definition))
             {
                 continue;
@@ -59,8 +60,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             foreach (var key in index.Definition.Keys)
             {
                 if (generated.TryGetValue(
-                        (NormalizeProofSchema(index.Definition.Schema), index.Definition.Table, key.Column!),
-                        out var source))
+                    (NormalizeProofSchema(index.Definition.Schema), index.Definition.Table, key.Column!),
+                    out var source))
                 {
                     (sources ??= []).Add(source);
                 }
@@ -68,15 +69,19 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
             if (sources is not null)
             {
-                (_generatedIndexIdentityProofs ??= new(ReferenceEqualityComparer.Instance))[operation] =
+                (_generatedIndexIdentityProofs ??=
+                        new Dictionary<SafeMigrationOperation, GeneratedIndexIdentityProof>(
+                            ReferenceEqualityComparer.Instance))[operation] =
                     new GeneratedIndexIdentityProof(sources.ToArray());
 
                 foreach (var source in sources)
                 {
                     var target = (EnsureColumnIntent)source.Intent;
-                    (_generatedIndexDroppedMembers ??= new(PhysicalMemberComparer)).TryAdd(
-                        (NormalizeProofSchema(target.Schema), target.Table, target.Definition.Name),
-                        false);
+                    (_generatedIndexDroppedMembers ??=
+                            new Dictionary<(string? Schema, string Table, string Column), bool>(PhysicalMemberComparer))
+                        .TryAdd(
+                            (NormalizeProofSchema(target.Schema), target.Table, target.Definition.Name),
+                            false);
                 }
             }
         }
@@ -224,7 +229,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             || live.ObservedState == SafeMigrationObservedState.Unsupported
             || _generatedColumnSourcesUnknown
             || _changedGeneratedColumnOwners?.Contains(
-                (NormalizeProofSchema(index.Definition.Schema), index.Definition.Table)) == true)
+                (NormalizeProofSchema(index.Definition.Schema), index.Definition.Table))
+            == true)
         {
             return projected;
         }
@@ -263,7 +269,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         {
             if (!columns.TryGetProjectedColumn(index.Definition.Table, index.Definition.Schema, key.Column!, out _)
                 && (_changedGeneratedColumnSources?.Contains(
-                        (NormalizeProofSchema(index.Definition.Schema), index.Definition.Table, key.Column!)) == true
+                        (NormalizeProofSchema(index.Definition.Schema), index.Definition.Table, key.Column!))
+                    == true
                     || live.IndexPhysicalEnvironment?.Columns?.ContainsKey(key.Column!) != true))
             {
                 return projected;
@@ -272,7 +279,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         var identity = columns.GetProjectedIndexIdentityAnalysis(index.Definition, live);
         var namespaceChanged = _generatedIndexNamespaceUnknownOwners?.Contains(
-                (NormalizeProofSchema(index.Definition.Schema), index.Definition.Table)) == true;
+                (NormalizeProofSchema(index.Definition.Schema), index.Definition.Table))
+            == true;
 
         if (!CanReuseGeneratedIndexNamespace(identity?.ObservedState, namespaceChanged))
         {
@@ -356,8 +364,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         if (owner.Table is not null)
         {
-            (_generatedIndexNamespaceUnknownOwners ??= new(PhysicalOwnerComparer)).Add(
-                (NormalizeProofSchema(owner.Schema), owner.Table));
+            (_generatedIndexNamespaceUnknownOwners ??=
+                    new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer))
+                .Add(
+                    (NormalizeProofSchema(owner.Schema), owner.Table));
         }
     }
 

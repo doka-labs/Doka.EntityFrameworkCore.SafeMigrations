@@ -118,7 +118,7 @@ public sealed class PostgreSqlIndexKeyCatalogSqlTests
         // Arrange
         using var context = CreateContext();
         ExpectedIndexKeyDefinition[] keys =
-        [new(structuredExpression: SafeMigrationSql.Function("lower", SafeMigrationSql.Identifier("column_0")))];
+            [new(structuredExpression: SafeMigrationSql.Function("lower", SafeMigrationSql.Identifier("column_0")))];
 
         // Act
         var state = BuildStateExpression(context, keys);
@@ -134,7 +134,8 @@ public sealed class PostgreSqlIndexKeyCatalogSqlTests
 
     private static ExpectedIndexKeyDefinition[] PlainKeys(
         int count
-    ) => Enumerable.Range(0, count)
+    ) => Enumerable
+        .Range(0, count)
         .Select(static index => new ExpectedIndexKeyDefinition(
             "column_" + index.ToString(CultureInfo.InvariantCulture)))
         .ToArray();
@@ -153,7 +154,8 @@ public sealed class PostgreSqlIndexKeyCatalogSqlTests
             new ExpectedIndexDefinition("ix_shape", "shape_table", keys),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        return builder.Build((SafeMigrationOperation)migration.Operations[0]).StateExpression;
+        return builder.Build((SafeMigrationOperation)migration.Operations[0])
+            .StateExpression;
     }
 
     private static int Occurrences(

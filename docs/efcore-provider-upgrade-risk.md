@@ -96,8 +96,8 @@ when a GUID property belongs only to a secondary Entity Splitting table. Shared
 SQL, computed and literal defaults are resolved through actual property mappings;
 explicit generation choices remain authoritative. This is a model-metadata
 correction, not a schema migration or a change to GUID storage defaults.
-The current 10.6.3 minimum retains those fixes and raises the MySqlConnector
-minimum to 2.6.1; direct consumer pins must satisfy the new driver floor.
+The current 10.6.4 minimum retains those fixes and the MySqlConnector
+minimum of 2.6.1 introduced in 10.6.3; direct consumer pins must satisfy that floor.
 SafeMigrations 10.6.1 additionally promotes the existing connector to minimum
 2.6.2 in its own MySQL/MariaDB package. The Doka upper bound remains in effect;
 other providers do not acquire this transport. The new connector revocation-
@@ -267,7 +267,9 @@ models.
 Facet-isolation tests and provider-specific golden digests run against the
 centrally declared dependency graph resolved for their test projects. The exact
 canonical snapshot initialization, `IMigrationsModelDiffer`, and fingerprint
-path used by the runner is covered by provider duration/allocation budgets.
+path used by the runner is covered by the isolated provider BenchmarkDotNet
+workloads. Complete execution/export smoke is required; duration and managed
+allocation values are informational, not acceptance thresholds.
 
 ## Qualified dependency ranges
 
@@ -309,7 +311,7 @@ Every EF, Doka, Npgsql, or supported database update requires:
    and Migration Bundle;
 9. deterministic pack, exact contents, package-only consumer, and Public API
    validation;
-10. informational performance/allocation reports, pooled clean/noisy live p95 evidence, and
+10. complete BenchmarkDotNet execution/export smoke, pooled clean/noisy live p95 evidence, and
     SPDX SBOM validation.
 
 If any behavior changes, update expected definitions or provider logic only

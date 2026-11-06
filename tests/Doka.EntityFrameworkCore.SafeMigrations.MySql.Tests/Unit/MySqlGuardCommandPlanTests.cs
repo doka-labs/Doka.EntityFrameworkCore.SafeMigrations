@@ -25,11 +25,13 @@ public sealed class MySqlGuardCommandPlanTests
         var generator = context.GetService<IMigrationsSqlGenerator>();
 
         // Act
-        var sql = Assert.Single(generator.Generate(builder.Operations, context.Model)).CommandText;
+        var sql = Assert.Single(generator.Generate(builder.Operations, context.Model))
+            .CommandText;
 
         // Assert
         Assert.Equal(reserved, sql.Contains("THEN 'missing' WHEN TRUE THEN 'different'", StringComparison.Ordinal));
     }
+
     /// <summary>Checks catalog scan count stays bounded as composite indexes gain key parts.</summary>
     [Fact]
     public void WideIndexDoesNotAddCatalogScansPerKeyPart()
@@ -43,8 +45,12 @@ public sealed class MySqlGuardCommandPlanTests
         var generator = context.GetService<IMigrationsSqlGenerator>();
 
         // Act
-        var oneKeySql = Assert.Single(generator.Generate(oneKey.Operations, context.Model)).CommandText;
-        var sixKeySql = Assert.Single(generator.Generate(sixKeys.Operations, context.Model)).CommandText;
+        var oneKeySql = Assert.Single(generator.Generate(oneKey.Operations, context.Model))
+            .CommandText;
+
+        var sixKeySql = Assert.Single(generator.Generate(sixKeys.Operations, context.Model))
+            .CommandText;
+
         var oneKeyScans = Count(oneKeySql, "INFORMATION_SCHEMA.STATISTICS");
         var sixKeyScans = Count(sixKeySql, "INFORMATION_SCHEMA.STATISTICS");
 
@@ -84,8 +90,12 @@ public sealed class MySqlGuardCommandPlanTests
         var generator = context.GetService<IMigrationsSqlGenerator>();
 
         // Act
-        var oneColumnSql = Assert.Single(generator.Generate(oneColumn.Operations, context.Model)).CommandText;
-        var eightColumnSql = Assert.Single(generator.Generate(eightColumns.Operations, context.Model)).CommandText;
+        var oneColumnSql = Assert.Single(generator.Generate(oneColumn.Operations, context.Model))
+            .CommandText;
+
+        var eightColumnSql = Assert.Single(generator.Generate(eightColumns.Operations, context.Model))
+            .CommandText;
+
         var oneColumnScans = Count(oneColumnSql, "FROM INFORMATION_SCHEMA.");
         var eightColumnScans = Count(eightColumnSql, "FROM INFORMATION_SCHEMA.");
 
@@ -118,7 +128,8 @@ public sealed class MySqlGuardCommandPlanTests
         var generator = context.GetService<IMigrationsSqlGenerator>();
 
         // Act
-        var sql = Assert.Single(generator.Generate(builder.Operations, context.Model)).CommandText;
+        var sql = Assert.Single(generator.Generate(builder.Operations, context.Model))
+            .CommandText;
 
         // Assert
         Assert.DoesNotContain("LEFT JOIN INFORMATION_SCHEMA.COLUMNS", sql, StringComparison.Ordinal);
@@ -132,6 +143,7 @@ public sealed class MySqlGuardCommandPlanTests
             + "AND (CASE c.ORDINAL_POSITION WHEN 1 THEN",
             sql,
             StringComparison.Ordinal);
+
         Assert.Contains(") = 3", sql, StringComparison.Ordinal);
     }
 
@@ -154,7 +166,11 @@ public sealed class MySqlGuardCommandPlanTests
 
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var capture = context.GetService<MySqlSafeMigrationPlanCapture>();
-        using var lease = capture.Begin(builder.Operations.Cast<SafeMigrationOperation>().ToArray());
+        using var lease = capture.Begin(builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray());
+
         using var command = new MySqlCommand();
         var parameterizer = new MySqlCatalogQueryParameterizer(
             command,
@@ -162,12 +178,17 @@ public sealed class MySqlGuardCommandPlanTests
 
         // Act
         _ = generator.Generate(builder.Operations, context.Model);
-        var plan = lease.Complete().Single();
+        var plan = lease
+            .Complete()
+            .Single();
+
         var sql = postflight
             ? plan.RenderPostcondition(parameterizer.Add)
             : plan.RenderStateExpression(parameterizer.Add);
 
-        var tableParameter = command.Parameters.Cast<DbParameter>()
+        var tableParameter = command
+            .Parameters
+            .Cast<DbParameter>()
             .Single(parameter => Equals(parameter.Value, "items"));
 
         // Assert
@@ -180,6 +201,7 @@ public sealed class MySqlGuardCommandPlanTests
             + "AND (CASE c.ORDINAL_POSITION WHEN 1 THEN",
             sql,
             StringComparison.Ordinal);
+
         Assert.Equal(1, Count(sql, "TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES"));
         Assert.DoesNotContain("LEFT JOIN INFORMATION_SCHEMA.COLUMNS", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("JOIN INFORMATION_SCHEMA.COLUMNS c ON", sql, StringComparison.Ordinal);
@@ -231,6 +253,7 @@ public sealed class MySqlGuardCommandPlanTests
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=application;Allow User Variables=true",
             MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
 
         using var context = new DbContext(options.Options);
@@ -266,6 +289,7 @@ public sealed class MySqlGuardCommandPlanTests
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=application;Allow User Variables=true",
             MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
 
         using var context = new DbContext(options.Options);
@@ -295,6 +319,7 @@ public sealed class MySqlGuardCommandPlanTests
                 [new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "int")]),
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.AddUniqueConstraintIfNotExists(
             "uq_users_id",
             "users",
@@ -329,11 +354,13 @@ public sealed class MySqlGuardCommandPlanTests
                 [new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "int")]),
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.AddUniqueConstraintIfNotExists(
             "uq_users_id",
             "users",
             ["id"],
             schema: "first");
+
         builder.CreateIndexIfNotExists(
             "ix_users_id",
             "users",
@@ -365,6 +392,7 @@ public sealed class MySqlGuardCommandPlanTests
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
             MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
 
         using var context = new DbContext(options.Options);
@@ -382,8 +410,11 @@ public sealed class MySqlGuardCommandPlanTests
         var command = Assert.Single(commands);
 
         // Assert
-        Assert.False(MySqlSafeMigrationCatalogSqlBuilder.CanUseRequiredColumnAddProtocol(
-            Assert.IsType<EnsureColumnIntent>(operation.Intent).Definition));
+        Assert.False(
+            MySqlSafeMigrationCatalogSqlBuilder.CanUseRequiredColumnAddProtocol(
+                Assert.IsType<EnsureColumnIntent>(operation.Intent)
+                    .Definition));
+
         AssertNativeScopedCommandIsPreserved(command);
         Assert.Equal(3, Count(command.CommandText, "PREPARE doka_sm_statement FROM"));
         Assert.Equal(2, Count(command.CommandText, "EXECUTE doka_sm_statement"));
@@ -402,6 +433,7 @@ public sealed class MySqlGuardCommandPlanTests
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
             MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
 
         using var context = new DbContext(options.Options);
@@ -433,6 +465,7 @@ public sealed class MySqlGuardCommandPlanTests
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
             MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
 
         using var context = new DbContext(options.Options);
@@ -456,10 +489,14 @@ public sealed class MySqlGuardCommandPlanTests
         // Assert
         var scopedSql = ReadRuntimeCommandBody(command.CommandText);
         var captureIndex = scopedSql.IndexOf("@__doka_previous_sql_mode", StringComparison.Ordinal);
-        var resetIndex = scopedSql.IndexOf("SET @doka_sm_provider_setup_entered = 0;",
+        var resetIndex = scopedSql.IndexOf(
+            "SET @doka_sm_provider_setup_entered = 0;",
             StringComparison.Ordinal);
-        var decisionIndex = scopedSql.IndexOf("WHERE @doka_sm_action = 'reject_different'",
+
+        var decisionIndex = scopedSql.IndexOf(
+            "WHERE @doka_sm_action = 'reject_different'",
             StringComparison.Ordinal);
+
         var bodyIndex = scopedSql.IndexOf(
             "PREPARE doka_sm_statement FROM @doka_sm_sql",
             StringComparison.Ordinal);
@@ -474,10 +511,17 @@ public sealed class MySqlGuardCommandPlanTests
         Assert.Equal(0, resetIndex);
         Assert.True(decisionIndex > resetIndex);
         Assert.True(captureIndex > decisionIndex);
-        Assert.Contains("@__doka_previous_sql_mode = @@SESSION.sql_mode, @doka_sm_provider_setup_entered = 1",
-            command.CommandText, StringComparison.Ordinal);
-        Assert.Contains("SET SESSION sql_mode = IF(COALESCE(@doka_sm_provider_setup_entered = 1, FALSE), "
-            + "@__doka_previous_sql_mode, @@SESSION.sql_mode)", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains(
+            "@__doka_previous_sql_mode = @@SESSION.sql_mode, @doka_sm_provider_setup_entered = 1",
+            command.CommandText,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "SET SESSION sql_mode = IF(COALESCE(@doka_sm_provider_setup_entered = 1, FALSE), "
+            + "@__doka_previous_sql_mode, @@SESSION.sql_mode)",
+            command.CommandText,
+            StringComparison.Ordinal);
+
         Assert.Contains("SET @doka_sm_provider_setup_entered = NULL;", command.CommandText, StringComparison.Ordinal);
         Assert.True(bodyIndex > captureIndex);
         Assert.True(cleanupIndex > bodyIndex);
@@ -491,6 +535,7 @@ public sealed class MySqlGuardCommandPlanTests
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
             MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
 
         using var context = new DbContext(options.Options);
@@ -525,9 +570,11 @@ public sealed class MySqlGuardCommandPlanTests
             payload => payload.Contains(
                 "THEN ('missing') ELSE NULL END INTO @doka_sm_state",
                 StringComparison.Ordinal));
+
         Assert.Contains(
             payloads,
             payload => payload.StartsWith("ALTER TABLE `items` ADD ", StringComparison.OrdinalIgnoreCase));
+
         Assert.Contains(payloads, payload => payload.Contains("MODIFY COLUMN", StringComparison.OrdinalIgnoreCase));
     }
 
@@ -540,6 +587,7 @@ public sealed class MySqlGuardCommandPlanTests
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
             MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
 
         using var context = new DbContext(options.Options);
@@ -559,13 +607,17 @@ public sealed class MySqlGuardCommandPlanTests
         const string dataProbe = "EXISTS (SELECT 1 FROM `items` LIMIT 1)";
 
         // Assert
-        Assert.False(MySqlSafeMigrationCatalogSqlBuilder.CanUseRequiredColumnAddProtocol(
-            Assert.IsType<EnsureColumnIntent>(operation.Intent).Definition));
+        Assert.False(
+            MySqlSafeMigrationCatalogSqlBuilder.CanUseRequiredColumnAddProtocol(
+                Assert.IsType<EnsureColumnIntent>(operation.Intent)
+                    .Definition));
+
         Assert.DoesNotContain(dataProbe, command.CommandText, StringComparison.Ordinal);
         Assert.Contains(
             payloads,
             payload => payload.Contains(dataProbe, StringComparison.Ordinal)
                 && payload.EndsWith("INTO @doka_sm_state", StringComparison.Ordinal));
+
         Assert.Equal(5, Count(command.CommandText, "PREPARE doka_sm_statement FROM"));
         Assert.Equal(4, Count(command.CommandText, "EXECUTE doka_sm_statement"));
         Assert.Equal(4, Count(command.CommandText, "DEALLOCATE PREPARE doka_sm_statement"));
@@ -578,6 +630,7 @@ public sealed class MySqlGuardCommandPlanTests
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
             MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
 
         using var context = new DbContext(options.Options);
@@ -605,6 +658,7 @@ public sealed class MySqlGuardCommandPlanTests
             "SET @doka_sm_repair_ok = CASE WHEN @doka_sm_state = 'different' THEN COALESCE((",
             command.CommandText,
             StringComparison.Ordinal);
+
         Assert.DoesNotContain("ALTER IGNORE TABLE", command.CommandText, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(
             payloads,
@@ -618,6 +672,7 @@ public sealed class MySqlGuardCommandPlanTests
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
             MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
 
         using var context = new DbContext(options.Options);
@@ -636,7 +691,9 @@ public sealed class MySqlGuardCommandPlanTests
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var command = Assert.Single(
-            context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model));
 
         var payloads = DecodeHexPayloads(command.CommandText);
 
@@ -690,7 +747,11 @@ public sealed class MySqlGuardCommandPlanTests
 
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var capture = context.GetService<MySqlSafeMigrationPlanCapture>();
-        using var lease = capture.Begin(builder.Operations.Cast<SafeMigrationOperation>().ToArray());
+        using var lease = capture.Begin(builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray());
+
         using var command = new MySqlCommand();
         var parameterizer = new MySqlCatalogQueryParameterizer(
             command,
@@ -698,7 +759,10 @@ public sealed class MySqlGuardCommandPlanTests
 
         // Act
         _ = generator.Generate(builder.Operations, context.Model);
-        var plan = lease.Complete().Single();
+        var plan = lease
+            .Complete()
+            .Single();
+
         var bound = redirect
             ? plan with { CatalogRelations = static view => $"`snap_{view.Length}`" }
             : plan;
@@ -782,11 +846,16 @@ public sealed class MySqlGuardCommandPlanTests
     /// <param name="command">
     /// The generated command whose native resource and transaction boundaries are checked.
     /// </param>
-    private static void AssertNativeScopedCommandIsPreserved(MigrationCommand command)
+    private static void AssertNativeScopedCommandIsPreserved(
+        MigrationCommand command
+    )
     {
         var diagnostic = Assert.IsType<MySqlSafeMigrationDiagnosticCommand>(command);
         var original = diagnostic.OriginalCommand;
-        Assert.Equal("Doka.EntityFrameworkCore.MySql.MySqlScopedMigrationCommand", original.GetType().FullName);
+        Assert.Equal("Doka.EntityFrameworkCore.MySql.MySqlScopedMigrationCommand",
+            original.GetType()
+                .FullName);
+
         Assert.Same(original.CommandText, diagnostic.CommandText);
         Assert.Same(original.CommandLogger, diagnostic.CommandLogger);
         Assert.Equal(original.TransactionSuppressed, diagnostic.TransactionSuppressed);
@@ -794,13 +863,19 @@ public sealed class MySqlGuardCommandPlanTests
 
     /// <summary>Removes only validated leading correlation metadata from the native command ordering oracle.</summary>
     /// <param name="sql">The generated native scope with its exact ownership marker.</param>
-    private static ReadOnlySpan<char> ReadRuntimeCommandBody(string sql)
+    private static ReadOnlySpan<char> ReadRuntimeCommandBody(
+        string sql
+    )
     {
         Assert.True(MySqlSafeMigrationRuntimeDiagnostic.TryReadMarker(sql, out _, out _));
-        var text = sql.AsSpan().TrimStart();
+        var text = sql
+            .AsSpan()
+            .TrimStart();
+
         var markerEnd = text.IndexOf("*/", StringComparison.Ordinal) + 2;
 
-        return text[markerEnd..].TrimStart();
+        return text[markerEnd..]
+            .TrimStart();
     }
 
     private static DbContext CreateContext()
@@ -809,6 +884,7 @@ public sealed class MySqlGuardCommandPlanTests
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
             MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
 
         return new DbContext(options.Options);

@@ -8,10 +8,10 @@ public sealed partial class SafeMigrationDefinitionTests
         var columns = new List<string>
         {
             "tenant_id",
-            "id"
+            "id",
         };
 
-        var bytes = new byte[] { 1, 2, 3, };
+        var bytes = new byte[] { 1, 2, 3 };
 
         var key = new ExpectedPrimaryKeyDefinition("pk_items", "items", columns);
         var defaultValue = SafeMigrationDefaultValue.Literal(bytes);
@@ -24,8 +24,8 @@ public sealed partial class SafeMigrationDefinitionTests
 
         var secondRead = Assert.IsType<byte[]>(defaultValue.LiteralValue);
 
-        Assert.Equal(["tenant_id", "id",], key.Columns);
-        Assert.Equal(new byte[] { 1, 2, 3, }, secondRead);
+        Assert.Equal(["tenant_id", "id"], key.Columns);
+        Assert.Equal(new byte[] { 1, 2, 3 }, secondRead);
     }
 
     [Fact]
@@ -38,39 +38,46 @@ public sealed partial class SafeMigrationDefinitionTests
             false,
             computedColumnSql: "1 + 1",
             defaultValue: SafeMigrationDefaultValue.Literal(2)));
+
         Assert.Throws<ArgumentException>(() => new ExpectedForeignKeyDefinition(
             "fk",
             "items",
-            ["a", "b",],
+            ["a", "b"],
             "parents",
             ["id"]));
+
         Assert.Throws<ArgumentException>(() => new ExpectedTableDefinition(
             "items",
             [
                 new ExpectedColumnDefinition("id", typeof(int), false),
                 new ExpectedColumnDefinition("id", typeof(int), false),
             ]));
+
         Assert.Throws<ArgumentException>(() => new ExpectedColumnDefinition(
             "value",
             typeof(int),
             false,
             defaultValue: SafeMigrationDefaultValue.Literal("wrong")));
+
         Assert.Throws<ArgumentException>(() => new ExpectedColumnDefinition(
             "value",
             typeof(int),
             false,
             defaultValue: SafeMigrationDefaultValue.Literal(null)));
+
         Assert.Throws<ArgumentException>(() => new ExpectedIndexDefinition(
             "ix",
             "items",
             [new ExpectedIndexKeyDefinition(column: "id")],
             unique: false,
             nullsDistinct: true));
+
         Assert.Throws<ArgumentException>(() => new ExpectedIndexDefinition(
             "ix",
             "items",
             [new ExpectedIndexKeyDefinition(column: "id")],
             includedColumns: ["id"]));
+
         Assert.Throws<ArgumentOutOfRangeException>(() => new ExpectedForeignKeyDefinition(
             "fk",
             "items",
@@ -78,10 +85,12 @@ public sealed partial class SafeMigrationDefinitionTests
             "parents",
             ["id"],
             onDelete: (ReferentialAction)999));
+
         Assert.Throws<ArgumentException>(() => new ExpectedTableDefinition(
             "items",
             [new ExpectedColumnDefinition("id", typeof(int), false)],
             primaryKey: new ExpectedPrimaryKeyDefinition("pk", "items", ["missing"])));
+
         Assert.Throws<ArgumentException>(() => new AlterColumnIntent(
             "items",
             new ExpectedColumnDefinition("new_name", typeof(int), false),

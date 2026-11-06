@@ -15,9 +15,13 @@ internal static class SqliteSqlNormalizer
     /// <param name="left">The live expression source.</param>
     /// <param name="right">The validated expected expression source.</param>
     /// <returns>Whether only identifier delimiters, trivia, or redundant parentheses differ.</returns>
-    public static bool EquivalentCapturedSource(string? left, string? right)
+    public static bool EquivalentCapturedSource(
+        string? left,
+        string? right
+    )
     {
-        if (left is null || right is null)
+        if (left is null
+            || right is null)
         {
             return left is null && right is null;
         }
@@ -51,10 +55,14 @@ internal static class SqliteSqlNormalizer
         string value
     )
     {
-        var span = value.AsSpan().Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters);
+        var span = value
+            .AsSpan()
+            .Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters);
+
         while (HasSingleOuterParentheses(span))
         {
-            span = span[1..^1].Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters);
+            span = span[1..^1]
+                .Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters);
         }
 
         var builder = new StringBuilder(span.Length);
@@ -127,7 +135,11 @@ internal static class SqliteSqlNormalizer
         for (var index = start + 1; index < value.Length; index++)
         {
             var character = value[index];
-            builder.Append(preserveCase ? character : ToUpperAscii(character));
+            builder.Append(
+                preserveCase
+                    ? character
+                    : ToUpperAscii(character));
+
             if (character != quote)
             {
                 continue;
@@ -232,5 +244,7 @@ internal static class SqliteSqlNormalizer
 
     private static char ToUpperAscii(
         char value
-    ) => value is >= 'a' and <= 'z' ? (char)(value - ('a' - 'A')) : value;
+    ) => value is >= 'a' and <= 'z'
+        ? (char)(value - ('a' - 'A'))
+        : value;
 }

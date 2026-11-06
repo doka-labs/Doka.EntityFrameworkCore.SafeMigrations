@@ -41,6 +41,13 @@ deployment output.
    contract fingerprint, and target migration.
 6. Review every assessment and unexpected object.
 
+Pass the deployment cancellation token explicitly to analysis and verification,
+and propagate it to execution where supported. Select `CancellationToken.None`
+only for an intentionally uncancellable root; cancellation is not a rollback
+guarantee. Required resource/session recovery can continue after cancellation
+under its existing cleanup contract. See the
+[API cancellation contract](../api-reference.md#cancellation-contract).
+
 Use pending-migration discovery when validating successive real migrations
 that transition the same model-managed typed key. Only the resolver's internal
 EF migration IDs establish separate validation groups. An explicit

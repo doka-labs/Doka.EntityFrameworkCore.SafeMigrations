@@ -11,22 +11,35 @@ public sealed class SqlServerAbsentTableCaptureTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task MixedCapture_ReadsOnlyEnsureTablesAndRetainsOffsets(bool nativeBatch)
+    public async Task MixedCapture_ReadsOnlyEnsureTablesAndRetainsOffsets(
+        bool nativeBatch
+    )
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch)
         {
             ReturnPresenceRows = true,
-            PresenceValue = ordinal => ordinal == 3 ? 0 : 1,
+            PresenceValue = ordinal => ordinal == 3
+                ? 0
+                : 1,
         };
 
         await using var transaction = await connection.BeginTransactionAsync();
-        SafeMigrationOperation[] operations = [Column(), Column(), Table("first'item", "custom_schema"),
-            Column(), Table("second"), Table("occupied"), Column()];
+        SafeMigrationOperation[] operations =
+        [
+            Column(), Column(), Table("first'item", "custom_schema"),
+            Column(), Table("second"), Table("occupied"), Column(),
+        ];
 
         // Act
         var absent = await SqlServerSafeMigrationProviderAnalyzer.ReadAbsentTableTargetsAsync(
-            connection, transaction, operations, 2, 5, 67, CancellationToken.None);
+            connection,
+            transaction,
+            operations,
+            2,
+            5,
+            67,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal([true, false, true, false, false], absent);
@@ -42,19 +55,46 @@ public sealed class SqlServerAbsentTableCaptureTests
         Assert.Equal("custom_schema", parameters[0].Value);
         Assert.Equal("first'item", parameters[1].Value);
         Assert.Equal("dbo", parameters[2].Value);
-        Assert.All(parameters, parameter =>
-        {
-            Assert.Equal(DbType.String, parameter.DbType);
-            Assert.Equal(128, parameter.Size);
-        });
+        Assert.All(
+            parameters,
+            parameter =>
+            {
+                Assert.Equal(DbType.String, parameter.DbType);
+                Assert.Equal(128, parameter.Size);
+            });
+
         Assert.Equal(67, Assert.Single(connection.ObservedTimeouts));
         Assert.Same(transaction, Assert.Single(connection.ObservedTransactions));
         Assert.Equal(0, connection.TransactionsDisposed);
-        Assert.Equal(nativeBatch ? 1 : 0, connection.BatchExecutions);
-        Assert.Equal(nativeBatch ? 0 : 1, connection.CommandExecutions);
-        Assert.Equal(nativeBatch ? 1 : 0, connection.BatchesDisposed);
-        Assert.Equal(nativeBatch ? 0 : 1, connection.CommandsDisposed);
-        Assert.Equal(nativeBatch ? 1 : 0, connection.ParameterFactoriesDisposed);
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.BatchExecutions);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : 1,
+            connection.CommandExecutions);
+
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : 1,
+            connection.CommandsDisposed);
+
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.ParameterFactoriesDisposed);
     }
 
     /// <summary>Captures the full bounded plan window in one occupancy statement.</summary>
@@ -63,20 +103,35 @@ public sealed class SqlServerAbsentTableCaptureTests
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection { ReturnPresenceRows = true };
-        var operations = Enumerable.Range(0, 512).Select(index => Table("target_"
-            + index.ToString(CultureInfo.InvariantCulture))).ToArray();
+        var operations = Enumerable
+            .Range(0, 512)
+            .Select(index => Table(
+                "target_"
+                + index.ToString(CultureInfo.InvariantCulture)))
+            .ToArray();
 
         // Act
         var absent = await SqlServerSafeMigrationProviderAnalyzer.ReadAbsentTableTargetsAsync(
-            connection, null, operations, 0, operations.Length, null, CancellationToken.None);
+            connection,
+            null,
+            operations,
+            0,
+            operations.Length,
+            null,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(512, absent.Length);
         Assert.All(absent, value => Assert.True(value));
         Assert.Single(connection.RecordedStatements);
-        Assert.Equal(1024, Assert.Single(connection.RecordedParameters).Length);
+        Assert.Equal(1024,
+            Assert.Single(connection.RecordedParameters)
+                .Length);
+
         Assert.Equal(1, connection.BatchExecutions);
-        Assert.InRange(Assert.Single(connection.BatchPayloadBytes), 1,
+        Assert.InRange(
+            Assert.Single(connection.BatchPayloadBytes),
+            1,
             SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes);
     }
 
@@ -85,15 +140,26 @@ public sealed class SqlServerAbsentTableCaptureTests
     [Theory]
     [InlineData(0)]
     [InlineData(8)]
-    public async Task EmptyOrUnrelatedCapture_PerformsNoTransport(int count)
+    public async Task EmptyOrUnrelatedCapture_PerformsNoTransport(
+        int count
+    )
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection { ReturnPresenceRows = true };
-        var operations = Enumerable.Range(0, count).Select(_ => Column()).ToArray();
+        var operations = Enumerable
+            .Range(0, count)
+            .Select(_ => Column())
+            .ToArray();
 
         // Act
         var absent = await SqlServerSafeMigrationProviderAnalyzer.ReadAbsentTableTargetsAsync(
-            connection, null, operations, 0, count, null, CancellationToken.None);
+            connection,
+            null,
+            operations,
+            0,
+            count,
+            null,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(count, absent.Length);
@@ -111,7 +177,10 @@ public sealed class SqlServerAbsentTableCaptureTests
     [InlineData(0, -1)]
     [InlineData(0, 513)]
     [InlineData(1, 1)]
-    public async Task InvalidWindow_RejectsBeforeExecution(int start, int count)
+    public async Task InvalidWindow_RejectsBeforeExecution(
+        int start,
+        int count
+    )
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection { ReturnPresenceRows = true };
@@ -119,7 +188,13 @@ public sealed class SqlServerAbsentTableCaptureTests
         // Act
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadAbsentTableTargetsAsync(
-                connection, null, [Table("target")], start, count, null, CancellationToken.None));
+                connection,
+                null,
+                [Table("target")],
+                start,
+                count,
+                null,
+                CancellationToken.None));
 
         // Assert
         Assert.Empty(connection.RecordedStatements);
@@ -134,7 +209,9 @@ public sealed class SqlServerAbsentTableCaptureTests
     [InlineData("unexpected")]
     [InlineData("extra")]
     [InlineData("reversed")]
-    public async Task MalformedPresenceResults_RejectAndDispose(string corruption)
+    public async Task MalformedPresenceResults_RejectAndDispose(
+        string corruption
+    )
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection
@@ -154,7 +231,13 @@ public sealed class SqlServerAbsentTableCaptureTests
         // Act
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadAbsentTableTargetsAsync(
-                connection, null, [Table("first"), Table("second")], 0, 2, null, CancellationToken.None));
+                connection,
+                null,
+                [Table("first"), Table("second")],
+                0,
+                2,
+                null,
+                CancellationToken.None));
 
         // Assert
         Assert.Equal(1, connection.BatchesDisposed);
@@ -168,7 +251,9 @@ public sealed class SqlServerAbsentTableCaptureTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task FailedPresenceTransport_DisposesWithoutRetainingAProof(bool nativeBatch)
+    public async Task FailedPresenceTransport_DisposesWithoutRetainingAProof(
+        bool nativeBatch
+    )
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch)
@@ -180,14 +265,34 @@ public sealed class SqlServerAbsentTableCaptureTests
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadAbsentTableTargetsAsync(
-                connection, null, [Table("target")], 0, 1, 51, CancellationToken.None));
+                connection,
+                null,
+                [Table("target")],
+                0,
+                1,
+                51,
+                CancellationToken.None));
 
         // Assert
         Assert.Equal("Injected catalog execution failure.", failure.Message);
         Assert.Equal(51, Assert.Single(connection.ObservedTimeouts));
-        Assert.Equal(nativeBatch ? 1 : 0, connection.BatchesDisposed);
-        Assert.Equal(nativeBatch ? 0 : 1, connection.CommandsDisposed);
-        Assert.Equal(nativeBatch ? 1 : 0, connection.ParameterFactoriesDisposed);
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : 1,
+            connection.CommandsDisposed);
+
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.ParameterFactoriesDisposed);
     }
 
     /// <summary>Cancellation before preparation performs no occupancy query.</summary>
@@ -202,7 +307,13 @@ public sealed class SqlServerAbsentTableCaptureTests
         // Act
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadAbsentTableTargetsAsync(
-                connection, null, [Table("target")], 0, 1, null, cancellation.Token));
+                connection,
+                null,
+                [Table("target")],
+                0,
+                1,
+                null,
+                cancellation.Token));
 
         // Assert
         Assert.Empty(connection.RecordedStatements);
@@ -214,7 +325,9 @@ public sealed class SqlServerAbsentTableCaptureTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task CancelledRead_DisposesTransportAndPreservesTransaction(bool nativeBatch)
+    public async Task CancelledRead_DisposesTransportAndPreservesTransaction(
+        bool nativeBatch
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
@@ -229,15 +342,35 @@ public sealed class SqlServerAbsentTableCaptureTests
         // Act
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadAbsentTableTargetsAsync(
-                connection, transaction, [Table("first"), Table("second")], 0, 2, 81, cancellation.Token));
+                connection,
+                transaction,
+                [Table("first"), Table("second")],
+                0,
+                2,
+                81,
+                cancellation.Token));
 
         // Assert
         Assert.Equal(cancellation.Token, connection.CancellationTokenSeen);
         Assert.Same(transaction, Assert.Single(connection.ObservedTransactions));
         Assert.Equal(0, connection.TransactionsDisposed);
-        Assert.Equal(nativeBatch ? 1 : 0, connection.BatchesDisposed);
-        Assert.Equal(nativeBatch ? 0 : 1, connection.CommandsDisposed);
-        Assert.Equal(nativeBatch ? 1 : 0, connection.ParameterFactoriesDisposed);
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : 1,
+            connection.CommandsDisposed);
+
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.ParameterFactoriesDisposed);
     }
 
     /// <summary>Absence avoids full matching but keeps every authored support and prerequisite guard.</summary>
@@ -246,20 +379,38 @@ public sealed class SqlServerAbsentTableCaptureTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
-        var definition = new ExpectedTableDefinition("guarded_target",
-            [new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
+        var definition = new ExpectedTableDefinition(
+            "guarded_target",
+            [
+                new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
                 new ExpectedColumnDefinition("ParentId", typeof(int), true, "int"),
-                new ExpectedColumnDefinition("Caption", typeof(string), true, "nvarchar(80)",
+                new ExpectedColumnDefinition(
+                    "Caption",
+                    typeof(string),
+                    true,
+                    "nvarchar(80)",
                     defaultValue: SafeMigrationDefaultValue.Literal("default"),
-                    collation: new SafeMigrationCollationIdentifier("Latin1_General_100_CI_AS"))],
-            foreignKeys: [new ExpectedForeignKeyDefinition("FK_guarded_target_parent", "guarded_target", ["ParentId"],
-                "guarded_parent", ["Id"])]);
+                    collation: new SafeMigrationCollationIdentifier("Latin1_General_100_CI_AS")),
+            ],
+            foreignKeys:
+            [
+                new ExpectedForeignKeyDefinition(
+                    "FK_guarded_target_parent",
+                    "guarded_target",
+                    ["ParentId"],
+                    "guarded_parent",
+                    ["Id"]),
+            ]);
 
-        var operation = new SafeMigrationOperation(new EnsureTableIntent(definition,
-            SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent);
+        var operation = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                definition,
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var full = catalog.Build(operation);
@@ -272,10 +423,16 @@ public sealed class SqlServerAbsentTableCaptureTests
         Assert.Equal(full.PrerequisiteExpression, absent.PrerequisiteExpression);
         Assert.Equal(full.CatalogPreambleSql, absent.CatalogPreambleSql);
         Assert.Equal(full.ClassificationCodeExpression, absent.ClassificationCodeExpression);
-        Assert.Contains("inline_foreign_key_prerequisite", absent.ClassificationCodeExpression,
+        Assert.Contains(
+            "inline_foreign_key_prerequisite",
+            absent.ClassificationCodeExpression,
             StringComparison.Ordinal);
-        Assert.Contains("WHEN 1 = 0 THEN N'matching' ELSE N'different'", absent.StateExpression,
+
+        Assert.Contains(
+            "WHEN 1 = 0 THEN N'matching' ELSE N'different'",
+            absent.StateExpression,
             StringComparison.Ordinal);
+
         Assert.DoesNotContain("SELECT COUNT(*) FROM sys.columns", absent.StateExpression, StringComparison.Ordinal);
         Assert.Equal("CASE WHEN 1 = 0 THEN 1 ELSE 0 END", absent.Postcondition);
     }
@@ -286,15 +443,20 @@ public sealed class SqlServerAbsentTableCaptureTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
-        var definition = new ExpectedTableDefinition("invalid_target",
+        var definition = new ExpectedTableDefinition(
+            "invalid_target",
             [new ExpectedColumnDefinition("Id", typeof(int), true, "int")],
             primaryKey: new ExpectedPrimaryKeyDefinition("PK_invalid_target", "invalid_target", ["Id"]));
 
-        var operation = new SafeMigrationOperation(new EnsureTableIntent(definition,
-            SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent);
+        var operation = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                definition,
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var absent = catalog.Build(operation, targetTableKnownAbsent: true);
@@ -305,13 +467,22 @@ public sealed class SqlServerAbsentTableCaptureTests
     }
 
     /// <summary>Creates an ordinary target table ensure for a synthetic catalog identity.</summary>
-    private static SafeMigrationOperation Table(string name, string? schema = null)
-        => new(new EnsureTableIntent(new ExpectedTableDefinition(name,
-            [new ExpectedColumnDefinition("Id", typeof(int), false, "int")], schema: schema),
-            SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent);
+    private static SafeMigrationOperation Table(
+        string name,
+        string? schema = null
+    )
+        => new(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    name,
+                    [new ExpectedColumnDefinition("Id", typeof(int), false, "int")],
+                    schema: schema),
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Creates an unrelated column operation that must not participate in the occupancy prepass.</summary>
     private static SafeMigrationOperation Column()
-        => new(new EnsureColumnIntent("columns", new ExpectedColumnDefinition("Id", typeof(int), false, "int")),
+        => new(
+            new EnsureColumnIntent("columns", new ExpectedColumnDefinition("Id", typeof(int), false, "int")),
             SafeMigrationPolicy.ThrowIfDifferent);
 }

@@ -11,7 +11,7 @@ internal static class SafeMigrationCatalogWorkOrder
     public static int[] Create(
         int count,
         Func<int, bool> include,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(include);
@@ -26,6 +26,7 @@ internal static class SafeMigrationCatalogWorkOrder
         // second managed allocation when most entries are already resolved.
         Span<int> selected = stackalloc int[count];
         var selectedCount = 0;
+
         // WHY: Capture original operation ordinals without constructing a filtered operation copy.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -40,7 +41,8 @@ internal static class SafeMigrationCatalogWorkOrder
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        return selected[..selectedCount].ToArray();
+        return selected[..selectedCount]
+            .ToArray();
     }
 
     /// <summary>Checks that a returned row belongs to the next submitted operation.</summary>
@@ -73,7 +75,7 @@ internal static class SafeMigrationCatalogWorkOrder
     }
 
     /// <summary>Requires one returned result for every operation submitted in the batch.</summary>
-    /// <param name="consumed">The number of rows accepted by <see cref="ValidateResultOrdinal"/>.</param>
+    /// <param name="consumed">The number of rows accepted by <see cref="ValidateResultOrdinal" />.</param>
     /// <param name="submittedOrdinals">The operation identities owned by this batch.</param>
     /// <exception cref="InvalidOperationException">The provider omitted or added classifier results.</exception>
     public static void ValidateCompletion(

@@ -100,7 +100,9 @@ public sealed partial class SafeMigrationRunContractTests
         bool requireExpectedFingerprint
     )
     {
-        var fingerprint = requireExpectedFingerprint ? ModelFingerprint() : null;
+        var fingerprint = requireExpectedFingerprint
+            ? ModelFingerprint()
+            : null;
 
         var options = new SafeMigrationRunOptions("instance", expectedModelFingerprint: fingerprint);
 
@@ -188,28 +190,33 @@ public sealed partial class SafeMigrationRunContractTests
             root
                 .GetProperty("schemaVersion")
                 .GetInt32());
+
         Assert.Equal(
             "preflight",
             root
                 .GetProperty("mode")
                 .GetString());
+
         Assert.Equal(
             "ready",
             root
                 .GetProperty("status")
                 .GetString());
+
         Assert.Equal(
             "ensure_table",
             root
                 .GetProperty("assessments")[0]
                 .GetProperty("operationKind")
                 .GetString());
+
         Assert.Equal(
             "missing",
             root
                 .GetProperty("assessments")[0]
                 .GetProperty("observedState")
                 .GetString());
+
         Assert.Equal(
             "table",
             root
@@ -242,9 +249,10 @@ public sealed partial class SafeMigrationRunContractTests
             status: SafeMigrationReportStatus.Blocked,
             assessments: [assessment]);
 
-        using var document = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(
-            report,
-            SafeMigrationReportSelection.BlockingOnly));
+        using var document = JsonDocument.Parse(
+            SafeMigrationReportJson.SerializeToUtf8Bytes(
+                report,
+                SafeMigrationReportSelection.BlockingOnly));
 
         using var schema = LoadReportViewSchema();
         var root = document.RootElement;
@@ -256,21 +264,29 @@ public sealed partial class SafeMigrationRunContractTests
                 .GetProperty("properties")
                 .GetProperty("selection"),
             ["complete", "non_matching", "blocking_only"]);
+
         AssertClosedObjectSurface(schemaRoot, root);
         AssertClosedObjectSurface(
             definitions.GetProperty("sourceReport"),
             root.GetProperty("sourceReport"));
+
         AssertClosedObjectSurface(
             definitions.GetProperty("environment"),
-            root.GetProperty("sourceReport")
+            root
+                .GetProperty("sourceReport")
                 .GetProperty("environment"));
+
         AssertClosedObjectSurface(
             definitions.GetProperty("assessment"),
-            root.GetProperty("assessments")[0]);
+            root
+                .GetProperty("assessments")[0]);
+
         AssertClosedObjectSurface(
             definitions.GetProperty("difference"),
-            root.GetProperty("assessments")[0]
+            root
+                .GetProperty("assessments")[0]
                 .GetProperty("differences")[0]);
+
         AssertMatchesSchema(schemaRoot, root, schemaRoot);
     }
 
@@ -279,19 +295,45 @@ public sealed partial class SafeMigrationRunContractTests
     public void CurrentSchemasMatchKnownAndUnknownDiagnosticIdentityShapes()
     {
         // Arrange
-        var intent = new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition("fk_child_parent", "children",
-            ["Tenant", "OwnerId"], "parents", ["Tenant", "Id"], schema: "dependent", principalSchema: "principal"));
+        var intent = new EnsureForeignKeyIntent(
+            new ExpectedForeignKeyDefinition(
+                "fk_child_parent",
+                "children",
+                ["Tenant", "OwnerId"],
+                "parents",
+                ["Tenant", "Id"],
+                schema: "dependent",
+                principalSchema: "principal"));
 
-        var known = new SafeMigrationAssessment(0, typeof(SafeMigrationOperation).FullName!, true, intent.Kind,
-            intent.ObjectName, SafeMigrationObservedState.PrerequisiteMissing,
-            SafeMigrationAction.RejectPrerequisiteMissing, false, "prerequisite_missing",
-            "classified_prerequisite_missing", "prerequisite_missing", SafeMigrationOperationalImpact.NotApplicable,
-            differences: null, deferredOrigin: null, identity: SafeMigrationOperationIdentity.Create(intent),
-            migrationId: "202610140001_Diagnostics", policy: SafeMigrationPolicy.ThrowIfDifferent);
+        var known = new SafeMigrationAssessment(
+            0,
+            typeof(SafeMigrationOperation).FullName!,
+            true,
+            intent.Kind,
+            intent.ObjectName,
+            SafeMigrationObservedState.PrerequisiteMissing,
+            SafeMigrationAction.RejectPrerequisiteMissing,
+            false,
+            "prerequisite_missing",
+            "classified_prerequisite_missing",
+            "prerequisite_missing",
+            SafeMigrationOperationalImpact.NotApplicable,
+            differences: null,
+            deferredOrigin: null,
+            identity: SafeMigrationOperationIdentity.Create(intent),
+            migrationId: "202610140001_Diagnostics",
+            policy: SafeMigrationPolicy.ThrowIfDifferent);
 
-        var unknown = new SafeMigrationAssessment(1, typeof(SafeMigrationOperation).FullName!, true,
-            SafeMigrationOperationKind.EnsureColumn, "Id", SafeMigrationObservedState.DataBlocked,
-            SafeMigrationAction.RejectDataBlocked, false, "data_blocked");
+        var unknown = new SafeMigrationAssessment(
+            1,
+            typeof(SafeMigrationOperation).FullName!,
+            true,
+            SafeMigrationOperationKind.EnsureColumn,
+            "Id",
+            SafeMigrationObservedState.DataBlocked,
+            SafeMigrationAction.RejectDataBlocked,
+            false,
+            "data_blocked");
 
         var report = CreateReport(status: SafeMigrationReportStatus.Blocked, assessments: [known, unknown]);
         using var completeSchema = LoadReportSchema();
@@ -299,17 +341,43 @@ public sealed partial class SafeMigrationRunContractTests
 
         // Act
         using var complete = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
-        using var view = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report,
-            SafeMigrationReportSelection.BlockingOnly));
+        using var view = JsonDocument.Parse(
+            SafeMigrationReportJson.SerializeToUtf8Bytes(
+                report,
+                SafeMigrationReportSelection.BlockingOnly));
 
         // Assert
-        Assert.Equal(4, complete.RootElement.GetProperty("schemaVersion").GetInt32());
-        Assert.Equal(3, view.RootElement.GetProperty("schemaVersion").GetInt32());
-        Assert.Equal(4, view.RootElement.GetProperty("sourceReport").GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(4,
+            complete
+                .RootElement
+                .GetProperty("schemaVersion")
+                .GetInt32());
+
+        Assert.Equal(3,
+            view
+                .RootElement
+                .GetProperty("schemaVersion")
+                .GetInt32());
+
+        Assert.Equal(4,
+            view
+                .RootElement
+                .GetProperty("sourceReport")
+                .GetProperty("schemaVersion")
+                .GetInt32());
+
         AssertMatchesSchema(completeSchema.RootElement, complete.RootElement, completeSchema.RootElement);
         AssertMatchesSchema(viewSchema.RootElement, view.RootElement, viewSchema.RootElement);
-        var completeAssessmentSchema = completeSchema.RootElement.GetProperty("$defs").GetProperty("assessment");
-        var viewAssessmentSchema = viewSchema.RootElement.GetProperty("$defs").GetProperty("assessment");
+        var completeAssessmentSchema = completeSchema
+            .RootElement
+            .GetProperty("$defs")
+            .GetProperty("assessment");
+
+        var viewAssessmentSchema = viewSchema
+            .RootElement
+            .GetProperty("$defs")
+            .GetProperty("assessment");
+
         var completeAssessments = complete.RootElement.GetProperty("assessments");
         var viewAssessments = view.RootElement.GetProperty("assessments");
 
@@ -317,12 +385,34 @@ public sealed partial class SafeMigrationRunContractTests
         AssertClosedObjectSurface(completeAssessmentSchema, completeAssessments[1]);
         AssertClosedObjectSurface(viewAssessmentSchema, viewAssessments[0]);
         AssertClosedObjectSurface(viewAssessmentSchema, viewAssessments[1]);
-        Assert.True(completeAssessments[0].GetProperty("identityKnown").GetBoolean());
-        Assert.False(completeAssessments[1].GetProperty("identityKnown").GetBoolean());
-        Assert.Equal("children", completeAssessments[0].GetProperty("table").GetString());
-        Assert.Equal(JsonValueKind.Null, completeAssessments[1].GetProperty("table").ValueKind);
-        Assert.Equal(JsonValueKind.Array, completeAssessments[0].GetProperty("columns").ValueKind);
-        Assert.Equal(JsonValueKind.Null, completeAssessments[1].GetProperty("columns").ValueKind);
+        Assert.True(completeAssessments[0]
+            .GetProperty("identityKnown")
+            .GetBoolean());
+
+        Assert.False(completeAssessments[1]
+            .GetProperty("identityKnown")
+            .GetBoolean());
+
+        Assert.Equal("children",
+            completeAssessments[0]
+                .GetProperty("table")
+                .GetString());
+
+        Assert.Equal(JsonValueKind.Null,
+            completeAssessments[1]
+                .GetProperty("table")
+                .ValueKind);
+
+        Assert.Equal(JsonValueKind.Array,
+            completeAssessments[0]
+                .GetProperty("columns")
+                .ValueKind);
+
+        Assert.Equal(JsonValueKind.Null,
+            completeAssessments[1]
+                .GetProperty("columns")
+                .ValueKind);
+
         Assert.Equal(completeAssessments.GetRawText(), viewAssessments.GetRawText());
     }
 
@@ -360,8 +450,13 @@ public sealed partial class SafeMigrationRunContractTests
     )
     {
         // Arrange
-        var modelFingerprint = model ? new string('a', 64) : null;
-        var contractFingerprint = model ? null : "ABC";
+        var modelFingerprint = model
+            ? new string('a', 64)
+            : null;
+
+        var contractFingerprint = model
+            ? null
+            : "ABC";
 
         // Act
         var exception = Record.Exception(() => CreateReport(
@@ -392,7 +487,10 @@ public sealed partial class SafeMigrationRunContractTests
             ? (SafeMigrationObservedState)int.MaxValue
             : SafeMigrationObservedState.Matching;
 
-        var action = field == "action" ? (SafeMigrationAction)int.MaxValue : SafeMigrationAction.NoOp;
+        var action = field == "action"
+            ? (SafeMigrationAction)int.MaxValue
+            : SafeMigrationAction.NoOp;
+
         var impact = field == "impact"
             ? (SafeMigrationOperationalImpact)int.MaxValue
             : SafeMigrationOperationalImpact.NotApplicable;
@@ -412,8 +510,12 @@ public sealed partial class SafeMigrationRunContractTests
                 action,
                 postconditionSatisfied: true,
                 code,
-                field == "impact" ? "classified_matching" : code,
-                field == "impact" ? "matching_no_op" : code,
+                field == "impact"
+                    ? "classified_matching"
+                    : code,
+                field == "impact"
+                    ? "matching_no_op"
+                    : code,
                 impact,
                 differences: null);
         });

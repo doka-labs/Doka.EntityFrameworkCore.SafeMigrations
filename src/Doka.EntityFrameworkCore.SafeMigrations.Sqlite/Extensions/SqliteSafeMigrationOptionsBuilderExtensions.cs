@@ -1,7 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 
 /// <summary>
-/// Provides <see cref="DbContextOptionsBuilder"/> extensions for SQLite
+/// Provides <see cref="DbContextOptionsBuilder" /> extensions for SQLite
 /// SafeMigrations, baseline-generator composition, and canonical migration discovery.
 /// </summary>
 public static class SqliteSafeMigrationOptionsBuilderExtensions

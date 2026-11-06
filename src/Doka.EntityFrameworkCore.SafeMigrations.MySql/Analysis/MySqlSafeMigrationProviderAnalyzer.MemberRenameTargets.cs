@@ -24,6 +24,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         cancellationToken.ThrowIfCancellationRequested();
 
         List<int>? candidates = null;
+
         // WHY: Keep rename operations, physical identities and returned evidence aligned by ordinal.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -53,13 +54,18 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         // accepted creation changes only the source, not this independent fact.
         // Native owner casing excludes same-collation table shadows, while
         // column/index member names retain their native case-insensitive rules.
-        await SafeMigrationCatalogProbeBatch.ReadAsync(connection, candidates.Count, maximumPayloadBytes,
+        await SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection,
+            candidates.Count,
+            maximumPayloadBytes,
             commandTimeout,
             (command, offset) =>
             {
                 var parameters = new MySqlCatalogQueryParameterizer(command);
-                var selections = new List<string>(Math.Min(
-                    SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement, candidates.Count - offset));
+                var selections = new List<string>(
+                    Math.Min(
+                        SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
+                        candidates.Count - offset));
 
                 var sqlBytes = trailerBytes;
                 while (offset + selections.Count < candidates.Count
@@ -68,7 +74,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     var ordinal = candidates[offset + selections.Count];
                     var checkpoint = parameters.Capture();
                     var expression = BuildMemberRenameTargetExpression(
-                        operations[ordinal].Intent, parameters.AddString);
+                        operations[ordinal].Intent,
+                        parameters.AddString);
 
                     var sourceSupported = operations[ordinal].Intent is RenameIndexIntent index
                         ? BuildIndexRenameSourceSupportedExpression(index, parameters.AddString)
@@ -78,7 +85,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         + $"({expression}), ({sourceSupported})";
 
                     var selectionBytes = Encoding.UTF8.GetByteCount(selection)
-                        + (selections.Count == 0 ? 0 : separatorBytes);
+                        + (selections.Count == 0
+                            ? 0
+                            : separatorBytes);
 
                     var payloadBytes = checked(sqlBytes + selectionBytes + parameters.Utf8PayloadBytes);
                     if (SafeMigrationCatalogQueryLimits.Exceeded(parameters.Count, payloadBytes, maximumPayloadBytes))
@@ -88,7 +97,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         if (selections.Count == 0)
                         {
                             throw SafeMigrationCatalogQueryLimits.OversizedOperation(
-                                ordinal, parameterCount, payloadBytes);
+                                ordinal,
+                                parameterCount,
+                                payloadBytes);
                         }
 
                         break;
@@ -102,7 +113,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     + SafeMigrationCatalogQueryLimits.Trailer;
 
                 return new SafeMigrationCatalogProbeStatement(
-                    selections.Count, parameters.Utf8PayloadBytes, candidates[offset]);
+                    selections.Count,
+                    parameters.Utf8PayloadBytes,
+                    candidates[offset]);
             },
             async (reader, offset, count, token) =>
             {
@@ -114,7 +127,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 var row = 0;
                 while (await reader.ReadAsync(token))
                 {
-                    if (row >= count || reader.GetInt32(0) != candidates[offset + row])
+                    if (row >= count
+                        || reader.GetInt32(0) != candidates[offset + row])
                     {
                         throw InvalidMemberRenameTargetResult();
                     }
@@ -126,7 +140,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     }
 
                     targets[offset + row] = (ReadColumnDependencyBoolean(reader, 1),
-                        hasSourceSupported ? ReadColumnDependencyBoolean(reader, 2) : null);
+                        hasSourceSupported
+                            ? ReadColumnDependencyBoolean(reader, 2)
+                            : null);
+
                     row++;
                 }
 
@@ -144,10 +161,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         for (var index = 0; index < candidates.Count; index++)
         {
             var ordinal = candidates[index];
-            results[ordinal] = results[ordinal].WithRenameTargetExists(targets[index].Target);
+            results[ordinal] = results[ordinal]
+                .WithRenameTargetExists(targets[index].Target);
+
             if (targets[index].SourceSupported is { } supported)
             {
-                results[ordinal] = results[ordinal].WithRenameSourceSupported(supported);
+                results[ordinal] = results[ordinal]
+                    .WithRenameSourceSupported(supported);
             }
 
             if (operations[ordinal].Intent is RenameIndexIntent rename)
@@ -155,8 +175,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 // WHY: PRIMARY is a reserved target even when no primary key
                 // exists. Source creation or a target tombstone cannot change
                 // that authored destination role; no live query is needed.
-                results[ordinal] = results[ordinal].WithRenameTargetSupported(
-                    !StringComparer.OrdinalIgnoreCase.Equals(rename.NewName, "PRIMARY"));
+                results[ordinal] = results[ordinal]
+                    .WithRenameTargetSupported(
+                        !StringComparer.OrdinalIgnoreCase.Equals(rename.NewName, "PRIMARY"));
             }
         }
     }
@@ -165,7 +186,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     /// <param name="intent">The source-independent column or index rename destination.</param>
     /// <param name="literal">The bounded parameter renderer for catalog identities.</param>
     /// <returns>A catalog-only destination occupancy predicate.</returns>
-    private static string BuildMemberRenameTargetExpression(SafeMigrationIntent intent, Func<string, string> literal)
+    private static string BuildMemberRenameTargetExpression(
+        SafeMigrationIntent intent,
+        Func<string, string> literal
+    )
     {
         var (table, target, catalog, alias, member) = intent switch
         {
@@ -184,7 +208,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     private static string BuildIndexRenameSourceSupportedExpression(
         RenameIndexIntent intent,
         Func<string, string> literal
-    ) => BuildMemberRenamePresenceExpression(intent.Table, intent.Name, "STATISTICS", "s", "INDEX_NAME", literal,
+    ) => BuildMemberRenamePresenceExpression(
+        intent.Table,
+        intent.Name,
+        "STATISTICS",
+        "s",
+        "INDEX_NAME",
+        literal,
         "s.INDEX_NAME <> 'PRIMARY'");
 
     /// <summary>Shares owner qualification for source and destination without interpreting authored SQL.</summary>
@@ -208,15 +238,20 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     {
         var owner = literal(table);
         var ownerMatch = MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
-            alias + ".TABLE_NAME", owner);
+            alias + ".TABLE_NAME",
+            owner);
 
         var databaseMatch = MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
-            alias + ".TABLE_SCHEMA", "DATABASE()");
+            alias + ".TABLE_SCHEMA",
+            "DATABASE()");
 
         return $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.{catalog} {alias} "
             + $"WHERE {alias}.TABLE_SCHEMA = DATABASE() AND {alias}.TABLE_NAME = {owner} "
             + $"AND {alias}.{member} = {literal(name)} AND {ownerMatch} AND {databaseMatch}"
-            + (invariant is null ? string.Empty : $" AND {invariant}") + ")";
+            + (invariant is null
+                ? string.Empty
+                : $" AND {invariant}")
+            + ")";
     }
 
     /// <summary>Rejects malformed destination facts without exposing physical names or data.</summary>

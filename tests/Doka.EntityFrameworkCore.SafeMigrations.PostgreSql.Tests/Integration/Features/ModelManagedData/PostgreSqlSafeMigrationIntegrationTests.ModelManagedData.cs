@@ -58,7 +58,7 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             new SafeMigrationRunOptions($"model-data-initial-{mode}"),
             CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var replay = await runner.AnalyzeAsync(
             context,
@@ -66,7 +66,7 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             new SafeMigrationRunOptions($"model-data-initial-{mode}-replay"),
             CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var tableAssessment = Assert.Single(
             preflight.Assessments,
@@ -84,10 +84,13 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
         Assert.Equal("projected_missing", dataAssessment.Code);
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
         Assert.All(replay.Assessments, assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
-        Assert.Equal(1, await ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM model_initial_roles "
-            + "WHERE id = 1 AND name = 'administrator';"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_initial_roles "
+                + "WHERE id = 1 AND name = 'administrator';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -103,7 +106,8 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             + "REFERENCES model_edge_roles (id) ON DELETE CASCADE);"
             + "INSERT INTO model_edge_roles (id, code, name) VALUES "
             + "(1, 'administrator', NULL), (2, 'member', 'Member');"
-            + "INSERT INTO model_edge_audit (id, role_id) VALUES (11, 1);");
+            + "INSERT INTO model_edge_audit (id, role_id) VALUES (11, 1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -116,6 +120,7 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             ["integer", "character varying(64)", "character varying(64)"],
             new object?[,] { { 3, "member", "Other member" } },
             uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["code"])]);
+
         var missingPrerequisite = new MigrationBuilder(context.Database.ProviderName!);
         _ = missingPrerequisite.EnsureModelManagedDataFromModel(
             "model_edge_missing",
@@ -124,6 +129,7 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             ["id"],
             ["integer"],
             new object?[,] { { 1 } });
+
         var unmodeledDependency = new MigrationBuilder(context.Database.ProviderName!);
         _ = unmodeledDependency.DeleteModelManagedDataFromModel(
             "model_edge_roles",
@@ -153,19 +159,35 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             CancellationToken.None);
 
         _ = await Assert.ThrowsAsync<PostgresException>(() =>
-            ExecuteOperationsAsync(context, unmodeledDependency.Operations));
+            ExecuteOperationsAsync(context, unmodeledDependency.Operations, CancellationToken.None));
 
-        Assert.Equal(SafeMigrationObservedState.DataBlocked, Assert.Single(uniqueReport.Assessments).ObservedState);
-        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing,
-            Assert.Single(missingReport.Assessments).ObservedState);
-        Assert.Equal(SafeMigrationObservedState.Unsupported,
-            Assert.Single(dependencyReport.Assessments).ObservedState);
-        Assert.Equal(1, await ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM model_edge_roles WHERE id = 1 AND name IS NULL;"));
-        Assert.Equal(1, await ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM model_edge_audit WHERE role_id = 1;"));
+        Assert.Equal(SafeMigrationObservedState.DataBlocked,
+            Assert.Single(uniqueReport.Assessments)
+                .ObservedState);
+
+        Assert.Equal(
+            SafeMigrationObservedState.PrerequisiteMissing,
+            Assert.Single(missingReport.Assessments)
+                .ObservedState);
+
+        Assert.Equal(
+            SafeMigrationObservedState.Unsupported,
+            Assert.Single(dependencyReport.Assessments)
+                .ObservedState);
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_edge_roles WHERE id = 1 AND name IS NULL;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_edge_audit WHERE role_id = 1;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -175,7 +197,8 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE model_null_roles (id integer NOT NULL PRIMARY KEY, name varchar(64) NULL);"
-            + "INSERT INTO model_null_roles (id, name) VALUES (1, NULL), (2, 'Owner');");
+            + "INSERT INTO model_null_roles (id, name) VALUES (1, NULL), (2, 'Owner');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var update = new MigrationBuilder(context.Database.ProviderName!);
@@ -196,14 +219,20 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             new SafeMigrationRunOptions("model-data-null-update"),
             CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, update.Operations);
-        await ExecuteOperationsAsync(context, update.Operations);
+        await ExecuteOperationsAsync(context, update.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, update.Operations, CancellationToken.None);
 
-        Assert.Equal(SafeMigrationObservedState.TransitionReady,
-            Assert.Single(preflight.Assessments).ObservedState);
-        Assert.Equal(2, await ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM model_null_roles WHERE name = 'Owner';"));
+        Assert.Equal(
+            SafeMigrationObservedState.TransitionReady,
+            Assert.Single(preflight.Assessments)
+                .ObservedState);
+
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_null_roles WHERE name = 'Owner';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -217,7 +246,8 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             + "CONSTRAINT fk_model_user_roles_role FOREIGN KEY (role_id) "
             + "REFERENCES model_roles (id) ON DELETE CASCADE);"
             + "INSERT INTO model_roles (id, name) VALUES (1, 'administrator'), (2, 'member');"
-            + "INSERT INTO model_user_roles (id, role_id) VALUES (11, 1), (21, 2), (22, 2);");
+            + "INSERT INTO model_user_roles (id, role_id) VALUES (11, 1), (21, 2), (22, 2);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var exact = ModelManagedDependencyDeletion(context.Database.ProviderName!, roleId: 1, userRoleId: 11);
@@ -228,7 +258,7 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             new SafeMigrationRunOptions("model-data-exact-dependency"),
             CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, exact.Operations);
+        await ExecuteOperationsAsync(context, exact.Operations, CancellationToken.None);
 
         var unmatched = ModelManagedDependencyDeletion(context.Database.ProviderName!, roleId: 2, userRoleId: 21);
         var unmatchedPreflight = await runner.AnalyzeAsync(
@@ -241,20 +271,35 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
         Assert.Equal(SafeMigrationObservedState.TransitionReady, exactPreflight.Assessments[0].ObservedState);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, exactPreflight.Assessments[1].Action);
         Assert.Equal("projected_model_managed_data_state_unknown", exactPreflight.Assessments[1].AnalysisCode);
-        Assert.Equal(0, await ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM model_roles WHERE id = 1;"));
-        Assert.Equal(0, await ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM model_user_roles WHERE role_id = 1;"));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_roles WHERE id = 1;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_user_roles WHERE role_id = 1;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, unmatchedPreflight.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, unmatchedPreflight.Assessments[1].Action);
-        Assert.Equal(1, await ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM model_roles WHERE id = 2;"));
-        Assert.Equal(2, await ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM model_user_roles WHERE role_id = 2;"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_roles WHERE id = 2;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_user_roles WHERE role_id = 2;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -266,7 +311,8 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             "CREATE TABLE model_roles ("
             + "id integer NOT NULL PRIMARY KEY, code varchar(64) NOT NULL UNIQUE, name varchar(64) NULL);"
             + "INSERT INTO model_roles (id, code, name) VALUES "
-            + "(1, 'administrator', 'Administrator'), (3, 'drift', 'Live value');");
+            + "(1, 'administrator', 'Administrator'), (3, 'drift', 'Live value');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var ensure = new MigrationBuilder(context.Database.ProviderName!);
@@ -276,11 +322,7 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             ["integer"],
             ["id", "code", "name"],
             ["integer", "character varying(64)", "character varying(64)"],
-            new object?[,]
-            {
-                { 1, "administrator", "Administrator" },
-                { 2, "member", "Member" },
-            },
+            new object?[,] { { 1, "administrator", "Administrator" }, { 2, "member", "Member" } },
             uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["code"])]);
 
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -290,7 +332,7 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             new SafeMigrationRunOptions("model-data-ensure"),
             CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, ensure.Operations);
+        await ExecuteOperationsAsync(context, ensure.Operations, CancellationToken.None);
         var ensureReplay = await runner.AnalyzeAsync(
             context,
             ensure.Operations,
@@ -314,7 +356,7 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             new SafeMigrationRunOptions("model-data-update"),
             CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, update.Operations);
+        await ExecuteOperationsAsync(context, update.Operations, CancellationToken.None);
 
         var delete = new MigrationBuilder(context.Database.ProviderName!);
         _ = delete.DeleteModelManagedDataFromModel(
@@ -324,11 +366,7 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             new object?[,] { { 1 }, { 99 } },
             ["id", "code", "name"],
             ["integer", "character varying(64)", "character varying(64)"],
-            new object?[,]
-            {
-                { 1, "administrator", "Owner" },
-                { 99, "absent", "Absent" },
-            });
+            new object?[,] { { 1, "administrator", "Owner" }, { 99, "absent", "Absent" } });
 
         var deletePreflight = await runner.AnalyzeAsync(
             context,
@@ -336,8 +374,8 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             new SafeMigrationRunOptions("model-data-delete"),
             CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, delete.Operations);
-        await ExecuteOperationsAsync(context, delete.Operations);
+        await ExecuteOperationsAsync(context, delete.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, delete.Operations, CancellationToken.None);
 
         var drift = new MigrationBuilder(context.Database.ProviderName!);
         _ = drift.EnsureModelManagedDataFromModel(
@@ -354,16 +392,31 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             new SafeMigrationRunOptions("model-data-drift"),
             CancellationToken.None);
 
-        _ = await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context, drift.Operations));
+        _ = await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(
+            context,
+            drift.Operations,
+            CancellationToken.None));
 
         Assert.Equal(SafeMigrationReportStatus.Ready, ensurePreflight.Status);
-        Assert.Equal(SafeMigrationObservedState.Missing, Assert.Single(ensurePreflight.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Missing,
+            Assert.Single(ensurePreflight.Assessments)
+                .ObservedState);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, ensureReplay.Status);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(ensureReplay.Assessments).Action);
-        Assert.Equal(SafeMigrationObservedState.TransitionReady,
-            Assert.Single(updatePreflight.Assessments).ObservedState);
-        Assert.Equal(SafeMigrationObservedState.TransitionReady,
-            Assert.Single(deletePreflight.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(ensureReplay.Assessments)
+                .Action);
+
+        Assert.Equal(
+            SafeMigrationObservedState.TransitionReady,
+            Assert.Single(updatePreflight.Assessments)
+                .ObservedState);
+
+        Assert.Equal(
+            SafeMigrationObservedState.TransitionReady,
+            Assert.Single(deletePreflight.Assessments)
+                .ObservedState);
+
         var driftAssessment = Assert.Single(driftPreflight.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, driftPreflight.Status);
@@ -371,15 +424,27 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
         Assert.Collection(
             driftAssessment.Differences,
             difference => Assert.Equal("model_managed_row_content", difference.Facet));
-        Assert.Equal(0, await ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM model_roles WHERE id = 1;"));
-        Assert.Equal(1, await ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM model_roles WHERE id = 2 AND name = 'Member';"));
-        Assert.Equal(1, await ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM model_roles WHERE id = 3 AND name = 'Live value';"));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_roles WHERE id = 1;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_roles WHERE id = 2 AND name = 'Member';",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_roles WHERE id = 3 AND name = 'Live value';",
+                cancellationToken: CancellationToken.None));
     }
 
     private static MigrationBuilder ModelManagedDependencyDeletion(
@@ -397,6 +462,7 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             ["id", "role_id"],
             ["integer", "integer"],
             new object?[,] { { userRoleId, roleId } });
+
         _ = builder.DeleteModelManagedDataFromModel(
             "model_roles",
             ["id"],
@@ -404,7 +470,15 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
             new object?[,] { { roleId } },
             ["id", "name"],
             ["integer", "character varying(64)"],
-            new object?[,] { { roleId, roleId == 1 ? "administrator" : "member" } },
+            new object?[,]
+            {
+                {
+                    roleId,
+                    roleId == 1
+                        ? "administrator"
+                        : "member",
+                },
+            },
             foreignKeys:
             [
                 new ExpectedModelManagedDataForeignKeyDefinition(
@@ -415,5 +489,4 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
 
         return builder;
     }
-
 }

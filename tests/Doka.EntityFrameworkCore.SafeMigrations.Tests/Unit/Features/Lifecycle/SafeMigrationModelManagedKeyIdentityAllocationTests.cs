@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Measures canonical key identity allocation without concurrent process-wide collections.</summary>
+
 // WHY: Keep both collection and warmed-cache cases in one exclusive theory with unchanged case data.
 [Collection(ProcessWideTestGroup.Name)]
 public sealed class SafeMigrationModelManagedKeyIdentityAllocationTests
@@ -13,10 +14,16 @@ public sealed class SafeMigrationModelManagedKeyIdentityAllocationTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void CompositeKeyAlreadyOrderedPathAvoidsAllocations(bool singleMember, bool collect)
+    public void CompositeKeyAlreadyOrderedPathAvoidsAllocations(
+        bool singleMember,
+        bool collect
+    )
     {
         // Arrange
-        string[] columns = singleMember ? ["Id"] : ["Code", "Id"];
+        string[] columns = singleMember
+            ? ["Id"]
+            : ["Code", "Id"];
+
         for (var iteration = 0; iteration < 256; iteration++)
         {
             _ = SafeMigrationModelManagedKeyIdentity.CanonicalizeColumns(columns, normalizer: null, out _);
@@ -38,7 +45,9 @@ public sealed class SafeMigrationModelManagedKeyIdentityAllocationTests
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var iteration = 0; iteration < 512; iteration++)
         {
-            canonical = SafeMigrationModelManagedKeyIdentity.CanonicalizeColumns(columns, normalizer: null,
+            canonical = SafeMigrationModelManagedKeyIdentity.CanonicalizeColumns(
+                columns,
+                normalizer: null,
                 out ordinals);
         }
 

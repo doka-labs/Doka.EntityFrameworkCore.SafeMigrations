@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore.Migrations.Design;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Compiles generated native UUID calls and checks their reconstructed migration contracts.</summary>
@@ -33,26 +35,38 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
 
         var result = GenerateAndReload(context, mode, original);
 
-        var operation = Assert.Single(result.Operations.OfType<SafeMigrationOperation>(),
+        var operation = Assert.Single(
+            result.Operations.OfType<SafeMigrationOperation>(),
             value => value.Intent is EnsureTableIntent);
 
         var intent = Assert.IsType<EnsureTableIntent>(operation.Intent);
 
         Assert.Contains(
-            mode == SafeMigrationScaffoldingMode.Strict ? ".CreateTableIfNotExists(" : ".ConvergeTableFromModel(",
+            mode == SafeMigrationScaffoldingMode.Strict
+                ? ".CreateTableIfNotExists("
+                : ".ConvergeTableFromModel(",
             result.Source,
             StringComparison.Ordinal);
+
         Assert.Equal(
             mode == SafeMigrationScaffoldingMode.Strict
                 ? SafeMigrationTableMode.StrictDefinition
                 : SafeMigrationTableMode.ConvergenceContainer,
             intent.Mode);
-        Assert.Equal(mode == SafeMigrationScaffoldingMode.Strict ? 1 : 5, result.Operations.Count);
+
+        Assert.Equal(
+            mode == SafeMigrationScaffoldingMode.Strict
+                ? 1
+                : 5,
+            result.Operations.Count);
+
         Assert.Equal(original.Columns.Count, intent.Definition.Columns.Count);
         Assert.Equal(original.PrimaryKey!.Columns, intent.Definition.PrimaryKey!.Columns);
-        Assert.All(original.Columns, column => AssertColumnRoundTrip(
-            column,
-            Assert.Single(intent.Definition.Columns, value => value.Name == column.Name)));
+        Assert.All(
+            original.Columns,
+            column => AssertColumnRoundTrip(
+                column,
+                Assert.Single(intent.Definition.Columns, value => value.Name == column.Name)));
     }
 
     /// <summary>Standalone native UUID columns retain their complete contract in both scaffolding modes.</summary>
@@ -71,7 +85,10 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
         using var context = CreateContext();
         var table = CreateTableOperation(context);
         var original = table.Columns.Single(value =>
-            value.Name == (nullable ? nameof(NativeRecord.OptionalId) : nameof(NativeRecord.DefaultId)));
+            value.Name
+            == (nullable
+                ? nameof(NativeRecord.OptionalId)
+                : nameof(NativeRecord.DefaultId)));
 
         var result = GenerateAndReload(context, mode, original);
 
@@ -97,7 +114,10 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
         Assert.Null(reloaded.MaxLength);
         Assert.Null(reloaded.IsFixedLength);
         Assert.Equal(original.DefaultValue, reloaded.DefaultValue.LiteralValue);
-        Assert.Equal(DokaMySqlGuidFormat.Uuid, original.GetMySqlMigrationMetadata().GuidFormat);
+        Assert.Equal(DokaMySqlGuidFormat.Uuid,
+            original.GetMySqlMigrationMetadata()
+                .GuidFormat);
+
         Assert.True(MySqlSafeMigrationColumnMetadata.TryCreate(reloaded, out var metadata));
         Assert.Equal(DokaMySqlGuidFormat.Uuid, metadata.GuidFormat);
     }
@@ -107,11 +127,16 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
         NativeContext context
     )
     {
-        var model = context.GetService<IDesignTimeModel>().Model;
-        var operations = context.GetService<IMigrationsModelDiffer>()
+        var model = context.GetService<IDesignTimeModel>()
+            .Model;
+
+        var operations = context
+            .GetService<IMigrationsModelDiffer>()
             .GetDifferences(source: null, model.GetRelationalModel());
 
-        return operations.OfType<CreateTableOperation>().Single();
+        return operations
+            .OfType<CreateTableOperation>()
+            .Single();
     }
 
     /// <summary>Renders and compiles the same operation source a consumer migration executes.</summary>
@@ -124,6 +149,7 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
         var services = new ServiceCollection();
         services.AddEntityFrameworkDesignTimeServices();
         new MySqlDesignTimeServices().ConfigureDesignTimeServices(services);
+
         // WHY: Reuse the active public mapping source, including its MariaDB
         // profile, instead of constructing or reflecting over Doka internals.
         services.AddSingleton<ITypeMappingSource>(context.GetService<ITypeMappingSource>());
@@ -131,7 +157,7 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
         using var provider = services.BuildServiceProvider();
         var generator = new SafeMigrationCSharpMigrationOperationGenerator(
             provider.GetRequiredService<
-                Microsoft.EntityFrameworkCore.Migrations.Design.CSharpMigrationOperationGeneratorDependencies>(),
+                CSharpMigrationOperationGeneratorDependencies>(),
             new SafeMigrationScaffoldingConfiguration(true, mode),
             [new MySqlSafeMigrationCreateIndexScaffoldingProjector()],
             [MySqlSafeMigrationProviderOperationAdapter.Instance]);
@@ -140,24 +166,25 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
         generator.Generate("migrationBuilder", [operation], builder);
         var operationSource = builder.ToString();
         var source = $$"""
-            using System;
-            using Doka.EntityFrameworkCore.MySql;
-            using Doka.EntityFrameworkCore.SafeMigrations;
-            using Microsoft.EntityFrameworkCore.Migrations;
+                       using System;
+                       using Doka.EntityFrameworkCore.MySql;
+                       using Doka.EntityFrameworkCore.SafeMigrations;
+                       using Microsoft.EntityFrameworkCore.Migrations;
 
-            public static class GeneratedNativeUuidMigration
-            {
-                public static void Up(MigrationBuilder migrationBuilder)
-                {
-                    {{operationSource}}
-                }
-            }
-            """;
+                       public static class GeneratedNativeUuidMigration
+                       {
+                           public static void Up(MigrationBuilder migrationBuilder)
+                           {
+                               {{operationSource}}
+                           }
+                       }
+                       """;
 
         var assembly = MySqlGeneratedMigrationCompiler.Compile(source);
         var method = assembly.GetType("GeneratedNativeUuidMigration", throwOnError: true)!.GetMethod("Up")!;
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
-        method.CreateDelegate<Action<MigrationBuilder>>()(migrationBuilder);
+        method
+            .CreateDelegate<Action<MigrationBuilder>>()(migrationBuilder);
 
         return new GeneratedResult(operationSource, migrationBuilder.Operations);
     }
@@ -170,6 +197,7 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
         builder.UseMySql(
             "Server=localhost;Database=native_uuid_scaffolding;User ID=test;",
             MySqlServerVersion.MariaDb(new Version(11, 8, 0)));
+
         builder.UseMySqlSafeMigrations();
 
         return new NativeContext(builder.Options);
@@ -178,7 +206,10 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
     /// <summary>Captures the rendered source and the operations reconstructed by compiled consumer code.</summary>
     /// <param name="Source">The generated operation body.</param>
     /// <param name="Operations">The reloaded SafeMigrations operations.</param>
-    private sealed record GeneratedResult(string Source, IReadOnlyList<MigrationOperation> Operations);
+    private sealed record GeneratedResult(
+        string Source,
+        IReadOnlyList<MigrationOperation> Operations
+    );
 
     /// <summary>Supplies required, optional, and defaulted UUIDs to the real provider model differ.</summary>
     private sealed class NativeContext(DbContextOptions<NativeContext> options) : DbContext(options)
@@ -190,9 +221,16 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
         {
             var entity = modelBuilder.Entity<NativeRecord>();
             entity.ToTable("native_uuid_scaffolding");
-            entity.Property(value => value.Id).HasMySqlGuidFormat(DokaMySqlGuidFormat.Uuid);
-            entity.Property(value => value.OptionalId).HasMySqlGuidFormat(DokaMySqlGuidFormat.Uuid);
-            entity.Property(value => value.DefaultId)
+            entity
+                .Property(value => value.Id)
+                .HasMySqlGuidFormat(DokaMySqlGuidFormat.Uuid);
+
+            entity
+                .Property(value => value.OptionalId)
+                .HasMySqlGuidFormat(DokaMySqlGuidFormat.Uuid);
+
+            entity
+                .Property(value => value.DefaultId)
                 .HasMySqlGuidFormat(DokaMySqlGuidFormat.Uuid)
                 .HasDefaultValue(Guid.Parse("00112233-4455-6677-8899-aabbccddeeff"));
         }

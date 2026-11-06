@@ -20,12 +20,19 @@ public sealed class MySqlProjectedMissingSqlDefaultColumnTests
         Assert.Contains("physical_owner.TABLE_NAME IN (@owner)", sql, StringComparison.Ordinal);
         Assert.Contains(
             "CAST(physical_owner.TABLE_NAME AS BINARY) = CAST(source_owner.owner AS BINARY)",
-            sql, StringComparison.Ordinal);
-        Assert.Contains(
-            "CAST(LOWER(physical_owner.TABLE_NAME) AS BINARY) = CAST(LOWER(source_owner.owner) AS BINARY)", sql,
+            sql,
             StringComparison.Ordinal);
+
         Assert.Contains(
-            "CAST(physical_owner.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)", sql, StringComparison.Ordinal);
+            "CAST(LOWER(physical_owner.TABLE_NAME) AS BINARY) = CAST(LOWER(source_owner.owner) AS BINARY)",
+            sql,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "CAST(physical_owner.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            sql,
+            StringComparison.Ordinal);
+
         Assert.Contains("UPPER(physical_owner.ENGINE) = 'INNODB'", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("SELECT physical_owner.TABLE_NAME", sql, StringComparison.Ordinal);
     }
@@ -41,14 +48,22 @@ public sealed class MySqlProjectedMissingSqlDefaultColumnTests
     [InlineData(true, true, false, true)]
     [InlineData(true, true, true, false)]
     [InlineData(true, true, true, true)]
-    public void AtomicNoDefaultRequiresEveryCapturedPrerequisite(bool innoDb, bool strict, bool checks, bool supported)
+    public void AtomicNoDefaultRequiresEveryCapturedPrerequisite(
+        bool innoDb,
+        bool strict,
+        bool checks,
+        bool supported
+    )
     {
         // Arrange
         var expected = innoDb && strict && checks && supported;
 
         // Act
         var safe = MySqlProjectedColumnTransition.HasSafeAtomicRequiredColumnAddEnvironment(
-            innoDb, strict, checks, supported);
+            innoDb,
+            strict,
+            checks,
+            supported);
 
         // Assert
         Assert.Equal(expected, safe);
@@ -83,8 +98,11 @@ public sealed class MySqlProjectedMissingSqlDefaultColumnTests
         var definition = new ExpectedColumnDefinition("value", typeof(string), false, storeType);
 
         // Act
-        var safe = MySqlProjectedColumnTransition.HasSafeRequiredAddLiteralMode(definition,
-            requiresEscapes, escapesEnabled, quotesAreLiteral);
+        var safe = MySqlProjectedColumnTransition.HasSafeRequiredAddLiteralMode(
+            definition,
+            requiresEscapes,
+            escapesEnabled,
+            quotesAreLiteral);
 
         // Assert
         Assert.Equal(expected, safe);
@@ -107,22 +125,37 @@ public sealed class MySqlProjectedMissingSqlDefaultColumnTests
     )
     {
         // Arrange
-        var target = new ExpectedColumnDefinition("value", typeof(int), false, "int", defaultValue: sqlNull
-            ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(null)) : SafeMigrationDefaultValue.None);
+        var target = new ExpectedColumnDefinition(
+            "value",
+            typeof(int),
+            false,
+            "int",
+            defaultValue: sqlNull
+                ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(null))
+                : SafeMigrationDefaultValue.None);
+
         var intent = new EnsureColumnIntent("items", target);
         var plan = new MySqlSafeMigrationRuntimePlan("'missing'", "FALSE", SafeMigrationRepairCapability.None, "FALSE")
         {
-            RequiredColumnAddPlan = sqlNull ? null
+            RequiredColumnAddPlan = sqlNull
+                ? null
                 : new MySqlSafeMigrationRequiredColumnAddPlan("guard", "fresh", false)
-            {
-                StatusBinding = staged ? "'staged'" : "'fresh'",
-                SupportsCheck = true,
-            },
+                {
+                    StatusBinding = staged
+                        ? "'staged'"
+                        : "'fresh'",
+                    SupportsCheck = true,
+                },
         };
 
         // Act
-        var carriesEmptyProof = MySqlSafeMigrationProviderAnalyzer.IsFreshRequiredColumnAddMissing(intent, plan,
-            state, staged ? "column_atomic_add_resume" : "classified_missing");
+        var carriesEmptyProof = MySqlSafeMigrationProviderAnalyzer.IsFreshRequiredColumnAddMissing(
+            intent,
+            plan,
+            state,
+            staged
+                ? "column_atomic_add_resume"
+                : "classified_missing");
 
         // Assert
         Assert.Equal(state == SafeMigrationObservedState.Missing && !staged, carriesEmptyProof);
@@ -146,25 +179,49 @@ public sealed class MySqlProjectedMissingSqlDefaultColumnTests
     )
     {
         // Arrange
-        var target = new ExpectedColumnDefinition("value", typeof(int), false, "int", defaultValue: sqlNull
-            ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(null)) : SafeMigrationDefaultValue.None);
+        var target = new ExpectedColumnDefinition(
+            "value",
+            typeof(int),
+            false,
+            "int",
+            defaultValue: sqlNull
+                ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(null))
+                : SafeMigrationDefaultValue.None);
+
         var intent = new EnsureColumnIntent("items", target);
-        var plan = new MySqlSafeMigrationRuntimePlan("'data_blocked'", "FALSE", SafeMigrationRepairCapability.None,
+        var plan = new MySqlSafeMigrationRuntimePlan(
+            "'data_blocked'",
+            "FALSE",
+            SafeMigrationRepairCapability.None,
             "FALSE")
         {
-            RequiredColumnAddPlan = sqlNull ? null
+            RequiredColumnAddPlan = sqlNull
+                ? null
                 : new MySqlSafeMigrationRequiredColumnAddPlan("guard", "fresh", false)
                 {
-                    StatusBinding = staged ? "'staged'" : "'fresh'",
+                    StatusBinding = staged
+                        ? "'staged'"
+                        : "'fresh'",
                     SupportsCheck = true,
                 },
         };
 
         // Act
-        var rowDependent = MySqlSafeMigrationProviderAnalyzer.IsBlockedRequiredColumnAddRowProof(intent, plan,
-            state, staged ? "column_atomic_add_resume" : "classified_data_blocked");
-        var provesEmpty = MySqlSafeMigrationProviderAnalyzer.IsFreshRequiredColumnAddMissing(intent, plan,
-            state, staged ? "column_atomic_add_resume" : "classified_data_blocked");
+        var rowDependent = MySqlSafeMigrationProviderAnalyzer.IsBlockedRequiredColumnAddRowProof(
+            intent,
+            plan,
+            state,
+            staged
+                ? "column_atomic_add_resume"
+                : "classified_data_blocked");
+
+        var provesEmpty = MySqlSafeMigrationProviderAnalyzer.IsFreshRequiredColumnAddMissing(
+            intent,
+            plan,
+            state,
+            staged
+                ? "column_atomic_add_resume"
+                : "classified_data_blocked");
 
         // Assert
         Assert.Equal(state == SafeMigrationObservedState.DataBlocked && !staged, rowDependent);
@@ -180,15 +237,22 @@ public sealed class MySqlProjectedMissingSqlDefaultColumnTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void RequiredSqlDefaultEnvironmentRequiresInnoDbAndStrictMode(bool innoDb, bool strict)
+    public void RequiredSqlDefaultEnvironmentRequiresInnoDbAndStrictMode(
+        bool innoDb,
+        bool strict
+    )
     {
         // Arrange
         using var context = CreateContext();
         var definition = SqlDefaultColumn(timestamp: false);
 
         // Act
-        var safe = MySqlProjectedColumnTransition.HasSafeRequiredSqlDefaultAddEnvironment(definition,
-            context.GetService<IRelationalTypeMappingSource>(), innoDb, strict, explicitTimestampDefaults: true);
+        var safe = MySqlProjectedColumnTransition.HasSafeRequiredSqlDefaultAddEnvironment(
+            definition,
+            context.GetService<IRelationalTypeMappingSource>(),
+            innoDb,
+            strict,
+            explicitTimestampDefaults: true);
 
         // Assert
         Assert.Equal(innoDb && strict, safe);
@@ -199,15 +263,20 @@ public sealed class MySqlProjectedMissingSqlDefaultColumnTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void RequiredTimestampSqlDefaultNeedsExplicitTimestampDefaults(bool explicitTimestampDefaults)
+    public void RequiredTimestampSqlDefaultNeedsExplicitTimestampDefaults(
+        bool explicitTimestampDefaults
+    )
     {
         // Arrange
         using var context = CreateContext();
         var definition = SqlDefaultColumn(timestamp: true);
 
         // Act
-        var safe = MySqlProjectedColumnTransition.HasSafeRequiredSqlDefaultAddEnvironment(definition,
-            context.GetService<IRelationalTypeMappingSource>(), isInnoDb: true, strictSqlMode: true,
+        var safe = MySqlProjectedColumnTransition.HasSafeRequiredSqlDefaultAddEnvironment(
+            definition,
+            context.GetService<IRelationalTypeMappingSource>(),
+            isInnoDb: true,
+            strictSqlMode: true,
             explicitTimestampDefaults);
 
         // Assert
@@ -241,28 +310,61 @@ public sealed class MySqlProjectedMissingSqlDefaultColumnTests
         using var context = CreateContext();
         var analyzer = new MissingAddAnalyzer(context.GetService<IRelationalTypeMappingSource>(), strict);
         var projection = new SafeMigrationPreflightProjection(projectedColumnAnalyzer: analyzer);
-        var owner = new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition("items",
-            [new ExpectedColumnDefinition("id", typeof(int), false, "int")]),
-            SafeMigrationTableMode.ConvergenceContainer), SafeMigrationPolicy.ThrowIfDifferent);
-        var ownerLive = Proof(created ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Matching);
+        var owner = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "items",
+                    [new ExpectedColumnDefinition("id", typeof(int), false, "int")]),
+                SafeMigrationTableMode.ConvergenceContainer),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var ownerLive = Proof(
+            created
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.Matching);
+
         var ownerResult = projection.Project(owner, ownerLive);
-        projection.Observe(owner, ownerLive, ownerResult, SafeMigrationDecisionPlanner.Plan(owner.Intent.Kind,
-            ownerResult.ObservedState, owner.Policy, ownerResult.RepairCapability));
-        var ensure = new SafeMigrationOperation(new EnsureColumnIntent("items", SqlDefaultColumn(timestamp: false)),
+        projection.Observe(
+            owner,
+            ownerLive,
+            ownerResult,
+            SafeMigrationDecisionPlanner.Plan(
+                owner.Intent.Kind,
+                ownerResult.ObservedState,
+                owner.Policy,
+                ownerResult.RepairCapability));
+
+        var ensure = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", SqlDefaultColumn(timestamp: false)),
             policy);
-        var live = Proof(created ? SafeMigrationObservedState.PrerequisiteMissing : SafeMigrationObservedState.Missing);
+
+        var live = Proof(
+            created
+                ? SafeMigrationObservedState.PrerequisiteMissing
+                : SafeMigrationObservedState.Missing);
 
         // Act
         var result = projection.Project(ensure, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(ensure.Intent.Kind, result.ObservedState,
-            ensure.Policy, result.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            ensure.Intent.Kind,
+            result.ObservedState,
+            ensure.Policy,
+            result.RepairCapability);
 
         // Assert
         Assert.Equal(1, analyzer.MissingCalls);
         Assert.Equal(created, analyzer.LastContext.TableWasCreated);
-        Assert.Equal(strict ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Unsupported,
+        Assert.Equal(
+            strict
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.Unsupported,
             result.ObservedState);
-        Assert.Equal(strict ? SafeMigrationAction.Apply : SafeMigrationAction.RejectUnsupported, decision.Action);
+
+        Assert.Equal(
+            strict
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectUnsupported,
+            decision.Action);
     }
 
     /// <summary>Existing exact Matching targets are never reclassified by a Missing-only eligibility hook.</summary>
@@ -271,25 +373,42 @@ public sealed class MySqlProjectedMissingSqlDefaultColumnTests
     [InlineData(SafeMigrationPolicy.ExistenceOnly)]
     [InlineData(SafeMigrationPolicy.ThrowIfDifferent)]
     [InlineData(SafeMigrationPolicy.RepairIfSafe)]
-    public void MatchingRequiredSqlDefaultDoesNotCallMissingHook(SafeMigrationPolicy policy)
+    public void MatchingRequiredSqlDefaultDoesNotCallMissingHook(
+        SafeMigrationPolicy policy
+    )
     {
         // Arrange
         using var context = CreateContext();
         var analyzer = new MissingAddAnalyzer(context.GetService<IRelationalTypeMappingSource>(), strict: false);
         var projection = new SafeMigrationPreflightProjection(projectedColumnAnalyzer: analyzer);
         var target = SqlDefaultColumn(timestamp: false);
-        var owner = new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition("items", [target]),
-            SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent);
+        var owner = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("items", [target]),
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         var missing = Proof(SafeMigrationObservedState.Missing);
         var creation = projection.Project(owner, missing);
-        projection.Observe(owner, missing, creation, SafeMigrationDecisionPlanner.Plan(owner.Intent.Kind,
-            creation.ObservedState, owner.Policy, creation.RepairCapability));
+        projection.Observe(
+            owner,
+            missing,
+            creation,
+            SafeMigrationDecisionPlanner.Plan(
+                owner.Intent.Kind,
+                creation.ObservedState,
+                owner.Policy,
+                creation.RepairCapability));
+
         var ensure = new SafeMigrationOperation(new EnsureColumnIntent("items", target), policy);
 
         // Act
         var result = projection.Project(ensure, missing);
-        var decision = SafeMigrationDecisionPlanner.Plan(ensure.Intent.Kind, result.ObservedState,
-            ensure.Policy, result.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            ensure.Intent.Kind,
+            result.ObservedState,
+            ensure.Policy,
+            result.RepairCapability);
 
         // Assert
         Assert.Equal(0, analyzer.MissingCalls);
@@ -303,8 +422,10 @@ public sealed class MySqlProjectedMissingSqlDefaultColumnTests
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", SqlDefaultColumn(timestamp: false)),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", SqlDefaultColumn(timestamp: false)),
             SafeMigrationPolicy.RepairIfSafe);
+
         var missing = Proof(SafeMigrationObservedState.Missing);
 
         // Act
@@ -314,42 +435,76 @@ public sealed class MySqlProjectedMissingSqlDefaultColumnTests
         Assert.Same(missing, result);
     }
 
-    private static ExpectedColumnDefinition SqlDefaultColumn(bool timestamp) => new("value",
-        timestamp ? typeof(DateTime) : typeof(int), false, timestamp ? "timestamp" : "int",
-        defaultValue: SafeMigrationDefaultValue.Sql(timestamp
-            ? SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Timestamp) : SafeMigrationSql.Literal(1)));
+    private static ExpectedColumnDefinition SqlDefaultColumn(
+        bool timestamp
+    ) => new(
+        "value",
+        timestamp
+            ? typeof(DateTime)
+            : typeof(int),
+        false,
+        timestamp
+            ? "timestamp"
+            : "int",
+        defaultValue: SafeMigrationDefaultValue.Sql(
+            timestamp
+                ? SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Timestamp)
+                : SafeMigrationSql.Literal(1)));
 
-    private static SafeMigrationProviderAnalysis Proof(SafeMigrationObservedState state) =>
+    private static SafeMigrationProviderAnalysis Proof(
+        SafeMigrationObservedState state
+    ) =>
         new(state, SafeMigrationRepairCapability.None, false, "test_owned_column");
 
-    private static DbContext CreateContext() => new(new DbContextOptionsBuilder<DbContext>()
-        .UseMySql("Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
-            MySqlServerVersion.MySql(new Version(8, 4, 11))).UseMySqlSafeMigrations().Options);
+    private static DbContext CreateContext() => new(
+        new DbContextOptionsBuilder<DbContext>()
+            .UseMySql(
+                "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
+                MySqlServerVersion.MySql(new Version(8, 4, 11)))
+            .UseMySqlSafeMigrations()
+            .Options);
 
-    private sealed class MissingAddAnalyzer(IRelationalTypeMappingSource mappings, bool strict)
+    private sealed class MissingAddAnalyzer(
+        IRelationalTypeMappingSource mappings,
+        bool strict
+    )
         : ISafeMigrationProjectedColumnAnalyzer
     {
         internal int MissingCalls { get; private set; }
 
         internal SafeMigrationProjectedMissingColumnContext LastContext { get; private set; }
 
-        public SafeMigrationProviderAnalysis ValidateProjectedMissingColumnAdd(EnsureColumnIntent intent,
-            SafeMigrationProjectedMissingColumnContext context, SafeMigrationProviderAnalysis liveAnalysis,
-            SafeMigrationProviderAnalysis projectedAnalysis)
+        public SafeMigrationProviderAnalysis ValidateProjectedMissingColumnAdd(
+            EnsureColumnIntent intent,
+            SafeMigrationProjectedMissingColumnContext context,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            SafeMigrationProviderAnalysis projectedAnalysis
+        )
         {
             MissingCalls++;
             LastContext = context;
 
-            return MySqlProjectedColumnTransition.HasSafeRequiredSqlDefaultAddEnvironment(intent.Definition,
-                mappings, isInnoDb: true, strict, explicitTimestampDefaults: true)
-                    ? projectedAnalysis
-                    : new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
-                        SafeMigrationRepairCapability.None, false, "column_required_sql_add_unavailable");
+            return MySqlProjectedColumnTransition.HasSafeRequiredSqlDefaultAddEnvironment(
+                intent.Definition,
+                mappings,
+                isInnoDb: true,
+                strict,
+                explicitTimestampDefaults: true)
+                ? projectedAnalysis
+                : new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.Unsupported,
+                    SafeMigrationRepairCapability.None,
+                    false,
+                    "column_required_sql_add_unavailable");
         }
 
-        public SafeMigrationProviderAnalysis ValidateProjectedAlterColumn(AlterColumnIntent intent,
-            ExpectedColumnDefinition source, SafeMigrationProjectedAlterColumnContext context,
-            SafeMigrationProviderAnalysis liveAnalysis, SafeMigrationProviderAnalysis projectedAnalysis) =>
+        public SafeMigrationProviderAnalysis ValidateProjectedAlterColumn(
+            AlterColumnIntent intent,
+            ExpectedColumnDefinition source,
+            SafeMigrationProjectedAlterColumnContext context,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            SafeMigrationProviderAnalysis projectedAnalysis
+        ) =>
             throw new InvalidOperationException("This fixture validates only Missing column adds.");
     }
 }

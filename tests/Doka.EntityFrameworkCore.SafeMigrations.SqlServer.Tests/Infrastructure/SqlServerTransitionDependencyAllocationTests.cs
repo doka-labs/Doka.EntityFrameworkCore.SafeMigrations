@@ -14,14 +14,21 @@ public sealed class SqlServerTransitionDependencyAllocationTests
         using var context = new SafeMigrationDbContext(ConnectionString);
         var current = Analyzer(context);
         var former = Analyzer(context);
-        var operations = Enumerable.Range(0, 512).Select(static index => new SafeMigrationOperation(
-            new AlterColumnIntent("items_" + index,
-                new ExpectedColumnDefinition("Value", typeof(long), false, "bigint"),
-                new ExpectedColumnDefinition("Value", typeof(int), false, "int")),
-            SafeMigrationPolicy.RepairIfSafe)).ToArray();
+        var operations = Enumerable
+            .Range(0, 512)
+            .Select(static index => new SafeMigrationOperation(
+                new AlterColumnIntent(
+                    "items_" + index,
+                    new ExpectedColumnDefinition("Value", typeof(long), false, "bigint"),
+                    new ExpectedColumnDefinition("Value", typeof(int), false, "int")),
+                SafeMigrationPolicy.RepairIfSafe))
+            .ToArray();
 
-        var analysis = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.Safe, false, "candidate_safe");
+        var analysis = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            false,
+            "candidate_safe");
 
         // WHY: Warm both dictionaries and capture paths with identical owned
         // candidates. The reference recreates only the removed eager-set

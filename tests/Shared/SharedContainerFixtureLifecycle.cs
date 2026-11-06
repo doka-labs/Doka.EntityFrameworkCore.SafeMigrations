@@ -16,7 +16,10 @@ internal sealed class SharedContainerFixtureLifecycle<TFixture>
     /// <param name="createFixture">The factory, or the fixture's public constructor when omitted.</param>
     public SharedContainerFixtureLifecycle(
         Func<TFixture>? createFixture = null
-    ) => _createFixture = createFixture ?? (() => new TFixture());
+    )
+    {
+        _createFixture = createFixture ?? (() => new TFixture());
+    }
 
     /// <summary>Gets the owned instance; consumers must await initialization before using it.</summary>
     public TFixture? Fixture
@@ -44,11 +47,15 @@ internal sealed class SharedContainerFixtureLifecycle<TFixture>
 
     /// <summary>Initializes once only when the selected tests need the fixture.</summary>
     /// <param name="required">Whether a runnable selected test requires constructor injection.</param>
+    /// <param name="cancellationToken">Cancels before startup ownership is committed.</param>
     /// <returns>The shared initialization task, or a completed task without constructing a resource.</returns>
     public Task InitializeAsync(
-        bool required
+        bool required,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         lock (_gate)
         {
             if (!required)
@@ -61,7 +68,7 @@ internal sealed class SharedContainerFixtureLifecycle<TFixture>
                 throw new InvalidOperationException("Fixture initialization cannot follow final cleanup.");
             }
 
-            return _initialization ??= InitializeCoreAsync();
+            return _initialization ??= InitializeCoreAsync(cancellationToken);
         }
     }
 
@@ -75,15 +82,26 @@ internal sealed class SharedContainerFixtureLifecycle<TFixture>
         }
     }
 
-    private async Task InitializeCoreAsync()
+    /// <summary>Commits startup ownership before invoking the framework's parameterless fixture hook.</summary>
+    /// <param name="cancellationToken">Cancels before allocating the owned fixture.</param>
+    /// <returns>The real startup task that final cleanup must await.</returns>
+    private async Task InitializeCoreAsync(
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         try
         {
             // WHY: Startup can allocate a container before failing. Recording
             // ownership first lets the final cleanup release that partial state.
             _fixture = _createFixture();
 
-            await _fixture.InitializeAsync().ConfigureAwait(false);
+            // WHY: xUnit's startup hook cannot accept a token. Once it owns resources, awaiting
+            // its actual completion prevents final cleanup from racing still-running startup.
+            await _fixture
+                .InitializeAsync()
+                .ConfigureAwait(false);
         }
         catch (Exception exception)
         {
@@ -119,7 +137,9 @@ internal sealed class SharedContainerFixtureLifecycle<TFixture>
 
         try
         {
-            await _fixture.DisposeAsync().ConfigureAwait(false);
+            await _fixture
+                .DisposeAsync()
+                .ConfigureAwait(false);
         }
         catch (Exception exception)
         {

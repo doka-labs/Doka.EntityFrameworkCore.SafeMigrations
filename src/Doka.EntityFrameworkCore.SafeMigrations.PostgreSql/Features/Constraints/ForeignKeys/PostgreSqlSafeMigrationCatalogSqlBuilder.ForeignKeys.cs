@@ -105,6 +105,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         + $"AND co.confupdtype = {onUpdate} "
         + $"AND co.confdeltype = {onDelete} "
         + "AND co.confmatchtype = 's'::\"char\" "
+
         // A column-list SET NULL/DEFAULT action changes which dependent
         // columns are updated and is not expressible by the EF operation.
         + "AND (to_jsonb(co) ->> 'confdelsetcols') IS NULL";
@@ -133,18 +134,18 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var records = new[]
         {
             DiagnosticRecord(
-                $"ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
-                    + "JOIN pg_catalog.pg_attribute a "
-                    + "ON a.attrelid = co.conrelid AND a.attnum = key.attnum "
-                    + $"ORDER BY key.ord) <> {NameArray(definition.Columns)}",
+                "ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
+                + "JOIN pg_catalog.pg_attribute a "
+                + "ON a.attrelid = co.conrelid AND a.attnum = key.attnum "
+                + $"ORDER BY key.ord) <> {NameArray(definition.Columns)}",
                 "foreign_key_column_order",
                 columnDiagnostics.Expected,
                 columnDiagnostics.Actual),
             DiagnosticRecord(
-                $"ARRAY(SELECT a.attname FROM unnest(co.confkey) WITH ORDINALITY AS key(attnum, ord) "
-                    + "JOIN pg_catalog.pg_attribute a "
-                    + "ON a.attrelid = co.confrelid AND a.attnum = key.attnum "
-                    + $"ORDER BY key.ord) <> {NameArray(definition.PrincipalColumns)}",
+                "ARRAY(SELECT a.attname FROM unnest(co.confkey) WITH ORDINALITY AS key(attnum, ord) "
+                + "JOIN pg_catalog.pg_attribute a "
+                + "ON a.attrelid = co.confrelid AND a.attnum = key.attnum "
+                + $"ORDER BY key.ord) <> {NameArray(definition.PrincipalColumns)}",
                 "foreign_key_principal_column_order",
                 principalColumnDiagnostics.Expected,
                 principalColumnDiagnostics.Actual),

@@ -86,7 +86,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var source = new IndexPrerequisiteSource();
         var projection = new SafeMigrationPreflightProjection(indexPrerequisiteSource: source);
         var columns = present
-            ? new[] { Column("id"), Column("predicate"), }
+            ? new[] { Column("id"), Column("predicate") }
             : [Column("id")];
 
         ObserveAccepted(
@@ -94,7 +94,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             new EnsureTableIntent(
                 new ExpectedTableDefinition("nodes", columns),
                 SafeMigrationTableMode.StrictDefinition),
-            created ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Matching);
+            created
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.Matching);
 
         var operation = RawFilterIndex();
 
@@ -104,7 +106,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Assert
         Assert.True(source.WasQueried);
         Assert.Equal(
-            present ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.PrerequisiteMissing,
+            present
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.PrerequisiteMissing,
             analysis.ObservedState);
     }
 
@@ -124,7 +128,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             new EnsureTableIntent(
                 new ExpectedTableDefinition("nodes", [Column("id")]),
                 SafeMigrationTableMode.StrictDefinition),
-            created ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Matching);
+            created
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new EnsureColumnIntent("nodes", new ExpectedColumnDefinition("predicate", typeof(int), true, "int")),
@@ -150,6 +157,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             new EnsureTableIntent(
                 new ExpectedTableDefinition("nodes", [Column("id"), Column("predicate")]),
                 SafeMigrationTableMode.StrictDefinition));
+
         ObserveAccepted(projection, new DropColumnIntent("predicate", "nodes"), SafeMigrationObservedState.Matching);
 
         var operation = RawFilterIndex();
@@ -195,20 +203,6 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 filter: "predicate IS NULL")),
         SafeMigrationPolicy.ThrowIfDifferent);
 
-    private sealed class IndexPrerequisiteSource : ISafeMigrationIndexPrerequisiteSource
-    {
-        public bool WasQueried { get; private set; }
-
-        public IReadOnlyList<string> GetIndexPrerequisiteColumns(
-            EnsureIndexIntent intent
-        )
-        {
-            WasQueried = true;
-
-            return ["id", "predicate"];
-        }
-    }
-
     private static ExpectedIndexDefinition IndexWithDependency(
         string dependency
     ) => dependency switch
@@ -230,4 +224,18 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             structuredFilter: SafeMigrationSql.IsNull(SafeMigrationSql.Identifier("predicate"))),
         _ => throw new ArgumentException("Unknown dependency case.", nameof(dependency)),
     };
+
+    private sealed class IndexPrerequisiteSource : ISafeMigrationIndexPrerequisiteSource
+    {
+        public bool WasQueried { get; private set; }
+
+        public IReadOnlyList<string> GetIndexPrerequisiteColumns(
+            EnsureIndexIntent intent
+        )
+        {
+            WasQueried = true;
+
+            return ["id", "predicate"];
+        }
+    }
 }

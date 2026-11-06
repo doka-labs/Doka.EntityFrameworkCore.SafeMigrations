@@ -8,7 +8,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]
-    public void ExistenceOnlyColumnDifferencePreservesActualEvidence(int sourceKind)
+    public void ExistenceOnlyColumnDifferencePreservesActualEvidence(
+        int sourceKind
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
@@ -21,15 +23,22 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         }
         else if (sourceKind == 2)
         {
-            Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items", [actual]),
-                SafeMigrationTableMode.StrictDefinition));
+            Apply(
+                projection,
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition("items", [actual]),
+                    SafeMigrationTableMode.StrictDefinition));
         }
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", target),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", target),
             SafeMigrationPolicy.ExistenceOnly);
+
         var live = Live(SafeMigrationObservedState.Different);
         var analysis = projection.Project(operation, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, analysis.ObservedState,
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            analysis.ObservedState,
             operation.Policy);
 
         // Act
@@ -44,7 +53,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.Equal(SafeMigrationObservedState.Different, analysis.ObservedState);
         Assert.Equal(SafeMigrationObservedState.Different, strict.ObservedState);
         Assert.Equal(sourceKind != 0, sourceExists);
-        Assert.Equal(sourceKind != 0 ? actual : null, source);
+        Assert.Equal(
+            sourceKind != 0
+                ? actual
+                : null,
+            source);
     }
 
     /// <summary>Existence-only acceptance cannot fabricate key membership for later strict operations.</summary>
@@ -53,7 +66,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]
-    public void ExistenceOnlyPrimaryKeyDifferencePreservesActualEvidence(int sourceKind)
+    public void ExistenceOnlyPrimaryKeyDifferencePreservesActualEvidence(
+        int sourceKind
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
@@ -66,16 +81,25 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         }
         else if (sourceKind == 2)
         {
-            Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items", [Column("id"), Column("code")],
-                primaryKey: actual), SafeMigrationTableMode.StrictDefinition));
+            Apply(
+                projection,
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition(
+                        "items",
+                        [Column("id"), Column("code")],
+                        primaryKey: actual),
+                    SafeMigrationTableMode.StrictDefinition));
         }
 
-        var operation = new SafeMigrationOperation(new EnsurePrimaryKeyIntent(target),
+        var operation = new SafeMigrationOperation(
+            new EnsurePrimaryKeyIntent(target),
             SafeMigrationPolicy.ExistenceOnly);
 
         var live = Live(SafeMigrationObservedState.Different);
         var analysis = projection.Project(operation, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, analysis.ObservedState,
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            analysis.ObservedState,
             operation.Policy);
 
         // Act
@@ -88,7 +112,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Assert
         Assert.Equal(SafeMigrationAction.NoOp, decision.Action);
         Assert.Equal(SafeMigrationObservedState.Different, strict.ObservedState);
-        Assert.Equal(sourceKind != 0 ? false : (bool?)null, membership);
+        Assert.Equal(
+            sourceKind != 0
+                ? false
+                : null,
+            membership);
     }
 
     /// <summary>Projected Matching remains valid when immutable live evidence still describes old shape.</summary>
@@ -98,13 +126,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var target = Column("value");
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", target),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", target),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.Safe, false, "test_safe_repair");
-        var repair = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, live.ObservedState,
-            operation.Policy, live.RepairCapability);
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            false,
+            "test_safe_repair");
+
+        var repair = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            live.ObservedState,
+            operation.Policy,
+            live.RepairCapability);
 
         projection.Observe(operation, live, live, repair);
 
@@ -114,7 +150,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Act
         projection.Observe(operation, live, matching, noOp);
 
-        var retained = Project(projection, new EnsureColumnIntent("items", target),
+        var retained = Project(
+            projection,
+            new EnsureColumnIntent("items", target),
             SafeMigrationObservedState.Different);
 
         // Assert
@@ -130,7 +168,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("unique")]
     [InlineData("check")]
     [InlineData("foreign")]
-    public void ExistenceOnlyDifferentDoesNotRebindAcceptedSemanticAlias(string family)
+    public void ExistenceOnlyDifferentDoesNotRebindAcceptedSemanticAlias(
+        string family
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
@@ -164,23 +204,33 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var projection = new SafeMigrationPreflightProjection();
         var recreated = NullableColumn("value");
 
-        ObserveAccepted(projection, new EnsureColumnIntent("items", Column("value")),
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("items", Column("value")),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(projection, new DropColumnIntent("value", "items"), SafeMigrationObservedState.Matching);
         ObserveAccepted(projection, new EnsureColumnIntent("items", recreated), SafeMigrationObservedState.Matching);
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", Column("value")),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", Column("value")),
             SafeMigrationPolicy.ExistenceOnly);
+
         var live = Live(SafeMigrationObservedState.Different);
         var analysis = projection.Project(operation, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, analysis.ObservedState,
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            analysis.ObservedState,
             operation.Policy);
 
         // Act
         projection.Observe(operation, live, analysis, decision);
 
-        var actual = Project(projection, new EnsureColumnIntent("items", recreated),
+        var actual = Project(
+            projection,
+            new EnsureColumnIntent("items", recreated),
             SafeMigrationObservedState.Matching);
+
         var incompatible = Project(projection, operation.Intent, SafeMigrationObservedState.Different);
 
         // Assert
@@ -223,13 +273,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var projection = new SafeMigrationPreflightProjection();
         var definition = ExpectedCheckConstraintDefinition.FromExpression("ck_alias", "items", Positive("id"));
 
-        ObserveAccepted(projection, new EnsureCheckConstraintIntent(definition), SafeMigrationObservedState.Matching,
+        ObserveAccepted(
+            projection,
+            new EnsureCheckConstraintIntent(definition),
+            SafeMigrationObservedState.Matching,
             matchedObjectName: "ck_physical");
-        ObserveAccepted(projection, new DropCheckConstraintIntent("ck_physical", "items"),
+
+        ObserveAccepted(
+            projection,
+            new DropCheckConstraintIntent("ck_physical", "items"),
             SafeMigrationObservedState.Matching);
 
         // Act
-        var analysis = projection.Project(new SafeMigrationOperation(new EnsureCheckConstraintIntent(definition),
+        var analysis = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureCheckConstraintIntent(definition),
                 SafeMigrationPolicy.ThrowIfDifferent),
             Live(SafeMigrationObservedState.Matching, "ck_physical"));
 
@@ -240,34 +298,45 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     /// <summary>Builds two accepted physical shapes and an incompatible logical-alias request for one family.</summary>
     /// <param name="family">The constraint or index family.</param>
     private static (SafeMigrationIntent Original, SafeMigrationIntent Other, SafeMigrationIntent Desired)
-        ReviewAliasContracts(string family) => family switch
-        {
-            "index" => (
-                new EnsureIndexIntent(new ExpectedIndexDefinition("alias", "items",
+        ReviewAliasContracts(
+            string family
+        ) => family switch
+    {
+        "index" => (
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "alias",
+                    "items",
                     [new ExpectedIndexKeyDefinition(column: "id")])),
-                new EnsureIndexIntent(new ExpectedIndexDefinition("physical_other", "items",
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "physical_other",
+                    "items",
                     [new ExpectedIndexKeyDefinition(column: "other")])),
-                new EnsureIndexIntent(new ExpectedIndexDefinition("alias", "items",
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "alias",
+                    "items",
                     [new ExpectedIndexKeyDefinition(column: "other")]))),
-            "unique" => (
-                new EnsureUniqueConstraintIntent(new ExpectedUniqueConstraintDefinition("alias", "items", ["id"])),
-                new EnsureUniqueConstraintIntent(
-                    new ExpectedUniqueConstraintDefinition("physical_other", "items", ["other"])),
-                new EnsureUniqueConstraintIntent(new ExpectedUniqueConstraintDefinition("alias", "items", ["other"]))),
-            "check" => (
-                new EnsureCheckConstraintIntent(
-                    ExpectedCheckConstraintDefinition.FromExpression("alias", "items", Positive("id"))),
-                new EnsureCheckConstraintIntent(
-                    ExpectedCheckConstraintDefinition.FromExpression("physical_other", "items", Positive("other"))),
-                new EnsureCheckConstraintIntent(
-                    ExpectedCheckConstraintDefinition.FromExpression("alias", "items", Positive("other")))),
-            "foreign" => (
-                new EnsureForeignKeyIntent(
-                    new ExpectedForeignKeyDefinition("alias", "items", ["id"], "parents", ["id"])),
-                new EnsureForeignKeyIntent(
-                    new ExpectedForeignKeyDefinition("physical_other", "items", ["other"], "parents", ["id"])),
-                new EnsureForeignKeyIntent(
-                    new ExpectedForeignKeyDefinition("alias", "items", ["other"], "parents", ["id"]))),
-            _ => throw new ArgumentOutOfRangeException(nameof(family), family, "Unknown review regression family."),
-        };
+        "unique" => (
+            new EnsureUniqueConstraintIntent(new ExpectedUniqueConstraintDefinition("alias", "items", ["id"])),
+            new EnsureUniqueConstraintIntent(
+                new ExpectedUniqueConstraintDefinition("physical_other", "items", ["other"])),
+            new EnsureUniqueConstraintIntent(new ExpectedUniqueConstraintDefinition("alias", "items", ["other"]))),
+        "check" => (
+            new EnsureCheckConstraintIntent(
+                ExpectedCheckConstraintDefinition.FromExpression("alias", "items", Positive("id"))),
+            new EnsureCheckConstraintIntent(
+                ExpectedCheckConstraintDefinition.FromExpression("physical_other", "items", Positive("other"))),
+            new EnsureCheckConstraintIntent(
+                ExpectedCheckConstraintDefinition.FromExpression("alias", "items", Positive("other")))),
+        "foreign" => (
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition("alias", "items", ["id"], "parents", ["id"])),
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition("physical_other", "items", ["other"], "parents", ["id"])),
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition("alias", "items", ["other"], "parents", ["id"]))),
+        _ => throw new ArgumentOutOfRangeException(nameof(family), family, "Unknown review regression family."),
+    };
 }

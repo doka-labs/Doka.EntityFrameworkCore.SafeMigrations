@@ -14,12 +14,17 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
     )
     {
         List<SafeMigrationConstraintIdentityBinding>? bindings = null;
+
         // WHY: Strict table transitions can match a later key shape. That
         // native symbol belongs to the original authored key only when its
         // complete physical shape also matches the original definition.
-        if (expected.PrimaryKey is { } primaryKey && table.PrimaryKeyName is { } primaryKeyName
+        if (expected.PrimaryKey is { } primaryKey
+            && table.PrimaryKeyName is { } primaryKeyName
             && SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
-                table, table.PrimaryKeyKeys, primaryKey.Columns, requireDefaultSortOrder: true))
+                table,
+                table.PrimaryKeyKeys,
+                primaryKey.Columns,
+                requireDefaultSortOrder: true))
         {
             Add(SafeMigrationDatabaseObjectKind.PrimaryKey, primaryKey.Name, primaryKeyName);
         }
@@ -36,14 +41,22 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             foreach (var actual in table.UniqueConstraints)
             {
                 if (SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
-                        table, actual.Keys, definition.Columns, requireDefaultSortOrder: true))
+                    table,
+                    actual.Keys,
+                    definition.Columns,
+                    requireDefaultSortOrder: true))
                 {
                     Observe(definition.Name, actual.Name, ref exact, ref candidate, ref count);
                 }
             }
 
-            Add(SafeMigrationDatabaseObjectKind.UniqueConstraint, definition.Name,
-                exact ?? (count == 1 ? candidate : null));
+            Add(
+                SafeMigrationDatabaseObjectKind.UniqueConstraint,
+                definition.Name,
+                exact
+                ?? (count == 1
+                    ? candidate
+                    : null));
         }
 
         foreach (var definition in expected.CheckConstraints)
@@ -54,14 +67,20 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             var count = 0;
             foreach (var actual in table.Checks)
             {
-                if (sql is not null && ExpressionMatches(actual.Expression, sql, definition.Expression))
+                if (sql is not null
+                    && ExpressionMatches(actual.Expression, sql, definition.Expression))
                 {
                     Observe(definition.Name, actual.Name, ref exact, ref candidate, ref count);
                 }
             }
 
-            Add(SafeMigrationDatabaseObjectKind.CheckConstraint, definition.Name,
-                exact ?? (count == 1 ? candidate : null));
+            Add(
+                SafeMigrationDatabaseObjectKind.CheckConstraint,
+                definition.Name,
+                exact
+                ?? (count == 1
+                    ? candidate
+                    : null));
         }
 
         foreach (var definition in expected.ForeignKeys)
@@ -71,26 +90,43 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             var count = 0;
             foreach (var actual in table.ForeignKeys)
             {
-                if (SqliteCatalogEquivalence.ForeignKeyMatches(snapshot, actual,
-                        definition.PrincipalTable, definition.Columns, definition.PrincipalColumns,
-                        definition.OnUpdate, definition.OnDelete))
+                if (SqliteCatalogEquivalence.ForeignKeyMatches(
+                    snapshot,
+                    actual,
+                    definition.PrincipalTable,
+                    definition.Columns,
+                    definition.PrincipalColumns,
+                    definition.OnUpdate,
+                    definition.OnDelete))
                 {
                     Observe(definition.Name, actual.Name, ref exact, ref candidate, ref count);
                 }
             }
 
-            Add(SafeMigrationDatabaseObjectKind.ForeignKey, definition.Name,
-                exact ?? (count == 1 ? candidate : null));
+            Add(
+                SafeMigrationDatabaseObjectKind.ForeignKey,
+                definition.Name,
+                exact
+                ?? (count == 1
+                    ? candidate
+                    : null));
         }
 
         return bindings;
 
-        void Add(SafeMigrationDatabaseObjectKind kind, string authoredName, string? physicalName)
+        void Add(
+            SafeMigrationDatabaseObjectKind kind,
+            string authoredName,
+            string? physicalName
+        )
         {
             if (!string.IsNullOrWhiteSpace(physicalName))
             {
-                (bindings ??= []).Add(new SafeMigrationConstraintIdentityBinding(
-                    kind, authoredName, physicalName));
+                (bindings ??= []).Add(
+                    new SafeMigrationConstraintIdentityBinding(
+                        kind,
+                        authoredName,
+                        physicalName));
             }
         }
     }
@@ -113,7 +149,8 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
     {
         count++;
         candidate = actualName;
-        if (actualName is not null && s_identifierComparer.Equals(authoredName, actualName))
+        if (actualName is not null
+            && s_identifierComparer.Equals(authoredName, actualName))
         {
             exact = actualName;
         }

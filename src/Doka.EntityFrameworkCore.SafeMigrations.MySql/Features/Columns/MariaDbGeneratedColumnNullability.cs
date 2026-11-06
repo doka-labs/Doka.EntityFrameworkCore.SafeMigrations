@@ -30,7 +30,9 @@ internal static class MariaDbGeneratedColumnNullability
             return false;
         }
 
-        sources = collected.Count == 0 ? Array.Empty<string>() : collected.ToArray();
+        sources = collected.Count == 0
+            ? Array.Empty<string>()
+            : collected.ToArray();
 
         return true;
     }
@@ -50,6 +52,7 @@ internal static class MariaDbGeneratedColumnNullability
         {
             ExpectedColumnDefinition? resolved = null;
             var columnCount = table.Columns.Count;
+
             // WHY: Prove uniqueness across the immutable source columns without an inner enumerator.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
@@ -174,7 +177,7 @@ internal static class MariaDbGeneratedColumnNullability
                         or int
                         or uint
                         or long
-                        or (ulong and <= long.MaxValue);
+                        or ulong and <= long.MaxValue;
                 case SafeMigrationSqlUnaryExpression value:
                     expression = value.Operand;
                     depth++;

@@ -14,38 +14,6 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
 
     protected MySqlEngineContainerFixture Fixture { get; }
 
-    /// <summary>Creates a unique database owned by this test instance rather than its class or assembly.</summary>
-    /// <param name="cancellationToken">Cancels database creation.</param>
-    /// <returns>The new database's root connection string.</returns>
-    protected async Task<string> CreateDatabaseAsync(CancellationToken cancellationToken)
-    {
-        var connectionString = await Fixture.CreateDatabaseAsync(cancellationToken);
-        _ownedDatabases.Add(connectionString);
-
-        return connectionString;
-    }
-
-    /// <summary>Tracks an explicitly enabled pool belonging to one of this test's database leases.</summary>
-    /// <param name="connectionString">The derived connection string with the test's pooling settings.</param>
-    protected void TrackOwnedPool(string connectionString)
-    {
-        var settings = new MySqlConnectionStringBuilder(connectionString);
-        if (!_ownedDatabases.Any(owned =>
-            {
-                var lease = new MySqlConnectionStringBuilder(owned);
-
-                return settings.Database == lease.Database
-                    && settings.Server == lease.Server
-                    && settings.Port == lease.Port;
-            }))
-        {
-            throw new ArgumentException("The pool does not belong to this test's database lease.",
-                nameof(connectionString));
-        }
-
-        _ownedPools.Add(connectionString);
-    }
-
     /// <inheritdoc />
     public Task InitializeAsync() => Task.CompletedTask;
 
@@ -90,6 +58,43 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
         }
     }
 
+    /// <summary>Creates a unique database owned by this test instance rather than its class or assembly.</summary>
+    /// <param name="cancellationToken">Cancels database creation.</param>
+    /// <returns>The new database's root connection string.</returns>
+    protected async Task<string> CreateDatabaseAsync(
+        CancellationToken cancellationToken
+    )
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(cancellationToken);
+        _ownedDatabases.Add(connectionString);
+
+        return connectionString;
+    }
+
+    /// <summary>Tracks an explicitly enabled pool belonging to one of this test's database leases.</summary>
+    /// <param name="connectionString">The derived connection string with the test's pooling settings.</param>
+    protected void TrackOwnedPool(
+        string connectionString
+    )
+    {
+        var settings = new MySqlConnectionStringBuilder(connectionString);
+        if (!_ownedDatabases.Any(owned =>
+            {
+                var lease = new MySqlConnectionStringBuilder(owned);
+
+                return settings.Database == lease.Database
+                    && settings.Server == lease.Server
+                    && settings.Port == lease.Port;
+            }))
+        {
+            throw new ArgumentException(
+                "The pool does not belong to this test's database lease.",
+                nameof(connectionString));
+        }
+
+        _ownedPools.Add(connectionString);
+    }
+
     protected SafeMigrationDbContext CreateContext(
         string connectionString,
         bool registerSafeMigrations = true
@@ -98,7 +103,7 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
     protected static async Task ExecuteOperationsAsync(
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         var generator = context.GetService<IMigrationsSqlGenerator>();
@@ -111,39 +116,56 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
         }
     }
 
+    /// <summary>Performs the execute sql test operation with explicit cancellation.</summary>
+    /// <param name="connectionString">The connection string for this operation.</param>
+    /// <param name="sql">The sql for this operation.</param>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     protected static async Task ExecuteSqlAsync(
         string connectionString,
-        string sql
+        string sql,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync(CancellationToken.None);
+        await connection.OpenAsync(cancellationToken);
 
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
 
-        await command.ExecuteNonQueryAsync(CancellationToken.None);
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    /// <summary>Performs the execute migration script test operation with explicit cancellation.</summary>
+    /// <param name="connectionString">The connection string for this operation.</param>
+    /// <param name="script">The script for this operation.</param>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     protected static async Task ExecuteMigrationScriptAsync(
         string connectionString,
-        string script
+        string script,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync(CancellationToken.None);
+        await connection.OpenAsync(cancellationToken);
         var delimiter = ";";
         var statement = new StringBuilder();
         foreach (var line in script
-                     .Replace("\r\n", "\n", StringComparison.Ordinal)
-                     .Split('\n'))
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Split('\n'))
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var trimmed = line.Trim();
             if (statement.Length == 0
                 && trimmed.StartsWith("DELIMITER ", StringComparison.OrdinalIgnoreCase))
             {
                 delimiter = trimmed["DELIMITER ".Length..]
                     .Trim();
+
                 if (delimiter.Length == 0)
                 {
                     throw new InvalidOperationException("A migration script declared an empty delimiter.");
@@ -164,6 +186,7 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
 
             statementText = statementText[..^delimiter.Length]
                 .Trim();
+
             statement.Clear();
             if (statementText.Length == 0)
             {
@@ -172,7 +195,7 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
 
             await using var command = connection.CreateCommand();
             command.CommandText = statementText;
-            await command.ExecuteNonQueryAsync(CancellationToken.None);
+            await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
         if (!string.IsNullOrWhiteSpace(statement.ToString()))
@@ -181,46 +204,68 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
         }
     }
 
+    /// <summary>Performs the scalar int test operation with explicit cancellation.</summary>
+    /// <param name="connectionString">The connection string for this operation.</param>
+    /// <param name="sql">The sql for this operation.</param>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     protected static async Task<int> ScalarIntAsync(
         string connectionString,
-        string sql
+        string sql,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync(CancellationToken.None);
+        await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
 
-        return Convert.ToInt32(await command.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture);
     }
 
+    /// <summary>Performs the context scalar int test operation with explicit cancellation.</summary>
+    /// <param name="context">The context for this operation.</param>
+    /// <param name="sql">The sql for this operation.</param>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     protected static async Task<int> ContextScalarIntAsync(
         DbContext context,
-        string sql
+        string sql,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var connection = context.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
+        if (connection.State != ConnectionState.Open)
         {
-            await connection.OpenAsync(CancellationToken.None);
+            await connection.OpenAsync(cancellationToken);
         }
 
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
 
-        return Convert.ToInt32(await command.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture);
     }
 
+    /// <summary>Performs the scalar string test operation with explicit cancellation.</summary>
+    /// <param name="connectionString">The connection string for this operation.</param>
+    /// <param name="sql">The sql for this operation.</param>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     protected static async Task<string> ScalarStringAsync(
         string connectionString,
-        string sql
+        string sql,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync(CancellationToken.None);
+        await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
 
-        return Convert.ToString(await command.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture) ?? "<null>";
+        return Convert.ToString(await command.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture)
+            ?? "<null>";
     }
 }

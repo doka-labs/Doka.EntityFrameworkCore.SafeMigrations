@@ -6,6 +6,6 @@ public sealed class PostgreSqlTestFramework : SharedContainerTestFramework<Postg
     /// <summary>Creates the test framework used by xUnit for this assembly.</summary>
     /// <param name="messageSink">The xUnit diagnostic message sink.</param>
     public PostgreSqlTestFramework(
-        Xunit.Abstractions.IMessageSink messageSink
+        IMessageSink messageSink
     ) : base(messageSink) { }
 }

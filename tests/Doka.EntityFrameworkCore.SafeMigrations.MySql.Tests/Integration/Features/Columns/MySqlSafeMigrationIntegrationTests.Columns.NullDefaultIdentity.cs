@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ColumnsNullDefaultIdentity migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlColumnsNullDefaultIdentityIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlColumnsNullDefaultIdentityIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlColumnsNullDefaultIdentityIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlColumnsNullDefaultIdentityIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>SQL NULL defaults retain exact source and target identity, including expression defaults.</summary>
     /// <param name="expressionDefault">Whether the original NULL default uses expression syntax.</param>
@@ -28,33 +30,50 @@ public sealed partial class MySqlColumnsNullDefaultIdentityIntegrationTests : My
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var defaultSql = expressionDefault ? "(NULL)" : "NULL";
-        var storeType = alreadyTarget ? "varchar(40)" : "varchar(20)";
-        await ExecuteSqlAsync(connectionString,
+        var defaultSql = expressionDefault
+            ? "(NULL)"
+            : "NULL";
+
+        var storeType = alreadyTarget
+            ? "varchar(40)"
+            : "varchar(20)";
+
+        await ExecuteSqlAsync(
+            connectionString,
             $"CREATE TABLE `null_defaults` (`value` {storeType} NULL DEFAULT {defaultSql}) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `null_defaults` VALUES ('kept'), (NULL);");
+            + "INSERT INTO `null_defaults` VALUES ('kept'), (NULL);",
+            cancellationToken: CancellationToken.None);
 
         var operation = NullDefaultTransition(literalNull);
         await using var context = CreateContext(connectionString);
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
 
         // Act
-        var before = await analyzer.AnalyzeAsync(context, [operation]);
-        var catalog = await ScalarStringAsync(connectionString,
+        var before = await analyzer.AnalyzeAsync(context, [operation], CancellationToken.None);
+        var catalog = await ScalarStringAsync(
+            connectionString,
             "SELECT CONCAT(COLUMN_DEFAULT IS NULL, '|', COALESCE(HEX(COLUMN_DEFAULT), '-'), '|', EXTRA) "
             + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'null_defaults' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'null_defaults' AND COLUMN_NAME = 'value';",
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, [operation]);
-        await ExecuteOperationsAsync(context, [operation]);
-        var after = await analyzer.AnalyzeAsync(context, [operation]);
-        var rows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `null_defaults` WHERE `value` IS NULL OR BINARY `value` = BINARY 'kept';");
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+        var after = await analyzer.AnalyzeAsync(context, [operation], CancellationToken.None);
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `null_defaults` WHERE `value` IS NULL OR BINARY `value` = BINARY 'kept';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(alreadyTarget ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
-            Assert.Single(before).ObservedState);
+        Assert.Equal(
+            alreadyTarget
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different,
+            Assert.Single(before)
+                .ObservedState);
+
         if (!alreadyTarget)
         {
             Assert.Equal(SafeMigrationRepairCapability.Safe, before[0].RepairCapability);
@@ -62,10 +81,17 @@ public sealed partial class MySqlColumnsNullDefaultIdentityIntegrationTests : My
 
         if (!Fixture.IsMariaDb)
         {
-            Assert.Equal(expressionDefault ? "0|4E554C4C|DEFAULT_GENERATED" : "1|-|", catalog);
+            Assert.Equal(
+                expressionDefault
+                    ? "0|4E554C4C|DEFAULT_GENERATED"
+                    : "1|-|",
+                catalog);
         }
 
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(after).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(after)
+                .ObservedState);
+
         Assert.True(after[0].PostconditionSatisfied);
         Assert.Equal(2, rows);
     }
@@ -91,34 +117,69 @@ public sealed partial class MySqlColumnsNullDefaultIdentityIntegrationTests : My
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var defaultSql = expressionDefault ? "('NULL')" : "'NULL'";
-        var width = alreadyTarget ? 40 : 20;
-        await ExecuteSqlAsync(connectionString,
+        var defaultSql = expressionDefault
+            ? "('NULL')"
+            : "'NULL'";
+
+        var width = alreadyTarget
+            ? 40
+            : 20;
+
+        await ExecuteSqlAsync(
+            connectionString,
             $"CREATE TABLE `null_defaults` (`value` varchar({width}) NULL DEFAULT {defaultSql}) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `null_defaults` () VALUES ();");
+            + "INSERT INTO `null_defaults` () VALUES ();",
+            cancellationToken: CancellationToken.None);
 
         var operation = NullDefaultTransition(literalNull);
         await using var context = CreateContext(connectionString);
 
         // Act
-        var results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var replayFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var unchangedWidth = await ScalarIntAsync(connectionString,
-            "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'null_defaults' AND COLUMN_NAME = 'value';");
+        var results = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                CancellationToken.None);
 
-        var value = await ScalarStringAsync(connectionString, "SELECT HEX(`value`) FROM `null_defaults`;");
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [operation],
+            CancellationToken.None));
+
+        var replayFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [operation],
+            CancellationToken.None));
+
+        var unchangedWidth = await ScalarIntAsync(
+            connectionString,
+            "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+            + "AND TABLE_NAME = 'null_defaults' AND COLUMN_NAME = 'value';",
+            cancellationToken: CancellationToken.None);
+
+        var value = await ScalarStringAsync(
+            connectionString,
+            "SELECT HEX(`value`) FROM `null_defaults`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(results);
         Assert.Equal(SafeMigrationObservedState.Different, analysis.ObservedState);
         Assert.Equal(SafeMigrationRepairCapability.None, analysis.RepairCapability);
         Assert.False(analysis.RequiresLiveDataProof);
-        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message, StringComparison.Ordinal);
-        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(replayFailure).Message,
+        Assert.Contains("doka_sm_different",
+            AssertOwnedGuardFailure(failure)
+                .Message,
             StringComparison.Ordinal);
+
+        Assert.Contains(
+            "doka_sm_different",
+            AssertOwnedGuardFailure(replayFailure)
+                .Message,
+            StringComparison.Ordinal);
+
         Assert.Equal(width, unchangedWidth);
         Assert.Equal("4E554C4C", value);
     }
@@ -128,11 +189,17 @@ public sealed partial class MySqlColumnsNullDefaultIdentityIntegrationTests : My
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task NullDefaultIdentity_NewColumnSatisfiesPostcondition(bool literalNull)
+    public async Task NullDefaultIdentity_NewColumnSatisfiesPostcondition(
+        bool literalNull
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `null_defaults` (`id` int NOT NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `null_defaults` (`id` int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         var operation = new SafeMigrationOperation(
             new EnsureColumnIntent("null_defaults", NullDefaultColumn("varchar(40)", literalNull)),
             SafeMigrationPolicy.ThrowIfDifferent);
@@ -140,12 +207,24 @@ public sealed partial class MySqlColumnsNullDefaultIdentityIntegrationTests : My
         await using var context = CreateContext(connectionString);
 
         // Act
-        await ExecuteOperationsAsync(context, [operation]);
-        await ExecuteOperationsAsync(context, [operation]);
-        var results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-        await ExecuteSqlAsync(connectionString, "INSERT INTO `null_defaults` (`id`) VALUES (1);");
-        var nullRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `null_defaults` WHERE `value` IS NULL;");
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+        var results = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                CancellationToken.None);
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "INSERT INTO `null_defaults` (`id`) VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
+        var nullRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `null_defaults` WHERE `value` IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(results);
@@ -161,8 +240,13 @@ public sealed partial class MySqlColumnsNullDefaultIdentityIntegrationTests : My
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var operation = new SafeMigrationOperation(
-            new EnsureColumnIntent("null_defaults", new ExpectedColumnDefinition("value", typeof(string), false,
-                "varchar(40)")),
+            new EnsureColumnIntent(
+                "null_defaults",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(string),
+                    false,
+                    "varchar(40)")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         await using var context = CreateContext(connectionString);
@@ -171,46 +255,78 @@ public sealed partial class MySqlColumnsNullDefaultIdentityIntegrationTests : My
         Exception? replayFailure = null;
 
         // Act
-        var creationFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString,
+        var creationFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `null_defaults` (`value` varchar(40) NOT NULL DEFAULT (NULL)); "
-            + "INSERT INTO `null_defaults` VALUES ('kept');"));
+            + "INSERT INTO `null_defaults` VALUES ('kept');",
+            cancellationToken: CancellationToken.None));
 
         if (creationFailure is null)
         {
-            results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-            failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-            replayFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+            results = await context
+                .GetService<ISafeMigrationProviderAnalyzer>()
+                .AnalyzeAsync(
+                    context,
+                    [operation],
+                    CancellationToken.None);
+
+            failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+                context,
+                [operation],
+                CancellationToken.None));
+
+            replayFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+                context,
+                [operation],
+                CancellationToken.None));
         }
 
-        var required = await ScalarIntAsync(connectionString,
+        var required = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'null_defaults' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';");
+            + "AND TABLE_NAME = 'null_defaults' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';",
+            cancellationToken: CancellationToken.None);
 
-        var tables = await ScalarIntAsync(connectionString,
+        var tables = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'null_defaults';");
+            + "AND TABLE_NAME = 'null_defaults';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         if (Fixture.IsMariaDb)
         {
             // WHY: MariaDB rejects this required-column expression at CREATE;
             // only MySQL can expose it to the catalog identity matcher.
-            Assert.Equal(1067, Assert.IsType<MySqlException>(creationFailure).Number);
+            Assert.Equal(1067,
+                Assert.IsType<MySqlException>(creationFailure)
+                    .Number);
+
             Assert.Empty(results);
             Assert.Equal(0, required);
         }
         else
         {
             Assert.Null(creationFailure);
-            Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(results).ObservedState);
-            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
+            Assert.Equal(SafeMigrationObservedState.Different,
+                Assert.Single(results)
+                    .ObservedState);
+
+            Assert.Contains(
+                "doka_sm_different",
+                AssertOwnedGuardFailure(failure)
+                    .Message,
                 StringComparison.Ordinal);
 
             AssertOwnedGuardFailure(replayFailure);
             Assert.Equal(1, required);
         }
 
-        Assert.Equal(Fixture.IsMariaDb ? 0 : 1, tables);
+        Assert.Equal(
+            Fixture.IsMariaDb
+                ? 0
+                : 1,
+            tables);
     }
 
     /// <summary>The explicit NULL-literal contract still requires a nullable column.</summary>
@@ -221,7 +337,11 @@ public sealed partial class MySqlColumnsNullDefaultIdentityIntegrationTests : My
         var defaultValue = SafeMigrationDefaultValue.Literal(null);
 
         // Act
-        var action = () => new ExpectedColumnDefinition("value", typeof(string), false, "varchar(40)",
+        var action = () => new ExpectedColumnDefinition(
+            "value",
+            typeof(string),
+            false,
+            "varchar(40)",
             defaultValue: defaultValue);
 
         // Assert
@@ -232,8 +352,12 @@ public sealed partial class MySqlColumnsNullDefaultIdentityIntegrationTests : My
     /// <summary>Builds a width-only transition with identical source and target NULL-default contracts.</summary>
     /// <param name="literalNull">Whether both definitions explicitly request a NULL literal.</param>
     /// <returns>The reviewed widening operation used by the source and target identity probes.</returns>
-    private static SafeMigrationOperation NullDefaultTransition(bool literalNull) => new(
-        new AlterColumnIntent("null_defaults", NullDefaultColumn("varchar(40)", literalNull),
+    private static SafeMigrationOperation NullDefaultTransition(
+        bool literalNull
+    ) => new(
+        new AlterColumnIntent(
+            "null_defaults",
+            NullDefaultColumn("varchar(40)", literalNull),
             NullDefaultColumn("varchar(20)", literalNull)),
         SafeMigrationPolicy.RepairIfSafe);
 
@@ -244,6 +368,12 @@ public sealed partial class MySqlColumnsNullDefaultIdentityIntegrationTests : My
     private static ExpectedColumnDefinition NullDefaultColumn(
         string storeType,
         bool literalNull
-    ) => new("value", typeof(string), true, storeType,
-        defaultValue: literalNull ? SafeMigrationDefaultValue.Literal(null) : SafeMigrationDefaultValue.None);
+    ) => new(
+        "value",
+        typeof(string),
+        true,
+        storeType,
+        defaultValue: literalNull
+            ? SafeMigrationDefaultValue.Literal(null)
+            : SafeMigrationDefaultValue.None);
 }

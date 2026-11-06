@@ -79,6 +79,8 @@ internal static class MySqlExpressionCatalogComparison
             builder.Append(')');
         }
 
-        return builder.Length == 0 ? "FALSE" : $"({builder})";
+        return builder.Length == 0
+            ? "FALSE"
+            : $"({builder})";
     }
 }

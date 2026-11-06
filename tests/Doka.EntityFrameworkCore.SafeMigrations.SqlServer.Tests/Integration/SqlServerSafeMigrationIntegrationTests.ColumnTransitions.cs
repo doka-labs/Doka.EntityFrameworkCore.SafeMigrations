@@ -16,14 +16,22 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
     public async Task AlterColumn_FittingRowsPermitNarrowingAndNotNullReplay()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.fitting_text (Id int NOT NULL, Caption nvarchar(80) NULL); "
-            + "INSERT INTO dbo.fitting_text (Id, Caption) VALUES (1, N'short');");
-        await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.fitting_text WHERE Caption = N'short';");
-        var automaticStatistics = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.stats WHERE object_id = OBJECT_ID(N'dbo.fitting_text') AND auto_created = 1;");
+            + "INSERT INTO dbo.fitting_text (Id, Caption) VALUES (1, N'short');",
+            cancellationToken: CancellationToken.None);
+
+        await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.fitting_text WHERE Caption = N'short';",
+            cancellationToken: CancellationToken.None);
+
+        var automaticStatistics = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM sys.stats WHERE object_id = OBJECT_ID(N'dbo.fitting_text') AND auto_created = 1;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -41,18 +49,20 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var matchingColumnCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.columns "
             + "WHERE object_id = OBJECT_ID(N'dbo.fitting_text', N'U') "
-            + "AND name = N'Caption' AND max_length = 40 AND is_nullable = 0;");
+            + "AND name = N'Caption' AND max_length = 40 AND is_nullable = 0;",
+            cancellationToken: CancellationToken.None);
 
         var preservedRowCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM dbo.fitting_text WHERE Id = 1 AND Caption = N'short';");
+            "SELECT COUNT(*) FROM dbo.fitting_text WHERE Id = 1 AND Caption = N'short';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.True(automaticStatistics > 0);
@@ -67,11 +77,13 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
     public async Task AlterColumn_VarcharExpansionAppliesAndReplays()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.expand_text (Id int NOT NULL, Caption varchar(10) NOT NULL); "
-            + "INSERT INTO dbo.expand_text (Id, Caption) VALUES (1, 'short');");
+            + "INSERT INTO dbo.expand_text (Id, Caption) VALUES (1, 'short');",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AlterColumnIfDifferentFromModel(
@@ -87,18 +99,20 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var matchingColumnCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.columns "
             + "WHERE object_id = OBJECT_ID(N'dbo.expand_text', N'U') "
-            + "AND name = N'Caption' AND max_length = 200 AND is_nullable = 0;");
+            + "AND name = N'Caption' AND max_length = 200 AND is_nullable = 0;",
+            cancellationToken: CancellationToken.None);
 
         var preservedRowCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM dbo.expand_text WHERE Id = 1 AND Caption = 'short';");
+            "SELECT COUNT(*) FROM dbo.expand_text WHERE Id = 1 AND Caption = 'short';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, matchingColumnCount);
@@ -112,11 +126,13 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
     public async Task AlterColumn_NullRowsBlockNotNullTransition()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.null_text (Id int NOT NULL, Caption nvarchar(80) NULL); "
-            + "INSERT INTO dbo.null_text (Id, Caption) VALUES (1, NULL);");
+            + "INSERT INTO dbo.null_text (Id, Caption) VALUES (1, NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AlterColumnIfDifferentFromModel(
@@ -133,20 +149,27 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-nullability-data-blocked"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-nullability-data-blocked"),
+                cancellationToken: CancellationToken.None);
 
         var nullableColumnCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.columns "
             + "WHERE object_id = OBJECT_ID(N'dbo.null_text', N'U') "
-            + "AND name = N'Caption' AND is_nullable = 1;");
+            + "AND name = N'Caption' AND is_nullable = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.DataBlocked, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.DataBlocked,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
         Assert.Equal(1, nullableColumnCount);
     }
 
@@ -155,33 +178,61 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
     public async Task AlterColumn_CallerOwnedStatisticsRemainDifferentWithoutMutation()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.statistics_text (Id int NOT NULL, Caption nvarchar(80) NULL); "
             + "INSERT dbo.statistics_text VALUES (1, N'short'); "
-            + "CREATE STATISTICS caller_statistics ON dbo.statistics_text (Caption);");
+            + "CREATE STATISTICS caller_statistics ON dbo.statistics_text (Caption);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AlterColumnIfDifferentFromModel(
-            operation => operation.AlterColumn<string>("Caption", "statistics_text", type: "nvarchar(20)",
-                maxLength: 20, nullable: false, oldClrType: typeof(string), oldType: "nvarchar(80)",
-                oldMaxLength: 80, oldNullable: true), SafeMigrationPolicy.RepairIfSafe);
+            operation => operation.AlterColumn<string>(
+                "Caption",
+                "statistics_text",
+                type: "nvarchar(20)",
+                maxLength: 20,
+                nullable: false,
+                oldClrType: typeof(string),
+                oldType: "nvarchar(80)",
+                oldMaxLength: 80,
+                oldNullable: true),
+            SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context,
-            builder.Operations.Cast<SafeMigrationOperation>().ToArray());
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                builder
+                    .Operations
+                    .Cast<SafeMigrationOperation>()
+                    .ToArray(),
+                cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
-        var preservedColumn = await ScalarIntAsync(connectionString,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            cancellationToken: CancellationToken.None));
+
+        var preservedColumn = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.statistics_text') "
-            + "AND name = N'Caption' AND max_length = 160 AND is_nullable = 1;");
+            + "AND name = N'Caption' AND max_length = 160 AND is_nullable = 1;",
+            cancellationToken: CancellationToken.None);
 
-        var preservedStatistics = await ScalarIntAsync(connectionString,
+        var preservedStatistics = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.stats WHERE object_id = OBJECT_ID(N'dbo.statistics_text') "
-            + "AND name = N'caller_statistics' AND user_created = 1;");
+            + "AND name = N'caller_statistics' AND user_created = 1;",
+            cancellationToken: CancellationToken.None);
 
-        var preservedRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.statistics_text WHERE Id = 1 AND Caption = N'short';");
+        var preservedRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.statistics_text WHERE Id = 1 AND Caption = N'short';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
@@ -199,33 +250,65 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
     public async Task AlterColumn_OversizedRowsRemainDataBlockedWithAutomaticStatistics()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.oversized_text (Id int NOT NULL, Caption nvarchar(80) NULL); "
-            + "INSERT dbo.oversized_text VALUES (1, REPLICATE(N'x', 30));");
-        await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.oversized_text WHERE Caption = REPLICATE(N'x', 30);");
+            + "INSERT dbo.oversized_text VALUES (1, REPLICATE(N'x', 30));",
+            cancellationToken: CancellationToken.None);
+
+        await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.oversized_text WHERE Caption = REPLICATE(N'x', 30);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AlterColumnIfDifferentFromModel(
-            operation => operation.AlterColumn<string>("Caption", "oversized_text", type: "nvarchar(20)",
-                maxLength: 20, nullable: false, oldClrType: typeof(string), oldType: "nvarchar(80)",
-                oldMaxLength: 80, oldNullable: true), SafeMigrationPolicy.RepairIfSafe);
+            operation => operation.AlterColumn<string>(
+                "Caption",
+                "oversized_text",
+                type: "nvarchar(20)",
+                maxLength: 20,
+                nullable: false,
+                oldClrType: typeof(string),
+                oldType: "nvarchar(80)",
+                oldMaxLength: 80,
+                oldNullable: true),
+            SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context,
-            builder.Operations.Cast<SafeMigrationOperation>().ToArray());
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                builder
+                    .Operations
+                    .Cast<SafeMigrationOperation>()
+                    .ToArray(),
+                cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
-        var preservedColumn = await ScalarIntAsync(connectionString,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            cancellationToken: CancellationToken.None));
+
+        var preservedColumn = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.oversized_text') "
-            + "AND name = N'Caption' AND max_length = 160 AND is_nullable = 1;");
+            + "AND name = N'Caption' AND max_length = 160 AND is_nullable = 1;",
+            cancellationToken: CancellationToken.None);
 
-        var preservedRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.oversized_text WHERE Id = 1 AND DATALENGTH(Caption) = 60;");
+        var preservedRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.oversized_text WHERE Id = 1 AND DATALENGTH(Caption) = 60;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationObservedState.DataBlocked, Assert.Single(analyses).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.DataBlocked,
+            Assert.Single(analyses)
+                .ObservedState);
+
         var sqlFailure = Assert.IsType<SqlException>(failure);
         Assert.Equal(51003, sqlFailure.Number);
         Assert.Equal(1, preservedColumn);

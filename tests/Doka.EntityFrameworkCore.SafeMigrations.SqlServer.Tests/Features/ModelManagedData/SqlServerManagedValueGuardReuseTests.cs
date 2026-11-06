@@ -19,16 +19,26 @@ public sealed class SqlServerManagedValueGuardReuseTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
-        var intent = new EnsureModelManagedDataIntent("items", ["Id"], ["int"],
-            ["Id", "Caption"], ["int", "nvarchar(20)"],
-            new object?[,] { { 1, first }, { 2, second } }, null, null);
+        var intent = new EnsureModelManagedDataIntent(
+            "items",
+            ["Id"],
+            ["int"],
+            ["Id", "Caption"],
+            ["int", "nvarchar(20)"],
+            new object?[,] { { 1, first }, { 2, second } },
+            null,
+            null);
 
         // Act
         var plan = catalog.Build(new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent));
         var guard = plan.StateEvaluationGuardExpression;
-        var predicateCount = guard.Split("AS nvarchar(20)) IS NOT NULL", StringSplitOptions.None).Length - 1;
+        var predicateCount = guard.Split("AS nvarchar(20)) IS NOT NULL")
+                .Length
+            - 1;
+
         var firstGuard = catalog.ManagedValueRepresentationGuard(first, "nvarchar(20)");
 
         // Assert

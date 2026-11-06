@@ -21,24 +21,34 @@ public sealed class PostgreSqlDatabaseIsolationIntegrationTests : PostgreSqlInte
         var ready = 0;
         try
         {
-            var connectionStrings = await Task.WhenAll(firstOwner.CreateAsync(), secondOwner.CreateAsync());
+            var connectionStrings = await Task.WhenAll(
+                firstOwner.CreateAsync(deadline.Token),
+                secondOwner.CreateAsync(deadline.Token));
 
             // Act
-            var values = await Task.WhenAll(WriteAndReadAsync(connectionStrings[0], 17),
+            var values = await Task.WhenAll(
+                WriteAndReadAsync(connectionStrings[0], 17),
                 WriteAndReadAsync(connectionStrings[1], 29));
+
             await using var survivor = new NpgsqlConnection(connectionStrings[1]);
             await survivor.OpenAsync(deadline.Token);
             await firstOwner.DisposeAsync();
             await using var survivingQuery = survivor.CreateCommand();
             survivingQuery.CommandText = "SELECT value FROM parallel_owner;";
-            var remainingValue = Convert.ToInt32(await survivingQuery.ExecuteScalarAsync(deadline.Token),
+            var remainingValue = Convert.ToInt32(
+                await survivingQuery.ExecuteScalarAsync(deadline.Token),
                 CultureInfo.InvariantCulture);
+
             var firstDatabaseName = new NpgsqlConnectionStringBuilder(connectionStrings[0]).Database;
             await using var absenceQuery = survivor.CreateCommand();
             absenceQuery.CommandText = "SELECT COUNT(*) FROM pg_catalog.pg_database WHERE datname = @database;";
-            absenceQuery.Parameters.AddWithValue("database", firstDatabaseName
+            absenceQuery.Parameters.AddWithValue(
+                "database",
+                firstDatabaseName
                 ?? throw new InvalidOperationException("The first owner has no database name."));
-            var releasedDatabaseCount = Convert.ToInt32(await absenceQuery.ExecuteScalarAsync(deadline.Token),
+
+            var releasedDatabaseCount = Convert.ToInt32(
+                await absenceQuery.ExecuteScalarAsync(deadline.Token),
                 CultureInfo.InvariantCulture);
 
             // Assert
@@ -60,13 +70,23 @@ public sealed class PostgreSqlDatabaseIsolationIntegrationTests : PostgreSqlInte
             }
         }
 
-        async Task<int> WriteAndReadAsync(string connectionString, int value)
+        /// <summary>Writes an isolated value and waits for the peer barrier before reading it.</summary>
+        /// <param name="connectionString">The isolated fixture database connection string.</param>
+        /// <param name="value">The fixture's value input.</param>
+        /// <returns>The asynchronous fixture operation or observation.</returns>
+        async Task<int> WriteAndReadAsync(
+            string connectionString,
+            int value
+        )
         {
+            deadline.Token.ThrowIfCancellationRequested();
+
             await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync(deadline.Token);
             await using var setup = connection.CreateCommand();
             setup.CommandText = "CREATE TABLE parallel_owner (value integer NOT NULL); "
                 + "INSERT INTO parallel_owner (value) VALUES (@value);";
+
             setup.Parameters.AddWithValue("value", value);
             await setup.ExecuteNonQueryAsync(deadline.Token);
 
@@ -88,6 +108,11 @@ public sealed class PostgreSqlDatabaseIsolationIntegrationTests : PostgreSqlInte
         PostgreSqlContainerFixture fixture
     ) : PostgreSqlIntegrationTestBase(fixture)
     {
-        public Task<string> CreateAsync() => CreateDatabaseAsync(CancellationToken.None);
+        /// <summary>Creates an isolated database owned by this test-local lifetime.</summary>
+        /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+        /// <returns>The asynchronous fixture operation or observation.</returns>
+        public Task<string> CreateAsync(
+            CancellationToken cancellationToken
+        ) => CreateDatabaseAsync(cancellationToken);
     }
 }

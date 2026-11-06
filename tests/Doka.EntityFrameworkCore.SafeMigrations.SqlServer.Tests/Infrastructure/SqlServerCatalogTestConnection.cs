@@ -1,13 +1,20 @@
+using System.Text.RegularExpressions;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>Records catalog transport and supplies deterministic classifications without a live session.</summary>
-internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConnection
+internal sealed class SqlServerCatalogTestConnection : DbConnection
 {
     private ConnectionState _state = ConnectionState.Closed;
 
     /// <summary>Creates a connection using native batching or sequential command execution.</summary>
     /// <param name="canCreateBatch">Whether the connection supports a native batch.</param>
-    public SqlServerCatalogTestConnection(bool canCreateBatch = true) => CanCreateBatch = canCreateBatch;
+    public SqlServerCatalogTestConnection(
+        bool canCreateBatch = true
+    )
+    {
+        CanCreateBatch = canCreateBatch;
+    }
 
     /// <summary>Gets the statements submitted in transport order.</summary>
     public List<string> RecordedStatements { get; } = [];
@@ -31,7 +38,7 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
     public List<int> ObservedTimeouts { get; } = [];
 
     /// <summary>Gets the transaction supplied to each native or sequential reader execution.</summary>
-    public List<System.Data.Common.DbTransaction?> ObservedTransactions { get; } = [];
+    public List<DbTransaction?> ObservedTransactions { get; } = [];
 
     /// <summary>Gets the number of disposed sequential commands.</summary>
     public int CommandsDisposed { get; private set; }
@@ -98,7 +105,9 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
     public override void Open() => _state = ConnectionState.Open;
 
     /// <inheritdoc />
-    public override Task OpenAsync(CancellationToken cancellationToken)
+    public override Task OpenAsync(
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
         Open();
@@ -110,18 +119,24 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
     public override void Close() => _state = ConnectionState.Closed;
 
     /// <inheritdoc />
-    public override void ChangeDatabase(string databaseName) => throw new NotSupportedException();
+    public override void ChangeDatabase(
+        string databaseName
+    ) => throw new NotSupportedException();
 
     /// <inheritdoc />
-    protected override System.Data.Common.DbTransaction BeginDbTransaction(IsolationLevel isolationLevel)
+    protected override DbTransaction BeginDbTransaction(
+        IsolationLevel isolationLevel
+    )
         => new CatalogTransaction(this, isolationLevel);
 
     /// <inheritdoc />
-    protected override System.Data.Common.DbCommand CreateDbCommand() => new CatalogCommand(this);
+    protected override DbCommand CreateDbCommand() => new CatalogCommand(this);
 
     /// <inheritdoc />
-    protected override System.Data.Common.DbBatch CreateDbBatch()
-        => CanCreateBatch ? new CatalogBatch(this) : throw new NotSupportedException();
+    protected override DbBatch CreateDbBatch()
+        => CanCreateBatch
+            ? new CatalogBatch(this)
+            : throw new NotSupportedException();
 
     private DataSet CreateResults(
         string[] statements,
@@ -158,7 +173,7 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
                     results.Tables.Add(table);
                     table.Columns.Add("ordinal", typeof(int));
                     table.Columns.Add("absent", typeof(int));
-                    var presenceOrdinals = System.Text.RegularExpressions.Regex
+                    var presenceOrdinals = Regex
                         .Matches(statement, @"\((\d+), @schema\d+, @table\d+\)")
                         .Select(static match => int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture))
                         .ToArray();
@@ -174,24 +189,33 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
 
                 var delayed = statement.StartsWith("EXEC sys.sp_executesql", StringComparison.Ordinal)
                     || statement.StartsWith("DECLARE @doka_template", StringComparison.Ordinal);
+
                 var parameters = RecordedParameters[RecordedParameters.Count - statements.Length + statementIndex];
+
                 // WHY: Delayed ordinals normally come from RPC values; a full source-parameter
                 // budget uses a trusted dispatcher literal. Metadata UNIONs own one multi-row set.
                 var ordinals = delayed
-                    ? System.Text.RegularExpressions.Regex.Matches(statement,
-                        @"@doka_ordinal\s*=\s*(?<parameter>@doka_ordinal\d+)|@doka_ordinal\s*=\s*(?<literal>\d+)")
+                    ? Regex
+                        .Matches(
+                            statement,
+                            @"@doka_ordinal\s*=\s*(?<parameter>@doka_ordinal\d+)|@doka_ordinal\s*=\s*(?<literal>\d+)")
                         .Select(match => match.Groups["parameter"].Success
                             ? (int)parameters.Single(parameter => parameter.ParameterName
-                                == match.Groups["parameter"].Value).Value
+                                    == match.Groups["parameter"].Value)
+                                .Value
                             : int.Parse(match.Groups["literal"].Value, CultureInfo.InvariantCulture))
                         .ToArray()
-                    : System.Text.RegularExpressions.Regex.Matches(statement, @"\bSELECT\s+(\d+)\s*,\s*\(")
+                    : Regex
+                        .Matches(statement, @"\bSELECT\s+(\d+)\s*,\s*\(")
                         .Select(static match => int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture))
                         .ToArray();
 
                 ordinals = TransformOrdinals?.Invoke(ordinals) ?? ordinals;
                 var resultSets = delayed
-                    ? ordinals.Select(static ordinal => new[] { ordinal }).ToArray() : [ordinals];
+                    ? ordinals
+                        .Select(static ordinal => new[] { ordinal })
+                        .ToArray()
+                    : [ordinals];
 
                 resultSets = TransformResultSets?.Invoke(resultSets) ?? resultSets;
                 foreach (var resultSet in resultSets)
@@ -202,13 +226,21 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
                     {
                         var state = (ordinal % 3) switch
                         {
-                            0 => "missing",
-                            1 => "matching",
-                            _ => "different",
+                            0 => "missing", 1 => "matching", _ => "different",
                         };
 
-                        table.Rows.Add(ordinal, state, state == "matching" ? 1 : 0, 0,
-                            DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value);
+                        table.Rows.Add(
+                            ordinal,
+                            state,
+                            state == "matching"
+                                ? 1
+                                : 0,
+                            0,
+                            DBNull.Value,
+                            DBNull.Value,
+                            DBNull.Value,
+                            DBNull.Value,
+                            DBNull.Value);
                     }
 
                     TransformClassifierTable?.Invoke(table);
@@ -242,15 +274,20 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
     }
 
     /// <summary>Copies synthetic parameter facets before command disposal can change the test evidence.</summary>
-    private void RecordParameters(System.Data.Common.DbParameterCollection parameters)
+    private void RecordParameters(
+        DbParameterCollection parameters
+    )
     {
         // WHY: Parameters belong to disposable transport commands. Independent copies let assertions
         // inspect source precision and payload identity without extending command lifetimes.
-        RecordedParameters.Add(parameters.Cast<SqlParameter>()
-            .Select(static parameter => (SqlParameter)((ICloneable)parameter).Clone()).ToArray());
+        RecordedParameters.Add(
+            parameters
+                .Cast<SqlParameter>()
+                .Select(static parameter => (SqlParameter)((ICloneable)parameter).Clone())
+                .ToArray());
     }
 
-    private sealed class CatalogTransaction : System.Data.Common.DbTransaction
+    private sealed class CatalogTransaction : DbTransaction
     {
         private readonly SqlServerCatalogTestConnection _connection;
         private bool _disposed;
@@ -269,23 +306,21 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
         }
 
         /// <inheritdoc />
-        protected override System.Data.Common.DbConnection DbConnection { get; }
+        protected override DbConnection DbConnection { get; }
 
         /// <inheritdoc />
         public override IsolationLevel IsolationLevel { get; }
 
         /// <inheritdoc />
-        public override void Commit()
-        {
-        }
+        public override void Commit() { }
 
         /// <inheritdoc />
-        public override void Rollback()
-        {
-        }
+        public override void Rollback() { }
 
         /// <inheritdoc />
-        protected override void Dispose(bool disposing)
+        protected override void Dispose(
+            bool disposing
+        )
         {
             if (disposing && !_disposed)
             {
@@ -297,16 +332,18 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
         }
     }
 
-    private sealed class CatalogCommand : System.Data.Common.DbCommand
+    private sealed class CatalogCommand : DbCommand
     {
         private readonly SqlServerCatalogTestConnection _connection;
         private readonly SqlCommand _parameterHost = new();
-        private DataSet? _results;
         private bool _disposed;
+        private DataSet? _results;
 
         /// <summary>Creates a sequential catalog command recording execution on its connection.</summary>
         /// <param name="connection">The recording connection owning the command.</param>
-        public CatalogCommand(SqlServerCatalogTestConnection connection)
+        public CatalogCommand(
+            SqlServerCatalogTestConnection connection
+        )
         {
             _connection = connection;
             DbConnection = connection;
@@ -329,13 +366,13 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
         public override UpdateRowSource UpdatedRowSource { get; set; }
 
         /// <inheritdoc />
-        protected override System.Data.Common.DbConnection? DbConnection { get; set; }
+        protected override DbConnection? DbConnection { get; set; }
 
         /// <inheritdoc />
-        protected override System.Data.Common.DbTransaction? DbTransaction { get; set; }
+        protected override DbTransaction? DbTransaction { get; set; }
 
         /// <inheritdoc />
-        protected override System.Data.Common.DbParameterCollection DbParameterCollection => _parameterHost.Parameters;
+        protected override DbParameterCollection DbParameterCollection => _parameterHost.Parameters;
 
         /// <inheritdoc />
         public override void Cancel() => throw new NotSupportedException();
@@ -350,23 +387,27 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
         public override object? ExecuteScalar() => throw new NotSupportedException();
 
         /// <inheritdoc />
-        protected override System.Data.Common.DbParameter CreateDbParameter() => new SqlParameter();
+        protected override DbParameter CreateDbParameter() => new SqlParameter();
 
         /// <inheritdoc />
-        protected override System.Data.Common.DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
+        protected override DbDataReader ExecuteDbDataReader(
+            CommandBehavior behavior
+        )
             => Read(CancellationToken.None);
 
         /// <inheritdoc />
-        protected override Task<System.Data.Common.DbDataReader> ExecuteDbDataReaderAsync(
+        protected override Task<DbDataReader> ExecuteDbDataReaderAsync(
             CommandBehavior behavior,
             CancellationToken cancellationToken
         )
-            => Task.FromResult<System.Data.Common.DbDataReader>(Read(cancellationToken));
+            => Task.FromResult<DbDataReader>(Read(cancellationToken));
 
         /// <summary>Records one statement and creates its deterministic catalog result reader.</summary>
         /// <param name="cancellationToken">The caller's cancellation token.</param>
         /// <returns>The statement's catalog classifications.</returns>
-        private CatalogReader Read(CancellationToken cancellationToken)
+        private CatalogReader Read(
+            CancellationToken cancellationToken
+        )
         {
             _results?.Dispose();
             _connection.ObservedTimeouts.Add(CommandTimeout);
@@ -378,13 +419,16 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
         }
 
         /// <inheritdoc />
-        protected override void Dispose(bool disposing)
+        protected override void Dispose(
+            bool disposing
+        )
         {
             if (disposing && !_disposed)
             {
                 _disposed = true;
                 _results?.Dispose();
                 _parameterHost.Dispose();
+
                 // WHY: Native catalog statements still need a provider command to create typed
                 // parameters. It owns no SQL and is not a sequential transport command.
                 if (CommandText.Length == 0)
@@ -401,16 +445,18 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
         }
     }
 
-    private sealed class CatalogBatch : System.Data.Common.DbBatch
+    private sealed class CatalogBatch : DbBatch
     {
-        private readonly SqlServerCatalogTestConnection _connection;
         private readonly CatalogBatchCommands _commands = new();
-        private DataSet? _results;
+        private readonly SqlServerCatalogTestConnection _connection;
         private bool _disposed;
+        private DataSet? _results;
 
         /// <summary>Creates a native catalog batch recording execution on its connection.</summary>
         /// <param name="connection">The recording connection owning the batch.</param>
-        public CatalogBatch(SqlServerCatalogTestConnection connection)
+        public CatalogBatch(
+            SqlServerCatalogTestConnection connection
+        )
         {
             _connection = connection;
             DbConnection = connection;
@@ -420,13 +466,13 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
         public override int Timeout { get; set; }
 
         /// <inheritdoc />
-        protected override System.Data.Common.DbConnection? DbConnection { get; set; }
+        protected override DbConnection? DbConnection { get; set; }
 
         /// <inheritdoc />
-        protected override System.Data.Common.DbTransaction? DbTransaction { get; set; }
+        protected override DbTransaction? DbTransaction { get; set; }
 
         /// <inheritdoc />
-        protected override System.Data.Common.DbBatchCommandCollection DbBatchCommands => _commands;
+        protected override DbBatchCommandCollection DbBatchCommands => _commands;
 
         /// <inheritdoc />
         public override void Cancel() => throw new NotSupportedException();
@@ -435,44 +481,57 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
         public override void Prepare() => throw new NotSupportedException();
 
         /// <inheritdoc />
-        public override Task PrepareAsync(CancellationToken cancellationToken = default)
+        public override Task PrepareAsync(
+            CancellationToken cancellationToken = default
+        )
             => throw new NotSupportedException();
 
         /// <inheritdoc />
         public override int ExecuteNonQuery() => throw new NotSupportedException();
 
         /// <inheritdoc />
-        public override Task<int> ExecuteNonQueryAsync(CancellationToken cancellationToken = default)
+        public override Task<int> ExecuteNonQueryAsync(
+            CancellationToken cancellationToken = default
+        )
             => throw new NotSupportedException();
 
         /// <inheritdoc />
         public override object? ExecuteScalar() => throw new NotSupportedException();
 
         /// <inheritdoc />
-        public override Task<object?> ExecuteScalarAsync(CancellationToken cancellationToken = default)
+        public override Task<object?> ExecuteScalarAsync(
+            CancellationToken cancellationToken = default
+        )
             => throw new NotSupportedException();
 
         /// <inheritdoc />
-        protected override System.Data.Common.DbBatchCommand CreateDbBatchCommand() => new CatalogBatchCommand();
+        protected override DbBatchCommand CreateDbBatchCommand() => new CatalogBatchCommand();
 
         /// <inheritdoc />
-        protected override System.Data.Common.DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
+        protected override DbDataReader ExecuteDbDataReader(
+            CommandBehavior behavior
+        )
             => Read(CancellationToken.None);
 
         /// <inheritdoc />
-        protected override Task<System.Data.Common.DbDataReader> ExecuteDbDataReaderAsync(
+        protected override Task<DbDataReader> ExecuteDbDataReaderAsync(
             CommandBehavior behavior,
             CancellationToken cancellationToken
         )
-            => Task.FromResult<System.Data.Common.DbDataReader>(Read(cancellationToken));
+            => Task.FromResult<DbDataReader>(Read(cancellationToken));
 
         /// <summary>Records native transport bounds and creates one result set per statement.</summary>
         /// <param name="cancellationToken">The caller's cancellation token.</param>
         /// <returns>The batch's catalog classifications in statement order.</returns>
-        private CatalogReader Read(CancellationToken cancellationToken)
+        private CatalogReader Read(
+            CancellationToken cancellationToken
+        )
         {
             _results?.Dispose();
-            var statements = _commands.Select(static command => command.CommandText).ToArray();
+            var statements = _commands
+                .Select(static command => command.CommandText)
+                .ToArray();
+
             _connection.BatchPayloadBytes.Add(
                 statements.Sum(static statement => Encoding.UTF8.GetByteCount(statement)));
 
@@ -509,7 +568,7 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
         }
     }
 
-    private sealed class CatalogReader : System.Data.Common.DbDataReader
+    private sealed class CatalogReader : DbDataReader
     {
         private readonly SqlServerCatalogTestConnection _connection;
         private readonly DataTableReader _reader;
@@ -542,16 +601,22 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
         public override int RecordsAffected => _reader.RecordsAffected;
 
         /// <inheritdoc />
-        public override object this[int ordinal] => _reader[ordinal];
+        public override object this[
+            int ordinal
+        ] => _reader[ordinal];
 
         /// <inheritdoc />
-        public override object this[string name] => _reader[name];
+        public override object this[
+            string name
+        ] => _reader[name];
 
         /// <inheritdoc />
         public override bool Read() => _reader.Read();
 
         /// <inheritdoc />
-        public override async Task<bool> ReadAsync(CancellationToken cancellationToken)
+        public override async Task<bool> ReadAsync(
+            CancellationToken cancellationToken
+        )
         {
             var read = await _reader.ReadAsync(cancellationToken);
             if (read)
@@ -567,7 +632,9 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
         public override bool NextResult() => _reader.NextResult();
 
         /// <inheritdoc />
-        public override async Task<bool> NextResultAsync(CancellationToken cancellationToken)
+        public override async Task<bool> NextResultAsync(
+            CancellationToken cancellationToken
+        )
         {
             var next = await _reader.NextResultAsync(cancellationToken);
             if (next)
@@ -579,10 +646,14 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
         }
 
         /// <inheritdoc />
-        public override bool GetBoolean(int ordinal) => _reader.GetBoolean(ordinal);
+        public override bool GetBoolean(
+            int ordinal
+        ) => _reader.GetBoolean(ordinal);
 
         /// <inheritdoc />
-        public override byte GetByte(int ordinal) => _reader.GetByte(ordinal);
+        public override byte GetByte(
+            int ordinal
+        ) => _reader.GetByte(ordinal);
 
         /// <inheritdoc />
         public override long GetBytes(
@@ -595,7 +666,9 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
             => _reader.GetBytes(ordinal, dataOffset, buffer, bufferOffset, length);
 
         /// <inheritdoc />
-        public override char GetChar(int ordinal) => _reader.GetChar(ordinal);
+        public override char GetChar(
+            int ordinal
+        ) => _reader.GetChar(ordinal);
 
         /// <inheritdoc />
         public override long GetChars(
@@ -608,64 +681,98 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
             => _reader.GetChars(ordinal, dataOffset, buffer, bufferOffset, length);
 
         /// <inheritdoc />
-        public override string GetDataTypeName(int ordinal) => _reader.GetDataTypeName(ordinal);
+        public override string GetDataTypeName(
+            int ordinal
+        ) => _reader.GetDataTypeName(ordinal);
 
         /// <inheritdoc />
-        public override DateTime GetDateTime(int ordinal) => _reader.GetDateTime(ordinal);
+        public override DateTime GetDateTime(
+            int ordinal
+        ) => _reader.GetDateTime(ordinal);
 
         /// <inheritdoc />
-        public override decimal GetDecimal(int ordinal) => _reader.GetDecimal(ordinal);
+        public override decimal GetDecimal(
+            int ordinal
+        ) => _reader.GetDecimal(ordinal);
 
         /// <inheritdoc />
-        public override double GetDouble(int ordinal) => _reader.GetDouble(ordinal);
+        public override double GetDouble(
+            int ordinal
+        ) => _reader.GetDouble(ordinal);
 
         /// <inheritdoc />
-        public override System.Collections.IEnumerator GetEnumerator() => _reader.GetEnumerator();
+        public override IEnumerator GetEnumerator() => _reader.GetEnumerator();
 
         /// <inheritdoc />
-        public override Type GetFieldType(int ordinal) => _reader.GetFieldType(ordinal);
+        public override Type GetFieldType(
+            int ordinal
+        ) => _reader.GetFieldType(ordinal);
 
         /// <inheritdoc />
-        public override float GetFloat(int ordinal) => _reader.GetFloat(ordinal);
+        public override float GetFloat(
+            int ordinal
+        ) => _reader.GetFloat(ordinal);
 
         /// <inheritdoc />
-        public override Guid GetGuid(int ordinal) => _reader.GetGuid(ordinal);
+        public override Guid GetGuid(
+            int ordinal
+        ) => _reader.GetGuid(ordinal);
 
         /// <inheritdoc />
-        public override short GetInt16(int ordinal) => _reader.GetInt16(ordinal);
+        public override short GetInt16(
+            int ordinal
+        ) => _reader.GetInt16(ordinal);
 
         /// <inheritdoc />
-        public override int GetInt32(int ordinal) => _reader.GetInt32(ordinal);
+        public override int GetInt32(
+            int ordinal
+        ) => _reader.GetInt32(ordinal);
 
         /// <inheritdoc />
-        public override long GetInt64(int ordinal) => _reader.GetInt64(ordinal);
+        public override long GetInt64(
+            int ordinal
+        ) => _reader.GetInt64(ordinal);
 
         /// <inheritdoc />
-        public override string GetName(int ordinal) => _reader.GetName(ordinal);
+        public override string GetName(
+            int ordinal
+        ) => _reader.GetName(ordinal);
 
         /// <inheritdoc />
-        public override int GetOrdinal(string name) => _reader.GetOrdinal(name);
+        public override int GetOrdinal(
+            string name
+        ) => _reader.GetOrdinal(name);
 
         /// <inheritdoc />
         public override DataTable? GetSchemaTable() => _reader.GetSchemaTable();
 
         /// <inheritdoc />
-        public override string GetString(int ordinal) => _reader.GetString(ordinal);
+        public override string GetString(
+            int ordinal
+        ) => _reader.GetString(ordinal);
 
         /// <inheritdoc />
-        public override object GetValue(int ordinal) => _reader.GetValue(ordinal);
+        public override object GetValue(
+            int ordinal
+        ) => _reader.GetValue(ordinal);
 
         /// <inheritdoc />
-        public override int GetValues(object[] values) => _reader.GetValues(values);
+        public override int GetValues(
+            object[] values
+        ) => _reader.GetValues(values);
 
         /// <inheritdoc />
-        public override bool IsDBNull(int ordinal) => _reader.IsDBNull(ordinal);
+        public override bool IsDBNull(
+            int ordinal
+        ) => _reader.IsDBNull(ordinal);
 
         /// <inheritdoc />
         public override void Close() => _reader.Close();
 
         /// <inheritdoc />
-        protected override void Dispose(bool disposing)
+        protected override void Dispose(
+            bool disposing
+        )
         {
             if (disposing)
             {
@@ -676,7 +783,7 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
         }
     }
 
-    private sealed class CatalogBatchCommand : System.Data.Common.DbBatchCommand, IDisposable
+    private sealed class CatalogBatchCommand : DbBatchCommand, IDisposable
     {
         private readonly SqlCommand _parameterHost = new();
 
@@ -691,7 +798,7 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
         public override int RecordsAffected => -1;
 
         /// <inheritdoc />
-        protected override System.Data.Common.DbParameterCollection DbParameterCollection => _parameterHost.Parameters;
+        protected override DbParameterCollection DbParameterCollection => _parameterHost.Parameters;
 
         /// <inheritdoc />
         public void Dispose()
@@ -701,9 +808,9 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
         }
     }
 
-    private sealed class CatalogBatchCommands : System.Data.Common.DbBatchCommandCollection
+    private sealed class CatalogBatchCommands : DbBatchCommandCollection
     {
-        private readonly List<System.Data.Common.DbBatchCommand> _commands = [];
+        private readonly List<DbBatchCommand> _commands = [];
 
         /// <inheritdoc />
         public override int Count => _commands.Count;
@@ -712,47 +819,59 @@ internal sealed class SqlServerCatalogTestConnection : System.Data.Common.DbConn
         public override bool IsReadOnly => false;
 
         /// <inheritdoc />
-        public override IEnumerator<System.Data.Common.DbBatchCommand> GetEnumerator() => _commands.GetEnumerator();
+        public override IEnumerator<DbBatchCommand> GetEnumerator() => _commands.GetEnumerator();
 
         /// <inheritdoc />
-        public override void Add(System.Data.Common.DbBatchCommand item) => _commands.Add(item);
+        public override void Add(
+            DbBatchCommand item
+        ) => _commands.Add(item);
 
         /// <inheritdoc />
         public override void Clear() => _commands.Clear();
 
         /// <inheritdoc />
-        public override bool Contains(System.Data.Common.DbBatchCommand item) => _commands.Contains(item);
+        public override bool Contains(
+            DbBatchCommand item
+        ) => _commands.Contains(item);
 
         /// <inheritdoc />
         public override void CopyTo(
-            System.Data.Common.DbBatchCommand[] array,
+            DbBatchCommand[] array,
             int arrayIndex
         )
             => _commands.CopyTo(array, arrayIndex);
 
         /// <inheritdoc />
-        public override int IndexOf(System.Data.Common.DbBatchCommand item) => _commands.IndexOf(item);
+        public override int IndexOf(
+            DbBatchCommand item
+        ) => _commands.IndexOf(item);
 
         /// <inheritdoc />
         public override void Insert(
             int index,
-            System.Data.Common.DbBatchCommand item
+            DbBatchCommand item
         )
             => _commands.Insert(index, item);
 
         /// <inheritdoc />
-        public override bool Remove(System.Data.Common.DbBatchCommand item) => _commands.Remove(item);
+        public override bool Remove(
+            DbBatchCommand item
+        ) => _commands.Remove(item);
 
         /// <inheritdoc />
-        public override void RemoveAt(int index) => _commands.RemoveAt(index);
+        public override void RemoveAt(
+            int index
+        ) => _commands.RemoveAt(index);
 
         /// <inheritdoc />
-        protected override System.Data.Common.DbBatchCommand GetBatchCommand(int index) => _commands[index];
+        protected override DbBatchCommand GetBatchCommand(
+            int index
+        ) => _commands[index];
 
         /// <inheritdoc />
         protected override void SetBatchCommand(
             int index,
-            System.Data.Common.DbBatchCommand batchCommand
+            DbBatchCommand batchCommand
         )
             => _commands[index] = batchCommand;
     }

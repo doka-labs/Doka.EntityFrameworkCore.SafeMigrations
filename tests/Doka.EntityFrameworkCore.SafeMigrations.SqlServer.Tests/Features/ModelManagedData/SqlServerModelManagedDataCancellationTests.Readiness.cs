@@ -14,8 +14,12 @@ public sealed partial class SqlServerModelManagedDataCancellationTests
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        var resource = "doka_identity_ready_" + Guid.NewGuid().ToString("N");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        var resource = "doka_identity_ready_"
+            + Guid
+                .NewGuid()
+                .ToString("N");
+
         var interceptor = new SqlServerIdentityInsertPauseInterceptor(resource);
         await using var owner = new SqlConnection(connectionString);
         await owner.OpenAsync();
@@ -28,6 +32,7 @@ public sealed partial class SqlServerModelManagedDataCancellationTests
                 + "EXEC @result = sys.sp_getapplock @DbPrincipal = N'public', @Resource = @resource, "
                 + "@LockMode = N'Exclusive', @LockOwner = N'Session', @LockTimeout = 0; "
                 + "IF @result < 0 THROW 51006, 'identity readiness lock failed', 1;";
+
             acquire.Parameters.Add(new SqlParameter("@resource", SqlDbType.NVarChar, 255) { Value = resource });
 
             await acquire.ExecuteNonQueryAsync();
@@ -45,14 +50,19 @@ public sealed partial class SqlServerModelManagedDataCancellationTests
         var clrType = reader.GetFieldType(0);
         var scalar = reader.GetValue(0);
         await reader.CloseAsync();
-        var available = await interceptor.CanAcquireMarkerAsync(observer);
+        var available = await interceptor.CanAcquireMarkerAsync(observer, cancellationToken: CancellationToken.None);
         var observerLockMode = await observerLock.ExecuteScalarAsync();
 
         // Assert
         Assert.True(rowPresent);
         Assert.Equal("int", sqlType);
         Assert.Equal(typeof(int), clrType);
-        Assert.Equal(markerHeld ? 0 : 1, Assert.IsType<int>(scalar));
+        Assert.Equal(
+            markerHeld
+                ? 0
+                : 1,
+            Assert.IsType<int>(scalar));
+
         Assert.Equal(!markerHeld, available);
         Assert.Equal("NoLock", Assert.IsType<string>(observerLockMode));
         Assert.Equal(ConnectionState.Open, owner.State);

@@ -108,6 +108,13 @@ The 10.6.1 maintenance release services dependency minimums and release-line
 audit/coordination reliability without extending public APIs or migration
 semantics. Its [upgrade guidance](docs/support-and-qualification.md#upgrade-to-1061)
 keeps earlier 10.6.0 approval requirements distinct from patch servicing.
+Version 10.7.0 requires explicit cancellation arguments and replaces the custom
+benchmark engine with BenchmarkDotNet. Its
+[upgrade guidance](docs/support-and-qualification.md#upgrade-to-1070) records the
+intentional source-breaking exception within the .NET/EF Core 10 package line.
+It retains migration safety and report contracts; timing/allocation results
+remain informational, while execution, coverage and native qualification gates
+remain blocking.
 These releases follow changed dependency conditions and confirmed correctness
 requirements; they are not deferred initial scope.
 

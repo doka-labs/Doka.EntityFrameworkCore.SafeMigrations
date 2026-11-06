@@ -8,12 +8,15 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(SafeMigrationOperationKind.EnsureUniqueConstraint)]
     [InlineData(SafeMigrationOperationKind.EnsureCheckConstraint)]
     [InlineData(SafeMigrationOperationKind.EnsureForeignKey)]
-    public void StrictTableShapeDoesNotCreatePhysicalConstraintNames(SafeMigrationOperationKind kind)
+    public void StrictTableShapeDoesNotCreatePhysicalConstraintNames(
+        SafeMigrationOperationKind kind
+    )
     {
         // Arrange
-        var projection = new SafeMigrationPreflightProjection { CurrentOperationOrdinal = 0, };
+        var projection = new SafeMigrationPreflightProjection { CurrentOperationOrdinal = 0 };
         ObserveAccepted(projection, ReviewConstraintShapeTable(kind), SafeMigrationObservedState.Matching);
-        var drop = new SafeMigrationOperation(ReviewConstraintShapeDrop(kind, "authored_alias"),
+        var drop = new SafeMigrationOperation(
+            ReviewConstraintShapeDrop(kind, "authored_alias"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var live = Live(SafeMigrationObservedState.Missing);
@@ -47,13 +50,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     )
     {
         // Arrange
-        var projection = new SafeMigrationPreflightProjection { CurrentOperationOrdinal = 0, };
+        var projection = new SafeMigrationPreflightProjection { CurrentOperationOrdinal = 0 };
         ObserveAccepted(projection, ReviewConstraintShapeTable(kind), SafeMigrationObservedState.Matching);
         projection.CurrentOperationOrdinal = 1;
-        ObserveAccepted(projection, ReviewConstraintShapeDrop(kind, "physical_constraint"),
+        ObserveAccepted(
+            projection,
+            ReviewConstraintShapeDrop(kind, "physical_constraint"),
             SafeMigrationObservedState.Matching);
 
-        var ensure = new SafeMigrationOperation(ReviewConstraintShapeEnsure(kind, "authored_alias"),
+        var ensure = new SafeMigrationOperation(
+            ReviewConstraintShapeEnsure(kind, "authored_alias"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // WHY: A state without a resolved physical name is not permission to
@@ -83,40 +89,52 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(SafeMigrationOperationKind.EnsureUniqueConstraint)]
     [InlineData(SafeMigrationOperationKind.EnsureCheckConstraint)]
     [InlineData(SafeMigrationOperationKind.EnsureForeignKey)]
-    public void RepeatedStrictTableNoOpRetainsResolvedConstraintAliasLedger(SafeMigrationOperationKind kind)
+    public void RepeatedStrictTableNoOpRetainsResolvedConstraintAliasLedger(
+        SafeMigrationOperationKind kind
+    )
     {
         // Arrange
-        var projection = new SafeMigrationPreflightProjection { CurrentOperationOrdinal = 0, };
+        var projection = new SafeMigrationPreflightProjection { CurrentOperationOrdinal = 0 };
         var table = ReviewConstraintShapeTable(kind);
         ObserveAccepted(projection, table, SafeMigrationObservedState.Matching);
         projection.CurrentOperationOrdinal = 1;
-        ObserveAccepted(projection, ReviewConstraintShapeEnsure(kind, "authored_alias"),
-            SafeMigrationObservedState.Matching, "physical_constraint");
+        ObserveAccepted(
+            projection,
+            ReviewConstraintShapeEnsure(kind, "authored_alias"),
+            SafeMigrationObservedState.Matching,
+            "physical_constraint");
 
         var repeat = new SafeMigrationOperation(table, SafeMigrationPolicy.ThrowIfDifferent);
         var tableLive = Live(SafeMigrationObservedState.Matching);
-        var physicalDrop = new SafeMigrationOperation(ReviewConstraintShapeDrop(kind, "physical_constraint"),
+        var physicalDrop = new SafeMigrationOperation(
+            ReviewConstraintShapeDrop(kind, "physical_constraint"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var dropLive = Live(SafeMigrationObservedState.Missing);
-        var ensure = new SafeMigrationOperation(ReviewConstraintShapeEnsure(kind, "authored_alias"),
+        var ensure = new SafeMigrationOperation(
+            ReviewConstraintShapeEnsure(kind, "authored_alias"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         projection.CurrentOperationOrdinal = 2;
         var repeatedTableAnalysis = projection.Project(repeat, tableLive);
-        var repeatedTableDecision = SafeMigrationDecisionPlanner.Plan(repeat.Intent.Kind,
-            repeatedTableAnalysis.ObservedState, repeat.Policy);
+        var repeatedTableDecision = SafeMigrationDecisionPlanner.Plan(
+            repeat.Intent.Kind,
+            repeatedTableAnalysis.ObservedState,
+            repeat.Policy);
 
         projection.Observe(repeat, tableLive, repeatedTableAnalysis, repeatedTableDecision);
         projection.CurrentOperationOrdinal = 3;
         var dropAnalysis = projection.Project(physicalDrop, dropLive);
-        var dropDecision = SafeMigrationDecisionPlanner.Plan(physicalDrop.Intent.Kind,
-            dropAnalysis.ObservedState, physicalDrop.Policy);
+        var dropDecision = SafeMigrationDecisionPlanner.Plan(
+            physicalDrop.Intent.Kind,
+            dropAnalysis.ObservedState,
+            physicalDrop.Policy);
 
         projection.Observe(physicalDrop, dropLive, dropAnalysis, dropDecision);
         projection.CurrentOperationOrdinal = 4;
-        var replacement = projection.Project(ensure,
+        var replacement = projection.Project(
+            ensure,
             Live(SafeMigrationObservedState.Matching, "physical_constraint"));
 
         // Assert
@@ -136,12 +154,15 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(SafeMigrationOperationKind.EnsureUniqueConstraint)]
     [InlineData(SafeMigrationOperationKind.EnsureCheckConstraint)]
     [InlineData(SafeMigrationOperationKind.EnsureForeignKey)]
-    public void CreatedTableRetainsAuthoredPhysicalConstraintNameProof(SafeMigrationOperationKind kind)
+    public void CreatedTableRetainsAuthoredPhysicalConstraintNameProof(
+        SafeMigrationOperationKind kind
+    )
     {
         // Arrange
-        var projection = new SafeMigrationPreflightProjection { CurrentOperationOrdinal = 0, };
+        var projection = new SafeMigrationPreflightProjection { CurrentOperationOrdinal = 0 };
         Apply(projection, ReviewConstraintShapeTable(kind));
-        var drop = new SafeMigrationOperation(ReviewConstraintShapeDrop(kind, "authored_alias"),
+        var drop = new SafeMigrationOperation(
+            ReviewConstraintShapeDrop(kind, "authored_alias"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         projection.CurrentOperationOrdinal = 1;
@@ -162,26 +183,34 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(SafeMigrationOperationKind.EnsureUniqueConstraint)]
     [InlineData(SafeMigrationOperationKind.EnsureCheckConstraint)]
     [InlineData(SafeMigrationOperationKind.EnsureForeignKey)]
-    public void StrictTableNoOpObserverDefensivelyPreservesConstraintTombstoneLedger(SafeMigrationOperationKind kind)
+    public void StrictTableNoOpObserverDefensivelyPreservesConstraintTombstoneLedger(
+        SafeMigrationOperationKind kind
+    )
     {
         // Arrange
-        var projection = new SafeMigrationPreflightProjection { CurrentOperationOrdinal = 0, };
+        var projection = new SafeMigrationPreflightProjection { CurrentOperationOrdinal = 0 };
         var table = ReviewConstraintShapeTable(kind);
         ObserveAccepted(projection, table, SafeMigrationObservedState.Matching);
         projection.CurrentOperationOrdinal = 1;
-        ObserveAccepted(projection, ReviewConstraintShapeDrop(kind, "physical_constraint"),
+        ObserveAccepted(
+            projection,
+            ReviewConstraintShapeDrop(kind, "physical_constraint"),
             SafeMigrationObservedState.Matching);
 
         var receipt = Live(SafeMigrationObservedState.Matching);
-        var noOp = SafeMigrationDecisionPlanner.Plan(SafeMigrationOperationKind.EnsureTable,
-            receipt.ObservedState, SafeMigrationPolicy.ThrowIfDifferent);
+        var noOp = SafeMigrationDecisionPlanner.Plan(
+            SafeMigrationOperationKind.EnsureTable,
+            receipt.ObservedState,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         var operation = new SafeMigrationOperation(table, SafeMigrationPolicy.ThrowIfDifferent);
-        var ensure = new SafeMigrationOperation(ReviewConstraintShapeEnsure(kind, "authored_alias"),
+        var ensure = new SafeMigrationOperation(
+            ReviewConstraintShapeEnsure(kind, "authored_alias"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         projection.CurrentOperationOrdinal = 2;
+
         // WHY: This isolates Observe's receipt invariant, not a claim that
         // Project would accept an old strict table shape after a physical drop.
         projection.Observe(operation, receipt, receipt, noOp);
@@ -204,15 +233,18 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(SafeMigrationOperationKind.EnsureUniqueConstraint)]
     [InlineData(SafeMigrationOperationKind.EnsureCheckConstraint)]
     [InlineData(SafeMigrationOperationKind.EnsureForeignKey)]
-    public void RepeatedStrictTableShapeMatchesRetainUnchangedConstraintSemantics(SafeMigrationOperationKind kind)
+    public void RepeatedStrictTableShapeMatchesRetainUnchangedConstraintSemantics(
+        SafeMigrationOperationKind kind
+    )
     {
         // Arrange
-        var projection = new SafeMigrationPreflightProjection { CurrentOperationOrdinal = 0, };
+        var projection = new SafeMigrationPreflightProjection { CurrentOperationOrdinal = 0 };
         var table = ReviewConstraintShapeTable(kind);
         ObserveAccepted(projection, table, SafeMigrationObservedState.Matching);
         projection.CurrentOperationOrdinal = 1;
         ObserveAccepted(projection, table, SafeMigrationObservedState.Matching);
-        var ensure = new SafeMigrationOperation(ReviewConstraintShapeEnsure(kind, "authored_alias"),
+        var ensure = new SafeMigrationOperation(
+            ReviewConstraintShapeEnsure(kind, "authored_alias"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         projection.CurrentOperationOrdinal = 2;
@@ -235,22 +267,29 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(SafeMigrationOperationKind.EnsureUniqueConstraint)]
     [InlineData(SafeMigrationOperationKind.EnsureCheckConstraint)]
     [InlineData(SafeMigrationOperationKind.EnsureForeignKey)]
-    public void UnresolvedConstraintDropPreservesOtherExactPhysicalBindings(SafeMigrationOperationKind kind)
+    public void UnresolvedConstraintDropPreservesOtherExactPhysicalBindings(
+        SafeMigrationOperationKind kind
+    )
     {
         // Arrange
-        var projection = new SafeMigrationPreflightProjection { CurrentOperationOrdinal = 0, };
-        ObserveAccepted(projection, ReviewConstraintShapeTable(kind, includeOther: true),
+        var projection = new SafeMigrationPreflightProjection { CurrentOperationOrdinal = 0 };
+        ObserveAccepted(
+            projection,
+            ReviewConstraintShapeTable(kind, includeOther: true),
             SafeMigrationObservedState.Matching);
 
         var known = ReviewConstraintShapeEnsure(kind, "other_alias", "code");
         projection.CurrentOperationOrdinal = 1;
         ObserveAccepted(projection, known, SafeMigrationObservedState.Matching, "other_physical");
         projection.CurrentOperationOrdinal = 2;
-        ObserveAccepted(projection, ReviewConstraintShapeDrop(kind, "unresolved_physical"),
+        ObserveAccepted(
+            projection,
+            ReviewConstraintShapeDrop(kind, "unresolved_physical"),
             SafeMigrationObservedState.Matching);
 
         var ensure = new SafeMigrationOperation(known, SafeMigrationPolicy.ThrowIfDifferent);
-        var drop = new SafeMigrationOperation(ReviewConstraintShapeDrop(kind, "other_physical"),
+        var drop = new SafeMigrationOperation(
+            ReviewConstraintShapeDrop(kind, "other_physical"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         projection.CurrentOperationOrdinal = 3;
@@ -274,18 +313,25 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(SafeMigrationOperationKind.EnsureUniqueConstraint)]
     [InlineData(SafeMigrationOperationKind.EnsureCheckConstraint)]
     [InlineData(SafeMigrationOperationKind.EnsureForeignKey)]
-    public void EquivalentConstraintAliasRebindsOnlyToSurvivingPhysicalMember(SafeMigrationOperationKind kind)
+    public void EquivalentConstraintAliasRebindsOnlyToSurvivingPhysicalMember(
+        SafeMigrationOperationKind kind
+    )
     {
         // Arrange
-        var projection = new SafeMigrationPreflightProjection { CurrentOperationOrdinal = 0, };
+        var projection = new SafeMigrationPreflightProjection { CurrentOperationOrdinal = 0 };
         var first = ReviewConstraintShapeEnsure(kind, "first_alias");
         ObserveAccepted(projection, first, SafeMigrationObservedState.Matching, "physical_first");
         projection.CurrentOperationOrdinal = 1;
-        ObserveAccepted(projection, ReviewConstraintShapeEnsure(kind, "second_alias"),
-            SafeMigrationObservedState.Matching, "physical_second");
+        ObserveAccepted(
+            projection,
+            ReviewConstraintShapeEnsure(kind, "second_alias"),
+            SafeMigrationObservedState.Matching,
+            "physical_second");
 
         projection.CurrentOperationOrdinal = 2;
-        ObserveAccepted(projection, ReviewConstraintShapeDrop(kind, "physical_first"),
+        ObserveAccepted(
+            projection,
+            ReviewConstraintShapeDrop(kind, "physical_first"),
             SafeMigrationObservedState.Matching);
 
         var ensure = new SafeMigrationOperation(first, SafeMigrationPolicy.ThrowIfDifferent);
@@ -300,11 +346,15 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // the immutable first object's name must not create another physical lifetime.
         projection.Observe(ensure, stale, analysis, decision);
         projection.CurrentOperationOrdinal = 4;
-        var firstDrop = Project(projection, ReviewConstraintShapeDrop(kind, "physical_first"),
+        var firstDrop = Project(
+            projection,
+            ReviewConstraintShapeDrop(kind, "physical_first"),
             SafeMigrationObservedState.Matching);
 
         projection.CurrentOperationOrdinal = 5;
-        var secondDrop = Project(projection, ReviewConstraintShapeDrop(kind, "physical_second"),
+        var secondDrop = Project(
+            projection,
+            ReviewConstraintShapeDrop(kind, "physical_second"),
             SafeMigrationObservedState.Missing);
 
         // Assert
@@ -325,22 +375,31 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     )
     {
         var ensure = ReviewConstraintShapeEnsure(kind, "authored_alias");
-        var other = includeOther ? ReviewConstraintShapeEnsure(kind, "other_alias", "code") : null;
-        ExpectedColumnDefinition[] columns = includeOther ? [Column("id"), Column("code")] : [Column("id")];
+        var other = includeOther
+            ? ReviewConstraintShapeEnsure(kind, "other_alias", "code")
+            : null;
+
+        ExpectedColumnDefinition[] columns = includeOther
+            ? [Column("id"), Column("code")]
+            : [Column("id")];
+
         var definition = new ExpectedTableDefinition(
             "items",
             columns,
             uniqueConstraints: ensure is EnsureUniqueConstraintIntent unique
                 ? other is EnsureUniqueConstraintIntent otherUnique
-                    ? [unique.Definition, otherUnique.Definition] : [unique.Definition]
+                    ? [unique.Definition, otherUnique.Definition]
+                    : [unique.Definition]
                 : [],
             checkConstraints: ensure is EnsureCheckConstraintIntent check
                 ? other is EnsureCheckConstraintIntent otherCheck
-                    ? [check.Definition, otherCheck.Definition] : [check.Definition]
+                    ? [check.Definition, otherCheck.Definition]
+                    : [check.Definition]
                 : [],
             foreignKeys: ensure is EnsureForeignKeyIntent foreignKey
                 ? other is EnsureForeignKeyIntent otherForeignKey
-                    ? [foreignKey.Definition, otherForeignKey.Definition] : [foreignKey.Definition]
+                    ? [foreignKey.Definition, otherForeignKey.Definition]
+                    : [foreignKey.Definition]
                 : []);
 
         return new EnsureTableIntent(definition, SafeMigrationTableMode.StrictDefinition);
@@ -373,7 +432,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     /// <param name="kind">The represented constraint family.</param>
     /// <param name="name">The name requested for physical removal.</param>
     /// <returns>The chosen physical-name drop intent.</returns>
-    private static SafeMigrationIntent ReviewConstraintShapeDrop(SafeMigrationOperationKind kind, string name) =>
+    private static SafeMigrationIntent ReviewConstraintShapeDrop(
+        SafeMigrationOperationKind kind,
+        string name
+    ) =>
         kind switch
         {
             SafeMigrationOperationKind.EnsureUniqueConstraint => new DropUniqueConstraintIntent(name, "items"),

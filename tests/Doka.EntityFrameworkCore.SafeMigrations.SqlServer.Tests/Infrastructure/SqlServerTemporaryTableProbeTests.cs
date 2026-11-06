@@ -10,7 +10,8 @@ public sealed class SqlServerTemporaryTableProbeTests
     /// <param name="qualifiedName">The safely quoted object-name value, never SQL statement text.</param>
     [Theory]
     [InlineData("#doka_sm_identifiers", "tempdb..[#doka_sm_identifiers]")]
-    [InlineData("#doka_sm_identifiers_00000000000000000000000000000001",
+    [InlineData(
+        "#doka_sm_identifiers_00000000000000000000000000000001",
         "tempdb..[#doka_sm_identifiers_00000000000000000000000000000001]")]
     [InlineData("#owner']; SELECT 1; --", "tempdb..[#owner']]; SELECT 1; --]")]
     [InlineData("#owner.with.dot[%]", "tempdb..[#owner.with.dot[%]]]")]
@@ -48,7 +49,9 @@ public sealed class SqlServerTemporaryTableProbeTests
     [InlineData("#")]
     [InlineData("##global")]
     [InlineData("dbo.owner")]
-    public void ObjectIdCommand_RejectsNonlocalNames(string? localName)
+    public void ObjectIdCommand_RejectsNonlocalNames(
+        string? localName
+    )
     {
         // Arrange
         using var connection = new SqlConnection();
@@ -58,7 +61,10 @@ public sealed class SqlServerTemporaryTableProbeTests
             SqlServerTemporaryTableProbe.CreateObjectIdCommand(connection, localName!));
 
         // Assert
-        Assert.Equal("localName", Assert.IsAssignableFrom<ArgumentException>(failure).ParamName);
+        Assert.Equal("localName",
+            Assert.IsAssignableFrom<ArgumentException>(failure)
+                .ParamName);
+
         Assert.Equal(ConnectionState.Closed, connection.State);
     }
 
@@ -88,14 +94,21 @@ public sealed class SqlServerTemporaryTableProbeTests
         if (accepted)
         {
             Assert.Null(failure);
-            var parameter = Assert.Single(Assert.IsType<SqlCommand>(ownedCommand).Parameters.Cast<SqlParameter>());
+            var parameter = Assert.Single(Assert
+                .IsType<SqlCommand>(ownedCommand)
+                .Parameters
+                .Cast<SqlParameter>());
+
             var value = Assert.IsType<string>(parameter.Value);
             Assert.InRange(value.Length, 1, parameter.Size);
             Assert.Equal("tempdb..[#" + new string(']', (length - 1) * 2) + "]", value);
         }
         else
         {
-            Assert.Equal("localName", Assert.IsType<ArgumentException>(failure).ParamName);
+            Assert.Equal("localName",
+                Assert.IsType<ArgumentException>(failure)
+                    .ParamName);
+
             Assert.Null(command);
         }
 
@@ -113,6 +126,8 @@ public sealed class SqlServerTemporaryTableProbeTests
         var failure = Record.Exception(() => SqlServerTemporaryTableProbe.CreateObjectIdCommand(null!, localName));
 
         // Assert
-        Assert.Equal("connection", Assert.IsType<ArgumentNullException>(failure).ParamName);
+        Assert.Equal("connection",
+            Assert.IsType<ArgumentNullException>(failure)
+                .ParamName);
     }
 }

@@ -9,28 +9,41 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("primary")]
     [InlineData("unique")]
     [InlineData("foreign")]
-    public void NativeGeneratedSnapshotSurvivesAcceptedConstraintRemovalPrefix(string kind)
+    public void NativeGeneratedSnapshotSurvivesAcceptedConstraintRemovalPrefix(
+        string kind
+    )
     {
         // Arrange
         var projection = GeneratedSnapshotProjection();
-        var removal = ObserveSnapshotOperation(projection, SnapshotConstraintRemoval(kind),
+        var removal = ObserveSnapshotOperation(
+            projection,
+            SnapshotConstraintRemoval(kind),
             SafeMigrationObservedState.Matching);
 
         // Act
         var analysis = ObserveNativeGeneratedDrop(projection);
-        var sourceConfirmation = ObserveSnapshotOperation(projection, new EnsureColumnIntent("items", Column("value")),
+        var sourceConfirmation = ObserveSnapshotOperation(
+            projection,
+            new EnsureColumnIntent("items", Column("value")),
             SafeMigrationObservedState.Matching);
 
         var dependency = ((ISafeMigrationProjectedTableSource)projection).HasProjectedGeneratedColumnDependency(
-            "items", null, "value", StringComparer.Ordinal);
+            "items",
+            null,
+            "value",
+            StringComparer.Ordinal);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, removal.Action);
         Assert.Equal(SafeMigrationObservedState.Matching, analysis.ObservedState);
         Assert.Equal(SafeMigrationAction.NoOp, sourceConfirmation.Action);
         Assert.False(dependency);
-        Assert.True(((ISafeMigrationProjectedTableSource)projection).TryGetProjectedTableState(
-            "items", null, out var state));
+        Assert.True(
+            ((ISafeMigrationProjectedTableSource)projection).TryGetProjectedTableState(
+                "items",
+                null,
+                out var state));
+
         Assert.True(state.HasUnknownStructure);
         Assert.False(state.IsNewlyCreated);
     }
@@ -42,17 +55,24 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("primary")]
     [InlineData("unique")]
     [InlineData("foreign")]
-    public void MissingConstraintRemovalDoesNotInvalidateNativeGeneratedSnapshot(string kind)
+    public void MissingConstraintRemovalDoesNotInvalidateNativeGeneratedSnapshot(
+        string kind
+    )
     {
         // Arrange
         var projection = GeneratedSnapshotProjection();
-        var removal = ObserveSnapshotOperation(projection, SnapshotConstraintRemoval(kind),
+        var removal = ObserveSnapshotOperation(
+            projection,
+            SnapshotConstraintRemoval(kind),
             SafeMigrationObservedState.Missing);
 
         // Act
         _ = ObserveNativeGeneratedDrop(projection);
         var dependency = ((ISafeMigrationProjectedTableSource)projection).HasProjectedGeneratedColumnDependency(
-            "items", null, "value", StringComparer.Ordinal);
+            "items",
+            null,
+            "value",
+            StringComparer.Ordinal);
 
         // Assert
         Assert.Equal(SafeMigrationAction.NoOp, removal.Action);
@@ -75,28 +95,46 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("primary", "generated_add")]
     [InlineData("unique", "generated_add")]
     [InlineData("foreign", "generated_add")]
-    public void ConstraintRemovalCannotReviveExpiredNativeGeneratedSnapshot(string kind, string boundary)
+    public void ConstraintRemovalCannotReviveExpiredNativeGeneratedSnapshot(
+        string kind,
+        string boundary
+    )
     {
         // Arrange
         var projection = GeneratedSnapshotProjection();
         if (boundary != "annotated")
         {
-            Apply(projection, new EnsureColumnIntent("items", GeneratedDependencyColumn(
-                SafeMigrationSql.Identifier("other"))));
+            Apply(
+                projection,
+                new EnsureColumnIntent(
+                    "items",
+                    GeneratedDependencyColumn(
+                        SafeMigrationSql.Identifier("other"))));
         }
 
-        var removal = ObserveSnapshotOperation(projection, SnapshotConstraintRemoval(kind),
-            boundary == "rejected" ? SafeMigrationObservedState.Unsupported : SafeMigrationObservedState.Matching,
+        var removal = ObserveSnapshotOperation(
+            projection,
+            SnapshotConstraintRemoval(kind),
+            boundary == "rejected"
+                ? SafeMigrationObservedState.Unsupported
+                : SafeMigrationObservedState.Matching,
             annotated: boundary == "annotated");
 
         // Act
         _ = ObserveNativeGeneratedDrop(projection);
         var dependency = ((ISafeMigrationProjectedTableSource)projection).HasProjectedGeneratedColumnDependency(
-            "items", null, "value", StringComparer.Ordinal);
+            "items",
+            null,
+            "value",
+            StringComparer.Ordinal);
 
         // Assert
-        Assert.Equal(boundary == "rejected" ? SafeMigrationAction.RejectUnsupported : SafeMigrationAction.Apply,
+        Assert.Equal(
+            boundary == "rejected"
+                ? SafeMigrationAction.RejectUnsupported
+                : SafeMigrationAction.Apply,
             removal.Action);
+
         Assert.Null(dependency);
     }
 
@@ -107,18 +145,25 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("primary")]
     [InlineData("unique")]
     [InlineData("foreign")]
-    public void ConstraintRemovalCannotBypassNativeGeneratedSnapshotSideEffectGuard(string kind)
+    public void ConstraintRemovalCannotBypassNativeGeneratedSnapshotSideEffectGuard(
+        string kind
+    )
     {
         // Arrange
         var guard = new GeneratedSnapshotSideEffectGuard();
         var projection = GeneratedSnapshotProjection(guard);
-        var removal = ObserveSnapshotOperation(projection, SnapshotConstraintRemoval(kind),
+        var removal = ObserveSnapshotOperation(
+            projection,
+            SnapshotConstraintRemoval(kind),
             SafeMigrationObservedState.Matching);
 
         // Act
         var analysis = ObserveNativeGeneratedDrop(projection);
         var dependency = ((ISafeMigrationProjectedTableSource)projection).HasProjectedGeneratedColumnDependency(
-            "items", null, "value", StringComparer.Ordinal);
+            "items",
+            null,
+            "value",
+            StringComparer.Ordinal);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, removal.Action);
@@ -133,7 +178,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void NativeGeneratedSnapshotSurvivesOnlyAcceptedIndexRemovalPrefix(bool twoIndexes)
+    public void NativeGeneratedSnapshotSurvivesOnlyAcceptedIndexRemovalPrefix(
+        bool twoIndexes
+    )
     {
         // Arrange
         var projection = GeneratedSnapshotProjection();
@@ -146,13 +193,20 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Act
         var analysis = ObserveNativeGeneratedDrop(projection);
         var dependency = ((ISafeMigrationProjectedTableSource)projection).HasProjectedGeneratedColumnDependency(
-            "items", null, "value", StringComparer.Ordinal);
+            "items",
+            null,
+            "value",
+            StringComparer.Ordinal);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Matching, analysis.ObservedState);
         Assert.False(dependency);
-        Assert.True(((ISafeMigrationProjectedTableSource)projection).TryGetProjectedTableState(
-            "items", null, out var state));
+        Assert.True(
+            ((ISafeMigrationProjectedTableSource)projection).TryGetProjectedTableState(
+                "items",
+                null,
+                out var state));
+
         Assert.True(state.HasUnknownStructure);
         Assert.False(state.IsNewlyCreated);
     }
@@ -172,7 +226,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("ordinary_index")]
     [InlineData("unknown_index_owner")]
     [InlineData("annotated_ordinary_index")]
-    public void IndexRemovalCannotReviveExpiredNativeGeneratedSnapshot(string boundary)
+    public void IndexRemovalCannotReviveExpiredNativeGeneratedSnapshot(
+        string boundary
+    )
     {
         // Arrange
         var projection = GeneratedSnapshotProjection();
@@ -180,32 +236,51 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         switch (boundary)
         {
             case "generated_add":
-                Apply(projection, new EnsureColumnIntent("items", GeneratedDependencyColumn(
-                    SafeMigrationSql.Identifier("other"))));
+                Apply(
+                    projection,
+                    new EnsureColumnIntent(
+                        "items",
+                        GeneratedDependencyColumn(
+                            SafeMigrationSql.Identifier("other"))));
+
                 break;
             case "column_add":
                 Apply(projection, new EnsureColumnIntent("items", Column("added")));
                 break;
             case "generated_alter":
-                projection.ObserveProviderPostcondition(new AlterColumnOperation
-                {
-                    Table = "items", Name = "derived", ClrType = typeof(int), ColumnType = "int",
-                    ComputedColumnSql = "other + 1",
-                });
+                projection.ObserveProviderPostcondition(
+                    new AlterColumnOperation
+                    {
+                        Table = "items",
+                        Name = "derived",
+                        ClrType = typeof(int),
+                        ColumnType = "int",
+                        ComputedColumnSql = "other + 1",
+                    });
+
                 break;
             case "earlier_column_drop":
-                ObserveAccepted(projection, new DropColumnIntent("retired", "items"),
+                ObserveAccepted(
+                    projection,
+                    new DropColumnIntent("retired", "items"),
                     SafeMigrationObservedState.Matching);
+
                 break;
             case "index_recreate":
-                Apply(projection, new EnsureIndexIntent(new ExpectedIndexDefinition("ix_value", "items",
-                    [new ExpectedIndexKeyDefinition(column: "value")])));
+                Apply(
+                    projection,
+                    new EnsureIndexIntent(
+                        new ExpectedIndexDefinition(
+                            "ix_value",
+                            "items",
+                            [new ExpectedIndexKeyDefinition(column: "value")])));
+
                 break;
             case "opaque_sql":
-                projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;", });
+                projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;" });
                 break;
             case "unsafe_provider":
-                projection.ObserveProviderPostcondition(new AlterTableOperation { Name = "items", });
+                projection.ObserveProviderPostcondition(new AlterTableOperation { Name = "items" });
                 break;
             case "owner_drop":
                 ObserveAccepted(projection, new DropTableIntent("items"), SafeMigrationObservedState.Matching);
@@ -215,7 +290,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             case "annotated_ordinary_index":
                 var providerDrop = new DropIndexOperation
                 {
-                    Name = "ix_other", Table = boundary == "unknown_index_owner" ? null : "items",
+                    Name = "ix_other",
+                    Table = boundary == "unknown_index_owner"
+                        ? null
+                        : "items",
                 };
 
                 if (boundary == "annotated_ordinary_index")
@@ -226,14 +304,18 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 projection.ObserveProviderPostcondition(providerDrop);
                 break;
             case "annotated_safe_index":
-                var operation = new SafeMigrationOperation(new DropIndexIntent("ix_other", "items"),
+                var operation = new SafeMigrationOperation(
+                    new DropIndexIntent("ix_other", "items"),
                     SafeMigrationPolicy.ThrowIfDifferent);
 
                 operation.AddAnnotation("Test:UnknownNativeEffect", true);
                 var live = Live(SafeMigrationObservedState.Matching);
                 var analysis = projection.Project(operation, live);
-                var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, analysis.ObservedState,
-                    operation.Policy, analysis.RepairCapability);
+                var decision = SafeMigrationDecisionPlanner.Plan(
+                    operation.Intent.Kind,
+                    analysis.ObservedState,
+                    operation.Policy,
+                    analysis.RepairCapability);
 
                 projection.Observe(operation, live, analysis, decision);
                 break;
@@ -241,14 +323,19 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         if (boundary is "generated_add" or "column_add" or "index_recreate" or "annotated_safe_index")
         {
-            ObserveAccepted(projection, new DropIndexIntent("ix_after_boundary", "items"),
+            ObserveAccepted(
+                projection,
+                new DropIndexIntent("ix_after_boundary", "items"),
                 SafeMigrationObservedState.Matching);
         }
 
         // Act
         _ = ObserveNativeGeneratedDrop(projection);
         var dependency = ((ISafeMigrationProjectedTableSource)projection).HasProjectedGeneratedColumnDependency(
-            "items", null, "value", StringComparer.Ordinal);
+            "items",
+            null,
+            "value",
+            StringComparer.Ordinal);
 
         // Assert
         Assert.Null(dependency);
@@ -266,7 +353,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Act
         var analysis = ObserveNativeGeneratedDrop(projection);
         var dependency = ((ISafeMigrationProjectedTableSource)projection).HasProjectedGeneratedColumnDependency(
-            "items", null, "value", StringComparer.Ordinal);
+            "items",
+            null,
+            "value",
+            StringComparer.Ordinal);
 
         // Assert
         Assert.True(guard.SawAcceptedRemoval);
@@ -280,31 +370,43 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     )
     {
         var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: guard);
-        ObserveAccepted(projection, new EnsureColumnIntent("items", Column("value")),
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("items", Column("value")),
             SafeMigrationObservedState.Matching);
 
-        ObserveAccepted(projection, new EnsureColumnIntent("items", Column("other")),
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("items", Column("other")),
             SafeMigrationObservedState.Matching);
 
         return projection;
     }
 
-    private static SafeMigrationProviderAnalysis ObserveNativeGeneratedDrop(SafeMigrationPreflightProjection projection)
+    private static SafeMigrationProviderAnalysis ObserveNativeGeneratedDrop(
+        SafeMigrationPreflightProjection projection
+    )
     {
-        var operation = new SafeMigrationOperation(new DropColumnIntent("removed_generated", "items"),
+        var operation = new SafeMigrationOperation(
+            new DropColumnIntent("removed_generated", "items"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var live = WithEmptyGeneratedSurvivors(Live(SafeMigrationObservedState.Matching));
         var analysis = projection.Project(operation, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, analysis.ObservedState,
-            operation.Policy, analysis.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            analysis.ObservedState,
+            operation.Policy,
+            analysis.RepairCapability);
 
         projection.Observe(operation, live, analysis, decision);
 
         return analysis;
     }
 
-    private static SafeMigrationIntent SnapshotConstraintRemoval(string kind) => kind switch
+    private static SafeMigrationIntent SnapshotConstraintRemoval(
+        string kind
+    ) => kind switch
     {
         "check" => new DropCheckConstraintIntent("ck_value", "items"),
         "primary" => new DropPrimaryKeyIntent("pk_items", "items"),
@@ -328,8 +430,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         var live = Live(observedState);
         var analysis = projection.Project(operation, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(intent.Kind, analysis.ObservedState,
-            operation.Policy, analysis.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            intent.Kind,
+            analysis.ObservedState,
+            operation.Policy,
+            analysis.RepairCapability);
 
         projection.Observe(operation, live, analysis, decision);
 
@@ -340,28 +445,43 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         public bool SawAcceptedRemoval { get; private set; }
 
-        public SafeMigrationProviderAnalysis? ValidateCapturedProjection(SafeMigrationOperation operation,
-            SafeMigrationProviderAnalysis liveAnalysis, ISafeMigrationProjectedColumnSource columns)
+        public SafeMigrationProviderAnalysis? ValidateCapturedProjection(
+            SafeMigrationOperation operation,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            ISafeMigrationProjectedColumnSource columns
+        )
             => SawAcceptedRemoval && operation.Intent is DropColumnIntent
-                ? new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
-                    SafeMigrationRepairCapability.None, false, "ddl_trigger_unproven")
+                ? new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.Unsupported,
+                    SafeMigrationRepairCapability.None,
+                    false,
+                    "ddl_trigger_unproven")
                 : null;
 
-        public SafeMigrationProviderAnalysis ValidateProjectedOperation(SafeMigrationOperation operation,
-            SafeMigrationProviderAnalysis projectedAnalysis, ISafeMigrationProjectedColumnSource columns)
+        public SafeMigrationProviderAnalysis ValidateProjectedOperation(
+            SafeMigrationOperation operation,
+            SafeMigrationProviderAnalysis projectedAnalysis,
+            ISafeMigrationProjectedColumnSource columns
+        )
             => projectedAnalysis;
 
-        public void ObserveAcceptedOperation(SafeMigrationOperation operation,
-            SafeMigrationProviderAnalysis liveAnalysis, SafeMigrationProviderAnalysis analysis,
-            SafeMigrationDecision decision)
+        public void ObserveAcceptedOperation(
+            SafeMigrationOperation operation,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            SafeMigrationProviderAnalysis analysis,
+            SafeMigrationDecision decision
+        )
         {
-            SawAcceptedRemoval |= operation.Intent is DropIndexIntent or DropCheckConstraintIntent
-                or DropPrimaryKeyIntent or DropUniqueConstraintIntent or DropForeignKeyIntent
+            SawAcceptedRemoval |= operation.Intent is DropIndexIntent
+                    or DropCheckConstraintIntent
+                    or DropPrimaryKeyIntent
+                    or DropUniqueConstraintIntent
+                    or DropForeignKeyIntent
                 && decision.Action == SafeMigrationAction.Apply;
         }
 
-        public void ObserveProviderOperation(MigrationOperation operation)
-        {
-        }
+        public void ObserveProviderOperation(
+            MigrationOperation operation
+        ) { }
     }
 }

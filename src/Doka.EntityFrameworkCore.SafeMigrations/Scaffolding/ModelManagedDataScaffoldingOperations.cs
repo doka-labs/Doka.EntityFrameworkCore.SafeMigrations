@@ -69,6 +69,7 @@ internal static class ModelManagedDataScaffoldingValues
     )
     {
         var result = new object?[values.RowCount, values.ColumnCount];
+
         // WHY: Copy matrix rows into the same row coordinates of the owned rectangular array.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery

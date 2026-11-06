@@ -1,7 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 /// <summary>
-/// Provides <see cref="DbContextOptionsBuilder"/> extensions for SQL Server
+/// Provides <see cref="DbContextOptionsBuilder" /> extensions for SQL Server
 /// safe migrations, baseline-generator composition, and canonical migration
 /// discovery.
 /// </summary>
@@ -14,7 +14,7 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// </summary>
     /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
     /// <returns>The same options builder so additional calls can be chained.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
     public static DbContextOptionsBuilder UseSqlServerSafeMigrations(
         this DbContextOptionsBuilder optionsBuilder
     )
@@ -37,7 +37,7 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// <param name="configure">The SafeMigrations design-time configuration.</param>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="optionsBuilder"/> or <paramref name="configure"/> is null.
+    /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
     public static DbContextOptionsBuilder UseSqlServerSafeMigrations(
         this DbContextOptionsBuilder optionsBuilder,
@@ -61,7 +61,7 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
     public static DbContextOptionsBuilder UseSqlServerSafeMigrations<TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder
     )
@@ -86,7 +86,7 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="optionsBuilder"/> or <paramref name="configure"/> is null.
+    /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
     public static DbContextOptionsBuilder UseSqlServerSafeMigrations<TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder,
@@ -112,7 +112,7 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TBaselineGenerator">The generator used for ordinary SQL Server operations.</typeparam>
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
     public static DbContextOptionsBuilder UseSqlServerSafeMigrations<TBaselineGenerator, TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder
     )
@@ -139,7 +139,7 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="optionsBuilder"/> or <paramref name="configure"/> is null.
+    /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
     public static DbContextOptionsBuilder UseSqlServerSafeMigrations<TBaselineGenerator, TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder,
@@ -166,7 +166,7 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
     /// <typeparam name="TContext">The DbContext type being configured.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
     public static DbContextOptionsBuilder<TContext> UseSqlServerSafeMigrations<TContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder
     )
@@ -191,7 +191,7 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TContext">The DbContext type being configured.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="optionsBuilder"/> or <paramref name="configure"/> is null.
+    /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
     public static DbContextOptionsBuilder<TContext> UseSqlServerSafeMigrations<TContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder,
@@ -218,11 +218,11 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TBaselineGenerator">The generator used for ordinary SQL Server operations.</typeparam>
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
     public static DbContextOptionsBuilder<TContext> UseSqlServerSafeMigrations<TContext, TBaselineGenerator,
         TCanonicalMigrationContext>(
-            this DbContextOptionsBuilder<TContext> optionsBuilder
-        )
+        this DbContextOptionsBuilder<TContext> optionsBuilder
+    )
         where TContext : DbContext
         where TBaselineGenerator : class, IMigrationsSqlGenerator
         where TCanonicalMigrationContext : DbContext
@@ -248,13 +248,13 @@ public static class SqlServerSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="optionsBuilder"/> or <paramref name="configure"/> is null.
+    /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
     public static DbContextOptionsBuilder<TContext> UseSqlServerSafeMigrations<TContext, TBaselineGenerator,
         TCanonicalMigrationContext>(
-            this DbContextOptionsBuilder<TContext> optionsBuilder,
-            Action<SafeMigrationOptionsBuilder> configure
-        )
+        this DbContextOptionsBuilder<TContext> optionsBuilder,
+        Action<SafeMigrationOptionsBuilder> configure
+    )
         where TContext : DbContext
         where TBaselineGenerator : class, IMigrationsSqlGenerator
         where TCanonicalMigrationContext : DbContext

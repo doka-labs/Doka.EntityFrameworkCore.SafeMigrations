@@ -1,13 +1,15 @@
+using Microsoft.EntityFrameworkCore.Diagnostics;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>
 /// Publishes attention readiness out of band without changing SqlClient's async TDS parsing path.
 /// </summary>
 internal sealed class SqlServerIdentityInsertPauseInterceptor
-    : Microsoft.EntityFrameworkCore.Diagnostics.DbCommandInterceptor
+    : DbCommandInterceptor
 {
-    private readonly string _resource;
     private readonly bool _beforeConfirmation;
+    private readonly string _resource;
 
     /// <summary>
     /// Creates a pause associated with a unique application lock in the test database.
@@ -22,17 +24,17 @@ internal sealed class SqlServerIdentityInsertPauseInterceptor
     }
 
     /// <inheritdoc />
-    public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>>
+    public override ValueTask<InterceptionResult<int>>
         NonQueryExecutingAsync(
-            System.Data.Common.DbCommand command,
-            Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData,
-            Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result,
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result,
             CancellationToken cancellationToken = default
         )
     {
         command.CommandText = BuildPausedCommand(command.CommandText, _resource, _beforeConfirmation);
 
-        return new ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>>(result);
+        return new ValueTask<InterceptionResult<int>>(result);
     }
 
     /// <summary>
@@ -65,24 +67,29 @@ internal sealed class SqlServerIdentityInsertPauseInterceptor
         // the gap between ON and its session marker. A separate adversarial
         // mode deliberately interrupts that uncertain acquisition gap.
         var anchor = !beforeConfirmation
-            && guardedBody.Contains(SqlServerSafeMigrationIdentityInsertScope.AcquiredMarkerComment,
+            && guardedBody.Contains(
+                SqlServerSafeMigrationIdentityInsertScope.AcquiredMarkerComment,
                 StringComparison.Ordinal)
-            ? SqlServerSafeMigrationIdentityInsertScope.AcquiredMarkerComment
-            : identityOn;
+                ? SqlServerSafeMigrationIdentityInsertScope.AcquiredMarkerComment
+                : identityOn;
 
         // WHY: SqlClient drains an unparameterized async batch's first response under its cancellation lock.
         // NOWAIT starts that synchronous drain, but InfoMessage is deferred until the batch finishes.
         // A session-owned lock proves ON to a separate observer without emitting the early INFO token.
         var pausedBody = guardedBody.Replace(
             anchor,
-            anchor + " DECLARE @doka_identity_ready int; "
-                + "EXEC @doka_identity_ready = sys.sp_getapplock @Resource = N''" + nestedResource
-                + "'', @LockMode = N''Exclusive'', @LockOwner = N''Session'', @LockTimeout = 0; "
-                + "IF @doka_identity_ready < 0 THROW 51006, ''identity readiness lock failed'', 1; "
-                + "WAITFOR DELAY ''00:05:00'';",
+            anchor
+            + " DECLARE @doka_identity_ready int; "
+            + "EXEC @doka_identity_ready = sys.sp_getapplock @Resource = N''"
+            + nestedResource
+            + "'', @LockMode = N''Exclusive'', @LockOwner = N''Session'', @LockTimeout = 0; "
+            + "IF @doka_identity_ready < 0 THROW 51006, ''identity readiness lock failed'', 1; "
+            + "WAITFOR DELAY ''00:05:00'';",
             StringComparison.Ordinal);
 
-        return isolatedGuard ? SqlServerGuardedSqlTestContract.EncodeScope(pausedBody) : pausedBody;
+        return isolatedGuard
+            ? SqlServerGuardedSqlTestContract.EncodeScope(pausedBody)
+            : pausedBody;
     }
 
     /// <summary>
@@ -116,9 +123,12 @@ internal sealed class SqlServerIdentityInsertPauseInterceptor
     /// <summary>
     /// Observes the marker without acquiring it or using the connection running the migration.
     /// </summary>
+    /// <param name="observer">The independent connection observing marker availability.</param>
+    /// <param name="cancellationToken">The token cancelling the marker query.</param>
+    /// <returns>Whether the observing session could acquire the marker.</returns>
     public async Task<bool> CanAcquireMarkerAsync(
         SqlConnection observer,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         await using var command = CreateMarkerObservationCommand(observer);

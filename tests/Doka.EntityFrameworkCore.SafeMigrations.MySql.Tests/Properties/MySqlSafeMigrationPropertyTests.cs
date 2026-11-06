@@ -20,6 +20,8 @@ public sealed class MySqlSafeMigrationPropertyTests : IDisposable
             _context.GetService<ISqlGenerationHelper>());
     }
 
+    public void Dispose() => _context.Dispose();
+
     [Property(MaxTest = 1000)]
     public bool Render_RoundTripsArbitraryIdentifierParts(
         string? rawSchema,
@@ -103,8 +105,6 @@ public sealed class MySqlSafeMigrationPropertyTests : IDisposable
             return true;
         }
     }
-
-    public void Dispose() => _context.Dispose();
 
     private static string Identifier(
         string? value,

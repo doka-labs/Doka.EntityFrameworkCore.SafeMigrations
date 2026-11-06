@@ -175,11 +175,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             foreach (var name in intent.Definition.Columns)
             {
                 if (!HasCurrentProjectedKeyMember(
-                        intent.Definition.Table,
-                        intent.Definition.Schema,
-                        name,
-                        columns,
-                        ref valuesPreserved))
+                    intent.Definition.Table,
+                    intent.Definition.Schema,
+                    name,
+                    columns,
+                    ref valuesPreserved))
                 {
                     return projectedAnalysis;
                 }
@@ -325,7 +325,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             }
         }
 
-        var tables = requestedColumns.Keys
+        var tables = requestedColumns
+            .Keys
             .OrderBy(static table => table, StringComparer.Ordinal)
             .ToArray();
 
@@ -340,7 +341,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             cancellationToken);
 
         var collationCharacterSets = await ReadProjectedAlterCollationCharacterSetsAsync(
-            connection, operations, maximumPayloadBytes, commandTimeout, cancellationToken);
+            connection,
+            operations,
+            maximumPayloadBytes,
+            commandTimeout,
+            cancellationToken);
 
         environmentDefaults = environmentDefaults with
         {
@@ -363,15 +368,18 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         var observedTables = new HashSet<string>(tableComparer);
 
         await SafeMigrationCatalogProbeBatch.ReadAsync(
-            connection, (tables.Length + SafeMigrationCatalogQueryLimits.MaximumInventoryValues - 1)
-                / SafeMigrationCatalogQueryLimits.MaximumInventoryValues,
-            maximumPayloadBytes, commandTimeout,
+            connection,
+            (tables.Length + SafeMigrationCatalogQueryLimits.MaximumInventoryValues - 1)
+            / SafeMigrationCatalogQueryLimits.MaximumInventoryValues,
+            maximumPayloadBytes,
+            commandTimeout,
             (command, slot) =>
             {
                 var offset = slot * SafeMigrationCatalogQueryLimits.MaximumInventoryValues;
                 var count = Math.Min(SafeMigrationCatalogQueryLimits.MaximumInventoryValues, tables.Length - offset);
                 var parameterNames = new string[count];
                 var valueBytes = 0;
+
                 // WHY: Keep bounded owner parameters aligned with their generated parameter-name slots.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
@@ -413,8 +421,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             },
             async (reader, slot, _, token) =>
             {
-                var permitted = tables.Skip(slot * SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
-                    .Take(SafeMigrationCatalogQueryLimits.MaximumInventoryValues).ToHashSet(tableComparer);
+                var permitted = tables
+                    .Skip(slot * SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
+                    .Take(SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
+                    .ToHashSet(tableComparer);
 
                 while (await reader.ReadAsync(token))
                 {
@@ -424,41 +434,50 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         throw new InvalidOperationException("MySQL returned an unowned physical key table.");
                     }
 
-                    var engine = reader.IsDBNull(1) ? null : reader.GetString(1);
-                    var rowFormat = reader.IsDBNull(2) ? null : reader.GetString(2);
+                    var engine = reader.IsDBNull(1)
+                        ? null
+                        : reader.GetString(1);
+
+                    var rowFormat = reader.IsDBNull(2)
+                        ? null
+                        : reader.GetString(2);
 
                     if (observedTables.Add(table))
                     {
                         result[table] = CreateIndexPhysicalEnvironment(
-                            engine,
-                            rowFormat,
-                            environmentDefaults.DynamicMaximumKeyBytes,
-                            environmentDefaults.PageSize) with
-                        {
-                            DefaultCharacterSet = environmentDefaults.DefaultEnvironment.DefaultCharacterSet,
-                            StrictSqlMode = environmentDefaults.DefaultEnvironment.StrictSqlMode,
-                            SupportsQuotedExpressionDefaults =
+                                engine,
+                                rowFormat,
+                                environmentDefaults.DynamicMaximumKeyBytes,
+                                environmentDefaults.PageSize) with
+                            {
+                                DefaultCharacterSet = environmentDefaults.DefaultEnvironment.DefaultCharacterSet,
+                                StrictSqlMode = environmentDefaults.DefaultEnvironment.StrictSqlMode,
+                                SupportsQuotedExpressionDefaults =
                                 environmentDefaults.DefaultEnvironment.SupportsQuotedExpressionDefaults,
-                            SupportsTextExpressionControlCharacters =
+                                SupportsTextExpressionControlCharacters =
                                 environmentDefaults.DefaultEnvironment.SupportsTextExpressionControlCharacters,
-                            CollationCharacterSets = environmentDefaults.DefaultEnvironment.CollationCharacterSets,
-                            NewTableEnvironment = environmentDefaults.DefaultEnvironment,
-                        };
+                                CollationCharacterSets = environmentDefaults.DefaultEnvironment.CollationCharacterSets,
+                                NewTableEnvironment = environmentDefaults.DefaultEnvironment,
+                            };
                     }
 
                     var column = reader.GetString(3);
-                    if (!requestedColumns[table].Contains(column))
+                    if (!requestedColumns[table]
+                        .Contains(column))
                     {
                         continue;
                     }
 
-                    if (!columnShapes[table].TryAdd(column, MySqlProjectedIndexPhysicalShape.CreateCatalogColumnShape(
-                        reader.GetString(4),
-                        ReadNullableInt64(reader, 5),
-                        ReadNullableInt64(reader, 6),
-                        ReadNullableInt32(reader, 7),
-                        ReadNullableInt32(reader, 8),
-                        ReadNullableInt32(reader, 9))))
+                    if (!columnShapes[table]
+                        .TryAdd(
+                            column,
+                            MySqlProjectedIndexPhysicalShape.CreateCatalogColumnShape(
+                                reader.GetString(4),
+                                ReadNullableInt64(reader, 5),
+                                ReadNullableInt64(reader, 6),
+                                ReadNullableInt32(reader, 7),
+                                ReadNullableInt32(reader, 8),
+                                ReadNullableInt32(reader, 9))))
                     {
                         throw new InvalidOperationException("MySQL returned a duplicate physical key column.");
                     }
@@ -470,7 +489,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         {
             if (columnShapes[table].Count > 0)
             {
-                result[table] = result[table] with { Columns = columnShapes[table], };
+                result[table] = result[table] with { Columns = columnShapes[table] };
             }
         }
 
@@ -493,7 +512,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     ) => intent switch
     {
         AlterColumnIntent value => [value.Definition.Name],
-        EnsureIndexIntent value => value.Definition.Keys
+        EnsureIndexIntent value => value
+            .Definition
+            .Keys
             .Where(static key => key.Column is not null)
             .Select(static key => key.Column!),
         EnsurePrimaryKeyIntent value => value.Definition.Columns,
@@ -532,20 +553,48 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             throw new InvalidOperationException("MySQL did not return its default index environment.");
         }
 
-        var engine = reader.IsDBNull(0) ? null : reader.GetString(0);
-        var rowFormat = reader.IsDBNull(1) ? null : reader.GetString(1);
+        var engine = reader.IsDBNull(0)
+            ? null
+            : reader.GetString(0);
+
+        var rowFormat = reader.IsDBNull(1)
+            ? null
+            : reader.GetString(1);
+
         var pageSize = Convert.ToInt32(reader.GetValue(2), CultureInfo.InvariantCulture);
         var dynamicMaximumKeyBytes = MaximumIndexKeyBytes(pageSize);
-        var characterSet = reader.IsDBNull(3) ? null : reader.GetString(3);
-        var sqlMode = reader.IsDBNull(4) ? string.Empty : reader.GetString(4);
-        var strictMode = sqlMode.Split(',').Any(static mode =>
-            mode.AsSpan().Trim().Equals("STRICT_TRANS_TABLES", StringComparison.OrdinalIgnoreCase)
-            || mode.AsSpan().Trim().Equals("STRICT_ALL_TABLES", StringComparison.OrdinalIgnoreCase));
+        var characterSet = reader.IsDBNull(3)
+            ? null
+            : reader.GetString(3);
 
-        var isMariaDb = reader.GetString(5).Contains("MariaDB", StringComparison.OrdinalIgnoreCase);
+        var sqlMode = reader.IsDBNull(4)
+            ? string.Empty
+            : reader.GetString(4);
+
+        var strictMode = sqlMode
+            .Split(',')
+            .Any(static mode =>
+                mode
+                    .AsSpan()
+                    .Trim()
+                    .Equals("STRICT_TRANS_TABLES", StringComparison.OrdinalIgnoreCase)
+                || mode
+                    .AsSpan()
+                    .Trim()
+                    .Equals("STRICT_ALL_TABLES", StringComparison.OrdinalIgnoreCase));
+
+        var isMariaDb = reader
+            .GetString(5)
+            .Contains("MariaDB", StringComparison.OrdinalIgnoreCase);
+
         var supportsQuotedExpressionDefaults = isMariaDb
-            || !sqlMode.Split(',').Any(static mode =>
-                mode.AsSpan().Trim().Equals("NO_BACKSLASH_ESCAPES", StringComparison.OrdinalIgnoreCase));
+            || !sqlMode
+                .Split(',')
+                .Any(static mode =>
+                    mode
+                        .AsSpan()
+                        .Trim()
+                        .Equals("NO_BACKSLASH_ESCAPES", StringComparison.OrdinalIgnoreCase));
 
         return new IndexEnvironmentDefaults(
             CreateIndexPhysicalEnvironment(engine, rowFormat, dynamicMaximumKeyBytes, pageSize) with
@@ -584,13 +633,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         int pageSize
     ) => pageSize switch
     {
-        4096 => 768,
-        8192 => 1536,
-        _ => 3072,
+        4096 => 768, 8192 => 1536, _ => 3072,
     };
 
     private readonly record struct IndexEnvironmentDefaults(
         SafeMigrationIndexPhysicalEnvironment DefaultEnvironment,
         int DynamicMaximumKeyBytes,
-        int PageSize);
+        int PageSize
+    );
 }

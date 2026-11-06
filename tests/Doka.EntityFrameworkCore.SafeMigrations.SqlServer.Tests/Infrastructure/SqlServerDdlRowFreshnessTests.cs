@@ -21,23 +21,35 @@ public sealed class SqlServerDdlRowFreshnessTests
         using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = Analyzer(context);
         var catalog = Catalog(context);
-        var check = new SafeMigrationOperation(new EnsureCheckConstraintIntent(
-            new ExpectedCheckConstraintDefinition("CK_checked", "checked", "[Value]>=0")),
+        var check = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(
+                new ExpectedCheckConstraintDefinition("CK_checked", "checked", "[Value]>=0")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var missing = Analysis(SafeMigrationObservedState.Missing);
         analyzer.CaptureProjectedCheckPredicates([check], [missing]);
         analyzer.CaptureProjectedDdlRowDependency(check, catalog.Build(check));
-        analyzer.CaptureProjectedDdlRowEffects(risk
-            ? SqlServerDdlRowEffectRisk.VisibilityUnproven : SqlServerDdlRowEffectRisk.None);
-        var drop = new SafeMigrationOperation(new DropIndexIntent("IX_source", "source"),
+        analyzer.CaptureProjectedDdlRowEffects(
+            risk
+                ? SqlServerDdlRowEffectRisk.VisibilityUnproven
+                : SqlServerDdlRowEffectRisk.None);
+
+        var drop = new SafeMigrationOperation(
+            new DropIndexIntent("IX_source", "source"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var state = Analysis(executes ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Missing);
+        var state = Analysis(
+            executes
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Missing);
 
         // Act
-        analyzer.ObserveAcceptedOperation(drop, state, state,
+        analyzer.ObserveAcceptedOperation(
+            drop,
+            state,
+            state,
             SafeMigrationDecisionPlanner.Plan(drop.Intent.Kind, state.ObservedState, drop.Policy));
+
         var result = analyzer.ValidateProjectedOperation(check, missing, new EmptyColumns());
 
         // Assert
@@ -62,25 +74,41 @@ public sealed class SqlServerDdlRowFreshnessTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = Analyzer(context);
-        var widening = new SafeMigrationOperation(new AlterColumnIntent("values",
-            new ExpectedColumnDefinition("Value", typeof(long), false, "bigint"),
-            new ExpectedColumnDefinition("Value", typeof(int), tightens, "int")), SafeMigrationPolicy.RepairIfSafe);
+        var widening = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "values",
+                new ExpectedColumnDefinition("Value", typeof(long), false, "bigint"),
+                new ExpectedColumnDefinition("Value", typeof(int), tightens, "int")),
+            SafeMigrationPolicy.RepairIfSafe);
 
-        var safe = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.Safe, false, "captured_safe");
+        var safe = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            false,
+            "captured_safe");
 
         analyzer.CaptureProjectedIntegerWidening(widening, safe, []);
-        analyzer.CaptureProjectedDdlRowDependency(widening, Catalog(context).Build(widening));
+        analyzer.CaptureProjectedDdlRowDependency(widening,
+            Catalog(context)
+                .Build(widening));
+
         analyzer.CaptureProjectedDdlRowEffects(SqlServerDdlRowEffectRisk.VisibilityUnproven);
-        var drop = new SafeMigrationOperation(new DropIndexIntent("IX_source", "source"),
+        var drop = new SafeMigrationOperation(
+            new DropIndexIntent("IX_source", "source"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var matching = Analysis(SafeMigrationObservedState.Matching);
 
         // Act
-        analyzer.ObserveAcceptedOperation(drop, matching, matching,
+        analyzer.ObserveAcceptedOperation(
+            drop,
+            matching,
+            matching,
             SafeMigrationDecisionPlanner.Plan(drop.Intent.Kind, matching.ObservedState, drop.Policy));
-        var result = analyzer.ValidateProjectedOperation(widening, Analysis(SafeMigrationObservedState.Different),
+
+        var result = analyzer.ValidateProjectedOperation(
+            widening,
+            Analysis(SafeMigrationObservedState.Different),
             new EmptyColumns());
 
         // Assert
@@ -100,29 +128,48 @@ public sealed class SqlServerDdlRowFreshnessTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = Analyzer(context);
-        var operation = new SafeMigrationOperation(managed
-            ? new EnsureModelManagedDataIntent("checked", ["Id"], ["int"], ["Id"], ["int"],
-                new object?[,] { { 1 } }, null, null)
-            : new EnsureCheckConstraintIntent(
-                new ExpectedCheckConstraintDefinition("CK_checked", "checked", "[Value]>=0")),
+        var operation = new SafeMigrationOperation(
+            managed
+                ? new EnsureModelManagedDataIntent(
+                    "checked",
+                    ["Id"],
+                    ["int"],
+                    ["Id"],
+                    ["int"],
+                    new object?[,] { { 1 } },
+                    null,
+                    null)
+                : new EnsureCheckConstraintIntent(
+                    new ExpectedCheckConstraintDefinition("CK_checked", "checked", "[Value]>=0")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        analyzer.CaptureProjectedDdlRowDependency(operation, Catalog(context).Build(operation));
+        analyzer.CaptureProjectedDdlRowDependency(operation,
+            Catalog(context)
+                .Build(operation));
+
         analyzer.CaptureProjectedDdlRowEffects(SqlServerDdlRowEffectRisk.VisibilityUnproven);
-        var drop = new SafeMigrationOperation(new DropIndexIntent("IX_source", "source"),
+        var drop = new SafeMigrationOperation(
+            new DropIndexIntent("IX_source", "source"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var matching = Analysis(SafeMigrationObservedState.Matching);
 
         // Act
-        analyzer.ObserveAcceptedOperation(drop, matching, matching,
+        analyzer.ObserveAcceptedOperation(
+            drop,
+            matching,
+            matching,
             SafeMigrationDecisionPlanner.Plan(drop.Intent.Kind, matching.ObservedState, drop.Policy));
+
         var result = analyzer.ValidateProjectedOperation(operation, matching, new EmptyColumns());
 
         // Assert
         Assert.Equal(expected, result.ObservedState);
-        Assert.Equal(managed ? "projected_ddl_visibility_data_unknown"
-            : "projected_ddl_visibility_structure_unknown", result.Code);
+        Assert.Equal(
+            managed
+                ? "projected_ddl_visibility_data_unknown"
+                : "projected_ddl_visibility_structure_unknown",
+            result.Code);
     }
 
     /// <summary>An unchanged table rename is planner Apply but emits no DDL, so it must retain row proofs.</summary>
@@ -132,15 +179,20 @@ public sealed class SqlServerDdlRowFreshnessTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = Analyzer(context);
-        var check = new SafeMigrationOperation(new EnsureCheckConstraintIntent(
-            new ExpectedCheckConstraintDefinition("CK_checked", "checked", "[Value]>=0")),
+        var check = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(
+                new ExpectedCheckConstraintDefinition("CK_checked", "checked", "[Value]>=0")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var missing = Analysis(SafeMigrationObservedState.Missing);
         analyzer.CaptureProjectedCheckPredicates([check], [missing]);
-        analyzer.CaptureProjectedDdlRowDependency(check, Catalog(context).Build(check));
+        analyzer.CaptureProjectedDdlRowDependency(check,
+            Catalog(context)
+                .Build(check));
+
         analyzer.CaptureProjectedDdlRowEffects(SqlServerDdlRowEffectRisk.VisibilityUnproven);
-        var rename = new SafeMigrationOperation(new RenameTableIntent("checked", "checked", "dbo", "dbo"),
+        var rename = new SafeMigrationOperation(
+            new RenameTableIntent("checked", "checked", "dbo", "dbo"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var matching = Analysis(SafeMigrationObservedState.Matching);
@@ -171,36 +223,55 @@ public sealed class SqlServerDdlRowFreshnessTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = Analyzer(context);
-        var operation = new SafeMigrationOperation(textAlter
-            ? new AlterColumnIntent("checked",
-                new ExpectedColumnDefinition("Value", typeof(string), true, "varchar(32)"),
-                new ExpectedColumnDefinition("Value", typeof(string), true, "varchar(64)"))
-            : new EnsureColumnIntent("checked", new ExpectedColumnDefinition("Value", typeof(int), false, "int")),
+        var operation = new SafeMigrationOperation(
+            textAlter
+                ? new AlterColumnIntent(
+                    "checked",
+                    new ExpectedColumnDefinition("Value", typeof(string), true, "varchar(32)"),
+                    new ExpectedColumnDefinition("Value", typeof(string), true, "varchar(64)"))
+                : new EnsureColumnIntent("checked", new ExpectedColumnDefinition("Value", typeof(int), false, "int")),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var plan = Catalog(context).Build(operation);
+        var plan = Catalog(context)
+            .Build(operation);
+
         CaptureEmptyLayout(analyzer);
         analyzer.CaptureProjectedDdlRowDependency(operation, plan);
-        analyzer.CaptureProjectedDdlRowEffects(risk
-            ? SqlServerDdlRowEffectRisk.VisibilityUnproven : SqlServerDdlRowEffectRisk.None);
-        var drop = new SafeMigrationOperation(new DropIndexIntent("IX_source", "source"),
+        analyzer.CaptureProjectedDdlRowEffects(
+            risk
+                ? SqlServerDdlRowEffectRisk.VisibilityUnproven
+                : SqlServerDdlRowEffectRisk.None);
+
+        var drop = new SafeMigrationOperation(
+            new DropIndexIntent("IX_source", "source"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var matching = Analysis(SafeMigrationObservedState.Matching);
         var original = textAlter
-            ? new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-                SafeMigrationRepairCapability.Safe, false, "captured_safe")
+            ? new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.Different,
+                SafeMigrationRepairCapability.Safe,
+                false,
+                "captured_safe")
             : Analysis(SafeMigrationObservedState.Missing);
 
         // Act
-        analyzer.ObserveAcceptedOperation(drop, matching, matching,
+        analyzer.ObserveAcceptedOperation(
+            drop,
+            matching,
+            matching,
             SafeMigrationDecisionPlanner.Plan(drop.Intent.Kind, matching.ObservedState, drop.Policy));
+
         var result = analyzer.ValidateProjectedOperation(operation, original, new EmptyColumns());
 
         // Assert
         Assert.True(plan.RequiresLiveDataProof);
-        Assert.Equal(risk ? SafeMigrationObservedState.PrerequisiteMissing : original.ObservedState,
+        Assert.Equal(
+            risk
+                ? SafeMigrationObservedState.PrerequisiteMissing
+                : original.ObservedState,
             result.ObservedState);
+
         if (risk)
         {
             Assert.Equal(SafeMigrationRepairCapability.None, result.RepairCapability);
@@ -220,29 +291,45 @@ public sealed class SqlServerDdlRowFreshnessTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = Analyzer(context);
-        var check = new SafeMigrationOperation(new EnsureCheckConstraintIntent(
-            new ExpectedCheckConstraintDefinition("CK_created", "created", "[Value]>=0")),
+        var check = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(
+                new ExpectedCheckConstraintDefinition("CK_created", "created", "[Value]>=0")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        analyzer.CaptureProjectedDdlRowDependency(check, Catalog(context).Build(check));
-        analyzer.CaptureProjectedDdlRowEffects(risk
-            ? SqlServerDdlRowEffectRisk.VisibilityUnproven : SqlServerDdlRowEffectRisk.None);
+        analyzer.CaptureProjectedDdlRowDependency(check,
+            Catalog(context)
+                .Build(check));
+
+        analyzer.CaptureProjectedDdlRowEffects(
+            risk
+                ? SqlServerDdlRowEffectRisk.VisibilityUnproven
+                : SqlServerDdlRowEffectRisk.None);
+
         var projection = new SafeMigrationPreflightProjection(
-            providerOperationProjection: analyzer, projectedDependencyAnalyzer: analyzer);
+            providerOperationProjection: analyzer,
+            projectedDependencyAnalyzer: analyzer);
 
         var create = new CreateTableOperation { Name = "created" };
-        create.Columns.Add(new AddColumnOperation
-        {
-            Name = "Value", Table = "created", ClrType = typeof(int), ColumnType = "int",
-        });
+        create.Columns.Add(
+            new AddColumnOperation
+            {
+                Name = "Value",
+                Table = "created",
+                ClrType = typeof(int),
+                ColumnType = "int",
+            });
 
         // Act
         projection.ObserveProviderPostcondition(create);
         var result = projection.Project(check, Analysis(SafeMigrationObservedState.PrerequisiteMissing));
 
         // Assert
-        Assert.Equal(risk ? SafeMigrationObservedState.PrerequisiteMissing : SafeMigrationObservedState.Missing,
+        Assert.Equal(
+            risk
+                ? SafeMigrationObservedState.PrerequisiteMissing
+                : SafeMigrationObservedState.Missing,
             result.ObservedState);
+
         if (risk)
         {
             Assert.Equal("projected_ddl_visibility_data_unknown", result.Code);
@@ -256,14 +343,21 @@ public sealed class SqlServerDdlRowFreshnessTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = Analyzer(context);
-        var check = new SafeMigrationOperation(new EnsureCheckConstraintIntent(
-            new ExpectedCheckConstraintDefinition("CK_checked", "checked", "[Value]>=0")),
+        var check = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(
+                new ExpectedCheckConstraintDefinition("CK_checked", "checked", "[Value]>=0")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        analyzer.CaptureProjectedDdlRowDependency(check, Catalog(context).Build(check));
+        analyzer.CaptureProjectedDdlRowDependency(check,
+            Catalog(context)
+                .Build(check));
+
         analyzer.CaptureProjectedDdlRowEffects(SqlServerDdlRowEffectRisk.VisibilityUnproven);
-        var unknown = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
-            SafeMigrationRepairCapability.None, false, "projected_structure_state_unknown")
+        var unknown = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.PrerequisiteMissing,
+            SafeMigrationRepairCapability.None,
+            false,
+            "projected_structure_state_unknown")
         {
             IsOpaqueProjectionUnknown = true,
         };
@@ -299,33 +393,52 @@ public sealed class SqlServerDdlRowFreshnessTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = Analyzer(context);
-        var check = new SafeMigrationOperation(new EnsureCheckConstraintIntent(
-            new ExpectedCheckConstraintDefinition("CK_checked", "checked", "[Value]>=0")),
+        var check = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(
+                new ExpectedCheckConstraintDefinition("CK_checked", "checked", "[Value]>=0")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        analyzer.CaptureProjectedDdlRowDependency(check, Catalog(context).Build(check));
+        analyzer.CaptureProjectedDdlRowDependency(check,
+            Catalog(context)
+                .Build(check));
+
         analyzer.CaptureProjectedDdlRowEffects(SqlServerDdlRowEffectRisk.VisibilityUnproven);
         MigrationOperation rename = sequence
             ? new RenameSequenceOperation
             {
-                Name = "source", Schema = "application", NewName = newName, NewSchema = newSchema,
+                Name = "source",
+                Schema = "application",
+                NewName = newName,
+                NewSchema = newSchema,
             }
             : new RenameTableOperation
             {
-                Name = "source", Schema = "application", NewName = newName, NewSchema = newSchema,
+                Name = "source",
+                Schema = "application",
+                NewName = newName,
+                NewSchema = newSchema,
             };
 
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate([rename],
-            context.GetService<IDesignTimeModel>().Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(
+                [rename],
+                context.GetService<IDesignTimeModel>()
+                    .Model);
 
         // Act
         analyzer.ObserveProviderOperation(rename);
-        var result = analyzer.ValidateProjectedOperation(check, Analysis(SafeMigrationObservedState.Missing),
+        var result = analyzer.ValidateProjectedOperation(
+            check,
+            Analysis(SafeMigrationObservedState.Missing),
             new EmptyColumns());
 
         // Assert
         Assert.Equal(emitsDdl, commands.Count > 0);
-        Assert.Equal(emitsDdl ? SafeMigrationObservedState.PrerequisiteMissing : SafeMigrationObservedState.Missing,
+        Assert.Equal(
+            emitsDdl
+                ? SafeMigrationObservedState.PrerequisiteMissing
+                : SafeMigrationObservedState.Missing,
             result.ObservedState);
     }
 
@@ -346,18 +459,23 @@ public sealed class SqlServerDdlRowFreshnessTests
         using var context = new SafeMigrationDbContext(ConnectionString);
         var risk = (SqlServerDdlRowEffectRisk)riskValue;
         var analyzer = Analyzer(context);
-        var check = new SafeMigrationOperation(new EnsureCheckConstraintIntent(
-            new ExpectedCheckConstraintDefinition("CK_checked", "checked", "[Value]>=0")),
+        var check = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(
+                new ExpectedCheckConstraintDefinition("CK_checked", "checked", "[Value]>=0")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        analyzer.CaptureProjectedDdlRowDependency(check, Catalog(context).Build(check));
+        analyzer.CaptureProjectedDdlRowDependency(check,
+            Catalog(context)
+                .Build(check));
+
         analyzer.CaptureProjectedDdlRowEffects(risk);
         var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: analyzer)
         {
             CurrentOperationOrdinal = 7,
         };
 
-        var drop = new SafeMigrationOperation(new DropIndexIntent("IX_source", "source"),
+        var drop = new SafeMigrationOperation(
+            new DropIndexIntent("IX_source", "source"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var matching = Analysis(SafeMigrationObservedState.Matching);
@@ -366,7 +484,12 @@ public sealed class SqlServerDdlRowFreshnessTests
         // Act
         if (typed)
         {
-            projection.ObserveProviderPostcondition(new DropIndexOperation { Name = "IX_source", Table = "source" });
+            projection.ObserveProviderPostcondition(
+                new DropIndexOperation
+                {
+                    Name = "IX_source",
+                    Table = "source",
+                });
         }
         else
         {
@@ -374,15 +497,20 @@ public sealed class SqlServerDdlRowFreshnessTests
         }
 
         projection.CurrentOperationOrdinal = 8;
-        var result = analyzer.ValidateProjectedOperation(check, Analysis(SafeMigrationObservedState.Missing),
+        var result = analyzer.ValidateProjectedOperation(
+            check,
+            Analysis(SafeMigrationObservedState.Missing),
             new EmptyColumns());
 
         // Assert
         Assert.Equal(7, result.ProviderDeferredOriginOrdinal);
         Assert.True(result.RequiresLiveDataProof);
         Assert.False(result.IsOpaqueProjectionUnknown);
-        Assert.Equal(risk == SqlServerDdlRowEffectRisk.EnabledTrigger
-            ? "projected_ddl_trigger_data_unknown" : "projected_ddl_visibility_data_unknown", result.Code);
+        Assert.Equal(
+            risk == SqlServerDdlRowEffectRisk.EnabledTrigger
+                ? "projected_ddl_trigger_data_unknown"
+                : "projected_ddl_visibility_data_unknown",
+            result.Code);
     }
 
     /// <summary>Invariant authoring and permission refusals cannot become deferred approval after risky DDL.</summary>
@@ -401,23 +529,35 @@ public sealed class SqlServerDdlRowFreshnessTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = Analyzer(context);
-        var check = new SafeMigrationOperation(new EnsureCheckConstraintIntent(
-            new ExpectedCheckConstraintDefinition("CK_checked", "checked", "[Value]>=0")),
+        var check = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(
+                new ExpectedCheckConstraintDefinition("CK_checked", "checked", "[Value]>=0")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        analyzer.CaptureProjectedDdlRowDependency(check, Catalog(context).Build(check));
+        analyzer.CaptureProjectedDdlRowDependency(check,
+            Catalog(context)
+                .Build(check));
+
         analyzer.CaptureProjectedDdlRowEffects(SqlServerDdlRowEffectRisk.EnabledTrigger);
         analyzer.SetCurrentOperationOrdinal(0);
-        var drop = new SafeMigrationOperation(new DropIndexIntent("IX_source", "source"),
+        var drop = new SafeMigrationOperation(
+            new DropIndexIntent("IX_source", "source"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var matching = Analysis(SafeMigrationObservedState.Matching);
-        var original = new SafeMigrationProviderAnalysis(state, SafeMigrationRepairCapability.None, false,
+        var original = new SafeMigrationProviderAnalysis(
+            state,
+            SafeMigrationRepairCapability.None,
+            false,
             "independent_failure") { IsInvariantUnsupported = invariant };
 
         // Act
-        analyzer.ObserveAcceptedOperation(drop, matching, matching,
+        analyzer.ObserveAcceptedOperation(
+            drop,
+            matching,
+            matching,
             SafeMigrationDecisionPlanner.Plan(drop.Intent.Kind, matching.ObservedState, drop.Policy));
+
         var result = analyzer.ValidateProjectedOperation(check, original, new EmptyColumns());
 
         // Assert
@@ -438,16 +578,29 @@ public sealed class SqlServerDdlRowFreshnessTests
         using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = Analyzer(context);
         var catalog = Catalog(context);
-        var table = new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition("created",
-            [new ExpectedColumnDefinition("Id", typeof(int), false, "int")]),
-            SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent);
+        var table = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "created",
+                    [new ExpectedColumnDefinition("Id", typeof(int), false, "int")]),
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
-        var column = new SafeMigrationOperation(new EnsureColumnIntent("created",
-            new ExpectedColumnDefinition("Caption", typeof(string), false, "nvarchar(80)", maxLength: 80,
-                defaultValue: SafeMigrationDefaultValue.Literal("ready"))), SafeMigrationPolicy.ThrowIfDifferent);
+        var column = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "created",
+                new ExpectedColumnDefinition(
+                    "Caption",
+                    typeof(string),
+                    false,
+                    "nvarchar(80)",
+                    maxLength: 80,
+                    defaultValue: SafeMigrationDefaultValue.Literal("ready"))),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
-        var check = new SafeMigrationOperation(new EnsureCheckConstraintIntent(
-            new ExpectedCheckConstraintDefinition("CK_created", "created", "[Id]>=0")),
+        var check = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(
+                new ExpectedCheckConstraintDefinition("CK_created", "created", "[Id]>=0")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         analyzer.CaptureProjectedDdlRowDependency(table, catalog.Build(table));
@@ -455,7 +608,8 @@ public sealed class SqlServerDdlRowFreshnessTests
         analyzer.CaptureProjectedDdlRowDependency(check, catalog.Build(check));
         analyzer.CaptureProjectedDdlRowEffects((SqlServerDdlRowEffectRisk)riskValue);
         var projection = new SafeMigrationPreflightProjection(
-            providerOperationProjection: analyzer, projectedDependencyAnalyzer: analyzer);
+            providerOperationProjection: analyzer,
+            projectedDependencyAnalyzer: analyzer);
 
         var create = new CreateTableOperation { Name = "ordinary" };
 
@@ -482,9 +636,12 @@ public sealed class SqlServerDdlRowFreshnessTests
         var checkAnalysis = projection.Project(check, Analysis(SafeMigrationObservedState.PrerequisiteMissing));
 
         // Assert
-        Assert.Equal(riskValue == (int)SqlServerDdlRowEffectRisk.EnabledTrigger
-            ? "projected_ddl_trigger_structure_unknown" : "projected_ddl_visibility_structure_unknown",
+        Assert.Equal(
+            riskValue == (int)SqlServerDdlRowEffectRisk.EnabledTrigger
+                ? "projected_ddl_trigger_structure_unknown"
+                : "projected_ddl_visibility_structure_unknown",
             tableAnalysis.Code);
+
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, tableAnalysis.ObservedState);
         Assert.Equal(0, tableAnalysis.ProviderDeferredOriginOrdinal);
         Assert.False(tableAnalysis.IsOpaqueProjectionUnknown);
@@ -510,7 +667,10 @@ public sealed class SqlServerDdlRowFreshnessTests
     private static SafeMigrationProviderAnalysis Analysis(
         SafeMigrationObservedState state
     )
-        => new(state, SafeMigrationRepairCapability.None, state == SafeMigrationObservedState.Matching,
+        => new(
+            state,
+            SafeMigrationRepairCapability.None,
+            state == SafeMigrationObservedState.Matching,
             "classified_state");
 
     private static void CaptureEmptyLayout(
@@ -526,7 +686,16 @@ public sealed class SqlServerDdlRowFreshnessTests
         table.Columns.Add("variables", typeof(int));
         table.Columns.Add("clustered", typeof(int));
         table.Columns.Add("known", typeof(bool));
-        table.Rows.Add("dbo", "checked", 0, 0, 0, 0, 0, true);
+        table.Rows.Add(
+            "dbo",
+            "checked",
+            0,
+            0,
+            0,
+            0,
+            0,
+            true);
+
         using var reader = table.CreateDataReader();
         reader.Read();
         analyzer.CaptureProjectedColumnLayout(reader);

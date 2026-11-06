@@ -23,62 +23,104 @@ public sealed class SqlServerSafeMigrationDdlStructuralDeferralIntegrationTests 
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.ddl_structure_values(Value int NOT NULL); "
             + "INSERT dbo.ddl_structure_values VALUES(-2147483648),(2147483647); "
-            + "CREATE INDEX IX_old ON dbo.ddl_structure_values(Value);");
+            + "CREATE INDEX IX_old ON dbo.ddl_structure_values(Value);",
+            cancellationToken: CancellationToken.None);
+
         var mutation = dependency == "index"
             ? "CREATE INDEX IX_new ON dbo.ddl_structure_values(Value);"
             : "ALTER TABLE dbo.ddl_structure_values ADD CONSTRAINT CK_new CHECK(Value>=-2147483648);";
 
         // WHY: Dynamic trigger SQL is deliberately absent from static expression
         // dependencies. A captured index list cannot infer the resulting object.
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TRIGGER create_ddl_dependency ON DATABASE FOR DROP_INDEX AS "
             + "IF EVENTDATA().value('(/EVENT_INSTANCE/ObjectName)[1]','nvarchar(128)')=N'IX_old' "
-            + "EXEC sys.sp_executesql N'" + mutation + "';");
+            + "EXEC sys.sp_executesql N'"
+            + mutation
+            + "';",
+            cancellationToken: CancellationToken.None);
+
         if (disabled)
         {
-            await ExecuteSqlAsync(connectionString, "DISABLE TRIGGER create_ddl_dependency ON DATABASE;");
+            await ExecuteSqlAsync(
+                connectionString,
+                "DISABLE TRIGGER create_ddl_dependency ON DATABASE;",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropIndexIfExists("IX_old", "ddl_structure_values");
-        builder.AlterColumnIfDifferent("ddl_structure_values",
+        builder.AlterColumnIfDifferent(
+            "ddl_structure_values",
             new ExpectedColumnDefinition("Value", typeof(long), false, "bigint"),
-            new ExpectedColumnDefinition("Value", typeof(int), false, "int"), SafeMigrationPolicy.RepairIfSafe);
+            new ExpectedColumnDefinition("Value", typeof(int), false, "int"),
+            SafeMigrationPolicy.RepairIfSafe);
+
         SafeMigrationRunReport report;
         Exception? failure;
         int observedDependency;
 
         // Act
-        report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-ddl-structural-freshness"));
+        report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-ddl-structural-freshness"),
+                cancellationToken: CancellationToken.None);
+
         await using (var transaction = await context.Database.BeginTransactionAsync())
         {
-            await ExecuteOperationsAsync(context, [builder.Operations[0]]);
-            observedDependency = await context.Database.SqlQueryRaw<int>(dependency == "index"
-                    ? "SELECT COUNT(*) AS [Value] FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ddl_structure_values') "
+            await ExecuteOperationsAsync(context, [builder.Operations[0]], cancellationToken: CancellationToken.None);
+            observedDependency = await context
+                .Database
+                .SqlQueryRaw<int>(
+                    dependency == "index"
+                        ? "SELECT COUNT(*) AS [Value] FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ddl_structure_values') "
                         + "AND name=N'IX_new'"
-                    : "SELECT COUNT(*) AS [Value] FROM sys.check_constraints "
+                        : "SELECT COUNT(*) AS [Value] FROM sys.check_constraints "
                         + "WHERE parent_object_id=OBJECT_ID(N'dbo.ddl_structure_values') AND name=N'CK_new'")
                 .SingleAsync();
-            failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [builder.Operations[1]]));
+
+            failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+                context,
+                [builder.Operations[1]],
+                cancellationToken: CancellationToken.None));
+
             await transaction.RollbackAsync();
         }
 
-        var preserved = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.ddl_structure_values WHERE Value IN(-2147483648,2147483647);");
-        var source = await ScalarIntAsync(connectionString,
+        var preserved = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.ddl_structure_values WHERE Value IN(-2147483648,2147483647);",
+            cancellationToken: CancellationToken.None);
+
+        var source = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.ddl_structure_values') "
-            + "AND name=N'Value' AND system_type_id=56;");
+            + "AND name=N'Value' AND system_type_id=56;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(disabled ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.RuntimeValidationRequired,
+        Assert.Equal(
+            disabled
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.RuntimeValidationRequired,
             report.Status);
-        Assert.Equal(disabled ? 0 : 1, observedDependency);
+
+        Assert.Equal(
+            disabled
+                ? 0
+                : 1,
+            observedDependency);
+
         if (disabled)
         {
             Assert.Equal(SafeMigrationAction.Repair, report.Assessments[1].Action);
@@ -86,9 +128,16 @@ public sealed class SqlServerSafeMigrationDdlStructuralDeferralIntegrationTests 
         }
         else
         {
-            AssertDdlDeferredOrigin(report.Assessments[1], "projected_ddl_trigger_structure_unknown", 0,
-                typeof(SafeMigrationOperation), migrationId: null);
-            Assert.Equal(51001, Assert.IsType<SqlException>(failure).Number);
+            AssertDdlDeferredOrigin(
+                report.Assessments[1],
+                "projected_ddl_trigger_structure_unknown",
+                0,
+                typeof(SafeMigrationOperation),
+                migrationId: null);
+
+            Assert.Equal(51001,
+                Assert.IsType<SqlException>(failure)
+                    .Number);
         }
 
         Assert.Equal(2, preserved);
@@ -100,35 +149,60 @@ public sealed class SqlServerSafeMigrationDdlStructuralDeferralIntegrationTests 
     public async Task MatchingIndex_TriggerRemovedMetadataCannotRemainPreflightNoOp()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.ddl_metadata_source(Value int NOT NULL); "
             + "CREATE TABLE dbo.ddl_metadata_other(Value int NOT NULL); "
             + "CREATE INDEX IX_old ON dbo.ddl_metadata_source(Value); "
-            + "CREATE INDEX IX_matching ON dbo.ddl_metadata_other(Value);");
-        await ExecuteSqlAsync(connectionString,
+            + "CREATE INDEX IX_matching ON dbo.ddl_metadata_other(Value);",
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TRIGGER remove_matching_ddl_metadata ON DATABASE FOR DROP_INDEX AS "
             + "IF EVENTDATA().value('(/EVENT_INSTANCE/ObjectName)[1]','nvarchar(128)')=N'IX_old' "
-            + "EXEC sys.sp_executesql N'DROP INDEX IX_matching ON dbo.ddl_metadata_other;';");
+            + "EXEC sys.sp_executesql N'DROP INDEX IX_matching ON dbo.ddl_metadata_other;';",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropIndexIfExists("IX_old", "ddl_metadata_source");
         builder.CreateIndexIfNotExists("IX_matching", "ddl_metadata_other", ["Value"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-ddl-matching-metadata"));
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var remaining = await ScalarIntAsync(connectionString,
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-ddl-matching-metadata"),
+                cancellationToken: CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        var remaining = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ddl_metadata_other') "
-            + "AND name=N'IX_matching';");
-        var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-ddl-matching-metadata-replay"));
+            + "AND name=N'IX_matching';",
+            cancellationToken: CancellationToken.None);
+
+        var replay = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-ddl-matching-metadata-replay"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
-        AssertDdlDeferredOrigin(report.Assessments[1], "projected_ddl_trigger_structure_unknown", 0,
-            typeof(SafeMigrationOperation), migrationId: null);
+        AssertDdlDeferredOrigin(
+            report.Assessments[1],
+            "projected_ddl_trigger_structure_unknown",
+            0,
+            typeof(SafeMigrationOperation),
+            migrationId: null);
+
         Assert.Equal(1, remaining);
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
         Assert.All(replay.Assessments, static assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));

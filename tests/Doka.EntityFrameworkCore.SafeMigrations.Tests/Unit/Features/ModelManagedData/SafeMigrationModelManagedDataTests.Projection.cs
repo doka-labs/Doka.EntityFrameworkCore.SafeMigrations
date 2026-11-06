@@ -51,11 +51,12 @@ public sealed partial class SafeMigrationModelManagedDataTests
         var projection = new SafeMigrationPreflightProjection();
 
         projection.ObserveProviderPostcondition(ProviderRoleTable());
-        projection.ObserveProviderPostcondition(new RenameTableOperation
-        {
-            Name = "roles",
-            NewName = "application_roles",
-        });
+        projection.ObserveProviderPostcondition(
+            new RenameTableOperation
+            {
+                Name = "roles",
+                NewName = "application_roles",
+            });
 
         var projected = projection.Project(
             RoleEnsure("application_roles"),
@@ -87,12 +88,13 @@ public sealed partial class SafeMigrationModelManagedDataTests
         var projection = new SafeMigrationPreflightProjection();
 
         projection.ObserveProviderPostcondition(ProviderRoleTable());
-        projection.ObserveProviderPostcondition(new RenameColumnOperation
-        {
-            Table = "roles",
-            Name = "name",
-            NewName = "display_name",
-        });
+        projection.ObserveProviderPostcondition(
+            new RenameColumnOperation
+            {
+                Table = "roles",
+                Name = "name",
+                NewName = "display_name",
+            });
 
         var ensure = RoleEnsureWithDisplayName();
         var projected = projection.Project(
@@ -125,12 +127,14 @@ public sealed partial class SafeMigrationModelManagedDataTests
     {
         var projection = new SafeMigrationPreflightProjection();
 
-        projection.ObserveProviderPostcondition(new InsertDataOperation
-        {
-            Table = "existing_table",
-            Columns = ["id"],
-            Values = new object[,] { { 1, }, },
-        });
+        projection.ObserveProviderPostcondition(
+            new InsertDataOperation
+            {
+                Table = "existing_table",
+                Columns = ["id"],
+                Values = new object[,] { { 1 } },
+            });
+
         projection.ObserveProviderPostcondition(ProviderRoleTable());
 
         var projected = projection.Project(
@@ -150,7 +154,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
 
         projection.ObserveProviderPostcondition(ProviderRoleTable());
-        projection.ObserveProviderPostcondition(new DropTableOperation { Name = "roles", });
+        projection.ObserveProviderPostcondition(new DropTableOperation { Name = "roles" });
 
         // Act
         var projected = projection.Project(RoleEnsure(), live);
@@ -237,21 +241,21 @@ public sealed partial class SafeMigrationModelManagedDataTests
             {
                 Table = "other_table",
                 Columns = ["id"],
-                Values = new object[,] { { 1, }, },
+                Values = new object[,] { { 1 } },
             },
             new UpdateDataOperation
             {
                 Table = "other_table",
                 KeyColumns = ["id"],
-                KeyValues = new object[,] { { 1, }, },
+                KeyValues = new object[,] { { 1 } },
                 Columns = ["name"],
-                Values = new object[,] { { "changed", }, },
+                Values = new object[,] { { "changed" } },
             },
             new DeleteDataOperation
             {
                 Table = "other_table",
                 KeyColumns = ["id"],
-                KeyValues = new object[,] { { 1, }, },
+                KeyValues = new object[,] { { 1 } },
             },
         ];
 
@@ -429,18 +433,31 @@ public sealed partial class SafeMigrationModelManagedDataTests
     [InlineData("column-rename", "projected_structure_state_unknown")]
     [InlineData("table-drop", "projected_prerequisite_missing")]
     [InlineData("table-rename", "projected_structure_state_unknown")]
-    public void StructuralIdentityChangesInvalidateModelManagedRowProjection(string mutation, string expectedCode)
+    public void StructuralIdentityChangesInvalidateModelManagedRowProjection(
+        string mutation,
+        string expectedCode
+    )
     {
         // Arrange
         MigrationOperation operation = mutation switch
         {
-            "column-drop" => new DropColumnOperation { Table = "roles", Name = "name" },
+            "column-drop" => new DropColumnOperation
+            {
+                Table = "roles",
+                Name = "name",
+            },
             "column-rename" => new RenameColumnOperation
             {
-                Table = "roles", Name = "name", NewName = "display_name",
+                Table = "roles",
+                Name = "name",
+                NewName = "display_name",
             },
             "table-drop" => new DropTableOperation { Name = "roles" },
-            "table-rename" => new RenameTableOperation { Name = "roles", NewName = "renamed_roles" },
+            "table-rename" => new RenameTableOperation
+            {
+                Name = "roles",
+                NewName = "renamed_roles",
+            },
             _ => throw new ArgumentOutOfRangeException(nameof(mutation)),
         };
 
@@ -628,22 +645,25 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
     private static CreateTableOperation ProviderRoleTable()
     {
-        var createTable = new CreateTableOperation { Name = "roles", };
+        var createTable = new CreateTableOperation { Name = "roles" };
 
-        createTable.Columns.Add(new AddColumnOperation
-        {
-            Name = "id",
-            Table = "roles",
-            ClrType = typeof(int),
-            ColumnType = "int",
-        });
-        createTable.Columns.Add(new AddColumnOperation
-        {
-            Name = "name",
-            Table = "roles",
-            ClrType = typeof(string),
-            ColumnType = "varchar(64)",
-        });
+        createTable.Columns.Add(
+            new AddColumnOperation
+            {
+                Name = "id",
+                Table = "roles",
+                ClrType = typeof(int),
+                ColumnType = "int",
+            });
+
+        createTable.Columns.Add(
+            new AddColumnOperation
+            {
+                Name = "name",
+                Table = "roles",
+                ClrType = typeof(string),
+                ColumnType = "varchar(64)",
+            });
 
         return createTable;
     }

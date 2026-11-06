@@ -9,18 +9,29 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Arrange
         var observer = new TypedCheckDropDependencyObserver();
         var projection = TypedCheckDropProjection(observer);
-        var drop = new DropCheckConstraintOperation { Name = "ck_value", Table = "items", };
-        var rename = new SafeMigrationOperation(new RenameColumnIntent("value", "items", "score"),
+        var drop = new DropCheckConstraintOperation
+        {
+            Name = "ck_value",
+            Table = "items",
+        };
+
+        var rename = new SafeMigrationOperation(
+            new RenameColumnIntent("value", "items", "score"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         projection.ObserveProviderPostcondition(drop);
         var renameAnalysis = projection.Project(rename, Live(SafeMigrationObservedState.Matching));
-        var local = projection.Project(new SafeMigrationOperation(new DropCheckConstraintIntent("ck_value", "items"),
-            SafeMigrationPolicy.ThrowIfDifferent), Live(SafeMigrationObservedState.Matching));
+        var local = projection.Project(
+            new SafeMigrationOperation(
+                new DropCheckConstraintIntent("ck_value", "items"),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            Live(SafeMigrationObservedState.Matching));
 
-        var unrelated = projection.Project(new SafeMigrationOperation(
-            new DropCheckConstraintIntent("ck_value", "other"), SafeMigrationPolicy.ThrowIfDifferent),
+        var unrelated = projection.Project(
+            new SafeMigrationOperation(
+                new DropCheckConstraintIntent("ck_value", "other"),
+                SafeMigrationPolicy.ThrowIfDifferent),
             Live(SafeMigrationObservedState.Matching));
 
         var hasColumn = ((ISafeMigrationProjectedColumnSource)projection)
@@ -40,18 +51,28 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void TypedCheckDropWithUnprovenContractRemainsOpaque(bool unknownOwner)
+    public void TypedCheckDropWithUnprovenContractRemainsOpaque(
+        bool unknownOwner
+    )
     {
         // Arrange
         var observer = new TypedCheckDropDependencyObserver();
         var projection = TypedCheckDropProjection(observer);
-        var drop = new DropCheckConstraintOperation { Name = "ck_value", Table = unknownOwner ? null! : "items", };
+        var drop = new DropCheckConstraintOperation
+        {
+            Name = "ck_value",
+            Table = unknownOwner
+                ? null!
+                : "items",
+        };
+
         if (!unknownOwner)
         {
             drop.AddAnnotation("Unproven:ProviderEffect", "opaque");
         }
 
-        var operation = new SafeMigrationOperation(new RenameColumnIntent("value", "items", "score"),
+        var operation = new SafeMigrationOperation(
+            new RenameColumnIntent("value", "items", "score"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -70,10 +91,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     public void TypedCheckDropCannotBypassProviderSideEffectQualification()
     {
         // Arrange
-        var observer = new TypedCheckDropDependencyObserver { RejectAfterDrop = true, };
+        var observer = new TypedCheckDropDependencyObserver { RejectAfterDrop = true };
         var projection = TypedCheckDropProjection(observer);
-        var drop = new DropCheckConstraintOperation { Name = "ck_value", Table = "items", };
-        var operation = new SafeMigrationOperation(new RenameColumnIntent("value", "items", "score"),
+        var drop = new DropCheckConstraintOperation
+        {
+            Name = "ck_value",
+            Table = "items",
+        };
+
+        var operation = new SafeMigrationOperation(
+            new RenameColumnIntent("value", "items", "score"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -86,16 +113,25 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.Equal("ddl_trigger_unproven", analysis.Code);
     }
 
-    private static SafeMigrationPreflightProjection TypedCheckDropProjection(TypedCheckDropDependencyObserver observer)
+    private static SafeMigrationPreflightProjection TypedCheckDropProjection(
+        TypedCheckDropDependencyObserver observer
+    )
     {
-        var projection = new SafeMigrationPreflightProjection(new RenameAbsenceProjection(),
+        var projection = new SafeMigrationPreflightProjection(
+            new RenameAbsenceProjection(),
             projectedDependencyAnalyzer: observer);
 
         foreach (var table in new[] { "items", "other" })
         {
             var check = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_value", table, "value >= 0", null);
-            Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition(table, [Column("value")],
-                checkConstraints: [check]), SafeMigrationTableMode.StrictDefinition));
+            Apply(
+                projection,
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition(
+                        table,
+                        [Column("value")],
+                        checkConstraints: [check]),
+                    SafeMigrationTableMode.StrictDefinition));
         }
 
         return projection;
@@ -107,19 +143,28 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         public bool RejectAfterDrop { get; init; }
 
-        public SafeMigrationProviderAnalysis ValidateProjectedOperation(SafeMigrationOperation operation,
-            SafeMigrationProviderAnalysis projectedAnalysis, ISafeMigrationProjectedColumnSource columns)
+        public SafeMigrationProviderAnalysis ValidateProjectedOperation(
+            SafeMigrationOperation operation,
+            SafeMigrationProviderAnalysis projectedAnalysis,
+            ISafeMigrationProjectedColumnSource columns
+        )
             => RejectAfterDrop && Observed is DropCheckConstraintOperation
-                ? new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
-                    SafeMigrationRepairCapability.None, false, "ddl_trigger_unproven")
+                ? new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.Unsupported,
+                    SafeMigrationRepairCapability.None,
+                    false,
+                    "ddl_trigger_unproven")
                 : projectedAnalysis;
 
         public void ObserveAcceptedOperation(
-            SafeMigrationOperation operation, SafeMigrationProviderAnalysis liveAnalysis,
-            SafeMigrationProviderAnalysis analysis, SafeMigrationDecision decision)
-        {
-        }
+            SafeMigrationOperation operation,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            SafeMigrationProviderAnalysis analysis,
+            SafeMigrationDecision decision
+        ) { }
 
-        public void ObserveProviderOperation(MigrationOperation operation) => Observed = operation;
+        public void ObserveProviderOperation(
+            MigrationOperation operation
+        ) => Observed = operation;
     }
 }

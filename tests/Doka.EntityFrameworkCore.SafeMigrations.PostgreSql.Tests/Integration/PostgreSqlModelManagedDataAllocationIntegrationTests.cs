@@ -19,7 +19,8 @@ public sealed class PostgreSqlModelManagedDataAllocationIntegrationTests : Postg
             connectionString,
             "CREATE TABLE large_model_managed_rows ("
             + "id integer NOT NULL PRIMARY KEY, managed_value character varying(32) NOT NULL);"
-            + BuildPostgreSqlModelManagedInitialRows());
+            + BuildPostgreSqlModelManagedInitialRows(),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         context.Database.SetCommandTimeout(PerformanceFixtureCommandTimeoutSeconds);
@@ -34,23 +35,31 @@ public sealed class PostgreSqlModelManagedDataAllocationIntegrationTests : Postg
             .GetService<IMigrationsSqlGenerator>()
             .Generate(builder.Operations, context.Model);
 
-        var initial = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() => runner.AnalyzeAsync(
+        var initial = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(
+            token => runner.AnalyzeAsync(
                 context,
                 builder.Operations,
                 new SafeMigrationRunOptions("large-model-managed-data"),
-                CancellationToken.None));
+                token),
+            CancellationToken.None);
 
-        var initialExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() =>
-            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
+        var initialExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(
+            token =>
+                ExecuteOperationsAsync(context, builder.Operations, token),
+            CancellationToken.None);
 
-        var replayExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() =>
-            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
+        var replayExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(
+            token =>
+                ExecuteOperationsAsync(context, builder.Operations, token),
+            CancellationToken.None);
 
-        var replay = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() => runner.AnalyzeAsync(
+        var replay = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(
+            token => runner.AnalyzeAsync(
                 context,
                 builder.Operations,
                 new SafeMigrationRunOptions("large-model-managed-data-replay"),
-                CancellationToken.None));
+                token),
+            CancellationToken.None);
 
         ModelManagedDataLargeExecutionEvidence.Write(
             "postgresql",
@@ -65,17 +74,24 @@ public sealed class PostgreSqlModelManagedDataAllocationIntegrationTests : Postg
         expectation.AssertReplayReport(replay.Result);
         Assert.Equal(
             expectation.FinalRowCount,
-            await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM large_model_managed_rows;"));
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM large_model_managed_rows;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             expectation.FinalRowCount,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM large_model_managed_rows WHERE managed_value = 'target';"));
+                "SELECT COUNT(*) FROM large_model_managed_rows WHERE managed_value = 'target';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM large_model_managed_rows WHERE id >= 3000000;"));
+                "SELECT COUNT(*) FROM large_model_managed_rows WHERE id >= 3000000;",
+                cancellationToken: CancellationToken.None));
     }
 
     private static string BuildPostgreSqlModelManagedInitialRows() => string.Join(
@@ -88,5 +104,4 @@ public sealed class PostgreSqlModelManagedDataAllocationIntegrationTests : Postg
                     ", ",
                     batch.Select(row => $"({row.Id.ToString(CultureInfo.InvariantCulture)}, '{row.Value}')"))
                 + ";"));
-
 }

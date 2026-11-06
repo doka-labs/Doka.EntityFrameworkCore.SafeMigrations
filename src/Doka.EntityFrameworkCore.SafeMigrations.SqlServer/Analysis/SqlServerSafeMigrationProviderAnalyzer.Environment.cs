@@ -1,3 +1,5 @@
+using System.Data;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
@@ -5,13 +7,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     /// <inheritdoc />
     public async Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
         DbContext context,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ValidateContext(context);
 
         var connection = context.Database.GetDbConnection();
-        var openedHere = connection.State != System.Data.ConnectionState.Open;
+        var openedHere = connection.State != ConnectionState.Open;
         if (openedHere)
         {
             await connection.OpenAsync(cancellationToken);
@@ -52,6 +54,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             + "CASE WHEN ("
             + SqlServerSafeMigrationCatalogSqlBuilder.ExpressionDependencyReadPermission
             + ") THEN 1 ELSE 0 END, "
+
             // WHY: One invocation-local bit covers SQL/CLR triggers on any
             // table or view, including indirectly modified cascade targets.
             // Complete database visibility is already mandatory above.
@@ -72,8 +75,12 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             !reader.IsDBNull(2) && reader.GetInt32(2) == 1,
             !reader.IsDBNull(3) && reader.GetInt32(3) == 1,
             reader.GetString(1),
-            reader.IsDBNull(4) ? null : reader.GetInt32(4),
-            reader.IsDBNull(5) ? null : reader.GetString(5))
+            reader.IsDBNull(4)
+                ? null
+                : reader.GetInt32(4),
+            reader.IsDBNull(5)
+                ? null
+                : reader.GetString(5))
         {
             DdlRowEffectRisk = reader.IsDBNull(6)
                 ? SqlServerDdlRowEffectRisk.VisibilityUnproven
@@ -272,7 +279,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             for (var index = 0; index < references.Count; index++)
             {
                 if (!References[index]
-                        .Equals(references[index]))
+                    .Equals(references[index]))
                 {
                     return false;
                 }

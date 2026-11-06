@@ -10,7 +10,9 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
     [InlineData("2147483648")]
     [InlineData("1.234567890123456789e30")]
     [InlineData("0.000e0")]
-    public void CapturedNumericRenderingPreservesNativeLexeme(string sql)
+    public void CapturedNumericRenderingPreservesNativeLexeme(
+        string sql
+    )
     {
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = new SqliteSafeMigrationTestContext(connection, registerSafeMigrations: false);
@@ -45,8 +47,14 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
         using var context = new SqliteSafeMigrationTestContext(connection, registerSafeMigrations: false);
         var renderer = CreateRenderer(context);
         var expression = SafeMigrationSql.Case(
-            [new(SafeMigrationSql.IsNull(SafeMigrationSql.Identifier("value")), SafeMigrationSql.Literal(0)),
-                new(SafeMigrationSql.IsNotNull(SafeMigrationSql.Identifier("other")), SafeMigrationSql.Literal(1))]);
+        [
+            new SafeMigrationSqlCaseWhenClause(
+                SafeMigrationSql.IsNull(SafeMigrationSql.Identifier("value")),
+                SafeMigrationSql.Literal(0)),
+            new SafeMigrationSqlCaseWhenClause(
+                SafeMigrationSql.IsNotNull(SafeMigrationSql.Identifier("other")),
+                SafeMigrationSql.Literal(1)),
+        ]);
 
         var sql = renderer.Render(expression);
 
@@ -69,9 +77,18 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
         var renderer = CreateRenderer(context);
         var unsupported = SafeMigrationSql.ProviderFragment("foreign", "x");
         var expression = SafeMigrationSql.Case(
-            [new(role == 0 ? unsupported : SafeMigrationSql.Literal(true),
-                role == 1 ? unsupported : SafeMigrationSql.Literal(1))],
-            role == 2 ? unsupported : SafeMigrationSql.Literal(0));
+            [
+                new SafeMigrationSqlCaseWhenClause(
+                    role == 0
+                        ? unsupported
+                        : SafeMigrationSql.Literal(true),
+                    role == 1
+                        ? unsupported
+                        : SafeMigrationSql.Literal(1)),
+            ],
+            role == 2
+                ? unsupported
+                : SafeMigrationSql.Literal(0));
 
         var feature = renderer.GetUnsupportedFeature(expression);
 

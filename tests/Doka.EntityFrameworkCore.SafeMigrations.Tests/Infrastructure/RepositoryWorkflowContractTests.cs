@@ -10,32 +10,6 @@ public sealed class RepositoryWorkflowContractTests
         "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0";
 
     /// <summary>
-    /// Keeps every benchmark budget informational without suppressing execution or qualification failures.
-    /// </summary>
-    [Fact]
-    public void QualityWorkflow_ReportsAllBenchmarkBudgetsWithoutIgnoringFailures()
-    {
-        var workflowPath = Path.Combine(RepositoryRoot(), ".github", "workflows", "quality-gates.yml");
-        var providers = new[] { "core", "mysql", "postgresql", "sqlite", "sqlserver" };
-
-        var workflow = File.ReadAllText(workflowPath);
-
-        Assert.Equal(providers.Length, Regex.Count(workflow, "--report-only"));
-
-        foreach (var provider in providers)
-        {
-            Assert.Contains($"--report-only --output artifacts/performance/{provider}-results.json",
-                workflow, StringComparison.Ordinal);
-        }
-
-        Assert.DoesNotContain("continue-on-error:", workflow, StringComparison.Ordinal);
-        Assert.Contains("- name: Core tests", workflow, StringComparison.Ordinal);
-        Assert.Contains("- name: Qualify reproducible packages", workflow, StringComparison.Ordinal);
-        Assert.Contains("- name: Generate and validate SPDX SBOM", workflow, StringComparison.Ordinal);
-        Assert.Contains("artifacts/performance", workflow, StringComparison.Ordinal);
-    }
-
-    /// <summary>
     /// Keeps untrusted restore separate from snapshot writes and binds verdicts to the PR head.
     /// </summary>
     [Fact]
@@ -48,13 +22,16 @@ public sealed class RepositoryWorkflowContractTests
         var restore = File.ReadAllText(Path.Combine(workflowDirectory, "dependency-snapshot.yml"));
 
         // Act
-        var submit = receiver.Split("  submit-nuget:\n", StringSplitOptions.None)[1]
-            .Split("  review:\n", StringSplitOptions.None)[0];
+        var submit = receiver
+            .Split("  submit-nuget:\n")[1]
+            .Split("  review:\n")[0];
 
-        var review = receiver.Split("  review:\n", StringSplitOptions.None)[1];
+        var review = receiver
+            .Split("  review:\n")[1];
 
         // Assert
         Assert.Contains("pull_request:", capture, StringComparison.Ordinal);
+
         // WHY: Registered release-line admission belongs to the trusted receiver, not a main-only trigger.
         Assert.DoesNotContain("branches:", capture, StringComparison.Ordinal);
         Assert.DoesNotContain("branches-ignore:", capture, StringComparison.Ordinal);
@@ -73,7 +50,9 @@ public sealed class RepositoryWorkflowContractTests
         Assert.Contains("artifact-ids: ${{ matrix.artifact_id }}", submit, StringComparison.Ordinal);
         Assert.Contains("prepare-dependency-snapshot-inputs.py receive", submit, StringComparison.Ordinal);
         Assert.Contains("uses: ./.github/workflows/dependency-snapshot.yml", capture, StringComparison.Ordinal);
-        Assert.DoesNotContain("uses: ./.github/workflows/dependency-snapshot.yml", receiver,
+        Assert.DoesNotContain(
+            "uses: ./.github/workflows/dependency-snapshot.yml",
+            receiver,
             StringComparison.Ordinal);
 
         Assert.Contains("cache-mode: none", capture, StringComparison.Ordinal);
@@ -128,10 +107,12 @@ public sealed class RepositoryWorkflowContractTests
         var receiver = File.ReadAllText(Path.Combine(workflowDirectory, "dependency-review-results.yml"));
 
         // Act
-        var quality = ci.Split("  quality-gates:\n", StringSplitOptions.None)[1]
-            .Split("  dependency-review-startup:\n", StringSplitOptions.None)[0];
+        var quality = ci
+            .Split("  quality-gates:\n")[1]
+            .Split("  dependency-review-startup:\n")[0];
 
-        var startup = ci.Split("  dependency-review-startup:\n", StringSplitOptions.None)[1];
+        var startup = ci
+            .Split("  dependency-review-startup:\n")[1];
 
         // Assert
         Assert.Contains("workflow_dispatch:", ci, StringComparison.Ordinal);
@@ -143,10 +124,14 @@ public sealed class RepositoryWorkflowContractTests
         Assert.Contains("name: Dependency review startup", startup, StringComparison.Ordinal);
         Assert.Contains("github.event_name == 'workflow_dispatch'", startup, StringComparison.Ordinal);
         Assert.Contains("inputs.dependency-review-pr != ''", startup, StringComparison.Ordinal);
-        Assert.Contains("uses: ./.github/workflows/dependency-review-results.yml", startup,
+        Assert.Contains(
+            "uses: ./.github/workflows/dependency-review-results.yml",
+            startup,
             StringComparison.Ordinal);
 
-        Assert.Contains("dependency-review-pr: ${{ inputs.dependency-review-pr }}", startup,
+        Assert.Contains(
+            "dependency-review-pr: ${{ inputs.dependency-review-pr }}",
+            startup,
             StringComparison.Ordinal);
 
         Assert.Equal(2, Regex.Count(receiver, "DEPENDENCY_REVIEW_PR: "));
@@ -217,20 +202,33 @@ public sealed class RepositoryWorkflowContractTests
     /// <param name="sourceFile">The producer path relative to that package.</param>
     /// <param name="code">The stable emitted code whose documentation must not drift.</param>
     [Theory]
-    [InlineData("PostgreSql", "Analysis/PostgreSqlSafeMigrationProviderAnalyzer.GeneratedCaseTypes.cs",
+    [InlineData(
+        "PostgreSql",
+        "Analysis/PostgreSqlSafeMigrationProviderAnalyzer.GeneratedCaseTypes.cs",
         "projected_generated_case_target_occupied")]
-    [InlineData("PostgreSql", "Analysis/PostgreSqlSafeMigrationProviderAnalyzer.GeneratedCaseTypes.cs",
+    [InlineData(
+        "PostgreSql",
+        "Analysis/PostgreSqlSafeMigrationProviderAnalyzer.GeneratedCaseTypes.cs",
         "projected_generated_case_binding_unproven")]
-    [InlineData("MySql", "Features/Columns/MySqlGeneratedColumnExpressionCapability.cs",
+    [InlineData(
+        "MySql",
+        "Features/Columns/MySqlGeneratedColumnExpressionCapability.cs",
         "generated_column_nondeterministic_expression")]
-    [InlineData("SqlServer", "Features/Columns/SqlServerSafeMigrationCatalogSqlBuilder.ComputedColumns.cs",
+    [InlineData(
+        "SqlServer",
+        "Features/Columns/SqlServerSafeMigrationCatalogSqlBuilder.ComputedColumns.cs",
         "computed_expression_unproven")]
     public void FailureCodeRunbook_CoversEmittedGeneratedExpressionCodesAcrossProviders(
-        string provider, string sourceFile, string code)
+        string provider,
+        string sourceFile,
+        string code
+    )
     {
         // Arrange
         var repositoryRoot = RepositoryRoot();
-        var sourcePath = Path.Combine(repositoryRoot, "src",
+        var sourcePath = Path.Combine(
+            repositoryRoot,
+            "src",
             "Doka.EntityFrameworkCore.SafeMigrations." + provider,
             sourceFile.Replace('/', Path.DirectorySeparatorChar));
 
@@ -238,7 +236,10 @@ public sealed class RepositoryWorkflowContractTests
         var runbook = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "runbooks", "failure-codes.md"));
 
         // Act
-        var emittedCodes = Regex.Matches(source, "\"(?<code>" + Regex.Escape(code) + ")\"",
+        var emittedCodes = Regex
+            .Matches(
+                source,
+                "\"(?<code>" + Regex.Escape(code) + ")\"",
                 RegexOptions.CultureInvariant)
             .Select(static match => match.Groups["code"].Value)
             .Distinct(StringComparer.Ordinal)

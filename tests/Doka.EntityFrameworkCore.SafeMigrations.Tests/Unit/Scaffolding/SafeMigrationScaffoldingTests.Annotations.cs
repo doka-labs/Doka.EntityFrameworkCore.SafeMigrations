@@ -40,7 +40,9 @@ public sealed partial class SafeMigrationScaffoldingTests
         Assert.IsType<AddColumnOperation>(secondStandard);
         Assert.Equal(TestValueGenerationStrategy.Identity, standard["Test:ValueGenerationStrategy"]);
         Assert.Equal([48, 24], restoredPrefixLengths[0]);
-        Assert.Equal([12, 24], Assert.IsType<int[][]>(secondStandard["Test:PrefixLengths"])[0]);
+        Assert.Equal([12, 24],
+            Assert
+                .IsType<int[][]>(secondStandard["Test:PrefixLengths"])[0]);
     }
 
     /// <summary>Rejects mutable annotation values that cannot be snapshotted safely.</summary>
@@ -132,7 +134,10 @@ public sealed partial class SafeMigrationScaffoldingTests
     )
     {
         // Arrange
-        var value = nonZeroBased ? Array.CreateInstance(typeof(int), [1], [1]) : new int[1, 1];
+        var value = nonZeroBased
+            ? Array.CreateInstance(typeof(int), [1], [1])
+            : new int[1, 1];
+
         var operation = new AddColumnOperation
         {
             Name = "id",
@@ -188,8 +193,22 @@ public sealed partial class SafeMigrationScaffoldingTests
         "double" => 1.75d,
         "date" => new DateOnly(2026, 8, 27),
         "time" => new TimeOnly(12, 34, 56),
-        "datetime" => new DateTime(2026, 8, 27, 12, 34, 56, DateTimeKind.Utc),
-        "datetimeoffset" => new DateTimeOffset(2026, 8, 27, 12, 34, 56, TimeSpan.FromHours(2)),
+        "datetime" => new DateTime(
+            2026,
+            8,
+            27,
+            12,
+            34,
+            56,
+            DateTimeKind.Utc),
+        "datetimeoffset" => new DateTimeOffset(
+            2026,
+            8,
+            27,
+            12,
+            34,
+            56,
+            TimeSpan.FromHours(2)),
         "timespan" => TimeSpan.FromMinutes(5),
         "guid" => Guid.Parse("1ea905b8-9114-46f1-811d-9db2ba394f31"),
         "bytes" => new byte[] { 1, 2, 3 },

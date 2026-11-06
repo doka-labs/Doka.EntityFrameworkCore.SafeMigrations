@@ -13,16 +13,27 @@ public sealed class SqlServerIdentifierCollisionAllocationTests
     )
     {
         // Arrange
-        var cases = Enum.GetValues<SqlServerIdentifierScope>().Select(scope =>
-            Enumerable.Repeat(new SqlServerIdentifierReference(scope, "dbo", "items", "same_name"), count)
-                .ToArray()).ToArray();
+        var cases = Enum
+            .GetValues<SqlServerIdentifierScope>()
+            .Select(scope =>
+                Enumerable
+                    .Repeat(new SqlServerIdentifierReference(scope, "dbo", "items", "same_name"), count)
+                    .ToArray())
+            .ToArray();
 
-        var expected = cases.Select(OriginalHasRepeatedScope).ToArray();
-        var snapshots = cases.Select(static references => references.ToArray()).ToArray();
+        var expected = cases
+            .Select(OriginalHasRepeatedScope)
+            .ToArray();
+
+        var snapshots = cases
+            .Select(static references => references.ToArray())
+            .ToArray();
 
         // Act
-        var actual = cases.Select(static references =>
-            SqlServerIdentifierContract.HasRepeatedPhysicalScope(references)).ToArray();
+        var actual = cases
+            .Select(static references =>
+                SqlServerIdentifierContract.HasRepeatedPhysicalScope(references))
+            .ToArray();
 
         // Assert
         Assert.Equal(expected, actual);
@@ -53,17 +64,24 @@ public sealed class SqlServerIdentifierCollisionAllocationTests
     )
     {
         // Arrange
-        var cases = Enum.GetValues<SqlServerIdentifierScope>().Select(scope => new[]
-        {
-            new SqlServerIdentifierReference(scope, firstSchema, firstTable, "first_name"),
-            new SqlServerIdentifierReference(scope, secondSchema, secondTable, "SECOND_NAME"),
-        }).ToArray();
+        var cases = Enum
+            .GetValues<SqlServerIdentifierScope>()
+            .Select(scope => new[]
+            {
+                new SqlServerIdentifierReference(scope, firstSchema, firstTable, "first_name"),
+                new SqlServerIdentifierReference(scope, secondSchema, secondTable, "SECOND_NAME"),
+            })
+            .ToArray();
 
-        var expected = cases.Select(OriginalHasRepeatedScope).ToArray();
+        var expected = cases
+            .Select(OriginalHasRepeatedScope)
+            .ToArray();
 
         // Act
-        var actual = cases.Select(static references =>
-            SqlServerIdentifierContract.HasRepeatedPhysicalScope(references)).ToArray();
+        var actual = cases
+            .Select(static references =>
+                SqlServerIdentifierContract.HasRepeatedPhysicalScope(references))
+            .ToArray();
 
         // Assert
         Assert.Equal(expected, actual);
@@ -75,8 +93,11 @@ public sealed class SqlServerIdentifierCollisionAllocationTests
     public void RepeatedScope_DifferentKindsRemainDistinct()
     {
         // Arrange
-        var references = Enum.GetValues<SqlServerIdentifierScope>().Select(static scope =>
-            new SqlServerIdentifierReference(scope, "dbo", null, "shared_name")).ToArray();
+        var references = Enum
+            .GetValues<SqlServerIdentifierScope>()
+            .Select(static scope =>
+                new SqlServerIdentifierReference(scope, "dbo", null, "shared_name"))
+            .ToArray();
 
         var expected = OriginalHasRepeatedScope(references);
 
@@ -98,9 +119,14 @@ public sealed class SqlServerIdentifierCollisionAllocationTests
     )
     {
         // Arrange
-        var references = Enumerable.Range(0, 1000).Select(static index => new SqlServerIdentifierReference(
-            SqlServerIdentifierScope.Column, "schema_" + index.ToString(CultureInfo.InvariantCulture),
-            "items", "name_" + index.ToString(CultureInfo.InvariantCulture))).ToArray();
+        var references = Enumerable
+            .Range(0, 1000)
+            .Select(static index => new SqlServerIdentifierReference(
+                SqlServerIdentifierScope.Column,
+                "schema_" + index.ToString(CultureInfo.InvariantCulture),
+                "items",
+                "name_" + index.ToString(CultureInfo.InvariantCulture)))
+            .ToArray();
 
         if (repeatAt >= 0)
         {
@@ -139,23 +165,24 @@ public sealed class SqlServerIdentifierCollisionAllocationTests
         // Arrange
         var invalid = malformedKind switch
         {
-            0 => "invalid\0name",
-            1 => "unpaired\uD800",
-            2 => "unpaired\uDC00",
-            _ => new string('x', 129),
+            0 => "invalid\0name", 1 => "unpaired\uD800", 2 => "unpaired\uDC00", _ => new string('x', 129),
         };
 
         var first = new SqlServerIdentifierReference(SqlServerIdentifierScope.Column, "dbo", "items", "first");
         var second = first with { Name = "second" };
         var invalidReferences = new[]
         {
-            first with { Name = invalid },
-            first with { Schema = invalid },
-            first with { Table = invalid },
+            first with { Name = invalid }, first with { Schema = invalid }, first with { Table = invalid },
         };
 
-        var cases = invalidReferences.Select(reference => new[] { first, second, reference }).ToArray();
-        var snapshots = cases.Select(static references => references.ToArray()).ToArray();
+        var cases = invalidReferences
+            .Select(reference => new[] { first, second, reference })
+            .ToArray();
+
+        var snapshots = cases
+            .Select(static references => references.ToArray())
+            .ToArray();
+
         var expected = EndGuardReference(throwOnCollision, false);
 
         // Act
@@ -163,17 +190,21 @@ public sealed class SqlServerIdentifierCollisionAllocationTests
         foreach (var references in cases)
         {
             var commands = SqlServerIdentifierContract.BuildCollisionGuardCommands(
-                references, throwOnCollision, out var temporaryTable);
+                references,
+                throwOnCollision,
+                out var temporaryTable);
 
             results.Add((commands, temporaryTable));
         }
 
         // Assert
-        Assert.All(results, result =>
-        {
-            Assert.Null(result.TemporaryTable);
-            Assert.Equal(expected, Assert.Single(result.Commands));
-        });
+        Assert.All(
+            results,
+            result =>
+            {
+                Assert.Null(result.TemporaryTable);
+                Assert.Equal(expected, Assert.Single(result.Commands));
+            });
 
         for (var index = 0; index < cases.Length; index++)
         {
@@ -192,14 +223,19 @@ public sealed class SqlServerIdentifierCollisionAllocationTests
     )
     {
         // Arrange
-        var references = Enum.GetValues<SqlServerIdentifierScope>().Select(static scope =>
-            new SqlServerIdentifierReference(scope, "dbo", null, "O'Brien \uD83D\uDE80")).ToArray();
+        var references = Enum
+            .GetValues<SqlServerIdentifierScope>()
+            .Select(static scope =>
+                new SqlServerIdentifierReference(scope, "dbo", null, "O'Brien \uD83D\uDE80"))
+            .ToArray();
 
         var expected = EndGuardReference(throwOnCollision, true);
 
         // Act
         var commands = SqlServerIdentifierContract.BuildCollisionGuardCommands(
-            references, throwOnCollision, out var temporaryTable);
+            references,
+            throwOnCollision,
+            out var temporaryTable);
 
         // Assert
         Assert.False(OriginalHasRepeatedScope(references));
@@ -218,21 +254,35 @@ public sealed class SqlServerIdentifierCollisionAllocationTests
     )
     {
         // Arrange
-        var references = Enumerable.Range(0, 1000).Select(static index => new SqlServerIdentifierReference(
-            SqlServerIdentifierScope.Column, "dbo", "O'Brien \uD83D\uDE80",
-            "name_" + index.ToString(CultureInfo.InvariantCulture))).ToArray();
+        var references = Enumerable
+            .Range(0, 1000)
+            .Select(static index => new SqlServerIdentifierReference(
+                SqlServerIdentifierScope.Column,
+                "dbo",
+                "O'Brien \uD83D\uDE80",
+                "name_" + index.ToString(CultureInfo.InvariantCulture)))
+            .ToArray();
 
         references[1] = references[0];
         var snapshot = references.ToArray();
 
         // Act
         var commands = SqlServerIdentifierContract.BuildCollisionGuardCommands(
-            references, throwOnCollision, out var temporaryTable);
+            references,
+            throwOnCollision,
+            out var temporaryTable);
 
-        var expectedInserts = references.Chunk(512).Select(chunk => "INSERT INTO " + temporaryTable
-            + " VALUES " + string.Join(", ", chunk.Select(RowReference)) + ";").ToArray();
+        var expectedInserts = references
+            .Chunk(512)
+            .Select(chunk => "INSERT INTO "
+                + temporaryTable
+                + " VALUES "
+                + string.Join(", ", chunk.Select(RowReference))
+                + ";")
+            .ToArray();
 
-        var actualInserts = commands.Where(static sql => sql.StartsWith("INSERT INTO ", StringComparison.Ordinal))
+        var actualInserts = commands
+            .Where(static sql => sql.StartsWith("INSERT INTO ", StringComparison.Ordinal))
             .ToArray();
 
         var lastCommand = commands[commands.Count - 1];
@@ -253,13 +303,18 @@ public sealed class SqlServerIdentifierCollisionAllocationTests
     {
         // Arrange
         const int renderCount = 64;
-        var references = Enumerable.Range(0, 1000).Select(static index => new SqlServerIdentifierReference(
-            SqlServerIdentifierScope.Column, "dbo", "items",
-            "name_" + index.ToString(CultureInfo.InvariantCulture))).ToArray();
+        var references = Enumerable
+            .Range(0, 1000)
+            .Select(static index => new SqlServerIdentifierReference(
+                SqlServerIdentifierScope.Column,
+                "dbo",
+                "items",
+                "name_" + index.ToString(CultureInfo.InvariantCulture)))
+            .ToArray();
 
         var snapshot = references.ToArray();
-        Func<bool> current = () => SqlServerIdentifierContract.HasRepeatedPhysicalScope(references);
-        Func<bool> original = () => OriginalHasRepeatedScope(references);
+        var current = () => SqlServerIdentifierContract.HasRepeatedPhysicalScope(references);
+        var original = () => OriginalHasRepeatedScope(references);
 
         // WHY: Both paths receive the same completed input. Warm the exact
         // grouping and scan paths before measuring per-thread allocations;
@@ -289,14 +344,19 @@ public sealed class SqlServerIdentifierCollisionAllocationTests
         var failure = Record.Exception(() => SqlServerIdentifierContract.HasRepeatedPhysicalScope(references!));
 
         // Assert
-        Assert.Equal("references", Assert.IsType<ArgumentNullException>(failure).ParamName);
+        Assert.Equal("references",
+            Assert.IsType<ArgumentNullException>(failure)
+                .ParamName);
     }
 
     /// <summary>Retains the exact former GroupBy/Skip predicate as an independent detection oracle.</summary>
     private static bool OriginalHasRepeatedScope(
         SqlServerIdentifierReference[] references
-    ) => references.GroupBy(static reference => (reference.Scope, reference.Schema, reference.Table))
-        .Any(static group => group.Skip(1).Any());
+    ) => references
+        .GroupBy(static reference => (reference.Scope, reference.Schema, reference.Table))
+        .Any(static group => group
+            .Skip(1)
+            .Any());
 
     /// <summary>
     /// Retains the original SQL-free proof and throw templates independently of the production helper.
@@ -304,7 +364,11 @@ public sealed class SqlServerIdentifierCollisionAllocationTests
     private static string EndGuardReference(
         bool throwOnCollision,
         bool safe
-    ) => "DECLARE @doka_identity_safe int = " + (safe ? "1" : "0") + "; "
+    ) => "DECLARE @doka_identity_safe int = "
+        + (safe
+            ? "1"
+            : "0")
+        + "; "
         + (throwOnCollision
             ? "IF @doka_identity_safe <> 1 THROW 51002, N'doka_sm_unsupported: SafeMigrations rejected the "
             + "migration identifier contract; owner=<unavailable>; reason=Invalid or catalog-colliding identifiers "
@@ -314,9 +378,15 @@ public sealed class SqlServerIdentifierCollisionAllocationTests
     /// <summary>Renders one complete original reference row without relying on production SQL helpers.</summary>
     private static string RowReference(
         SqlServerIdentifierReference reference
-    ) => "(" + ((byte)reference.Scope).ToString(CultureInfo.InvariantCulture) + ", "
-        + LiteralReference(reference.Schema) + ", " + LiteralReference(reference.Table ?? string.Empty) + ", "
-        + LiteralReference(reference.Name) + ")";
+    ) => "("
+        + ((byte)reference.Scope).ToString(CultureInfo.InvariantCulture)
+        + ", "
+        + LiteralReference(reference.Schema)
+        + ", "
+        + LiteralReference(reference.Table ?? string.Empty)
+        + ", "
+        + LiteralReference(reference.Name)
+        + ")";
 
     /// <summary>Retains exact ordinal literal quoting for the independent complete-row oracle.</summary>
     private static string LiteralReference(

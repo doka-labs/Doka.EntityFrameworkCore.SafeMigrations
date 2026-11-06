@@ -49,7 +49,10 @@ public static partial class SafeMigrationContractFingerprint
             else
             {
                 writer.Add("provider-owned");
-                writer.Add(operation.GetType().FullName ?? operation.GetType().Name);
+                writer.Add(operation.GetType()
+                        .FullName
+                    ?? operation.GetType()
+                        .Name);
             }
         }
 
@@ -152,7 +155,8 @@ public static partial class SafeMigrationContractFingerprint
             default:
                 throw new ArgumentOutOfRangeException(
                     nameof(intent),
-                    intent.GetType().FullName,
+                    intent.GetType()
+                        .FullName,
                     "Unknown SafeMigrations intent type.");
         }
     }

@@ -55,7 +55,10 @@ public sealed class SqliteSqlIdentifierScannerTests
     [InlineData("other--\r'\n << source", true)]
     [InlineData("other/* source */ << 1", false)]
     [InlineData("other-- source\n << 1", false)]
-    public void AdjacentCommentAfterIdentifierCannotHideLaterSource(string sql, bool expected)
+    public void AdjacentCommentAfterIdentifierCannotHideLaterSource(
+        string sql,
+        bool expected
+    )
     {
         // Arrange
         const string source = "source";
@@ -96,7 +99,10 @@ public sealed class SqliteSqlIdentifierScannerTests
     [InlineData("source /* \u00A0operand */ + 1", false)]
     [InlineData("source -- \u2003operand\n + 1", false)]
     [InlineData("source \t\n\f\r + 1", false)]
-    public void NativeWhitespaceCompatibilityRetainsQuotedAndCommentRoles(string sql, bool expected)
+    public void NativeWhitespaceCompatibilityRetainsQuotedAndCommentRoles(
+        string sql,
+        bool expected
+    )
     {
         // Arrange
         var native = sql;

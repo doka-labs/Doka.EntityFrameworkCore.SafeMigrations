@@ -44,7 +44,9 @@ internal static class ModelManagedDataLargeExecutionContract
         {
             yield return new ModelManagedDataInitialRow(
                 UpdateKeyOffset + ordinal,
-                ordinal % 2 == 0 ? SourceValue : TargetValue);
+                ordinal % 2 == 0
+                    ? SourceValue
+                    : TargetValue);
         }
 
         for (var ordinal = 0; ordinal < DeleteRowCount; ordinal += 2)
@@ -224,11 +226,15 @@ internal sealed class ModelManagedDataLargeExecutionExpectation
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(OperationCount, report.Assessments.Count);
-        Assert.All(report.Assessments, static assessment =>
-            Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
+        Assert.All(
+            report.Assessments,
+            static assessment =>
+                Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
+
         Assert.Contains(
             report.Assessments,
             static assessment => assessment.ObservedState == SafeMigrationObservedState.Matching);
+
         Assert.Contains(
             report.Assessments,
             static assessment => assessment.ObservedState == SafeMigrationObservedState.Missing);
@@ -252,21 +258,30 @@ internal readonly record struct ModelManagedDataMeasuredResult<T>(
 
 internal static class ModelManagedDataLargeExecutionEvidence
 {
-    private static readonly System.Text.Json.JsonSerializerOptions s_serializerOptions = new()
+    private static readonly JsonSerializerOptions s_serializerOptions = new()
     {
         WriteIndented = true,
     };
 
+    /// <summary>Measures one asynchronous action while retaining its result and caller cancellation.</summary>
+    /// <typeparam name="T">The action's functional result.</typeparam>
+    /// <param name="action">The measured operation receiving the caller token.</param>
+    /// <param name="cancellationToken">The caller token, checked before measurement and passed unchanged.</param>
+    /// <returns>The functional result and informational measurement.</returns>
     public static async Task<ModelManagedDataMeasuredResult<T>> MeasureAsync<T>(
-        Func<Task<T>> action
+        Func<CancellationToken, Task<T>> action,
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(action);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
         var started = Stopwatch.GetTimestamp();
-        var result = await action();
-        var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        var result = await action(cancellationToken);
+        var elapsed = Stopwatch.GetElapsedTime(started)
+            .TotalMilliseconds;
+
         var allocated = GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore;
 
         return new ModelManagedDataMeasuredResult<T>(
@@ -274,18 +289,25 @@ internal static class ModelManagedDataLargeExecutionEvidence
             new ModelManagedDataPhaseMeasurement(elapsed, allocated));
     }
 
+    /// <summary>Measures one asynchronous operation without making its duration a correctness gate.</summary>
+    /// <param name="action">The measured operation receiving the caller token.</param>
+    /// <param name="cancellationToken">The caller token, checked before measurement and passed unchanged.</param>
+    /// <returns>The informational phase measurement.</returns>
     public static async Task<ModelManagedDataPhaseMeasurement> MeasureAsync(
-        Func<Task> action
+        Func<CancellationToken, Task> action,
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(action);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
         var started = Stopwatch.GetTimestamp();
-        await action();
+        await action(cancellationToken);
 
         return new ModelManagedDataPhaseMeasurement(
-            Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+            Stopwatch.GetElapsedTime(started)
+                .TotalMilliseconds,
             GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore);
     }
 
@@ -326,7 +348,7 @@ internal static class ModelManagedDataLargeExecutionEvidence
             replayAnalysis,
         };
 
-        File.WriteAllBytes(path, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(payload, s_serializerOptions));
+        File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(payload, s_serializerOptions));
     }
 
     private static string FindRepositoryRoot(

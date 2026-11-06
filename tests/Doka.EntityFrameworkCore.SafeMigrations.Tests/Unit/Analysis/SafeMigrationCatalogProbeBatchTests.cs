@@ -1,3 +1,5 @@
+using System.Data.Common;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Checks transport limits and result ownership for independent catalog probes.</summary>
@@ -8,7 +10,9 @@ public sealed class SafeMigrationCatalogProbeBatchTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ProbeStatements_PackWithinBoundsAndPreserveOwnership(bool native)
+    public async Task ProbeStatements_PackWithinBoundsAndPreserveOwnership(
+        bool native
+    )
     {
         // Arrange
         await using var connection = new CatalogProbeTestConnection(native);
@@ -17,20 +21,49 @@ public sealed class SafeMigrationCatalogProbeBatchTests
 
         // Act
         await SafeMigrationCatalogProbeBatch.ReadAsync(
-            connection, 257, 4 * 1024 * 1024, 73, BuildStatement,
+            connection,
+            257,
+            4 * 1024 * 1024,
+            73,
+            BuildStatement,
             (reader, offset, count, token) => ReadStatementAsync(reader, offset, count, values, token),
-            CancellationToken.None, transaction);
+            CancellationToken.None,
+            transaction);
 
         // Assert
-        Assert.Equal(Enumerable.Range(0, 257).Select(index => (index * 2) + 501), values);
-        Assert.Equal(native ? 2 : 0, connection.BatchExecutions);
-        Assert.Equal(native ? 0 : 9, connection.CommandExecutions);
+        Assert.Equal(Enumerable
+                .Range(0, 257)
+                .Select(index => index * 2 + 501),
+            values);
+
+        Assert.Equal(
+            native
+                ? 2
+                : 0,
+            connection.BatchExecutions);
+
+        Assert.Equal(
+            native
+                ? 0
+                : 9,
+            connection.CommandExecutions);
+
         Assert.Equal(9, connection.StatementCount);
         Assert.All(connection.BatchCounts, count => Assert.InRange(count, 1, 8));
         Assert.All(connection.Timeouts, timeout => Assert.Equal(73, timeout));
         Assert.All(connection.Transactions, actual => Assert.Same(transaction, actual));
-        Assert.Equal(native ? 2 : 9, connection.Disposals);
-        Assert.Equal(native ? 2 : 9, connection.ReaderDisposals);
+        Assert.Equal(
+            native
+                ? 2
+                : 9,
+            connection.Disposals);
+
+        Assert.Equal(
+            native
+                ? 2
+                : 9,
+            connection.ReaderDisposals);
+
         Assert.Equal(0, connection.ConnectionDisposals);
         Assert.Equal(0, connection.TransactionDisposals);
     }
@@ -40,7 +73,9 @@ public sealed class SafeMigrationCatalogProbeBatchTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task AggregatePayload_SplitsBeforeExceedingBudget(bool native)
+    public async Task AggregatePayload_SplitsBeforeExceedingBudget(
+        bool native
+    )
     {
         // Arrange
         await using var connection = new CatalogProbeTestConnection(native);
@@ -48,15 +83,28 @@ public sealed class SafeMigrationCatalogProbeBatchTests
 
         // Act
         await SafeMigrationCatalogProbeBatch.ReadAsync(
-            connection, 3, 100, null,
+            connection,
+            3,
+            100,
+            null,
             (command, offset) => BuildStatement(command, offset, count: 1, parameterPayload: 60),
             (reader, offset, count, token) => ReadStatementAsync(reader, offset, count, values, token),
             CancellationToken.None);
 
         // Assert
         Assert.Equal([501, 503, 505], values);
-        Assert.Equal(native ? 3 : 0, connection.BatchExecutions);
-        Assert.Equal(native ? 0 : 3, connection.CommandExecutions);
+        Assert.Equal(
+            native
+                ? 3
+                : 0,
+            connection.BatchExecutions);
+
+        Assert.Equal(
+            native
+                ? 0
+                : 3,
+            connection.CommandExecutions);
+
         Assert.All(connection.BatchCounts, count => Assert.Equal(1, count));
     }
 
@@ -65,7 +113,9 @@ public sealed class SafeMigrationCatalogProbeBatchTests
     [Theory]
     [InlineData(0)]
     [InlineData(100)]
-    public async Task OversizedStatement_RejectsWithoutExecuting(int parameterPayload)
+    public async Task OversizedStatement_RejectsWithoutExecuting(
+        int parameterPayload
+    )
     {
         // Arrange
         await using var connection = new CatalogProbeTestConnection(native: true);
@@ -73,7 +123,10 @@ public sealed class SafeMigrationCatalogProbeBatchTests
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             SafeMigrationCatalogProbeBatch.ReadAsync(
-                connection, 1, 10, null,
+                connection,
+                1,
+                10,
+                null,
                 (command, offset) =>
                 {
                     var statement = BuildStatement(command, offset, count: 1, parameterPayload);
@@ -84,7 +137,8 @@ public sealed class SafeMigrationCatalogProbeBatchTests
 
                     return statement;
                 },
-                static (_, _, _, _) => Task.CompletedTask, CancellationToken.None));
+                static (_, _, _, _) => Task.CompletedTask,
+                CancellationToken.None));
 
         // Assert
         Assert.Contains("operation 501 exceeds a bounded query limit", failure.Message, StringComparison.Ordinal);
@@ -97,7 +151,9 @@ public sealed class SafeMigrationCatalogProbeBatchTests
     [Theory]
     [InlineData(9000)]
     [InlineData(16001)]
-    public async Task ParameterCardinality_BoundsBothStatementsAndBatches(int parametersPerStatement)
+    public async Task ParameterCardinality_BoundsBothStatementsAndBatches(
+        int parametersPerStatement
+    )
     {
         // Arrange
         await using var connection = new CatalogProbeTestConnection(native: true);
@@ -105,7 +161,10 @@ public sealed class SafeMigrationCatalogProbeBatchTests
 
         // Act
         var execution = SafeMigrationCatalogProbeBatch.ReadAsync(
-            connection, 2, 4 * 1024 * 1024, null,
+            connection,
+            2,
+            4 * 1024 * 1024,
+            null,
             (command, offset) =>
             {
                 command.Parameters.AddRange(new object[parametersPerStatement]);
@@ -114,6 +173,7 @@ public sealed class SafeMigrationCatalogProbeBatchTests
             },
             (reader, offset, count, token) => ReadStatementAsync(reader, offset, count, values, token),
             CancellationToken.None);
+
         var failure = await Record.ExceptionAsync(() => execution);
 
         // Assert
@@ -152,7 +212,10 @@ public sealed class SafeMigrationCatalogProbeBatchTests
 
         // Act
         var failure = await Record.ExceptionAsync(() => SafeMigrationCatalogProbeBatch.ReadAsync(
-            connection, 9, 4 * 1024 * 1024, null,
+            connection,
+            9,
+            4 * 1024 * 1024,
+            null,
             (command, offset) =>
             {
                 command.Parameters.AddRange(new object[parameters]);
@@ -160,7 +223,8 @@ public sealed class SafeMigrationCatalogProbeBatchTests
                 return BuildStatement(command, offset, count: 1, parameterPayload: 0);
             },
             (reader, offset, count, token) => ReadStatementAsync(reader, offset, count, values, token),
-            CancellationToken.None, maximumParameters: 2000));
+            CancellationToken.None,
+            maximumParameters: 2000));
 
         // Assert
         if (parameters > 2000)
@@ -171,9 +235,25 @@ public sealed class SafeMigrationCatalogProbeBatchTests
         else
         {
             Assert.Null(failure);
-            Assert.Equal(Enumerable.Range(0, 9).Select(index => (index * 2) + 501), values);
-            Assert.Equal(native ? parameters == 512 ? 3 : 9 : 0, connection.BatchExecutions);
-            Assert.Equal(native ? 0 : 9, connection.CommandExecutions);
+            Assert.Equal(Enumerable
+                    .Range(0, 9)
+                    .Select(index => index * 2 + 501),
+                values);
+
+            Assert.Equal(
+                native
+                    ? parameters == 512
+                        ? 3
+                        : 9
+                    : 0,
+                connection.BatchExecutions);
+
+            Assert.Equal(
+                native
+                    ? 0
+                    : 9,
+                connection.CommandExecutions);
+
             Assert.All(connection.BatchCounts, count => Assert.InRange(count * parameters, 1, 2000));
         }
     }
@@ -184,15 +264,23 @@ public sealed class SafeMigrationCatalogProbeBatchTests
     [InlineData(0)]
     [InlineData(-1)]
     [InlineData(16001)]
-    public async Task InvalidProviderParameterCap_RejectsBeforeTransportCreation(int cap)
+    public async Task InvalidProviderParameterCap_RejectsBeforeTransportCreation(
+        int cap
+    )
     {
         // Arrange
         await using var connection = new CatalogProbeTestConnection(native: true);
 
         // Act
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => SafeMigrationCatalogProbeBatch.ReadAsync(
-            connection, 1, 1024, null, BuildStatement,
-            static (_, _, _, _) => Task.CompletedTask, CancellationToken.None, maximumParameters: cap));
+            connection,
+            1,
+            1024,
+            null,
+            BuildStatement,
+            static (_, _, _, _) => Task.CompletedTask,
+            CancellationToken.None,
+            maximumParameters: cap));
 
         // Assert
         Assert.Equal(0, connection.Disposals);
@@ -208,8 +296,13 @@ public sealed class SafeMigrationCatalogProbeBatchTests
 
         // Act
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => SafeMigrationCatalogProbeBatch.ReadAsync(
-            connection, 1, (4 * 1024 * 1024) + 1, null, BuildStatement,
-            static (_, _, _, _) => Task.CompletedTask, CancellationToken.None));
+            connection,
+            1,
+            4 * 1024 * 1024 + 1,
+            null,
+            BuildStatement,
+            static (_, _, _, _) => Task.CompletedTask,
+            CancellationToken.None));
 
         // Assert
         Assert.Equal(0, connection.Disposals);
@@ -241,7 +334,11 @@ public sealed class SafeMigrationCatalogProbeBatchTests
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             SafeMigrationCatalogProbeBatch.ReadAsync(
-                connection, 64, 4 * 1024 * 1024, null, BuildStatement,
+                connection,
+                64,
+                4 * 1024 * 1024,
+                null,
+                BuildStatement,
                 (reader, offset, count, token) =>
                 {
                     consumedOffsets.Add(offset);
@@ -251,21 +348,41 @@ public sealed class SafeMigrationCatalogProbeBatchTests
                 CancellationToken.None));
 
         // Assert
-        Assert.Equal((fault, native) switch
-        {
-            ("missing-set", _) => "The catalog probe transport returned an inconsistent result-set count."
-                + recoveryGuidance,
-            ("extra-set", true) => "The catalog probe transport returned an invalid result-set count."
-                + recoveryGuidance,
-            ("reversed", _) => "Invalid probe result ordinal.",
-            _ => "Missing probe result row.",
-        }, failure.Message);
-        int[] expectedOffsets = fault == "extra-set" ? [0, 32] : [0];
+        Assert.Equal(
+            (fault, native) switch
+            {
+                ("missing-set", _) => "The catalog probe transport returned an inconsistent result-set count."
+                    + recoveryGuidance,
+                ("extra-set", true) => "The catalog probe transport returned an invalid result-set count."
+                    + recoveryGuidance,
+                ("reversed", _) => "Invalid probe result ordinal.",
+                _ => "Missing probe result row.",
+            },
+            failure.Message);
+
+        int[] expectedOffsets = fault == "extra-set"
+            ? [0, 32]
+            : [0];
 
         Assert.Equal(expectedOffsets, consumedOffsets);
-        Assert.Equal(native ? 1 : 0, connection.BatchExecutions);
-        Assert.Equal(native ? 0 : 1, connection.CommandExecutions);
-        Assert.Equal(native ? 1 : 2, connection.Disposals);
+        Assert.Equal(
+            native
+                ? 1
+                : 0,
+            connection.BatchExecutions);
+
+        Assert.Equal(
+            native
+                ? 0
+                : 1,
+            connection.CommandExecutions);
+
+        Assert.Equal(
+            native
+                ? 1
+                : 2,
+            connection.Disposals);
+
         Assert.Equal(1, connection.ReaderDisposals);
         Assert.Equal(0, connection.ConnectionDisposals);
     }
@@ -292,8 +409,14 @@ public sealed class SafeMigrationCatalogProbeBatchTests
 
         // Act
         var execution = SafeMigrationCatalogProbeBatch.ReadAsync(
-            connection, count, 1024, null, BuildStatement,
-            static (_, _, _, _) => Task.CompletedTask, cancellation.Token);
+            connection,
+            count,
+            1024,
+            null,
+            BuildStatement,
+            static (_, _, _, _) => Task.CompletedTask,
+            cancellation.Token);
+
         if (cancelled)
         {
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
@@ -314,7 +437,9 @@ public sealed class SafeMigrationCatalogProbeBatchTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task CancellationDuringReading_DisposesTheTransport(bool native)
+    public async Task CancellationDuringReading_DisposesTheTransport(
+        bool native
+    )
     {
         // Arrange
         await using var connection = new CatalogProbeTestConnection(native);
@@ -325,21 +450,45 @@ public sealed class SafeMigrationCatalogProbeBatchTests
 
         // Act
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => SafeMigrationCatalogProbeBatch.ReadAsync(
-            connection, 64, 1024 * 1024, null, BuildStatement,
+            connection,
+            64,
+            1024 * 1024,
+            null,
+            BuildStatement,
             async (reader, offset, count, token) =>
             {
                 consumedOffsets.Add(offset);
                 await ReadStatementAsync(reader, offset, count, values, token);
                 cancellation.Cancel();
             },
-            cancellation.Token, transaction));
+            cancellation.Token,
+            transaction));
 
         // Assert
-        Assert.Equal(native ? 1 : 2, connection.Disposals);
-        Assert.Equal(native ? 1 : 0, connection.BatchExecutions);
-        Assert.Equal(native ? 0 : 1, connection.CommandExecutions);
+        Assert.Equal(
+            native
+                ? 1
+                : 2,
+            connection.Disposals);
+
+        Assert.Equal(
+            native
+                ? 1
+                : 0,
+            connection.BatchExecutions);
+
+        Assert.Equal(
+            native
+                ? 0
+                : 1,
+            connection.CommandExecutions);
+
         Assert.Equal([0], consumedOffsets);
-        Assert.Equal(Enumerable.Range(0, 32).Select(index => (index * 2) + 501), values);
+        Assert.Equal(Enumerable
+                .Range(0, 32)
+                .Select(index => index * 2 + 501),
+            values);
+
         Assert.Equal(1, connection.ReaderDisposals);
         Assert.Equal(0, connection.ConnectionDisposals);
         Assert.Equal(0, connection.TransactionDisposals);
@@ -352,7 +501,9 @@ public sealed class SafeMigrationCatalogProbeBatchTests
     [InlineData(-1)]
     [InlineData(33)]
     [InlineData(2)]
-    public async Task InvalidBuilderCount_RejectsBeforeExecution(int count)
+    public async Task InvalidBuilderCount_RejectsBeforeExecution(
+        int count
+    )
     {
         // Arrange
         await using var connection = new CatalogProbeTestConnection(native: true);
@@ -360,14 +511,18 @@ public sealed class SafeMigrationCatalogProbeBatchTests
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             SafeMigrationCatalogProbeBatch.ReadAsync(
-                connection, 1, 1024, null,
+                connection,
+                1,
+                1024,
+                null,
                 (command, _) =>
                 {
                     command.CommandText = "501";
 
                     return new SafeMigrationCatalogProbeStatement(count, ParameterPayloadBytes: 0, FirstOrdinal: 501);
                 },
-                static (_, _, _, _) => Task.CompletedTask, CancellationToken.None));
+                static (_, _, _, _) => Task.CompletedTask,
+                CancellationToken.None));
 
         // Assert
         Assert.Contains("invalid statement", failure.Message, StringComparison.Ordinal);
@@ -387,13 +542,16 @@ public sealed class SafeMigrationCatalogProbeBatchTests
         int parameterPayload
     )
     {
-        command.CommandText = string.Join(",", Enumerable.Range(offset, count).Select(index => (index * 2) + 501));
+        command.CommandText = string.Join(",",
+            Enumerable
+                .Range(offset, count)
+                .Select(index => index * 2 + 501));
 
-        return new SafeMigrationCatalogProbeStatement(count, parameterPayload, (offset * 2) + 501);
+        return new SafeMigrationCatalogProbeStatement(count, parameterPayload, offset * 2 + 501);
     }
 
     private static async Task ReadStatementAsync(
-        System.Data.Common.DbDataReader reader,
+        DbDataReader reader,
         int offset,
         int count,
         List<int> values,
@@ -403,7 +561,8 @@ public sealed class SafeMigrationCatalogProbeBatchTests
         var row = 0;
         while (await reader.ReadAsync(token))
         {
-            if (row >= count || reader.GetInt32(0) != ((offset + row) * 2) + 501)
+            if (row >= count
+                || reader.GetInt32(0) != (offset + row) * 2 + 501)
             {
                 throw new InvalidOperationException("Invalid probe result ordinal.");
             }

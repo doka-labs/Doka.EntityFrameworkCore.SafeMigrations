@@ -6,6 +6,17 @@ internal sealed class CanonicalHashWriter : IDisposable
     private byte[] _buffer = ArrayPool<byte>.Shared.Rent(256);
     private bool _completed;
 
+    public void Dispose()
+    {
+        _hash.Dispose();
+
+        if (_buffer.Length > 0)
+        {
+            ArrayPool<byte>.Shared.Return(_buffer, clearArray: true);
+            _buffer = [];
+        }
+    }
+
     public void Add(
         string? value
     )
@@ -78,7 +89,10 @@ internal sealed class CanonicalHashWriter : IDisposable
 
     public void Add(
         bool value
-    ) => Add(value ? 1 : 0);
+    ) => Add(
+        value
+            ? 1
+            : 0);
 
     public void Add(
         bool? value
@@ -112,17 +126,6 @@ internal sealed class CanonicalHashWriter : IDisposable
 
         _completed = true;
         return Convert.ToHexStringLower(_hash.GetHashAndReset());
-    }
-
-    public void Dispose()
-    {
-        _hash.Dispose();
-
-        if (_buffer.Length > 0)
-        {
-            ArrayPool<byte>.Shared.Return(_buffer, clearArray: true);
-            _buffer = [];
-        }
     }
 
     private void EnsureBufferSize(

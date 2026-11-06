@@ -8,6 +8,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     )
     {
         List<ExpectedColumnDefinition>? computed = null;
+
         // WHY: Scan immutable column definitions without an interface enumerator.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -24,14 +25,21 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         {
             // WHY: Ordinary columns retain the shared aggregate fast path; only
             // computed members need native compiler-owned definition identities.
-            var ordinary = definition.Columns.Where(static column
-                => !SqlServerComputedColumnContract.IsComputed(column)).ToArray();
+            var ordinary = definition
+                .Columns
+                .Where(static column
+                    => !SqlServerComputedColumnContract.IsComputed(column))
+                .ToArray();
 
             var predicates = computed.Select(column => ColumnMatches(definition.Table, definition.Schema, column));
             if (ordinary.Length != 0)
             {
-                predicates = predicates.Prepend(TableColumnsMatch(new ExpectedTableDefinition(
-                    definition.Table, ordinary, definition.Schema)));
+                predicates = predicates.Prepend(
+                    TableColumnsMatch(
+                        new ExpectedTableDefinition(
+                            definition.Table,
+                            ordinary,
+                            definition.Schema)));
             }
 
             return "(" + string.Join(") AND (", predicates) + ")";
@@ -64,29 +72,51 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 sql.Append(", ");
             }
 
-            sql.Append('(')
+            sql
+                .Append('(')
                 .Append(Literal(column.Name))
                 .Append(", ")
                 .Append(Literal(type.Name))
-                .Append(column.IsNullable ? ", 1" : ", 0")
-                .Append(identity ? ", 1, " : ", 0, ");
+                .Append(
+                    column.IsNullable
+                        ? ", 1"
+                        : ", 0")
+                .Append(
+                    identity
+                        ? ", 1, "
+                        : ", 0, ");
 
             AppendTableColumnOptionalFacet(sql, type.Length);
             sql.Append(", ");
             AppendTableColumnOptionalFacet(sql, type.Precision);
             sql.Append(", ");
             AppendTableColumnOptionalFacet(sql, type.Scale);
-            sql.Append(type.IsCharacter ? ", 1, " : ", 0, ");
-            sql.Append(!type.IsCharacter
-                ? "CAST(NULL AS nvarchar(128))"
-                : column.Collation is null
-                    ? "CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(), 'Collation'))"
-                    : Literal(column.Collation.Name));
+            sql.Append(
+                type.IsCharacter
+                    ? ", 1, "
+                    : ", 0, ");
+
+            sql.Append(
+                !type.IsCharacter
+                    ? "CAST(NULL AS nvarchar(128))"
+                    : column.Collation is null
+                        ? "CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(), 'Collation'))"
+                        : Literal(column.Collation.Name));
 
             sql.Append(", ");
-            AppendTableColumnIdentityFacet(sql, identity ? seed : null);
+            AppendTableColumnIdentityFacet(
+                sql,
+                identity
+                    ? seed
+                    : null);
+
             sql.Append(", ");
-            AppendTableColumnIdentityFacet(sql, identity ? increment : null);
+            AppendTableColumnIdentityFacet(
+                sql,
+                identity
+                    ? increment
+                    : null);
+
             sql.Append(", ");
             if (column.DefaultValue.Kind == SafeMigrationDefaultValueKind.None)
             {
@@ -95,14 +125,21 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             else
             {
                 hasDefaults = true;
-                sql.Append(Literal(ContractFingerprint("default", definition.Schema, definition.Table, column.Name,
-                    DefaultExpression(column))));
+                sql.Append(
+                    Literal(
+                        ContractFingerprint(
+                            "default",
+                            definition.Schema,
+                            definition.Table,
+                            column.Name,
+                            DefaultExpression(column))));
             }
 
             sql.Append(')');
         }
 
-        sql.Append(") expected(name, type_name, is_nullable, is_identity, max_length, precision_value, scale_value, ")
+        sql
+            .Append(") expected(name, type_name, is_nullable, is_identity, max_length, precision_value, scale_value, ")
             .Append("is_character, collation_name, identity_seed, identity_increment, default_fingerprint) ")
             .Append("LEFT JOIN sys.columns c ON c.object_id = ")
             .Append(TableId(definition.Table, definition.Schema))
@@ -114,13 +151,15 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // not optional metadata joins. Mixed authored contracts retain their proofs.
         if (hasIdentity)
         {
-            sql.Append("LEFT JOIN sys.identity_columns identity_column ON identity_column.object_id = c.object_id ")
+            sql
+                .Append("LEFT JOIN sys.identity_columns identity_column ON identity_column.object_id = c.object_id ")
                 .Append("AND identity_column.column_id = c.column_id ");
         }
 
         if (hasDefaults)
         {
-            sql.Append("LEFT JOIN sys.default_constraints dc ON dc.parent_object_id = c.object_id ")
+            sql
+                .Append("LEFT JOIN sys.default_constraints dc ON dc.parent_object_id = c.object_id ")
                 .Append("AND dc.parent_column_id = c.column_id ")
                 .Append("LEFT JOIN sys.extended_properties ep ON ep.class = 1 AND ep.major_id = dc.object_id ")
                 .Append("AND ep.minor_id = 0 AND ep.name = N'Doka:SafeMigrations:Contract' ");
@@ -129,11 +168,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // WHY: NOT(predicate) would discard UNKNOWN. CASE treats absent
         // columns, missing identity metadata, and missing stamps as a
         // mismatch, preserving the original positive EXISTS semantics.
-        sql.Append("WHERE CASE WHEN c.column_id IS NOT NULL ")
+        sql
+            .Append("WHERE CASE WHEN c.column_id IS NOT NULL ")
             .Append("AND ty.name = expected.type_name AND ty.is_user_defined = 0 AND ty.is_assembly_type = 0 ")
             .Append("AND c.is_nullable = expected.is_nullable AND c.is_identity = expected.is_identity ")
             .Append("AND c.is_computed = 0 AND c.is_sparse = 0 AND c.is_column_set = 0 AND c.is_rowguidcol = 0 ")
             .Append("AND c.is_filestream = 0 AND c.is_hidden = 0 AND c.generated_always_type = 0 ")
+
             // WHY: Whole-table matching must reject the same unsupported storage as
             // standalone column matching, rather than certifying an encrypted or RULE-bound column.
             .Append("AND c.rule_object_id = 0 AND c.encryption_type IS NULL ")
@@ -144,7 +185,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         if (hasIdentity)
         {
-            sql.Append("AND (expected.is_identity = 0 OR (identity_column.is_not_for_replication = 0 ")
+            sql
+                .Append("AND (expected.is_identity = 0 OR (identity_column.is_not_for_replication = 0 ")
                 .Append("AND TRY_CONVERT(decimal(38,0), identity_column.seed_value) = expected.identity_seed ")
                 .Append("AND TRY_CONVERT(decimal(38,0), identity_column.increment_value) ")
                 .Append("= expected.identity_increment)) ");
@@ -152,7 +194,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         if (hasDefaults)
         {
-            sql.Append("AND ((expected.default_fingerprint IS NULL AND c.default_object_id = 0) ")
+            sql
+                .Append("AND ((expected.default_fingerprint IS NULL AND c.default_object_id = 0) ")
                 .Append("OR (expected.default_fingerprint IS NOT NULL AND dc.object_id IS NOT NULL ")
                 .Append("AND CONVERT(nvarchar(64), ep.value) = expected.default_fingerprint ")
                 .Append("COLLATE Latin1_General_100_BIN2)) ");
@@ -171,10 +214,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private static void AppendTableColumnOptionalFacet(
         StringBuilder sql,
         int? value
-    )
-    {
-        sql.Append(value is null ? "CAST(NULL AS int)" : value.Value.ToString(CultureInfo.InvariantCulture));
-    }
+    ) => sql.Append(
+        value is null
+            ? "CAST(NULL AS int)"
+            : value.Value.ToString(CultureInfo.InvariantCulture));
 
     /// <summary>Preserves full signed identity values without narrowing the catalog conversion.</summary>
     private static void AppendTableColumnIdentityFacet(
@@ -182,8 +225,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         long? value
     )
     {
-        sql.Append("CAST(")
-            .Append(value is null ? "NULL" : value.Value.ToString(CultureInfo.InvariantCulture))
+        sql
+            .Append("CAST(")
+            .Append(
+                value is null
+                    ? "NULL"
+                    : value.Value.ToString(CultureInfo.InvariantCulture))
             .Append(" AS decimal(38,0))");
     }
 }

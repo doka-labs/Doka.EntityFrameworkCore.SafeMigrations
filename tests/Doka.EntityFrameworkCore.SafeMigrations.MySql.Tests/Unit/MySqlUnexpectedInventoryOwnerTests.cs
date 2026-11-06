@@ -53,7 +53,9 @@ public sealed class MySqlUnexpectedInventoryOwnerTests
 
         // Assert
         Assert.Same(definition, inventory["MissingItems"]);
-        Assert.Equal("MissingItems", Assert.Single(inventory).Key);
+        Assert.Equal("MissingItems",
+            Assert.Single(inventory)
+                .Key);
     }
 
     /// <summary>Distinct authored definitions cannot merge after the server resolves one physical owner.</summary>
@@ -74,8 +76,8 @@ public sealed class MySqlUnexpectedInventoryOwnerTests
         };
 
         // Act
-        var exception = Record.Exception(
-            () => MySqlSafeMigrationProviderAnalyzer.BindUnexpectedInventoryOwners(expected, bindings));
+        var exception = Record.Exception(() =>
+            MySqlSafeMigrationProviderAnalyzer.BindUnexpectedInventoryOwners(expected, bindings));
 
         // Assert
         Assert.IsType<InvalidOperationException>(exception);
@@ -123,8 +125,8 @@ public sealed class MySqlUnexpectedInventoryOwnerTests
         Dictionary<string, string?> bindings = new(StringComparer.Ordinal);
 
         // Act
-        var exception = Record.Exception(
-            () => MySqlSafeMigrationProviderAnalyzer.BindUnexpectedInventoryOwners(expected, bindings));
+        var exception = Record.Exception(() =>
+            MySqlSafeMigrationProviderAnalyzer.BindUnexpectedInventoryOwners(expected, bindings));
 
         // Assert
         Assert.IsType<InvalidOperationException>(exception);
@@ -148,8 +150,14 @@ public sealed class MySqlUnexpectedInventoryOwnerTests
     /// <summary>Creates one immutable raw table inventory for owner-only mapping tests.</summary>
     /// <param name="table">The untouched authored owner.</param>
     /// <returns>The expected table and its original column facets.</returns>
-    private static SafeMigrationExpectedTableInventory Inventory(string table) => new(
-        table, schema: null,
+    private static SafeMigrationExpectedTableInventory Inventory(
+        string table
+    ) => new(
+        table,
+        schema: null,
         columns: [new KeyValuePair<string, string?>("required_value", "int")],
-        indexes: [], uniqueIndexes: [], indexDefinitions: [], constraints: []);
+        indexes: [],
+        uniqueIndexes: [],
+        indexDefinitions: [],
+        constraints: []);
 }

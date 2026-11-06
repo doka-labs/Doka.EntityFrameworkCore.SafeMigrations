@@ -42,7 +42,9 @@ internal static class MySqlGeneratedColumnDependencies
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         SafeMigrationSqlExpressionInspector.CollectIdentifiers(definition.ComputedExpression, names);
 
-        return names.Count == 0 ? Array.Empty<string>() : names.ToArray();
+        return names.Count == 0
+            ? Array.Empty<string>()
+            : names.ToArray();
     }
 
     /// <summary>Rejects missing and self-referential sources before a fresh native CREATE is attempted.</summary>
@@ -60,6 +62,7 @@ internal static class MySqlGeneratedColumnDependencies
 
             var count = 0;
             var columnCount = table.Columns.Count;
+
             // WHY: Check every immutable column for ambiguity without an inner-loop enumerator.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery

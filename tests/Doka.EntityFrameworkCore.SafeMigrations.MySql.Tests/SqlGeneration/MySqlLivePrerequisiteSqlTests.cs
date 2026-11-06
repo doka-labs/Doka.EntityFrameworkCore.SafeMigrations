@@ -88,7 +88,11 @@ public sealed class MySqlLivePrerequisiteSqlTests
     [InlineData("ENUM('A','b')", "enum('b','A')", false)]
     [InlineData("ENUM ('A','b')", "enum ('a','b')", false)]
     [InlineData("ENUM('A\\n','b')", "enum('A\\n','b')", false)]
-    public void LiveForeignKeyStorageEquivalencePreservesNativeDomains(string first, string second, bool expected)
+    public void LiveForeignKeyStorageEquivalencePreservesNativeDomains(
+        string first,
+        string second,
+        bool expected
+    )
     {
         // Arrange
         // Act
@@ -105,51 +109,88 @@ public sealed class MySqlLivePrerequisiteSqlTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task LiveForeignKeyCandidateQueryIsBoundedParameterizedAndCatalogOnly(bool databaseScopedNames)
+    public async Task LiveForeignKeyCandidateQueryIsBoundedParameterizedAndCatalogOnly(
+        bool databaseScopedNames
+    )
     {
         // Arrange
         await using var connection = new MySqlConnection();
         await using var batch = new SafeMigrationCatalogBatch(connection, commandTimeout: 17);
         var command = batch.CreateCommand();
-        var definition = new ExpectedForeignKeyDefinition("fk'quoted", "child'quoted", ["new", "old"],
-            "parent'quoted", ["id'one", "id'two"]);
+        var definition = new ExpectedForeignKeyDefinition(
+            "fk'quoted",
+            "child'quoted",
+            ["new", "old"],
+            "parent'quoted",
+            ["id'one", "id'two"]);
 
         // Act
         var valueBytes = MySqlSafeMigrationCatalogSqlBuilder.BuildLiveForeignKeyCandidateProbe(
-            command, definition, databaseScopedNames);
+            command,
+            definition,
+            databaseScopedNames);
 
         // Assert
         Assert.Equal(7, command.Parameters.Count);
         Assert.DoesNotContain("parent'quoted", command.CommandText, StringComparison.Ordinal);
         Assert.DoesNotContain("fk'quoted", command.CommandText, StringComparison.Ordinal);
-        Assert.Contains("s.SEQ_IN_INDEX = 1 AND s.COLUMN_NAME = @live_3", command.CommandText,
+        Assert.Contains(
+            "s.SEQ_IN_INDEX = 1 AND s.COLUMN_NAME = @live_3",
+            command.CommandText,
             StringComparison.Ordinal);
-        Assert.Contains("s.SEQ_IN_INDEX = 2 AND s.COLUMN_NAME = @live_4", command.CommandText,
-            StringComparison.Ordinal);
-        Assert.Contains("s.SUB_PART IS NULL", command.CommandText, StringComparison.Ordinal);
-        Assert.Contains(MySqlSafeMigrationCatalogSqlBuilder.BuildNativeCaseInsensitiveIdentifierMatches(
-            "s.COLUMN_NAME", "@live_3"), command.CommandText, StringComparison.Ordinal);
 
-        Assert.Contains("GROUP BY s.INDEX_NAME, CAST(s.INDEX_NAME AS BINARY)", command.CommandText,
+        Assert.Contains(
+            "s.SEQ_IN_INDEX = 2 AND s.COLUMN_NAME = @live_4",
+            command.CommandText,
             StringComparison.Ordinal);
+
+        Assert.Contains("s.SUB_PART IS NULL", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains(
+            MySqlSafeMigrationCatalogSqlBuilder.BuildNativeCaseInsensitiveIdentifierMatches(
+                "s.COLUMN_NAME",
+                "@live_3"),
+            command.CommandText,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "GROUP BY s.INDEX_NAME, CAST(s.INDEX_NAME AS BINARY)",
+            command.CommandText,
+            StringComparison.Ordinal);
+
         Assert.Contains("HAVING COUNT(*) = 2", command.CommandText, StringComparison.Ordinal);
         Assert.DoesNotContain("GROUP_CONCAT", command.CommandText, StringComparison.Ordinal);
         Assert.DoesNotContain("FROM `", command.CommandText, StringComparison.Ordinal);
-        Assert.Equal(!databaseScopedNames,
-            command.CommandText.Contains("AND rc.CONSTRAINT_NAME = @live_2 "
-                + "AND " + MySqlSafeMigrationCatalogSqlBuilder.BuildNativeCaseInsensitiveIdentifierMatches(
-                    "rc.CONSTRAINT_NAME", "@live_2") + " "
-                + "AND " + MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
-                    "rc.TABLE_NAME", "@live_1") + ") "
-                + "AS names_free", StringComparison.Ordinal));
+        Assert.Equal(
+            !databaseScopedNames,
+            command.CommandText.Contains(
+                "AND rc.CONSTRAINT_NAME = @live_2 "
+                + "AND "
+                + MySqlSafeMigrationCatalogSqlBuilder.BuildNativeCaseInsensitiveIdentifierMatches(
+                    "rc.CONSTRAINT_NAME",
+                    "@live_2")
+                + " "
+                + "AND "
+                + MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
+                    "rc.TABLE_NAME",
+                    "@live_1")
+                + ") "
+                + "AS names_free",
+                StringComparison.Ordinal));
 
-        Assert.Equal(s_quotedParameterValues,
-            command.Parameters.Cast<DbParameter>().Select(static parameter => (string)parameter.Value!).ToArray());
+        Assert.Equal(
+            s_quotedParameterValues,
+            command
+                .Parameters
+                .Cast<DbParameter>()
+                .Select(static parameter => (string)parameter.Value!)
+                .ToArray());
 
         Assert.True(valueBytes >= 7 * 32);
-        Assert.False(SafeMigrationCatalogQueryLimits.Exceeded(command.Parameters.Count,
-            Encoding.UTF8.GetByteCount(command.CommandText) + valueBytes,
-            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes));
+        Assert.False(
+            SafeMigrationCatalogQueryLimits.Exceeded(
+                command.Parameters.Count,
+                Encoding.UTF8.GetByteCount(command.CommandText) + valueBytes,
+                SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes));
     }
 
     /// <summary>All actual candidate aliases survive streaming, independently of the sixteen-column FK limit.</summary>
@@ -167,7 +208,8 @@ public sealed class MySqlLivePrerequisiteSqlTests
 
         // Act
         var result = await MySqlSafeMigrationProviderAnalyzer.ReadLiveCandidateKeyProofAsync(
-            reader, CancellationToken.None);
+            reader,
+            CancellationToken.None);
 
         // Assert
         Assert.True(result.NamesFree);
@@ -176,12 +218,20 @@ public sealed class MySqlLivePrerequisiteSqlTests
         Assert.False(result.MultiValuedIndexRisk);
         Assert.Empty(result.CoveringIndexNames);
         Assert.Equal(32, result.Keys.Length);
-        Assert.Equal(32, result.Keys.Select(static key => key.PhysicalName).Distinct(StringComparer.Ordinal).Count());
-        Assert.All(result.Keys, static key =>
-        {
-            Assert.Equal(SafeMigrationDatabaseObjectKind.UniqueConstraint, key.Kind);
-            Assert.Equal(key.PhysicalName, key.BackingIndexName);
-        });
+        Assert.Equal(32,
+            result
+                .Keys
+                .Select(static key => key.PhysicalName)
+                .Distinct(StringComparer.Ordinal)
+                .Count());
+
+        Assert.All(
+            result.Keys,
+            static key =>
+            {
+                Assert.Equal(SafeMigrationDatabaseObjectKind.UniqueConstraint, key.Kind);
+                Assert.Equal(key.PhysicalName, key.BackingIndexName);
+            });
     }
 
     /// <summary>Principal and dependent alias namespaces remain separate without truncating local evidence.</summary>
@@ -193,14 +243,22 @@ public sealed class MySqlLivePrerequisiteSqlTests
         table.Rows.Add(1, 0, 1, 0, "same_name", "unique_constraint");
         for (var index = 0; index < 32; index++)
         {
-            table.Rows.Add(1, 0, 1, 0, index == 0 ? "same_name" : "ix_" + index.ToString(CultureInfo.InvariantCulture),
+            table.Rows.Add(
+                1,
+                0,
+                1,
+                0,
+                index == 0
+                    ? "same_name"
+                    : "ix_" + index.ToString(CultureInfo.InvariantCulture),
                 "local_covering_index");
         }
 
         await using var reader = table.CreateDataReader();
 
         // Act
-        var result = await MySqlSafeMigrationProviderAnalyzer.ReadLiveCandidateKeyProofAsync(reader,
+        var result = await MySqlSafeMigrationProviderAnalyzer.ReadLiveCandidateKeyProofAsync(
+            reader,
             CancellationToken.None);
 
         // Assert
@@ -235,7 +293,9 @@ public sealed class MySqlLivePrerequisiteSqlTests
     [InlineData("duplicate_covering")]
     [InlineData("null_flag")]
     [InlineData("truncated")]
-    public async Task LiveForeignKeyCandidateReaderRejectsMalformedFacts(string shape)
+    public async Task LiveForeignKeyCandidateReaderRejectsMalformedFacts(
+        string shape
+    )
     {
         // Arrange
         using var table = CandidateFactsTable();
@@ -353,23 +413,33 @@ public sealed class MySqlLivePrerequisiteSqlTests
         await using var connection = new MySqlConnection();
         await using var batch = new SafeMigrationCatalogBatch(connection, commandTimeout: 17);
         var command = batch.CreateCommand();
-        var requests = Enumerable.Range(0, 32).Select(static index =>
-            ((string?)null, "t_" + index.ToString(CultureInfo.InvariantCulture) + new string('\u20AC', 58),
-                "c_" + index.ToString(CultureInfo.InvariantCulture) + new string('\u20AC', 58))).ToArray();
+        var requests = Enumerable
+            .Range(0, 32)
+            .Select(static index =>
+                ((string?)null, "t_" + index.ToString(CultureInfo.InvariantCulture) + new string('\u20AC', 58),
+                    "c_" + index.ToString(CultureInfo.InvariantCulture) + new string('\u20AC', 58)))
+            .ToArray();
 
         const int maximumPayload = 4096;
 
         // Act
         var result = MySqlSafeMigrationProviderAnalyzer.BuildLivePrerequisiteColumnsProbe(
-            command, requests, offset: 0, maximumPayload);
+            command,
+            requests,
+            offset: 0,
+            maximumPayload);
 
         // Assert
         Assert.InRange(result.OperationCount, 1, requests.Length - 1);
         Assert.Equal(result.OperationCount * 2, command.Parameters.Count);
         Assert.Equal(0, result.FirstOrdinal);
         Assert.True(Encoding.UTF8.GetByteCount(command.CommandText) + result.ParameterPayloadBytes <= maximumPayload);
-        Assert.DoesNotContain("SELECT " + result.OperationCount.ToString(CultureInfo.InvariantCulture)
-            + " AS ordinal", command.CommandText, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "SELECT "
+            + result.OperationCount.ToString(CultureInfo.InvariantCulture)
+            + " AS ordinal",
+            command.CommandText,
+            StringComparison.Ordinal);
     }
 
     /// <summary>An individually oversized request is rejected explicitly rather than submitted as empty SQL.</summary>
@@ -384,7 +454,10 @@ public sealed class MySqlLivePrerequisiteSqlTests
 
         // Act
         var exception = Record.Exception(() => MySqlSafeMigrationProviderAnalyzer.BuildLivePrerequisiteColumnsProbe(
-            command, requests, offset: 0, maximumPayloadBytes: 128));
+            command,
+            requests,
+            offset: 0,
+            maximumPayloadBytes: 128));
 
         // Assert
         Assert.IsType<InvalidOperationException>(exception);

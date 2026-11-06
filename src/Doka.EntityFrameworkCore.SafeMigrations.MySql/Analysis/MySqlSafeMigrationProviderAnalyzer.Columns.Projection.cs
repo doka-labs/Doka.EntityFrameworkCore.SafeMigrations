@@ -2,16 +2,16 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProjectedColumnAnalyzer
 {
-    private readonly Dictionary<SafeMigrationProviderAnalysis, bool> _projectedExplicitTimestampDefaults =
-        new(ReferenceEqualityComparer.Instance);
-
     private readonly Dictionary<SafeMigrationProviderAnalysis, ProjectedColumnSessionEnvironment>
         _projectedColumnSessionEnvironments = new(ReferenceEqualityComparer.Instance);
 
-    private Dictionary<SafeMigrationOperation, RequiredColumnAddCapabilities>? _projectedRequiredAddCapsByOperation;
+    private readonly Dictionary<SafeMigrationProviderAnalysis, bool> _projectedExplicitTimestampDefaults =
+        new(ReferenceEqualityComparer.Instance);
 
     private Dictionary<SafeMigrationProviderAnalysis, RequiredColumnAddCapabilities>?
         _projectedRequiredAddCapsByAnalysis;
+
+    private Dictionary<SafeMigrationOperation, RequiredColumnAddCapabilities>? _projectedRequiredAddCapsByOperation;
 
     /// <inheritdoc />
     bool ISafeMigrationProjectedColumnAnalyzer.PreservesColumnSourcesAfterIndexDrop(
@@ -44,7 +44,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             {
                 ObservedState: SafeMigrationObservedState.Different,
                 RepairCapability: SafeMigrationRepairCapability.Safe,
-                RepairMutatesData: false
+                RepairMutatesData: false,
             }
             && intent.OldDefinition is not null
             && _projectedAlterPhysicalSnapshots.TryGetValue(liveAnalysis, out var snapshot)
@@ -74,8 +74,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             return projectedAnalysis;
         }
 
-        var sqlDefault = MySqlSafeMigrationCatalogSqlBuilder.RequiresRequiredSqlDefaultAddQualification(intent.Definition);
-        var unavailable = sqlDefault ? "column_required_sql_add_unavailable" : "column_atomic_add_unavailable";
+        var sqlDefault =
+            MySqlSafeMigrationCatalogSqlBuilder.RequiresRequiredSqlDefaultAddQualification(intent.Definition);
+
+        var unavailable = sqlDefault
+            ? "column_required_sql_add_unavailable"
+            : "column_atomic_add_unavailable";
+
         if (!SupportsRetainedColumnProof(intent.Definition)
             || MySqlSafeMigrationCatalogSqlBuilder.RequiresUnsupportedMissingRequiredAdd(intent.Definition)
             || (!sqlDefault && RequiresProjectedTimestampDefaults(intent.Definition))
@@ -116,6 +121,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 protocol.BackslashEscapes,
                 environment.BackslashEscapesEnabled,
                 environment.DoubleQuotesAreLiteral);
+
         if (!sessionIsSafe)
         {
             return new SafeMigrationProviderAnalysis(
@@ -139,7 +145,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             var currentOwnedStage =
                 liveAnalysis is
                 {
-                    ObservedState: SafeMigrationObservedState.Missing, RequiredColumnAddResumesOwnedStaging: true
+                    ObservedState: SafeMigrationObservedState.Missing, RequiredColumnAddResumesOwnedStaging: true,
                 }
                 && context is { TableWasCreated: false, ColumnWasDropped: false, HasDataMutation: false };
 
@@ -240,6 +246,166 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         return true;
     }
 
+    bool ISafeMigrationProjectedColumnAnalyzer.CanReuseLiveColumnProofAfterForeignKeyDrops(
+        EnsureColumnIntent intent,
+        SafeMigrationProviderAnalysis liveAnalysis
+    ) => SupportsRetainedColumnProof(intent.Definition)
+        && liveAnalysis is { ObservedState: SafeMigrationObservedState.Matching, PostconditionSatisfied: true }
+            or
+            {
+                ObservedState: SafeMigrationObservedState.Different,
+                RepairCapability: SafeMigrationRepairCapability.Safe,
+            };
+
+    bool ISafeMigrationProjectedColumnAnalyzer.PreservesSiblingColumnProofsAfterForeignKeyDrops(
+        EnsureColumnIntent intent,
+        ExpectedColumnDefinition source,
+        SafeMigrationProviderAnalysis liveAnalysis
+    ) => liveAnalysis is
+        {
+            ObservedState: SafeMigrationObservedState.Different,
+            RepairCapability: SafeMigrationRepairCapability.Safe,
+            RepairMutatesData: false,
+        }
+        && source.IsNullable != intent.Definition.IsNullable
+        && HasSameReviewedColumnLayout(source, intent.Definition, StringComparer.OrdinalIgnoreCase);
+
+    bool ISafeMigrationProjectedColumnAnalyzer.CanReuseLiveColumnProofAfterForeignKeyDrops(
+        AlterColumnIntent intent,
+        SafeMigrationProviderAnalysis liveAnalysis
+    )
+    {
+        if (liveAnalysis.ObservedState == SafeMigrationObservedState.Matching)
+        {
+            return liveAnalysis.PostconditionSatisfied && SupportsRetainedColumnProof(intent.Definition);
+        }
+
+        // WHY: Authored old metadata is not a live-source proof. The captured
+        // Safe result must independently bind this exact unchanged-layout transition.
+        return liveAnalysis is
+            {
+                ObservedState: SafeMigrationObservedState.Different,
+                RepairCapability: SafeMigrationRepairCapability.Safe,
+            }
+            && intent.OldDefinition is { } source
+            && HasSafeProjectedColumnSession(
+                source,
+                intent.Definition,
+                liveAnalysis,
+                canReuseLiveProof: true,
+                useCreationEnvironment: false)
+            && (liveAnalysis.RepairMutatesData
+                ? IsCapturedGuidBackfillTransition(source, intent.Definition)
+                : IsSameLayoutNullabilityTransition(source, intent.Definition));
+    }
+
+    bool ISafeMigrationProjectedColumnAnalyzer.AreProjectedColumnSourcesEquivalent(
+        ExpectedColumnDefinition accepted,
+        ExpectedColumnDefinition source
+    ) => accepted.IsNullable == source.IsNullable
+        && HasSameReviewedColumnLayout(accepted, source, StringComparer.OrdinalIgnoreCase);
+
+    SafeMigrationProviderAnalysis ISafeMigrationProjectedColumnAnalyzer.ValidateProjectedAlterColumn(
+        AlterColumnIntent intent,
+        ExpectedColumnDefinition source,
+        SafeMigrationProjectedAlterColumnContext context,
+        SafeMigrationProviderAnalysis liveAnalysis,
+        SafeMigrationProviderAnalysis projectedAnalysis
+    )
+    {
+        if (projectedAnalysis.ObservedState == SafeMigrationObservedState.Matching)
+        {
+            return projectedAnalysis;
+        }
+
+        if (!HasSafeProjectedColumnSession(
+            source,
+            intent.Definition,
+            liveAnalysis,
+            context.CanReuseLiveProof,
+            context.HasCompleteTable))
+        {
+            return DifferentProjectedTransition();
+        }
+
+        if (!context.HasCompleteTable)
+        {
+            if (SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(
+                    source,
+                    intent.Definition,
+                    StringComparer.OrdinalIgnoreCase)
+                && context.CanReuseLiveProof)
+            {
+                return projectedAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe
+                    ? projectedAnalysis.WithRepairPreservesPhysicalKeys()
+                    : projectedAnalysis;
+            }
+
+            if (context is { PreservesLiveValueDomain: true, HasDataMutation: false, HasForeignKeyDependency: false }
+                && HasSafeRetainedAlterValueDomain(intent, source, context.Table, liveAnalysis))
+            {
+                // WHY: A certified widening does not populate the larger
+                // domain. The immutable original declaration remains a row
+                // proof only while Core certifies every intervening step.
+                return new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.Different,
+                    SafeMigrationRepairCapability.Safe,
+                    postconditionSatisfied: false,
+                    "projected_retained_column_domain_safe",
+                    SafeMigrationOperationalImpact.TableRewritePossible,
+                    differences: null)
+                {
+                    RepairPreservesLiveValueDomain = true,
+                }.WithRepairPreservesPhysicalKeys();
+            }
+
+            // WHY: Independent source-bound proofs do not compose by themselves:
+            // earlier VARCHAR targets also consume row and composite-key bytes.
+            // Recheck their cumulative shape without repeating row scans.
+            return liveAnalysis is
+                {
+                    ObservedState: SafeMigrationObservedState.Different,
+                    RepairCapability: SafeMigrationRepairCapability.Safe,
+                }
+                && !(context.HasDataMutation && liveAnalysis.RequiresLiveDataProof)
+                && !context.HasForeignKeyDependency
+                && HasSafeCumulativeAlterPhysicalShape(intent, context.Table, liveAnalysis)
+                    ? liveAnalysis.WithRepairPreservesPhysicalKeys()
+                    : DifferentProjectedTransition();
+        }
+
+        if (SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(
+            source,
+            intent.Definition,
+            StringComparer.OrdinalIgnoreCase))
+        {
+            return projectedAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe
+                ? projectedAnalysis.WithRepairPreservesPhysicalKeys()
+                : projectedAnalysis;
+        }
+
+        if (!context.ProvesEmpty
+            || context.HasForeignKeyDependency
+            || !MySqlProjectedColumnTransition.IsSafe(
+                intent,
+                source,
+                context.Table,
+                liveAnalysis.IndexPhysicalEnvironment,
+                _typeMappingSource,
+                context.CanReuseCreationCharacterSet))
+        {
+            return DifferentProjectedTransition();
+        }
+
+        return new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            postconditionSatisfied: false,
+            "projected_column_transition_safe",
+            SafeMigrationOperationalImpact.TableRewritePossible,
+            differences: null).WithRepairPreservesPhysicalKeys();
+    }
+
     /// <summary>Recognizes only the native implicit NULL-default removal accompanying a required target.</summary>
     /// <param name="target">The unchanged required target with no explicit default.</param>
     /// <param name="differences">The independently captured native facet evidence.</param>
@@ -249,7 +415,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         IReadOnlyList<SafeMigrationFacetDifference> differences
     )
     {
-        if (target.IsNullable || target.DefaultValue.Kind != SafeMigrationDefaultValueKind.None
+        if (target.IsNullable
+            || target.DefaultValue.Kind != SafeMigrationDefaultValueKind.None
             || differences.Count < 2)
         {
             return false;
@@ -269,7 +436,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             var difference = differences[index];
             if (difference.Facet == "column_nullability")
             {
-                if (difference.Expected != "not_nullable" || difference.Actual != "nullable")
+                if (difference.Expected != "not_nullable"
+                    || difference.Actual != "nullable")
                 {
                     return false;
                 }
@@ -278,7 +446,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             }
             else if (difference.Facet == "column_default_kind")
             {
-                if (difference.Expected != "none" || difference.Actual != "null")
+                if (difference.Expected != "none"
+                    || difference.Actual != "null")
                 {
                     return false;
                 }
@@ -289,65 +458,6 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
         return tightensNullability && removesNullDefault;
     }
-
-    bool ISafeMigrationProjectedColumnAnalyzer.CanReuseLiveColumnProofAfterForeignKeyDrops(
-        EnsureColumnIntent intent,
-        SafeMigrationProviderAnalysis liveAnalysis
-    ) => SupportsRetainedColumnProof(intent.Definition)
-        && liveAnalysis is { ObservedState: SafeMigrationObservedState.Matching, PostconditionSatisfied: true }
-            or
-        {
-            ObservedState: SafeMigrationObservedState.Different,
-            RepairCapability: SafeMigrationRepairCapability.Safe
-        };
-
-    bool ISafeMigrationProjectedColumnAnalyzer.PreservesSiblingColumnProofsAfterForeignKeyDrops(
-        EnsureColumnIntent intent,
-        ExpectedColumnDefinition source,
-        SafeMigrationProviderAnalysis liveAnalysis
-    ) => liveAnalysis is
-    {
-        ObservedState: SafeMigrationObservedState.Different,
-        RepairCapability: SafeMigrationRepairCapability.Safe,
-        RepairMutatesData: false
-    }
-        && source.IsNullable != intent.Definition.IsNullable
-        && HasSameReviewedColumnLayout(source, intent.Definition, StringComparer.OrdinalIgnoreCase);
-
-    bool ISafeMigrationProjectedColumnAnalyzer.CanReuseLiveColumnProofAfterForeignKeyDrops(
-        AlterColumnIntent intent,
-        SafeMigrationProviderAnalysis liveAnalysis
-    )
-    {
-        if (liveAnalysis.ObservedState == SafeMigrationObservedState.Matching)
-        {
-            return liveAnalysis.PostconditionSatisfied && SupportsRetainedColumnProof(intent.Definition);
-        }
-
-        // WHY: Authored old metadata is not a live-source proof. The captured
-        // Safe result must independently bind this exact unchanged-layout transition.
-        return liveAnalysis is
-        {
-            ObservedState: SafeMigrationObservedState.Different,
-            RepairCapability: SafeMigrationRepairCapability.Safe
-        }
-            && intent.OldDefinition is { } source
-            && HasSafeProjectedColumnSession(
-                source,
-                intent.Definition,
-                liveAnalysis,
-                canReuseLiveProof: true,
-                useCreationEnvironment: false)
-            && (liveAnalysis.RepairMutatesData
-                ? IsCapturedGuidBackfillTransition(source, intent.Definition)
-                : IsSameLayoutNullabilityTransition(source, intent.Definition));
-    }
-
-    bool ISafeMigrationProjectedColumnAnalyzer.AreProjectedColumnSourcesEquivalent(
-        ExpectedColumnDefinition accepted,
-        ExpectedColumnDefinition source
-    ) => accepted.IsNullable == source.IsNullable
-        && HasSameReviewedColumnLayout(accepted, source, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Validates exact physical metadata for a value-preserving nullability-only transition.</summary>
     /// <param name="source">The independently reviewed immutable source declaration.</param>
@@ -408,107 +518,6 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     ) => SafeMigrationColumnRepairHelper.HasRepairableIntrinsicShape(definition)
         && (definition.ProviderAnnotations.Count == 0 || MySqlSafeMigrationColumnMetadata.TryCreate(definition, out _));
 
-    SafeMigrationProviderAnalysis ISafeMigrationProjectedColumnAnalyzer.ValidateProjectedAlterColumn(
-        AlterColumnIntent intent,
-        ExpectedColumnDefinition source,
-        SafeMigrationProjectedAlterColumnContext context,
-        SafeMigrationProviderAnalysis liveAnalysis,
-        SafeMigrationProviderAnalysis projectedAnalysis
-    )
-    {
-        if (projectedAnalysis.ObservedState == SafeMigrationObservedState.Matching)
-        {
-            return projectedAnalysis;
-        }
-
-        if (!HasSafeProjectedColumnSession(
-                source,
-                intent.Definition,
-                liveAnalysis,
-                context.CanReuseLiveProof,
-                context.HasCompleteTable))
-        {
-            return DifferentProjectedTransition();
-        }
-
-        if (!context.HasCompleteTable)
-        {
-            if (SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(
-                    source,
-                    intent.Definition,
-                    StringComparer.OrdinalIgnoreCase)
-                && context.CanReuseLiveProof)
-            {
-                return projectedAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe
-                    ? projectedAnalysis.WithRepairPreservesPhysicalKeys()
-                    : projectedAnalysis;
-            }
-
-            if (context is { PreservesLiveValueDomain: true, HasDataMutation: false, HasForeignKeyDependency: false }
-                && HasSafeRetainedAlterValueDomain(intent, source, context.Table, liveAnalysis))
-            {
-                // WHY: A certified widening does not populate the larger
-                // domain. The immutable original declaration remains a row
-                // proof only while Core certifies every intervening step.
-                return new SafeMigrationProviderAnalysis(
-                    SafeMigrationObservedState.Different,
-                    SafeMigrationRepairCapability.Safe,
-                    postconditionSatisfied: false,
-                    "projected_retained_column_domain_safe",
-                    SafeMigrationOperationalImpact.TableRewritePossible,
-                    differences: null)
-                {
-                    RepairPreservesLiveValueDomain = true,
-                }.WithRepairPreservesPhysicalKeys();
-            }
-
-            // WHY: Independent source-bound proofs do not compose by themselves:
-            // earlier VARCHAR targets also consume row and composite-key bytes.
-            // Recheck their cumulative shape without repeating row scans.
-            return liveAnalysis is
-            {
-                ObservedState: SafeMigrationObservedState.Different,
-                RepairCapability: SafeMigrationRepairCapability.Safe
-            }
-                && !(context.HasDataMutation && liveAnalysis.RequiresLiveDataProof)
-                && !context.HasForeignKeyDependency
-                && HasSafeCumulativeAlterPhysicalShape(intent, context.Table, liveAnalysis)
-                    ? liveAnalysis.WithRepairPreservesPhysicalKeys()
-                    : DifferentProjectedTransition();
-        }
-
-        if (SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(
-                source,
-                intent.Definition,
-                StringComparer.OrdinalIgnoreCase))
-        {
-            return projectedAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe
-                ? projectedAnalysis.WithRepairPreservesPhysicalKeys()
-                : projectedAnalysis;
-        }
-
-        if (!context.ProvesEmpty
-            || context.HasForeignKeyDependency
-            || !MySqlProjectedColumnTransition.IsSafe(
-                intent,
-                source,
-                context.Table,
-                liveAnalysis.IndexPhysicalEnvironment,
-                _typeMappingSource,
-                context.CanReuseCreationCharacterSet))
-        {
-            return DifferentProjectedTransition();
-        }
-
-        return new SafeMigrationProviderAnalysis(
-            SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.Safe,
-            postconditionSatisfied: false,
-            "projected_column_transition_safe",
-            SafeMigrationOperationalImpact.TableRewritePossible,
-            differences: null).WithRepairPreservesPhysicalKeys();
-    }
-
     /// <summary>Retains captured session prerequisites even when projection proves an empty table.</summary>
     private bool HasSafeProjectedColumnSession(
         ExpectedColumnDefinition source,
@@ -522,7 +531,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             && liveAnalysis is
             {
                 ObservedState: SafeMigrationObservedState.Different,
-                RepairCapability: SafeMigrationRepairCapability.Safe
+                RepairCapability: SafeMigrationRepairCapability.Safe,
             };
 
         var environment = useCreationEnvironment
@@ -595,7 +604,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
         command.CommandText = "SELECT @@default_storage_engine, @@SESSION.sql_mode, "
             + "@@SESSION.explicit_defaults_for_timestamp, "
-            + (isMariaDb ? "@@SESSION.check_constraint_checks;" : "1;");
+            + (isMariaDb
+                ? "@@SESSION.check_constraint_checks;"
+                : "1;");
 
         bool defaultEngineIsInnoDb;
         bool strict;
@@ -613,7 +624,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             }
 
             defaultEngineIsInnoDb = StringComparer.OrdinalIgnoreCase.Equals(reader.GetString(0), "InnoDB");
-            var sqlMode = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
+            var sqlMode = reader.IsDBNull(1)
+                ? string.Empty
+                : reader.GetString(1);
+
             strict = sqlMode
                 .Split(',')
                 .Any(static mode => mode
@@ -626,7 +640,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                         .Equals("STRICT_ALL_TABLES", StringComparison.OrdinalIgnoreCase));
 
             var enabled = Convert.ToInt32(reader.GetValue(2), CultureInfo.InvariantCulture);
-            var checks = reader.IsDBNull(3) ? -1 : Convert.ToInt32(reader.GetValue(3), CultureInfo.InvariantCulture);
+            var checks = reader.IsDBNull(3)
+                ? -1
+                : Convert.ToInt32(reader.GetValue(3), CultureInfo.InvariantCulture);
+
             if (enabled is not 0 and not 1
                 || checks is not 0 and not 1
                 || await reader.ReadAsync(cancellationToken))
@@ -667,7 +684,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                     BuildRequiredColumnAddOwnerEngineQuery(string.Empty, string.Empty));
 
                 while (offset + selections.Count < requiredAddTables.Length
-                       && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+                    && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
                 {
                     var checkpoint = parameterizer.Capture();
                     var ordinal = offset + selections.Count;
@@ -677,7 +694,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
                     var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                         + Encoding.UTF8.GetByteCount(ownerParameter)
-                        + (selections.Count == 0 ? 0 : separatorBytes + 2);
+                        + (selections.Count == 0
+                            ? 0
+                            : separatorBytes + 2);
 
                     var payload = checked(sqlBytes + selectionBytes + parameterizer.Utf8PayloadBytes);
                     if (!SafeMigrationCatalogQueryLimits.Exceeded(parameterizer.Count, payload, maximumPayloadBytes))
@@ -825,20 +844,6 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         _projectedRequiredAddCapsByOperation?.Clear();
     }
 
-    private sealed record ProjectedColumnSessionEnvironment(
-        bool StrictSqlMode,
-        bool DefaultEngineIsInnoDb,
-        bool ExplicitTimestampDefaults,
-        bool ChecksEnforced,
-        bool BackslashEscapesEnabled,
-        bool DoubleQuotesAreLiteral,
-        IReadOnlySet<string> ExistingInnoDbTables
-    )
-    {
-        /// <summary>Gets the original native literal mode without duplicating a stored session flag.</summary>
-        internal bool NoBackslashEscapes => !BackslashEscapesEnabled;
-    }
-
     /// <summary>Records enriched producer plans without deriving feature support from SQL or versions.</summary>
     private void CaptureProjectedRequiredAddPlans(
         SafeMigrationOperation[] operations,
@@ -868,6 +873,26 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         || MySqlSafeMigrationCatalogSqlBuilder.CanUseRequiredColumnAddProtocol(definition)
         || MySqlSafeMigrationCatalogSqlBuilder.RequiresUnsupportedMissingRequiredAdd(definition);
 
+    private static SafeMigrationProviderAnalysis DifferentProjectedTransition() => new(
+        SafeMigrationObservedState.Different,
+        SafeMigrationRepairCapability.None,
+        postconditionSatisfied: false,
+        "projected_column_transition_unproven");
+
+    private sealed record ProjectedColumnSessionEnvironment(
+        bool StrictSqlMode,
+        bool DefaultEngineIsInnoDb,
+        bool ExplicitTimestampDefaults,
+        bool ChecksEnforced,
+        bool BackslashEscapesEnabled,
+        bool DoubleQuotesAreLiteral,
+        IReadOnlySet<string> ExistingInnoDbTables
+    )
+    {
+        /// <summary>Gets the original native literal mode without duplicating a stored session flag.</summary>
+        internal bool NoBackslashEscapes => !BackslashEscapesEnabled;
+    }
+
     /// <summary>Retains only the two consumed canonical flags, never a protocol's SQL or staging identities.</summary>
     /// <param name="SupportsCheck">Whether canonical provider features enforce CHECK constraints.</param>
     /// <param name="BackslashEscapes">Whether the native member declaration requires standard escape decoding.</param>
@@ -875,10 +900,4 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         bool SupportsCheck,
         bool BackslashEscapes
     );
-
-    private static SafeMigrationProviderAnalysis DifferentProjectedTransition() => new(
-        SafeMigrationObservedState.Different,
-        SafeMigrationRepairCapability.None,
-        postconditionSatisfied: false,
-        "projected_column_transition_unproven");
 }

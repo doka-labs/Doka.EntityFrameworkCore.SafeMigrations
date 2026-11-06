@@ -24,7 +24,8 @@ public sealed class SqlServerSchemaSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropSchemaIfExists(schema);
@@ -32,7 +33,9 @@ public sealed class SqlServerSchemaSqlTests
         // Act
         var plan = catalog.Build((SafeMigrationOperation)builder.Operations[0]);
         var exception = Record.Exception(() =>
-            context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate(builder.Operations, context.Model));
 
         // Assert
         Assert.True(plan.IsStaticallyUnsupported);

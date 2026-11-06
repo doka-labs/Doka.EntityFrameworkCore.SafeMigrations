@@ -11,22 +11,31 @@ public sealed class SqliteSafeMigrationAlterAfterDropsIntegrationTests : SqliteS
     [InlineData("wrong-old")]
     [InlineData("type-change")]
     [InlineData("unmanaged-trigger")]
-    public async Task AlterAfterSiblingDropsRetainsRebuildSafetyBoundaries(string control)
+    public async Task AlterAfterSiblingDropsRetainsRebuildSafetyBoundaries(
+        string control
+    )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection,
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE rebuild_entities (Id INTEGER NOT NULL, Code TEXT NULL, Legacy TEXT NULL, "
             + "Temporary TEXT NULL, CONSTRAINT pk_rebuild_entities PRIMARY KEY (Id), "
             + "CONSTRAINT uq_rebuild_entities_code UNIQUE (Code), "
             + "CONSTRAINT ck_rebuild_entities_code CHECK (length(\"Code\") > 0)); "
             + "INSERT INTO rebuild_entities (Id, Code) VALUES (1, "
-            + (control == "null-rows" ? "NULL" : "'kept'") + ");");
+            + (control == "null-rows"
+                ? "NULL"
+                : "'kept'")
+            + ");",
+            cancellationToken: CancellationToken.None);
 
         if (control == "unmanaged-trigger")
         {
-            await ExecuteSqlAsync(connection,
-                "CREATE TRIGGER unmanaged AFTER UPDATE ON rebuild_entities BEGIN SELECT 1; END;");
+            await ExecuteSqlAsync(
+                connection,
+                "CREATE TRIGGER unmanaged AFTER UPDATE ON rebuild_entities BEGIN SELECT 1; END;",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connection);
@@ -35,32 +44,53 @@ public sealed class SqliteSafeMigrationAlterAfterDropsIntegrationTests : SqliteS
         builder.DropColumnIfExists("Legacy", "rebuild_entities");
         builder.AlterColumnIfDifferent(
             "rebuild_entities",
-            new ExpectedColumnDefinition("Code", control == "type-change" ? typeof(int) : typeof(string),
-                isNullable: false, storeType: control == "type-change" ? "INTEGER" : "TEXT"),
-            new ExpectedColumnDefinition("Code", typeof(string), isNullable: true,
-                storeType: control == "wrong-old" ? "VARCHAR(20)" : "TEXT"),
+            new ExpectedColumnDefinition(
+                "Code",
+                control == "type-change"
+                    ? typeof(int)
+                    : typeof(string),
+                isNullable: false,
+                storeType: control == "type-change"
+                    ? "INTEGER"
+                    : "TEXT"),
+            new ExpectedColumnDefinition(
+                "Code",
+                typeof(string),
+                isNullable: true,
+                storeType: control == "wrong-old"
+                    ? "VARCHAR(20)"
+                    : "TEXT"),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-alter-after-sibling-drops"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-alter-after-sibling-drops"),
+                cancellationToken: CancellationToken.None);
 
         Exception? executionError = null;
         try
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         }
         catch (InvalidOperationException exception)
         {
             executionError = exception;
         }
 
-        var retainedRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM rebuild_entities WHERE Id = 1 AND Code = 'kept';");
+        var retainedRows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM rebuild_entities WHERE Id = 1 AND Code = 'kept';",
+            cancellationToken: CancellationToken.None);
 
-        var siblingColumns = await ScalarIntAsync(connection,
+        var siblingColumns = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('rebuild_entities') "
-            + "WHERE name IN ('Legacy', 'Temporary');");
+            + "WHERE name IN ('Legacy', 'Temporary');",
+            cancellationToken: CancellationToken.None);
 
         var alteration = report.Assessments[^1];
 

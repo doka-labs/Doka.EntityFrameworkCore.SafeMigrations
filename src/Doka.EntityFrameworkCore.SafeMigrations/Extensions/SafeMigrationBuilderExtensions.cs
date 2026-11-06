@@ -2,7 +2,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>
 /// Adds fail-closed SafeMigrations operations to an EF Core
-/// <see cref="MigrationBuilder"/>.
+/// <see cref="MigrationBuilder" />.
 /// </summary>
 public static partial class SafeMigrationBuilderExtensions
 {

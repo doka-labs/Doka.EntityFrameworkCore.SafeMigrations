@@ -28,6 +28,7 @@ public sealed class PostgreSqlModelManagedDataOwnershipTests
         Assert.Contains(
             operations,
             operation => operation is InsertDataOperation { Table: "core_roles", Schema: "shared" });
+
         Assert.Contains(
             operations,
             operation => operation is InsertDataOperation { Table: "custom_profiles", Schema: "instance" });
@@ -68,7 +69,9 @@ public sealed class PostgreSqlModelManagedDataOwnershipTests
             operations[ordinal] = new InsertDataOperation
             {
                 Table = "roles",
-                Schema = ordinal % 2 == 0 ? "shared" : "instance",
+                Schema = ordinal % 2 == 0
+                    ? "shared"
+                    : "instance",
                 Columns = ["Id", "Name"],
                 Values = values,
             };
@@ -82,13 +85,16 @@ public sealed class PostgreSqlModelManagedDataOwnershipTests
         Assert.Equal(50_000, filtered.Count);
         for (var ordinal = 0; ordinal < filtered.Count; ordinal++)
         {
-            Assert.Same(operations[(ordinal * 2) + 1], filtered[ordinal]);
+            Assert.Same(operations[ordinal * 2 + 1], filtered[ordinal]);
         }
     }
 
     private static IRelationalModel RelationalModel(
         DbContext context
-    ) => context.GetService<IDesignTimeModel>().Model.GetRelationalModel();
+    ) => context
+        .GetService<IDesignTimeModel>()
+        .Model
+        .GetRelationalModel();
 
     private static string? Table(
         MigrationOperation operation
@@ -135,8 +141,17 @@ public sealed class PostgreSqlModelManagedDataOwnershipTests
                     table => table.ExcludeFromMigrations());
 
                 entity.HasKey(role => role.Id);
-                entity.Property(role => role.Name).HasMaxLength(64).IsRequired();
-                entity.HasData(new CoreRole { Id = 1, Name = "administrator" });
+                entity
+                    .Property(role => role.Name)
+                    .HasMaxLength(64)
+                    .IsRequired();
+
+                entity.HasData(
+                    new CoreRole
+                    {
+                        Id = 1,
+                        Name = "administrator",
+                    });
             });
 
             if (IncludeCustomTable)
@@ -145,8 +160,17 @@ public sealed class PostgreSqlModelManagedDataOwnershipTests
                 {
                     entity.ToTable("custom_profiles", "instance");
                     entity.HasKey(profile => profile.Id);
-                    entity.Property(profile => profile.Name).HasMaxLength(64).IsRequired();
-                    entity.HasData(new CustomProfile { Id = 1, Name = "default" });
+                    entity
+                        .Property(profile => profile.Name)
+                        .HasMaxLength(64)
+                        .IsRequired();
+
+                    entity.HasData(
+                        new CustomProfile
+                        {
+                            Id = 1,
+                            Name = "default",
+                        });
                 });
             }
         }
@@ -198,14 +222,20 @@ public sealed class PostgreSqlModelManagedDataOwnershipTests
                     table => table.ExcludeFromMigrations());
 
                 entity.HasKey(role => role.Id);
-                entity.Property(role => role.Name).HasMaxLength(64).IsRequired();
+                entity
+                    .Property(role => role.Name)
+                    .HasMaxLength(64)
+                    .IsRequired();
             });
 
             modelBuilder.Entity<CustomRole>(entity =>
             {
                 entity.ToTable("roles", "instance");
                 entity.HasKey(role => role.Id);
-                entity.Property(role => role.Name).HasMaxLength(64).IsRequired();
+                entity
+                    .Property(role => role.Name)
+                    .HasMaxLength(64)
+                    .IsRequired();
             });
         }
     }

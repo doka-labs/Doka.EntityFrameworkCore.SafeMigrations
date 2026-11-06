@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 /// <summary>Builds bounded SQL Server catalog and guarded execution contracts.</summary>
@@ -8,12 +10,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         "COALESCE(HAS_PERMS_BY_NAME(DB_NAME(),N'DATABASE',N'VIEW DEFINITION'),0)=1 "
         + "AND COALESCE(HAS_PERMS_BY_NAME(N'sys.sql_expression_dependencies',N'OBJECT',N'SELECT'),0)=1";
 
-    private readonly IRelationalTypeMappingSource _typeMappingSource;
-    private readonly ISqlGenerationHelper _sqlGenerationHelper;
-    private readonly Func<string, string> _literal;
-    private readonly Func<object?, string, string> _valueLiteral;
-    private readonly Func<object, bool, string>? _sourceParameter;
     private readonly SqlServerSafeMigrationSqlExpressionRenderer _expressionRenderer;
+    private readonly Func<string, string> _literal;
+    private readonly Func<object, bool, string>? _sourceParameter;
+    private readonly ISqlGenerationHelper _sqlGenerationHelper;
+
+    private readonly IRelationalTypeMappingSource _typeMappingSource;
+    private readonly Func<object?, string, string> _valueLiteral;
 
     /// <summary>Initializes the catalog builder with the active provider services.</summary>
     /// <param name="typeMappingSource">The provider's canonical store-type and literal mappings.</param>
@@ -75,7 +78,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             DropTableIntent value => BuildDropTable(value),
             RenameTableIntent value => BuildRenameTable(value),
             EnsureColumnIntent value => BuildEnsureColumn(value),
-            DropColumnIntent value => BuildDropColumn(value, projectedIndexDropCandidates,
+            DropColumnIntent value => BuildDropColumn(
+                value,
+                projectedIndexDropCandidates,
                 projectedConstraintDropCandidates),
             RenameColumnIntent value => BuildRenameColumn(value),
             AlterColumnIntent value => BuildAlterColumn(value),
@@ -95,7 +100,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             DeleteModelManagedDataIntent value => BuildDeleteModelManagedData(value),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(operation),
-                operation.Intent.GetType().FullName,
+                operation.Intent.GetType()
+                    .FullName,
                 "Unknown SafeMigrations intent type."),
         };
 
@@ -111,15 +117,16 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             prerequisite = Bit($"({prerequisite}) = 1 AND ({plan.PrerequisiteExpression}) = 1");
         }
 
-        return QualifyExpressionDependencyRead(plan with
-        {
-            PhysicalTableSupportExpression = BuildPhysicalTableSupportExpression(operation.Intent),
-            DefaultValueSupportExpression = defaultSupport,
-            ColumnCollationSupportExpression = columnCollationSupport,
-            DefaultValueSupportRequiresDelayedBinding = delayedDefault,
-            RequiresDelayedBinding = plan.RequiresDelayedBinding || delayedDefault,
-            PrerequisiteExpression = prerequisite,
-        });
+        return QualifyExpressionDependencyRead(
+            plan with
+            {
+                PhysicalTableSupportExpression = BuildPhysicalTableSupportExpression(operation.Intent),
+                DefaultValueSupportExpression = defaultSupport,
+                ColumnCollationSupportExpression = columnCollationSupport,
+                DefaultValueSupportRequiresDelayedBinding = delayedDefault,
+                RequiresDelayedBinding = plan.RequiresDelayedBinding || delayedDefault,
+                PrerequisiteExpression = prerequisite,
+            });
     }
 
     /// <summary>Keeps a denied dependency-catalog read outside the dynamically compiled classifier.</summary>
@@ -140,17 +147,19 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         return plan with
         {
             RequiresDelayedBinding = true,
-            StateEvaluationGuardExpression = Bit($"({ExpressionDependencyReadPermission}) "
+            StateEvaluationGuardExpression = Bit(
+                $"({ExpressionDependencyReadPermission}) "
                 + $"AND ({plan.StateEvaluationGuardExpression})=1"),
             StateEvaluationGuardFailureExpression = "N'unsupported'",
-            AnalysisOuterStateGuardExpression = plan.AnalysisOuterStateGuardExpression is null ? null
+            AnalysisOuterStateGuardExpression = plan.AnalysisOuterStateGuardExpression is null
+                ? null
                 : Bit($"({ExpressionDependencyReadPermission}) AND ({plan.AnalysisOuterStateGuardExpression})=1"),
             PrerequisiteFailureCodeExpression = $"CASE WHEN NOT ({ExpressionDependencyReadPermission}) "
-                + "THEN N'dependency_catalog_permission' "
-                + $"ELSE ({plan.PrerequisiteFailureCodeExpression ?? "CONVERT(nvarchar(128),NULL)"}) END",
+            + "THEN N'dependency_catalog_permission' "
+            + $"ELSE ({plan.PrerequisiteFailureCodeExpression ?? "CONVERT(nvarchar(128),NULL)"}) END",
             ClassificationCodeExpression = $"CASE WHEN NOT ({ExpressionDependencyReadPermission}) "
-                + "THEN N'dependency_catalog_permission' "
-                + $"ELSE ({plan.ClassificationCodeExpression ?? "NULL"}) END",
+            + "THEN N'dependency_catalog_permission' "
+            + $"ELSE ({plan.ClassificationCodeExpression ?? "NULL"}) END",
         };
     }
 
@@ -174,8 +183,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             EnsureIndexIntent value => TableAndColumnsExist(
                 value.Definition.Table,
                 value.Definition.Schema,
-                value.Definition.Keys.Select(static key => key.Column!).Concat(value.Definition.IncludedColumns)
-                    .Concat(IndexFilterColumns(value.Definition)).Distinct(StringComparer.Ordinal).ToArray()),
+                value
+                    .Definition
+                    .Keys
+                    .Select(static key => key.Column!)
+                    .Concat(value.Definition.IncludedColumns)
+                    .Concat(IndexFilterColumns(value.Definition))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray()),
             EnsurePrimaryKeyIntent value => TableAndColumnsExist(
                 value.Definition.Table,
                 value.Definition.Schema,
@@ -185,7 +200,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 value.Definition.Schema,
                 value.Definition.Columns),
             EnsureCheckConstraintIntent value
-                => TableAndColumnsExist(value.Definition.Table, value.Definition.Schema,
+                => TableAndColumnsExist(
+                    value.Definition.Table,
+                    value.Definition.Schema,
                     SafeMigrationPrerequisiteColumns.Local(value)),
             EnsureForeignKeyIntent value => ForeignKeyPrerequisites(value.Definition),
             ModelManagedDataIntent value => BuildModelManagedDataPrerequisite(value),
@@ -207,7 +224,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         SafeMigrationOperation operation
     )
     {
-        if (operation.GetAnnotations().Any())
+        if (operation
+            .GetAnnotations()
+            .Any())
         {
             return "operation_annotation";
         }
@@ -264,7 +283,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             }
 
             if (table.Definition.Columns.Count(static column
-                => TryGetIdentity(column, out var identity, out _, out _) && identity) > 1)
+                    => TryGetIdentity(column, out var identity, out _, out _) && identity)
+                > 1)
             {
                 return "identity_multiple_columns";
             }
@@ -340,7 +360,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             if (HasIndexFilter(index))
             {
                 var filter = GetStructuredIndexFilter(index);
-                if (filter is null || !IsSupportedIndexFilter(filter)
+                if (filter is null
+                    || !IsSupportedIndexFilter(filter)
                     || _expressionRenderer.GetUnsupportedFeature(filter) is not null)
                 {
                     return "index_filter_unproven";
@@ -378,7 +399,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     )
     {
         var input = string.Join("\u001e", kind, schema ?? "dbo", table, name, expression);
-        var digest = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(input));
+        var digest = SHA256.HashData(Encoding.UTF8.GetBytes(input));
 
         return Convert.ToHexString(digest);
     }
@@ -410,9 +431,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // string/binary pair into its collection-mapping inference path.
         var clrType = Nullable.GetUnderlyingType(definition.ClrType) ?? definition.ClrType;
         if (!IsSupportedScalarClrType(clrType)
-            || definition.StoreType is { } storeType
+            || (definition.StoreType is { } storeType
                 && (!TryParseStoreType(storeType, out var target)
-                    || !ColumnClrTypeMatchesScalarFamily(clrType, target)))
+                    || !ColumnClrTypeMatchesScalarFamily(clrType, target))))
         {
             return null;
         }
@@ -433,19 +454,36 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <returns>True for built-in scalar values represented by the provider's literal contract.</returns>
     internal static bool IsSupportedScalarClrType(
         Type type
-    ) => type == typeof(string) || type == typeof(char) || type == typeof(byte[]) || type == typeof(Guid)
-        || type == typeof(DateTime) || type == typeof(DateTimeOffset) || type == typeof(DateOnly)
-        || type == typeof(TimeOnly) || type == typeof(TimeSpan) || type == typeof(float) || type == typeof(double)
-        || type == typeof(bool) || type == typeof(byte) || type == typeof(sbyte) || type == typeof(short)
-        || type == typeof(ushort) || type == typeof(int) || type == typeof(uint) || type == typeof(long)
-        || type == typeof(ulong) || type == typeof(decimal) || type.IsEnum;
+    ) => type == typeof(string)
+        || type == typeof(char)
+        || type == typeof(byte[])
+        || type == typeof(Guid)
+        || type == typeof(DateTime)
+        || type == typeof(DateTimeOffset)
+        || type == typeof(DateOnly)
+        || type == typeof(TimeOnly)
+        || type == typeof(TimeSpan)
+        || type == typeof(float)
+        || type == typeof(double)
+        || type == typeof(bool)
+        || type == typeof(byte)
+        || type == typeof(sbyte)
+        || type == typeof(short)
+        || type == typeof(ushort)
+        || type == typeof(int)
+        || type == typeof(uint)
+        || type == typeof(long)
+        || type == typeof(ulong)
+        || type == typeof(decimal)
+        || type.IsEnum;
 
     private static bool ColumnClrTypeMatchesScalarFamily(
         Type type,
         SqlServerColumnType target
     )
     {
-        if (type == typeof(string) || type == typeof(char))
+        if (type == typeof(string)
+            || type == typeof(char))
         {
             return target.IsCharacter;
         }
@@ -460,18 +498,30 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return target.Name == "uniqueidentifier";
         }
 
-        if (type == typeof(DateTime) || type == typeof(DateTimeOffset) || type == typeof(DateOnly))
+        if (type == typeof(DateTime)
+            || type == typeof(DateTimeOffset)
+            || type == typeof(DateOnly))
         {
             return target.Name is "date" or "datetime" or "datetime2" or "datetimeoffset" or "smalldatetime";
         }
 
-        if (type == typeof(TimeOnly) || type == typeof(TimeSpan))
+        if (type == typeof(TimeOnly)
+            || type == typeof(TimeSpan))
         {
             return target.Name == "time";
         }
 
-        return target.Name is "bigint" or "bit" or "decimal" or "float" or "int" or "money" or "numeric"
-            or "real" or "smallint" or "smallmoney" or "tinyint";
+        return target.Name is "bigint"
+            or "bit"
+            or "decimal"
+            or "float"
+            or "int"
+            or "money"
+            or "numeric"
+            or "real"
+            or "smallint"
+            or "smallmoney"
+            or "tinyint";
     }
 
     /// <summary>Parses supported physical scalar facets without materializing numeric argument tokens.</summary>
@@ -480,25 +530,57 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         out SqlServerColumnType type
     )
     {
-        var storeType = value.Trim().ToLowerInvariant();
+        var storeType = value
+            .Trim()
+            .ToLowerInvariant();
+
         var opening = storeType.IndexOf('(');
-        var name = opening < 0 ? storeType : storeType[..opening].TrimEnd();
+        var name = opening < 0
+            ? storeType
+            : storeType[..opening]
+                .TrimEnd();
+
         // WHY: Canonical type names remain owned strings, but numeric arguments
         // are consumed synchronously and need no substring or split-array snapshot.
         var hasArguments = opening >= 0 && storeType.EndsWith(')');
-        var arguments = hasArguments ? storeType.AsSpan(opening + 1, storeType.Length - opening - 2) : default;
+        var arguments = hasArguments
+            ? storeType.AsSpan(opening + 1, storeType.Length - opening - 2)
+            : default;
 
-        if (opening >= 0 && !hasArguments)
+        if (opening >= 0
+            && !hasArguments)
         {
             type = default;
 
             return false;
         }
 
-        if (name is not ("bigint" or "binary" or "bit" or "char" or "date" or "datetime" or "datetime2"
-            or "datetimeoffset" or "decimal" or "float" or "int" or "money" or "nchar" or "numeric"
-            or "nvarchar" or "real" or "rowversion" or "smalldatetime" or "smallint" or "smallmoney"
-            or "time" or "timestamp" or "tinyint" or "uniqueidentifier" or "varbinary" or "varchar"))
+        if (name is not ("bigint"
+            or "binary"
+            or "bit"
+            or "char"
+            or "date"
+            or "datetime"
+            or "datetime2"
+            or "datetimeoffset"
+            or "decimal"
+            or "float"
+            or "int"
+            or "money"
+            or "nchar"
+            or "numeric"
+            or "nvarchar"
+            or "real"
+            or "rowversion"
+            or "smalldatetime"
+            or "smallint"
+            or "smallmoney"
+            or "time"
+            or "timestamp"
+            or "tinyint"
+            or "uniqueidentifier"
+            or "varbinary"
+            or "varchar"))
         {
             type = default;
 
@@ -532,9 +614,15 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             }
             else if (short.TryParse(arguments, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed)
                 && parsed > 0
-                && parsed <= (name is "nchar" or "nvarchar" ? 4000 : 8000))
+                && parsed
+                <= (name is "nchar" or "nvarchar"
+                    ? 4000
+                    : 8000))
             {
-                var bytes = name is "nchar" or "nvarchar" ? parsed * 2 : parsed;
+                var bytes = name is "nchar" or "nvarchar"
+                    ? parsed * 2
+                    : parsed;
+
                 if (bytes > short.MaxValue)
                 {
                     type = default;
@@ -555,11 +643,21 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         if (name is "decimal" or "numeric")
         {
             var separator = arguments.IndexOf(',');
-            if (separator < 0 || arguments[(separator + 1)..].Contains(',')
+            if (separator < 0
+                || arguments[(separator + 1)..]
+                    .Contains(',')
                 || !byte.TryParse(
-                    arguments[..separator].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var p)
+                    arguments[..separator]
+                        .Trim(),
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var p)
                 || !byte.TryParse(
-                    arguments[(separator + 1)..].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var s))
+                    arguments[(separator + 1)..]
+                        .Trim(),
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var s))
             {
                 type = default;
 
@@ -568,7 +666,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
             precision = p;
             scale = s;
-            if (p is < 1 or > 38 || s > p)
+            if (p is < 1 or > 38
+                || s > p)
             {
                 type = default;
 
@@ -601,16 +700,31 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
 
         if (hasArguments
-            && name is not ("char" or "nchar" or "varchar" or "nvarchar" or "binary" or "varbinary"
-                or "decimal" or "numeric" or "datetime2" or "datetimeoffset" or "time"))
+            && name is not ("char"
+                or "nchar"
+                or "varchar"
+                or "nvarchar"
+                or "binary"
+                or "varbinary"
+                or "decimal"
+                or "numeric"
+                or "datetime2"
+                or "datetimeoffset"
+                or "time"))
         {
             type = default;
 
             return false;
         }
 
-        type = new SqlServerColumnType(name == "rowversion" ? "timestamp" : name,
-            length, precision, scale, isCharacter);
+        type = new SqlServerColumnType(
+            name == "rowversion"
+                ? "timestamp"
+                : name,
+            length,
+            precision,
+            scale,
+            isCharacter);
 
         return true;
     }
@@ -627,8 +741,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return TableExists(table, schema);
         }
 
-        var values = string.Join(", ", columns.Distinct(StringComparer.Ordinal)
-            .Select((column, index) => $"({index + 1}, {Literal(column)})"));
+        var values = string.Join(
+            ", ",
+            columns
+                .Distinct(StringComparer.Ordinal)
+                .Select((column, index) => $"({index + 1}, {Literal(column)})"));
 
         return $"({TableExists(table, schema)}) AND NOT EXISTS (SELECT 1 FROM (VALUES {values}) "
             + $"expected(ordinal, name) WHERE NOT EXISTS (SELECT 1 FROM sys.columns c "

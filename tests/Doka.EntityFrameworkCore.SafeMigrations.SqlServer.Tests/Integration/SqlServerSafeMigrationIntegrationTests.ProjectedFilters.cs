@@ -22,28 +22,46 @@ public sealed class SqlServerSafeMigrationProjectedFiltersIntegrationTests : Sql
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.CreateTableIfNotExists("projected_filter_values", table => new
-        {
-            Id = table.Column<int>(type: "int", nullable: false),
-            Code = table.Column<int>(type: "int", nullable: true),
-        }, constraints: table => table.PrimaryKey("PK_projected_filter_values", row => row.Id));
-        var definition = new ExpectedIndexDefinition("IX_projected_filter_values_Code", "projected_filter_values",
-            [new ExpectedIndexKeyDefinition("Code")], unique: true,
-            structuredFilter: new SafeMigrationSqlBinaryExpression(SafeMigrationSql.Identifier("Code"),
-                SafeMigrationSqlBinaryOperator.Equal, SafeMigrationSql.Literal(value)));
+        builder.CreateTableIfNotExists(
+            "projected_filter_values",
+            table => new
+            {
+                Id = table.Column<int>(type: "int", nullable: false),
+                Code = table.Column<int>(type: "int", nullable: true),
+            },
+            constraints: table => table.PrimaryKey("PK_projected_filter_values", row => row.Id));
 
-        builder.Operations.Add(new SafeMigrationOperation(new EnsureIndexIntent(definition),
-            SafeMigrationPolicy.ThrowIfDifferent));
+        var definition = new ExpectedIndexDefinition(
+            "IX_projected_filter_values_Code",
+            "projected_filter_values",
+            [new ExpectedIndexKeyDefinition("Code")],
+            unique: true,
+            structuredFilter: new SafeMigrationSqlBinaryExpression(
+                SafeMigrationSql.Identifier("Code"),
+                SafeMigrationSqlBinaryOperator.Equal,
+                SafeMigrationSql.Literal(value)));
+
+        builder.Operations.Add(
+            new SafeMigrationOperation(
+                new EnsureIndexIntent(definition),
+                SafeMigrationPolicy.ThrowIfDifferent));
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-projected-filter-value"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-projected-filter-value"),
+                cancellationToken: CancellationToken.None);
 
-        var tableCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.projected_filter_values');");
+        var tableCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.projected_filter_values');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(expected, report.Status);
@@ -58,26 +76,41 @@ public sealed class SqlServerSafeMigrationProjectedFiltersIntegrationTests : Sql
     public async Task ProjectedCharacterFilter_RejectsColumnSideConversion()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.CreateTableIfNotExists("projected_filter_precedence", table => new
-        {
-            Id = table.Column<int>(type: "int", nullable: false),
-            Code = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: true),
-        }, constraints: table => table.PrimaryKey("PK_projected_filter_precedence", row => row.Id));
-        var definition = new ExpectedIndexDefinition(
-            "IX_projected_filter_precedence_Code", "projected_filter_precedence",
-            [new ExpectedIndexKeyDefinition("Code")], unique: true,
-            structuredFilter: new SafeMigrationSqlBinaryExpression(SafeMigrationSql.Identifier("Code"),
-                SafeMigrationSqlBinaryOperator.Equal, SafeMigrationSql.Literal(1)));
+        builder.CreateTableIfNotExists(
+            "projected_filter_precedence",
+            table => new
+            {
+                Id = table.Column<int>(type: "int", nullable: false),
+                Code = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: true),
+            },
+            constraints: table => table.PrimaryKey("PK_projected_filter_precedence", row => row.Id));
 
-        builder.Operations.Add(new SafeMigrationOperation(new EnsureIndexIntent(definition),
-            SafeMigrationPolicy.ThrowIfDifferent));
+        var definition = new ExpectedIndexDefinition(
+            "IX_projected_filter_precedence_Code",
+            "projected_filter_precedence",
+            [new ExpectedIndexKeyDefinition("Code")],
+            unique: true,
+            structuredFilter: new SafeMigrationSqlBinaryExpression(
+                SafeMigrationSql.Identifier("Code"),
+                SafeMigrationSqlBinaryOperator.Equal,
+                SafeMigrationSql.Literal(1)));
+
+        builder.Operations.Add(
+            new SafeMigrationOperation(
+                new EnsureIndexIntent(definition),
+                SafeMigrationPolicy.ThrowIfDifferent));
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-projected-filter-precedence"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-projected-filter-precedence"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -90,27 +123,40 @@ public sealed class SqlServerSafeMigrationProjectedFiltersIntegrationTests : Sql
     public async Task ProjectedNumericFilter_ValidConstantCreatesThePhysicalIndex()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.CreateTableIfNotExists("projected_filter_runtime", table => new
-        {
-            Id = table.Column<int>(type: "int", nullable: false),
-            Code = table.Column<int>(type: "int", nullable: true),
-        }, constraints: table => table.PrimaryKey("PK_projected_filter_runtime", row => row.Id));
-        var definition = new ExpectedIndexDefinition("IX_projected_filter_runtime_Code", "projected_filter_runtime",
-            [new ExpectedIndexKeyDefinition("Code")], unique: true,
-            structuredFilter: new SafeMigrationSqlBinaryExpression(SafeMigrationSql.Identifier("Code"),
-                SafeMigrationSqlBinaryOperator.Equal, SafeMigrationSql.Literal("1")));
+        builder.CreateTableIfNotExists(
+            "projected_filter_runtime",
+            table => new
+            {
+                Id = table.Column<int>(type: "int", nullable: false),
+                Code = table.Column<int>(type: "int", nullable: true),
+            },
+            constraints: table => table.PrimaryKey("PK_projected_filter_runtime", row => row.Id));
 
-        builder.Operations.Add(new SafeMigrationOperation(new EnsureIndexIntent(definition),
-            SafeMigrationPolicy.ThrowIfDifferent));
+        var definition = new ExpectedIndexDefinition(
+            "IX_projected_filter_runtime_Code",
+            "projected_filter_runtime",
+            [new ExpectedIndexKeyDefinition("Code")],
+            unique: true,
+            structuredFilter: new SafeMigrationSqlBinaryExpression(
+                SafeMigrationSql.Identifier("Code"),
+                SafeMigrationSqlBinaryOperator.Equal,
+                SafeMigrationSql.Literal("1")));
+
+        builder.Operations.Add(
+            new SafeMigrationOperation(
+                new EnsureIndexIntent(definition),
+                SafeMigrationPolicy.ThrowIfDifferent));
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var indexCount = await ScalarIntAsync(connectionString,
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        var indexCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.projected_filter_runtime') "
-            + "AND name = N'IX_projected_filter_runtime_Code';");
+            + "AND name = N'IX_projected_filter_runtime_Code';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, indexCount);

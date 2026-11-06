@@ -50,6 +50,7 @@ public sealed partial class SafeMigrationScaffoldingTests
             "operationFactory: static operationBuilder => operationBuilder.AddColumn<string>(",
             source,
             StringComparison.Ordinal);
+
         Assert.Contains(".Annotation(\"Provider:Facet\", \"value\")", source, StringComparison.Ordinal);
         Assert.Contains("migrationBuilder.AlterColumnIfDifferentFromModel(", source, StringComparison.Ordinal);
         Assert.Contains("SafeMigrationPolicy.RepairIfSafe", source, StringComparison.Ordinal);
@@ -65,26 +66,31 @@ public sealed partial class SafeMigrationScaffoldingTests
         var builder = new MigrationBuilder("test");
 
         // Act
-        _ = builder.AlterColumnIfDifferentFromModel(
-            operationBuilder => operationBuilder
-                .AlterColumn<string>(
-                    name: "caption",
-                    table: "items",
-                    type: "varchar(400)",
-                    maxLength: 400,
-                    nullable: false,
-                    oldClrType: typeof(string),
-                    oldType: "varchar(200)",
-                    oldMaxLength: 200)
-                .Annotation("Provider:Target", "target")
-                .OldAnnotation("Provider:Old", "old"));
+        _ = builder.AlterColumnIfDifferentFromModel(operationBuilder => operationBuilder
+            .AlterColumn<string>(
+                name: "caption",
+                table: "items",
+                type: "varchar(400)",
+                maxLength: 400,
+                nullable: false,
+                oldClrType: typeof(string),
+                oldType: "varchar(200)",
+                oldMaxLength: 200)
+            .Annotation("Provider:Target", "target")
+            .OldAnnotation("Provider:Old", "old"));
 
         // Assert
         var operation = Assert.IsType<SafeMigrationOperation>(Assert.Single(builder.Operations));
         var intent = Assert.IsType<AlterColumnIntent>(operation.Intent);
 
-        Assert.Equal("target", Assert.Single(intent.Definition.ProviderAnnotations).Value);
-        Assert.Equal("old", Assert.Single(intent.OldDefinition!.ProviderAnnotations).Value);
+        Assert.Equal("target",
+            Assert.Single(intent.Definition.ProviderAnnotations)
+                .Value);
+
+        Assert.Equal("old",
+            Assert.Single(intent.OldDefinition!.ProviderAnnotations)
+                .Value);
+
         Assert.Equal(SafeMigrationPolicy.RepairIfSafe, operation.Policy);
     }
 
@@ -96,8 +102,7 @@ public sealed partial class SafeMigrationScaffoldingTests
         var builder = new MigrationBuilder("test");
 
         // Act
-        var exception = Record.Exception(() => builder.AddColumnIfNotExistsFromModel(
-            static _ => { }));
+        var exception = Record.Exception(() => builder.AddColumnIfNotExistsFromModel(static _ => { }));
 
         // Assert
         Assert.IsType<InvalidOperationException>(exception);
@@ -112,8 +117,8 @@ public sealed partial class SafeMigrationScaffoldingTests
         var builder = new MigrationBuilder("test");
 
         // Act
-        var exception = Record.Exception(() => builder.AddColumnIfNotExistsFromModel(
-            static builder => builder.DropColumn("legacy", "items")));
+        var exception = Record.Exception(() =>
+            builder.AddColumnIfNotExistsFromModel(static builder => builder.DropColumn("legacy", "items")));
 
         // Assert
         Assert.IsType<InvalidOperationException>(exception);
@@ -128,12 +133,11 @@ public sealed partial class SafeMigrationScaffoldingTests
         var builder = new MigrationBuilder("test");
 
         // Act
-        var exception = Record.Exception(() => builder.AddColumnIfNotExistsFromModel(
-            static builder =>
-            {
-                builder.AddColumn<int>("left", "items", nullable: false);
-                builder.AddColumn<int>("right", "items", nullable: false);
-            }));
+        var exception = Record.Exception(() => builder.AddColumnIfNotExistsFromModel(static builder =>
+        {
+            builder.AddColumn<int>("left", "items", nullable: false);
+            builder.AddColumn<int>("right", "items", nullable: false);
+        }));
 
         // Assert
         Assert.IsType<InvalidOperationException>(exception);
@@ -148,13 +152,12 @@ public sealed partial class SafeMigrationScaffoldingTests
         var builder = new MigrationBuilder("test");
 
         // Act
-        var exception = Record.Exception(() => builder.AddColumnIfNotExistsFromModel(
-            static migrationBuilder =>
-            {
-                migrationBuilder.AddColumn<int>("caption", "items", nullable: false);
+        var exception = Record.Exception(() => builder.AddColumnIfNotExistsFromModel(static migrationBuilder =>
+        {
+            migrationBuilder.AddColumn<int>("caption", "items", nullable: false);
 
-                throw new InvalidOperationException("callback failed");
-            }));
+            throw new InvalidOperationException("callback failed");
+        }));
 
         // Assert
         var invalidOperation = Assert.IsType<InvalidOperationException>(exception);

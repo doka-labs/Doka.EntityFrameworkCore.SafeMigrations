@@ -16,10 +16,12 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
     [InlineData("primary")]
     [InlineData("unique")]
     [InlineData("index")]
-    public async Task RemovedPrincipalPrerequisiteBlocksLaterInlineForeignKey(string removal)
+    public async Task RemovedPrincipalPrerequisiteBlocksLaterInlineForeignKey(
+        string removal
+    )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var key = removal switch
         {
             "unique" => "CONSTRAINT UQ_inline_principal UNIQUE (Id)",
@@ -27,12 +29,18 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
             _ => "CONSTRAINT PK_inline_principal PRIMARY KEY (Id)",
         };
 
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.inline_principal (Id int NOT NULL"
-            + (key.Length == 0 ? string.Empty : ", " + key) + ");"
+            + (key.Length == 0
+                ? string.Empty
+                : ", " + key)
+            + ");"
             + (removal == "index"
                 ? " CREATE UNIQUE INDEX IX_inline_principal ON dbo.inline_principal(Id);"
-                : string.Empty));
+                : string.Empty),
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
 
@@ -54,12 +62,19 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
                 throw new ArgumentOutOfRangeException(nameof(removal));
         }
 
-        builder.EnsureTable(InlineDependent("inline_principal"),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            InlineDependent("inline_principal"),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("removed-inline-prerequisite"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("removed-inline-prerequisite"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -77,24 +92,44 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("inline_principal", "renamed_principal");
-        builder.EnsureTable(InlineDependent(useNewName ? "renamed_principal" : "inline_principal"),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            InlineDependent(
+                useNewName
+                    ? "renamed_principal"
+                    : "inline_principal"),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("renamed-inline-principal"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("renamed-inline-principal"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(expectedReady ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+        Assert.Equal(
+            expectedReady
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
             report.Status);
+
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
-        Assert.Equal(expectedReady ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
+        Assert.Equal(
+            expectedReady
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectPrerequisiteMissing,
             report.Assessments[1].Action);
     }
 
@@ -109,26 +144,45 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("inline_principal", "intermediate_principal");
         builder.RenameTableIfExists("intermediate_principal", "renamed_principal");
-        builder.EnsureTable(InlineDependent(principalTable),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            InlineDependent(principalTable),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("repeated-renamed-inline-principal"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("repeated-renamed-inline-principal"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(expectedReady ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+        Assert.Equal(
+            expectedReady
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
             report.Status);
-        Assert.All(report.Assessments.Take(2),
+
+        Assert.All(
+            report.Assessments.Take(2),
             assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
-        Assert.Equal(expectedReady ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
+
+        Assert.Equal(
+            expectedReady
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectPrerequisiteMissing,
             report.Assessments[2].Action);
     }
 
@@ -137,19 +191,29 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
     public async Task RejectedPrincipalRenameDoesNotActivateInlineStorageProof()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY); "
-            + "CREATE TABLE dbo.renamed_principal (Id bigint NOT NULL CONSTRAINT PK_occupied_principal PRIMARY KEY);");
+            + "CREATE TABLE dbo.renamed_principal (Id bigint NOT NULL CONSTRAINT PK_occupied_principal PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("inline_principal", "renamed_principal");
-        builder.EnsureTable(InlineDependent("renamed_principal"),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            InlineDependent("renamed_principal"),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("rejected-renamed-inline-principal"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("rejected-renamed-inline-principal"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -161,23 +225,37 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
     [SqlServerLiveTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task RepeatedPrincipalRenameRetainsTargetObjectKindGuard(bool targetIsView)
+    public async Task RepeatedPrincipalRenameRetainsTargetObjectKindGuard(
+        bool targetIsView
+    )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
-        await ExecuteSqlAsync(connectionString, targetIsView
-            ? "CREATE VIEW dbo.occupied_principal AS SELECT 1 AS Id;"
-            : "CREATE TABLE dbo.occupied_principal (Id int NOT NULL);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteSqlAsync(
+            connectionString,
+            targetIsView
+                ? "CREATE VIEW dbo.occupied_principal AS SELECT 1 AS Id;"
+                : "CREATE TABLE dbo.occupied_principal (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("inline_principal", "intermediate_principal");
         builder.RenameTableIfExists("intermediate_principal", "occupied_principal");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("ordered-rename-target-kind"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("ordered-rename-target-kind"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -191,30 +269,44 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
     public async Task OpaqueSqlAfterRenameCannotRetainInlinePrerequisiteProof()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("inline_principal", "renamed_principal");
         builder.Sql("SELECT 1;");
-        builder.EnsureTable(InlineDependent("renamed_principal"),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            InlineDependent("renamed_principal"),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("opaque-sql-invalidates-inline-rename"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("opaque-sql-invalidates-inline-rename"),
+                cancellationToken: CancellationToken.None);
 
         var preflightFailure = Record.Exception(report.ThrowIfBlocked);
-        var preflightChildCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.inline_dependent',N'U');");
+        var preflightChildCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.inline_dependent',N'U');",
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var foreignKeyCount = await ScalarIntAsync(connectionString,
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        var foreignKeyCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.foreign_keys WHERE name=N'FK_inline_dependent' "
             + "AND parent_object_id=OBJECT_ID(N'dbo.inline_dependent',N'U') "
             + "AND referenced_object_id=OBJECT_ID(N'dbo.renamed_principal',N'U') "
-            + "AND is_disabled=0 AND is_not_trusted=0;");
+            + "AND is_disabled=0 AND is_not_trusted=0;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
@@ -238,35 +330,60 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
     [SqlServerLiveTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task OpaqueSqlAfterRenameRejectsRemovedInlinePrerequisiteBeforeChildCreation(bool dropTable)
+    public async Task OpaqueSqlAfterRenameRejectsRemovedInlinePrerequisiteBeforeChildCreation(
+        bool dropTable
+    )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("inline_principal", "renamed_principal");
-        builder.Sql(dropTable ? "DROP TABLE dbo.renamed_principal;"
-            : "ALTER TABLE dbo.renamed_principal DROP CONSTRAINT PK_inline_principal;");
-        builder.EnsureTable(InlineDependent("renamed_principal"),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.Sql(
+            dropTable
+                ? "DROP TABLE dbo.renamed_principal;"
+                : "ALTER TABLE dbo.renamed_principal DROP CONSTRAINT PK_inline_principal;");
+
+        builder.EnsureTable(
+            InlineDependent("renamed_principal"),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("opaque-sql-removes-inline-prerequisite"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("opaque-sql-removes-inline-prerequisite"),
+                cancellationToken: CancellationToken.None);
 
         var preflightFailure = Record.Exception(report.ThrowIfBlocked);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
-        var childCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.inline_dependent',N'U');");
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            cancellationToken: CancellationToken.None));
 
-        var principalCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.renamed_principal',N'U');");
+        var childCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.inline_dependent',N'U');",
+            cancellationToken: CancellationToken.None);
 
-        var keyCount = await ScalarIntAsync(connectionString,
+        var principalCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.renamed_principal',N'U');",
+            cancellationToken: CancellationToken.None);
+
+        var keyCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.key_constraints "
-            + "WHERE parent_object_id=OBJECT_ID(N'dbo.renamed_principal',N'U');");
+            + "WHERE parent_object_id=OBJECT_ID(N'dbo.renamed_principal',N'U');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
@@ -281,9 +398,17 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
         Assert.Equal(typeof(SqlOperation).FullName, origin.OperationType);
         Assert.Null(origin.MigrationId);
         Assert.Null(preflightFailure);
-        Assert.Equal(51004, Assert.IsType<SqlException>(failure).Number);
+        Assert.Equal(51004,
+            Assert.IsType<SqlException>(failure)
+                .Number);
+
         Assert.Equal(0, childCount);
-        Assert.Equal(dropTable ? 0 : 1, principalCount);
+        Assert.Equal(
+            dropTable
+                ? 0
+                : 1,
+            principalCount);
+
         Assert.Equal(0, keyCount);
     }
 
@@ -292,19 +417,29 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
     public async Task DroppedCandidateKeyDoesNotInvalidateSurvivingEquivalentKey()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY, "
-            + "CONSTRAINT UQ_inline_principal UNIQUE (Id));");
+            + "CONSTRAINT UQ_inline_principal UNIQUE (Id));",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropPrimaryKeyIfExists("PK_inline_principal", "inline_principal");
-        builder.EnsureTable(InlineDependent("inline_principal"),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            InlineDependent("inline_principal"),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("surviving-inline-candidate-key"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("surviving-inline-candidate-key"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -315,14 +450,19 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
     [SqlServerLiveTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task RemovedIncomingForeignKeyPermitsSameStreamPrincipalDrop(bool dropChild)
+    public async Task RemovedIncomingForeignKeyPermitsSameStreamPrincipalDrop(
+        bool dropChild
+    )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.drop_principal (Id int NOT NULL CONSTRAINT PK_drop_principal PRIMARY KEY); "
             + "CREATE TABLE dbo.drop_dependent (ParentId int NOT NULL, "
-            + "CONSTRAINT FK_drop_dependent FOREIGN KEY (ParentId) REFERENCES dbo.drop_principal(Id));");
+            + "CONSTRAINT FK_drop_dependent FOREIGN KEY (ParentId) REFERENCES dbo.drop_principal(Id));",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
 
@@ -338,12 +478,19 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
         builder.DropTableIfExists("drop_principal");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("ordered-incoming-fk-drop"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("ordered-incoming-fk-drop"),
+                cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var remaining = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.drop_principal');");
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        var remaining = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.drop_principal');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -356,21 +503,32 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
     public async Task RemovedIncomingForeignKeyDoesNotBypassOtherDropDependencies()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.drop_principal (Id int NOT NULL CONSTRAINT PK_drop_principal PRIMARY KEY); "
             + "CREATE TABLE dbo.drop_dependent (ParentId int NOT NULL, "
-            + "CONSTRAINT FK_drop_dependent FOREIGN KEY (ParentId) REFERENCES dbo.drop_principal(Id));");
-        await ExecuteSqlAsync(connectionString,
-            "CREATE VIEW dbo.bound_principal WITH SCHEMABINDING AS SELECT Id FROM dbo.drop_principal;");
+            + "CONSTRAINT FK_drop_dependent FOREIGN KEY (ParentId) REFERENCES dbo.drop_principal(Id));",
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE VIEW dbo.bound_principal WITH SCHEMABINDING AS SELECT Id FROM dbo.drop_principal;",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("FK_drop_dependent", "drop_dependent");
         builder.DropTableIfExists("drop_principal");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("independent-drop-dependency"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("independent-drop-dependency"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -390,26 +548,51 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY, "
-            + "OtherId int NOT NULL);");
+            + "OtherId int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureTable(new ExpectedTableDefinition("inline_dependent",
-            [new ExpectedColumnDefinition("ParentId", typeof(int), false, "int")],
-            foreignKeys: [new ExpectedForeignKeyDefinition("FK_inline_dependent", "inline_dependent",
-                ["ParentId"], "inline_principal", [principalColumn])]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "inline_dependent",
+                [new ExpectedColumnDefinition("ParentId", typeof(int), false, "int")],
+                foreignKeys:
+                [
+                    new ExpectedForeignKeyDefinition(
+                        "FK_inline_dependent",
+                        "inline_dependent",
+                        ["ParentId"],
+                        "inline_principal",
+                        [principalColumn]),
+                ]),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("inline-physical-column-id"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("inline-physical-column-id"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(expectedReady ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+        Assert.Equal(
+            expectedReady
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
             report.Status);
-        Assert.Equal(expectedReady ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
+
+        Assert.Equal(
+            expectedReady
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectPrerequisiteMissing,
             report.Assessments[0].Action);
     }
 
@@ -425,27 +608,56 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameColumnIfExists("Id", "inline_principal", "RenamedId");
-        builder.EnsureTable(new ExpectedTableDefinition("inline_dependent",
-            [new ExpectedColumnDefinition("ParentId", typeof(int), false, "int")],
-            foreignKeys: [new ExpectedForeignKeyDefinition("FK_inline_dependent", "inline_dependent",
-                ["ParentId"], "inline_principal", [useNewName ? "RenamedId" : "Id"])]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "inline_dependent",
+                [new ExpectedColumnDefinition("ParentId", typeof(int), false, "int")],
+                foreignKeys:
+                [
+                    new ExpectedForeignKeyDefinition(
+                        "FK_inline_dependent",
+                        "inline_dependent",
+                        ["ParentId"],
+                        "inline_principal",
+                        [
+                            useNewName
+                                ? "RenamedId"
+                                : "Id",
+                        ]),
+                ]),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("inline-renamed-physical-column-id"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("inline-renamed-physical-column-id"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(expectedReady ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+        Assert.Equal(
+            expectedReady
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
             report.Status);
+
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
-        Assert.Equal(expectedReady ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
+        Assert.Equal(
+            expectedReady
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectPrerequisiteMissing,
             report.Assessments[1].Action);
     }
 
@@ -455,12 +667,17 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
     [SqlServerLiveTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task InlineForeignKeyAfterPrincipalRenameAppliesAndReplays(bool renameColumn)
+    public async Task InlineForeignKeyAfterPrincipalRenameAppliesAndReplays(
+        bool renameColumn
+    )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (renameColumn)
@@ -472,26 +689,48 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
             builder.RenameTableIfExists("inline_principal", "renamed_principal");
         }
 
-        builder.EnsureTable(new ExpectedTableDefinition("inline_dependent",
-            [new ExpectedColumnDefinition("ParentId", typeof(int), false, "int")],
-            foreignKeys: [new ExpectedForeignKeyDefinition("FK_inline_dependent", "inline_dependent",
-                ["ParentId"], renameColumn ? "inline_principal" : "renamed_principal",
-                [renameColumn ? "RenamedId" : "Id"])]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "inline_dependent",
+                [new ExpectedColumnDefinition("ParentId", typeof(int), false, "int")],
+                foreignKeys:
+                [
+                    new ExpectedForeignKeyDefinition(
+                        "FK_inline_dependent",
+                        "inline_dependent",
+                        ["ParentId"],
+                        renameColumn
+                            ? "inline_principal"
+                            : "renamed_principal",
+                        [
+                            renameColumn
+                                ? "RenamedId"
+                                : "Id",
+                        ]),
+                ]),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("inline-renamed-principal-replay"));
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        var replay = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("inline-renamed-principal-replay"),
+                cancellationToken: CancellationToken.None);
 
-        var foreignKeyCount = await ScalarIntAsync(connectionString,
+        var foreignKeyCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.foreign_keys fk JOIN sys.foreign_key_columns fkc "
             + "ON fkc.constraint_object_id = fk.object_id "
             + "JOIN sys.columns principal ON principal.object_id = fkc.referenced_object_id "
             + "AND principal.column_id = fkc.referenced_column_id "
             + "WHERE fk.name = N'FK_inline_dependent' AND fk.is_disabled = 0 AND fk.is_not_trusted = 0 "
-            + $"AND principal.name = N'{(renameColumn ? "RenamedId" : "Id")}';");
+            + $"AND principal.name = N'{(renameColumn ? "RenamedId" : "Id")}';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
@@ -499,8 +738,19 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
         Assert.Equal(1, foreignKeyCount);
     }
 
-    private static ExpectedTableDefinition InlineDependent(string principalTable)
-        => new("inline_dependent", [new ExpectedColumnDefinition("ParentId", typeof(int), false, "int")],
-            foreignKeys: [new ExpectedForeignKeyDefinition("FK_inline_dependent", "inline_dependent",
-                ["ParentId"], principalTable, ["Id"])]);
+    private static ExpectedTableDefinition InlineDependent(
+        string principalTable
+    )
+        => new(
+            "inline_dependent",
+            [new ExpectedColumnDefinition("ParentId", typeof(int), false, "int")],
+            foreignKeys:
+            [
+                new ExpectedForeignKeyDefinition(
+                    "FK_inline_dependent",
+                    "inline_dependent",
+                    ["ParentId"],
+                    principalTable,
+                    ["Id"]),
+            ]);
 }

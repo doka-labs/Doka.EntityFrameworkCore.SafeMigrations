@@ -18,8 +18,13 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         foreach (var uniqueConstraint in definition.UniqueConstraints)
         {
-            CaptureTableMember(prerequisites.Indexes, uniqueConstraint.Name, AsUniqueIndex(uniqueConstraint),
-                prerequisites.NewlyCreated, SafeMigrationDatabaseObjectKind.UniqueConstraint, liveAnalysis);
+            CaptureTableMember(
+                prerequisites.Indexes,
+                uniqueConstraint.Name,
+                AsUniqueIndex(uniqueConstraint),
+                prerequisites.NewlyCreated,
+                SafeMigrationDatabaseObjectKind.UniqueConstraint,
+                liveAnalysis);
         }
     }
 
@@ -213,8 +218,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             || definition.StructuredFilter is not null
             || definition.IncludedColumns.Count > 0
             || definition.NullsDistinct == false
-            || definition.Method is not null
-                && !StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE")
+            || (definition.Method is not null
+                && !StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE"))
             || definition.Keys.Any(static key => key.Column is null
                 || key.PrefixLength is not null
                 || key.Collation is not null

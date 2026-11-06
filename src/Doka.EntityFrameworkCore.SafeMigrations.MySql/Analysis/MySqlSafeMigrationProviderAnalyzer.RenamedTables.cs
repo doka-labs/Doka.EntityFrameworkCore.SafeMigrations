@@ -2,8 +2,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationRenamedTableAnalyzer
 {
-    private readonly Dictionary<RenamedSourceKey, SafeMigrationProviderAnalysis> _renamedSourceAnalyses = [];
     private readonly HashSet<RenameTableIntent> _renameTargetConflicts = [];
+    private readonly Dictionary<RenamedSourceKey, SafeMigrationProviderAnalysis> _renamedSourceAnalyses = [];
 
     bool ISafeMigrationRenamedTableAnalyzer.TryGetRenamedTableAnalysis(
         SafeMigrationOperation operation,
@@ -14,7 +14,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     {
         return _renamedSourceAnalyses.TryGetValue(
             new RenamedSourceKey(
-                operation, sourceTable, MySqlTableIdentity.NormalizeDatabase(sourceSchema, _currentDatabase)),
+                operation,
+                sourceTable,
+                MySqlTableIdentity.NormalizeDatabase(sourceSchema, _currentDatabase)),
             out analysis);
     }
 
@@ -33,13 +35,18 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         var identities = new List<(string? Schema, string Table)>();
         var requestedSources = new HashSet<RenamedSourceKey>();
 
-        var renames = operations.Select(static operation => operation.Intent).OfType<RenameTableIntent>().ToArray();
+        var renames = operations
+            .Select(static operation => operation.Intent)
+            .OfType<RenameTableIntent>()
+            .ToArray();
+
         if (renames.Length == 0)
         {
             return;
         }
 
         await CaptureRenameTargetPresenceAsync(context, renames, cancellationToken);
+
         // WHY: Keep rename operations, physical identities and returned evidence aligned by ordinal.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -47,7 +54,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         {
             if (operations[index].Intent is RenameTableIntent rename)
             {
-                results[index] = results[index].WithRenameTargetExists(_renameTargetConflicts.Contains(rename));
+                results[index] = results[index]
+                    .WithRenameTargetExists(_renameTargetConflicts.Contains(rename));
             }
         }
 
@@ -61,7 +69,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 var target = (MySqlTableIdentity.NormalizeDatabase(rename.NewSchema ?? rename.Schema, currentDatabase),
                     rename.NewName ?? rename.Name);
 
-                sources[target] = sources.TryGetValue(source, out var original) ? original : source;
+                sources[target] = sources.TryGetValue(source, out var original)
+                    ? original
+                    : source;
+
                 sources.Remove(source);
 
                 continue;
@@ -105,7 +116,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         {
             // Source-bound windows omit declarations, so their constraint
             // hazards must travel with the original operation identities.
-            var analyses = await AnalyzeCoreAsync(context, rebound, captureRenameSources: false, cancellationToken,
+            var analyses = await AnalyzeCoreAsync(
+                context,
+                rebound,
+                captureRenameSources: false,
+                cancellationToken,
                 backfillConstraints.Rebind(originals, rebound));
 
             // WHY: Keep rename operations, physical identities and returned evidence aligned by ordinal.
@@ -133,17 +148,18 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         AlterColumnIntent value => new AlterColumnIntent(table, value.Definition, value.OldDefinition, schema),
         EnsureIndexIntent value => new EnsureIndexIntent(
             new ExpectedIndexDefinition(
-                value.Definition.Name, table, value.Definition.Keys, schema,
-                value.Definition.Unique, value.Definition.Filter, value.Definition.IncludedColumns,
-                value.Definition.Method, value.Definition.NullsDistinct, value.Definition.StructuredFilter)),
+                value.Definition.Name,
+                table,
+                value.Definition.Keys,
+                schema,
+                value.Definition.Unique,
+                value.Definition.Filter,
+                value.Definition.IncludedColumns,
+                value.Definition.Method,
+                value.Definition.NullsDistinct,
+                value.Definition.StructuredFilter)),
         _ => throw new UnreachableException(),
     };
-
-    private readonly record struct RenamedSourceKey(
-        SafeMigrationOperation Operation,
-        string Table,
-        string? Schema
-    );
 
     private async Task CaptureRenameTargetPresenceAsync(
         DbContext context,
@@ -151,9 +167,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         CancellationToken cancellationToken
     )
     {
-        var requested = renames.Where(intent => TargetsCurrentDatabase(intent, _currentDatabase))
+        var requested = renames
+            .Where(intent => TargetsCurrentDatabase(intent, _currentDatabase))
             .GroupBy(static intent => intent.NewName ?? intent.Name, StringComparer.Ordinal)
             .ToDictionary(static group => group.Key, static group => group.ToArray(), StringComparer.Ordinal);
+
         var targets = requested.Keys.ToArray();
         if (targets.Length == 0)
         {
@@ -167,7 +185,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         await SafeMigrationCatalogProbeBatch.ReadAsync(
             connection,
             (targets.Length + SafeMigrationCatalogQueryLimits.MaximumInventoryValues - 1)
-                / SafeMigrationCatalogQueryLimits.MaximumInventoryValues,
+            / SafeMigrationCatalogQueryLimits.MaximumInventoryValues,
             maximumPayloadBytes,
             commandTimeout,
             (command, slot) =>
@@ -176,6 +194,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 var count = Math.Min(SafeMigrationCatalogQueryLimits.MaximumInventoryValues, targets.Length - offset);
                 var parameters = new string[count];
                 var valueBytes = 0;
+
                 // WHY: Keep bounded owner parameters aligned with their generated parameter-name slots.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
@@ -191,7 +210,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
                 command.CommandText = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES "
                     + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ("
-                    + string.Join(", ", parameters) + ");";
+                    + string.Join(", ", parameters)
+                    + ");";
 
                 return new SafeMigrationCatalogProbeStatement(1, valueBytes, offset);
             },
@@ -212,4 +232,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             },
             cancellationToken);
     }
+
+    private readonly record struct RenamedSourceKey(
+        SafeMigrationOperation Operation,
+        string Table,
+        string? Schema
+    );
 }

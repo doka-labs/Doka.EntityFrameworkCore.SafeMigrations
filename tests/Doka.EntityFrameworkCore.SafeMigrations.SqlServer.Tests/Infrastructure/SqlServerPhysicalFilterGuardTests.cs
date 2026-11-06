@@ -11,13 +11,19 @@ public sealed class SqlServerPhysicalFilterGuardTests
     public void RawFilter_PreservesLiteralEncodingAndEscapedQuotes()
     {
         // Arrange
-        var definition = new ExpectedIndexDefinition("IX_items_Code", "items",
-            [new ExpectedIndexKeyDefinition("Code")], filter: "[odd'column] = 'a''b' AND [Caption] IN (N'c', 'd')");
+        var definition = new ExpectedIndexDefinition(
+            "IX_items_Code",
+            "items",
+            [new ExpectedIndexKeyDefinition("Code")],
+            filter: "[odd'column] = 'a''b' AND [Caption] IN (N'c', 'd')");
 
         // Act
         var filter = SqlServerSafeMigrationCatalogSqlBuilder.GetStructuredIndexFilter(definition);
-        var comparisons = filter is null ? Array.Empty<(string Column, SafeMigrationSqlLiteralExpression? Literal)>()
-            : SqlServerSafeMigrationCatalogSqlBuilder.GetIndexFilterComparisons(filter).ToArray();
+        var comparisons = filter is null
+            ? Array.Empty<(string Column, SafeMigrationSqlLiteralExpression? Literal)>()
+            : SqlServerSafeMigrationCatalogSqlBuilder
+                .GetIndexFilterComparisons(filter)
+                .ToArray();
 
         // Assert
         Assert.NotNull(filter);
@@ -40,17 +46,24 @@ public sealed class SqlServerPhysicalFilterGuardTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
-        var definition = new ExpectedIndexDefinition("IX_items_Code", "items",
-            [new ExpectedIndexKeyDefinition("Code")], unique: unique, filter: "[Flag] = N'abc'");
+        var definition = new ExpectedIndexDefinition(
+            "IX_items_Code",
+            "items",
+            [new ExpectedIndexKeyDefinition("Code")],
+            unique: unique,
+            filter: "[Flag] = N'abc'");
 
-        var operation = new SafeMigrationOperation(new EnsureIndexIntent(definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureIndexIntent(definition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var plan = catalog.Build(operation);
-        var selection = unique ? SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan)
+        var selection = unique
+            ? SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan)
             : SqlServerSafeMigrationProviderAnalyzer.BuildCatalogSelection(257, plan);
 
         var runtime = SqlServerGuardedSqlTestContract.GenerateBody(context, operation);
@@ -62,8 +75,13 @@ public sealed class SqlServerPhysicalFilterGuardTests
         Assert.Contains("ty.is_assembly_type = 0", support, StringComparison.Ordinal);
         Assert.Contains("TRY_CAST", support, StringComparison.Ordinal);
         Assert.Contains("NOT EXISTS", support, StringComparison.Ordinal);
-        Assert.Contains(unique ? support.Replace("'", "''", StringComparison.Ordinal) : support,
-            selection, StringComparison.Ordinal);
+        Assert.Contains(
+            unique
+                ? support.Replace("'", "''", StringComparison.Ordinal)
+                : support,
+            selection,
+            StringComparison.Ordinal);
+
         Assert.Contains("index_filter_unproven", selection, StringComparison.Ordinal);
         Assert.Contains("N'Flag'", plan.PrerequisiteExpression, StringComparison.Ordinal);
         var supportOffset = runtime.IndexOf(support, StringComparison.Ordinal);
@@ -72,7 +90,8 @@ public sealed class SqlServerPhysicalFilterGuardTests
         if (unique)
         {
             var supportGate = selection.IndexOf("IF COALESCE(@doka_filter, 0) <> 1", StringComparison.Ordinal);
-            var rowBinding = selection.IndexOf("IF @doka_prerequisite = 1 EXEC sys.sp_executesql",
+            var rowBinding = selection.IndexOf(
+                "IF @doka_prerequisite = 1 EXEC sys.sp_executesql",
                 StringComparison.Ordinal);
 
             Assert.True(supportGate >= 0);
@@ -91,16 +110,23 @@ public sealed class SqlServerPhysicalFilterGuardTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
-        var definition = new ExpectedIndexDefinition("IX_items_Code", "items",
-            [new ExpectedIndexKeyDefinition("Code")], structuredFilter: SafeMigrationSql.Binary(
-                SafeMigrationSql.Identifier("Flag"), SafeMigrationSqlBinaryOperator.Equal,
+        var definition = new ExpectedIndexDefinition(
+            "IX_items_Code",
+            "items",
+            [new ExpectedIndexKeyDefinition("Code")],
+            structuredFilter: SafeMigrationSql.Binary(
+                SafeMigrationSql.Identifier("Flag"),
+                SafeMigrationSqlBinaryOperator.Equal,
                 SafeMigrationSql.Literal("1", "int")));
 
         // Act
-        var plan = catalog.Build(new SafeMigrationOperation(new EnsureIndexIntent(definition),
-            SafeMigrationPolicy.ThrowIfDifferent));
+        var plan = catalog.Build(
+            new SafeMigrationOperation(
+                new EnsureIndexIntent(definition),
+                SafeMigrationPolicy.ThrowIfDifferent));
 
         // Assert
         var support = Assert.IsType<string>(plan.IndexFilterSupportExpression);

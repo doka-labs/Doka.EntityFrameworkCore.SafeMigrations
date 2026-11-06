@@ -68,7 +68,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     private static string CheckFacets(
         string expressionMatch,
         bool requireLocalIdentity = true
-    ) => (requireLocalIdentity ? LocalConstraintIdentity() : string.Empty)
+    ) => (requireLocalIdentity
+            ? LocalConstraintIdentity()
+            : string.Empty)
         + " AND co.convalidated AND NOT co.connoinherit"
         + " AND COALESCE((to_jsonb(co) ->> 'conenforced')::boolean, TRUE)"
         + $" AND {expressionMatch}";
@@ -79,8 +81,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     private string ExpectedCheckExpressionMatches(
         ExpectedCheckConstraintDefinition definition
     ) => definition.Expression is not null
-        ? ExpressionMatches("pg_catalog.pg_get_expr(co.conbin, co.conrelid)", definition.Expression,
-            relationOid: "co.conrelid", capturedSql: definition.CapturedSql)
+        ? ExpressionMatches(
+            "pg_catalog.pg_get_expr(co.conbin, co.conrelid)",
+            definition.Expression,
+            relationOid: "co.conrelid",
+            capturedSql: definition.CapturedSql)
         : ExpressionMatches("pg_catalog.pg_get_expr(co.conbin, co.conrelid)", definition.Sql!);
 
     /// <summary>Verifies every required check constraint of one table through three catalog scans.</summary>
@@ -102,6 +107,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         var rows = new List<string>(required.Length);
         var arms = new List<string>(required.Length);
+
         // WHY: Give each expected CHECK row and its CASE arm the same one-based ordinal.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery

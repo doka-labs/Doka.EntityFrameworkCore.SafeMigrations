@@ -26,7 +26,9 @@ internal sealed record SharedContainerExecutionPolicy(
         var maximum = optionMaximum ?? attributeMaximum;
 
         return new SharedContainerExecutionPolicy(
-            maximum == 0 ? processorCount : maximum,
+            maximum == 0
+                ? processorCount
+                : maximum,
             optionDisable ?? attributeDisable);
     }
 }
@@ -42,19 +44,23 @@ internal sealed class SharedContainerCollectionScheduler : IDisposable
         SharedContainerExecutionPolicy policy
     )
     {
-        if (!policy.DisableParallelization && policy.MaximumParallelThreads > 0)
+        if (!policy.DisableParallelization
+            && policy.MaximumParallelThreads > 0)
         {
             _semaphore = new SemaphoreSlim(policy.MaximumParallelThreads, policy.MaximumParallelThreads);
         }
     }
 
+    /// <inheritdoc />
+    public void Dispose() => _semaphore?.Dispose();
+
     /// <summary>Runs one collection after acquiring capacity, and always returns that capacity.</summary>
     /// <typeparam name="TResult">The collection runner's result type.</typeparam>
-    /// <param name="runCollection">The asynchronous collection execution.</param>
-    /// <param name="cancellationToken">The runner's cancellation while waiting for capacity.</param>
+    /// <param name="runCollection">The asynchronous collection execution receiving the runner token.</param>
+    /// <param name="cancellationToken">The runner token while waiting for capacity and executing the callback.</param>
     /// <returns>The collection execution result.</returns>
     public async Task<TResult> RunAsync<TResult>(
-        Func<Task<TResult>> runCollection,
+        Func<CancellationToken, Task<TResult>> runCollection,
         CancellationToken cancellationToken
     )
     {
@@ -62,21 +68,22 @@ internal sealed class SharedContainerCollectionScheduler : IDisposable
 
         if (_semaphore is null)
         {
-            return await runCollection().ConfigureAwait(false);
+            return await runCollection(cancellationToken)
+                .ConfigureAwait(false);
         }
 
-        await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _semaphore
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         try
         {
-            return await runCollection().ConfigureAwait(false);
+            return await runCollection(cancellationToken)
+                .ConfigureAwait(false);
         }
         finally
         {
             _semaphore.Release();
         }
     }
-
-    /// <inheritdoc />
-    public void Dispose() => _semaphore?.Dispose();
 }

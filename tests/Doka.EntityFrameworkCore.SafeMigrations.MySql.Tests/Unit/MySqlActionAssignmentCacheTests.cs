@@ -64,7 +64,10 @@ public sealed class MySqlActionAssignmentCacheTests
             ? SafeMigrationOperationKind.DropColumn
             : SafeMigrationOperationKind.EnsureColumn;
 
-        var policy = component == "policy" ? SafeMigrationPolicy.ThrowIfDifferent : SafeMigrationPolicy.RepairIfSafe;
+        var policy = component == "policy"
+            ? SafeMigrationPolicy.ThrowIfDifferent
+            : SafeMigrationPolicy.RepairIfSafe;
+
         var capability = component == "capability"
             ? SafeMigrationRepairCapability.None
             : SafeMigrationRepairCapability.Safe;
@@ -127,8 +130,14 @@ public sealed class MySqlActionAssignmentCacheTests
         // Arrange
         using var context = CreateContext();
         var handler = CreateHandler(context);
-        var kind = component == "kind" ? (SafeMigrationOperationKind)(-1) : SafeMigrationOperationKind.EnsureColumn;
-        var policy = component == "policy" ? (SafeMigrationPolicy)(-1) : SafeMigrationPolicy.ThrowIfDifferent;
+        var kind = component == "kind"
+            ? (SafeMigrationOperationKind)(-1)
+            : SafeMigrationOperationKind.EnsureColumn;
+
+        var policy = component == "policy"
+            ? (SafeMigrationPolicy)(-1)
+            : SafeMigrationPolicy.ThrowIfDifferent;
+
         var capability = component == "capability"
             ? (SafeMigrationRepairCapability)(-1)
             : SafeMigrationRepairCapability.None;
@@ -157,24 +166,31 @@ public sealed class MySqlActionAssignmentCacheTests
         // Arrange
         using var context = CreateContext();
         var handler = CreateHandler(context);
-        var contracts = CanonicalContracts().ToArray();
-        var expected = contracts.Select(contract => ExpectedAssignment(
-            (SafeMigrationOperationKind)contract[0],
-            (SafeMigrationPolicy)contract[1],
-            (SafeMigrationRepairCapability)contract[2])).ToArray();
+        var contracts = CanonicalContracts()
+            .ToArray();
+
+        var expected = contracts
+            .Select(contract => ExpectedAssignment(
+                (SafeMigrationOperationKind)contract[0],
+                (SafeMigrationPolicy)contract[1],
+                (SafeMigrationRepairCapability)contract[2]))
+            .ToArray();
 
         var results = new string[512];
 
         // Act
         // WHY: Only the pure assignment accessor is shared; concurrent DbContext/generator use is not supported.
-        Parallel.For(0, results.Length, index =>
-        {
-            var contract = contracts[index % contracts.Length];
-            results[index] = handler.BuildActionAssignment(
-                (SafeMigrationOperationKind)contract[0],
-                (SafeMigrationPolicy)contract[1],
-                (SafeMigrationRepairCapability)contract[2]);
-        });
+        Parallel.For(
+            0,
+            results.Length,
+            index =>
+            {
+                var contract = contracts[index % contracts.Length];
+                results[index] = handler.BuildActionAssignment(
+                    (SafeMigrationOperationKind)contract[0],
+                    (SafeMigrationPolicy)contract[1],
+                    (SafeMigrationRepairCapability)contract[2]);
+            });
 
         // Assert
         for (var index = 0; index < results.Length; index++)
@@ -241,9 +257,16 @@ public sealed class MySqlActionAssignmentCacheTests
                 _ => throw new InvalidOperationException("The canonical action requires an explicit SQL arm."),
             };
 
-            builder.Append("WHEN '").Append(stateCode).Append("' THEN ").Append(action).Append(' ');
+            builder
+                .Append("WHEN '")
+                .Append(stateCode)
+                .Append("' THEN ")
+                .Append(action)
+                .Append(' ');
         }
 
-        return builder.Append("ELSE 'reject_unsupported' END;").ToString();
+        return builder
+            .Append("ELSE 'reject_unsupported' END;")
+            .ToString();
     }
 }

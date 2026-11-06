@@ -125,7 +125,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             }
 
             if (operation.Intent is EnsurePrimaryKeyIntent or EnsureUniqueConstraintIntent
-                || operation.Intent is EnsureIndexIntent { Definition.Unique: true, })
+                || operation.Intent is EnsureIndexIntent { Definition.Unique: true })
             {
                 rowsRequired.Add(table.Value);
             }
@@ -218,7 +218,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                         new SqlServerProjectedKeyTable(
                             reader.GetInt32(1) == 1,
                             reader.GetInt32(2),
-                            reader.IsDBNull(3) ? null : reader.GetString(3),
+                            reader.IsDBNull(3)
+                                ? null
+                                : reader.GetString(3),
                             shapes,
                             reader.GetInt32(4) == 1));
 
@@ -236,10 +238,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
         // WHY: Every table header is captured before column facets. Chunk slots
         // transport whole 512-value statements, not individual column operations.
-        var bindings = tables.SelectMany((
-            table,
-            ordinal
-        ) => requested[table]
+        var bindings = tables.SelectMany((table,
+            ordinal) => requested[table]
             .Select(name => (ordinal, name)));
 
         using var chunks = bindings
@@ -282,7 +282,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             },
             async (reader, slot, _, token) =>
             {
-                var permitted = pending[slot].ToHashSet();
+                var permitted = pending[slot]
+                    .ToHashSet();
+
                 pending.Remove(slot);
 
                 while (await reader.ReadAsync(token))
@@ -304,7 +306,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                             reader.GetBoolean(4),
                             reader.GetInt32(5) == 1,
                             reader.GetInt32(6) == 1,
-                            reader.IsDBNull(7) ? null : reader.GetString(7),
+                            reader.IsDBNull(7)
+                                ? null
+                                : reader.GetString(7),
                             reader.GetInt32(8) == 1,
                             reader.GetInt32(9) == 1));
                 }
@@ -355,9 +359,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             {
                 var rowProbe = "SELECT @count = COUNT(*) FROM "
                     + $"(SELECT TOP (2) 1 AS value FROM {qualified}) [doka_rows];";
+
                 var rowArgument = SqlServerSqlStringLiteral.ProcedureArgument(
-                    rowProbe, KeyLiteral(rowProbe), SqlServerSqlStringLiteral.RequiresExpression(rowProbe.AsSpan())
-                        ? "@doka_key_row_sql" + ordinal.ToString(CultureInfo.InvariantCulture) : string.Empty,
+                    rowProbe,
+                    KeyLiteral(rowProbe),
+                    SqlServerSqlStringLiteral.RequiresExpression(rowProbe.AsSpan())
+                        ? "@doka_key_row_sql" + ordinal.ToString(CultureInfo.InvariantCulture)
+                        : string.Empty,
                     out var rowDeclaration);
 
                 // WHY: Memory-optimized and other unsupported physical tables

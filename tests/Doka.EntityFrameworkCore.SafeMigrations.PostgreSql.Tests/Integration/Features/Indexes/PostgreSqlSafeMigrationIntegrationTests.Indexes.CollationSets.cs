@@ -20,22 +20,29 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateMixedCollationIndexAsync(connectionString);
+        await CreateMixedCollationIndexAsync(connectionString, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = MixedCollationBuilder(context, alias, new SafeMigrationCollationIdentifier("C", "pg_catalog"));
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("mixed-key-collation-match"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("mixed-key-collation-match"),
+                CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
-        Assert.Equal(1, await MixedCollationIndexCountAsync(connectionString));
+        Assert.Equal(
+            1,
+            await MixedCollationIndexCountAsync(
+                connectionString,
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A different or unspecified key collation must not become a physical or semantic match.</summary>
@@ -57,25 +64,48 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateMixedCollationIndexAsync(connectionString);
+        await CreateMixedCollationIndexAsync(connectionString, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        var expected = collation is null ? null : new SafeMigrationCollationIdentifier(collation, "pg_catalog");
+        var expected = collation is null
+            ? null
+            : new SafeMigrationCollationIdentifier(collation, "pg_catalog");
+
         var builder = MixedCollationBuilder(context, alias, expected, explicitOperatorClass);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("mixed-key-collation-mismatch"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("mixed-key-collation-mismatch"),
+                CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
-        Assert.Equal(alias ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
-            alias ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Different,
+            alias
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
+            report.Status);
+
+        Assert.Equal(
+            alias
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.Different,
             assessment.ObservedState);
-        Assert.Equal(alias ? SafeMigrationAction.Apply : SafeMigrationAction.RejectDifferent, assessment.Action);
-        Assert.Equal(1, await MixedCollationIndexCountAsync(connectionString));
+
+        Assert.Equal(
+            alias
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectDifferent,
+            assessment.Action);
+
+        Assert.Equal(
+            1,
+            await MixedCollationIndexCountAsync(
+                connectionString,
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>The physical column-default collation matches in collapsed and per-key catalog paths.</summary>
@@ -93,22 +123,29 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateMixedCollationIndexAsync(connectionString, collationName: "POSIX");
+        await CreateMixedCollationIndexAsync(connectionString, CancellationToken.None, collationName: "POSIX");
         await using var context = CreateContext(connectionString);
         var builder = MixedCollationBuilder(context, alias, collation: null, explicitOperatorClass);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("mixed-key-default-collation-match"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("mixed-key-default-collation-match"),
+                CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
-        Assert.Equal(1, await MixedCollationIndexCountAsync(connectionString));
+        Assert.Equal(
+            1,
+            await MixedCollationIndexCountAsync(
+                connectionString,
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Collations with the same name in different schemas retain distinct physical identities.</summary>
@@ -124,25 +161,41 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA custom; CREATE COLLATION custom.\"C\" FROM pg_catalog.\"C\";");
+            "CREATE SCHEMA custom; CREATE COLLATION custom.\"C\" FROM pg_catalog.\"C\";",
+            cancellationToken: CancellationToken.None);
 
-        await CreateMixedCollationIndexAsync(connectionString, "custom");
+        await CreateMixedCollationIndexAsync(connectionString, CancellationToken.None, "custom");
         await using var context = CreateContext(connectionString);
         var builder = MixedCollationBuilder(context, alias, new SafeMigrationCollationIdentifier("C", "pg_catalog"));
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("mixed-key-collation-namespace"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("mixed-key-collation-namespace"),
+                CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(
-            alias ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Different,
+            alias
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.Different,
             assessment.ObservedState);
-        Assert.Equal(alias ? SafeMigrationAction.Apply : SafeMigrationAction.RejectDifferent, assessment.Action);
-        Assert.Equal(1, await MixedCollationIndexCountAsync(connectionString));
+
+        Assert.Equal(
+            alias
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectDifferent,
+            assessment.Action);
+
+        Assert.Equal(
+            1,
+            await MixedCollationIndexCountAsync(
+                connectionString,
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>The generated guard rejects key-collation drift without replacing the existing index.</summary>
@@ -159,19 +212,30 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateMixedCollationIndexAsync(connectionString);
+        await CreateMixedCollationIndexAsync(connectionString, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        var expected = collation is null ? null : new SafeMigrationCollationIdentifier(collation, "pg_catalog");
+        var expected = collation is null
+            ? null
+            : new SafeMigrationCollationIdentifier(collation, "pg_catalog");
+
         var builder = MixedCollationBuilder(context, alias: false, expected, explicitOperatorClass);
 
         // Act
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            CancellationToken.None));
 
         // Assert
         var postgres = Assert.IsType<PostgresException>(exception);
         Assert.Equal("P1001", postgres.SqlState);
         Assert.StartsWith("doka_sm_different:", postgres.MessageText, StringComparison.Ordinal);
-        Assert.Equal(1, await MixedCollationIndexCountAsync(connectionString));
+        Assert.Equal(
+            1,
+            await MixedCollationIndexCountAsync(
+                connectionString,
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             "C",
             await ScalarStringAsync(
@@ -179,7 +243,8 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
                 "SELECT coll.collname FROM pg_catalog.pg_index i "
                 + "JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid "
                 + "JOIN pg_catalog.pg_collation coll ON coll.oid = i.indcollation[1] "
-                + "WHERE idx.relname = 'ix_collation_set';"));
+                + "WHERE idx.relname = 'ix_collation_set';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Expression-key identity includes explicit or derived collation even on an empty table.</summary>
@@ -208,40 +273,62 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE collation_sets (value text COLLATE pg_catalog.\"POSIX\"); "
-            + "CREATE INDEX ix_collation_set ON collation_sets (lower(value) COLLATE pg_catalog.\"C\");");
+            + "CREATE INDEX ix_collation_set ON collation_sets (lower(value) COLLATE pg_catalog.\"C\");",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureIndex(
             new ExpectedIndexDefinition(
-                alias ? "ix_collation_alias" : "ix_collation_set",
+                alias
+                    ? "ix_collation_alias"
+                    : "ix_collation_set",
                 "collation_sets",
-                [new ExpectedIndexKeyDefinition(
-                    structuredExpression: SqlFunction("lower", "value"),
-                    collation: expectedCollation is null
-                        ? null
-                        : new SafeMigrationCollationIdentifier(expectedCollation, "pg_catalog"),
-                    operatorClass: explicitOperatorClass ? "text_ops" : null)]),
+                [
+                    new ExpectedIndexKeyDefinition(
+                        structuredExpression: SqlFunction("lower", "value"),
+                        collation: expectedCollation is null
+                            ? null
+                            : new SafeMigrationCollationIdentifier(expectedCollation, "pg_catalog"),
+                        operatorClass: explicitOperatorClass
+                            ? "text_ops"
+                            : null),
+                ]),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("expression-key-collation"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("expression-key-collation"),
+                CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
         var matching = expectedCollation == "C";
         Assert.Equal(
-            matching ? SafeMigrationObservedState.Matching
-                : alias ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Different,
+            matching
+                ? SafeMigrationObservedState.Matching
+                : alias
+                    ? SafeMigrationObservedState.Missing
+                    : SafeMigrationObservedState.Different,
             assessment.ObservedState);
+
         Assert.Equal(
-            matching ? SafeMigrationAction.NoOp
-                : alias ? SafeMigrationAction.Apply : SafeMigrationAction.RejectDifferent,
+            matching
+                ? SafeMigrationAction.NoOp
+                : alias
+                    ? SafeMigrationAction.Apply
+                    : SafeMigrationAction.RejectDifferent,
             assessment.Action);
-        Assert.Equal(1, await MixedCollationIndexCountAsync(connectionString));
+
+        Assert.Equal(
+            1,
+            await MixedCollationIndexCountAsync(
+                connectionString,
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Derived expression collation matches without needing even one physical data row.</summary>
@@ -262,8 +349,11 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE collation_sets (value text COLLATE pg_catalog.\"POSIX\"); "
-            + (populated ? "INSERT INTO collation_sets VALUES ('entry'); " : string.Empty)
-            + "CREATE INDEX ix_collation_set ON collation_sets (lower(value));");
+            + (populated
+                ? "INSERT INTO collation_sets VALUES ('entry'); "
+                : string.Empty)
+            + "CREATE INDEX ix_collation_set ON collation_sets (lower(value));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -271,23 +361,34 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
             new ExpectedIndexDefinition(
                 "ix_collation_set",
                 "collation_sets",
-                [new ExpectedIndexKeyDefinition(
-                    structuredExpression: SqlFunction("lower", "value"),
-                    operatorClass: explicitOperatorClass ? "text_ops" : null)]),
+                [
+                    new ExpectedIndexKeyDefinition(
+                        structuredExpression: SqlFunction("lower", "value"),
+                        operatorClass: explicitOperatorClass
+                            ? "text_ops"
+                            : null),
+                ]),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("expression-key-default-collation"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("expression-key-default-collation"),
+                CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
-        Assert.Equal(1, await MixedCollationIndexCountAsync(connectionString));
+        Assert.Equal(
+            1,
+            await MixedCollationIndexCountAsync(
+                connectionString,
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Integer expression keys keep their identity without a collation-function type error.</summary>
@@ -299,7 +400,8 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE collation_sets (value text); "
-            + "CREATE INDEX ix_collation_set ON collation_sets (length(value));");
+            + "CREATE INDEX ix_collation_set ON collation_sets (length(value));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -311,10 +413,13 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("expression-key-noncollatable"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("expression-key-noncollatable"),
+                CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
@@ -338,18 +443,25 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var storedExpression = nested
             ? "lower(value COLLATE pg_catalog.\"C\")"
-            : columnOnly ? "value COLLATE pg_catalog.\"C\"" : "lower(value) COLLATE pg_catalog.\"C\"";
+            : columnOnly
+                ? "value COLLATE pg_catalog.\"C\""
+                : "lower(value) COLLATE pg_catalog.\"C\"";
 
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE collation_sets (value text COLLATE pg_catalog.\"POSIX\"); "
-            + "CREATE INDEX ix_collation_set ON collation_sets (" + storedExpression + ");");
+            + "CREATE INDEX ix_collation_set ON collation_sets ("
+            + storedExpression
+            + ");",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var expression = nested
             ? SafeMigrationSql.Function("lower", SafeMigrationSql.Collate(SqlColumn("value"), "C", "pg_catalog"))
             : SafeMigrationSql.Collate(
-                columnOnly ? SqlColumn("value") : SqlFunction("lower", "value"),
+                columnOnly
+                    ? SqlColumn("value")
+                    : SqlFunction("lower", "value"),
                 "C",
                 "pg_catalog");
 
@@ -362,16 +474,23 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("expression-key-structured-collation"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("expression-key-structured-collation"),
+                CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
-        Assert.Equal(1, await MixedCollationIndexCountAsync(connectionString));
+        Assert.Equal(
+            1,
+            await MixedCollationIndexCountAsync(
+                connectionString,
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Expression-key runtime checks distinguish explicit and derived collation before any mutation.</summary>
@@ -389,13 +508,17 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE collation_sets (value text COLLATE pg_catalog.\"POSIX\"); "
-            + "CREATE INDEX ix_collation_set ON collation_sets (lower(value) COLLATE pg_catalog.\"C\");");
+            + "CREATE INDEX ix_collation_set ON collation_sets (lower(value) COLLATE pg_catalog.\"C\");",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = ExpressionCollationBuilder(context, expectedCollation);
 
         // Act
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            CancellationToken.None));
 
         // Assert
         if (expectedCollation == "C")
@@ -409,7 +532,12 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
             Assert.StartsWith("doka_sm_different:", postgres.MessageText, StringComparison.Ordinal);
         }
 
-        Assert.Equal(1, await MixedCollationIndexCountAsync(connectionString));
+        Assert.Equal(
+            1,
+            await MixedCollationIndexCountAsync(
+                connectionString,
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             "C",
             await ScalarStringAsync(
@@ -417,7 +545,8 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
                 "SELECT coll.collname FROM pg_catalog.pg_index i "
                 + "JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid "
                 + "JOIN pg_catalog.pg_collation coll ON coll.oid = i.indcollation[0] "
-                + "WHERE idx.relname = 'ix_collation_set';"));
+                + "WHERE idx.relname = 'ix_collation_set';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>New expression indexes verify their explicit or derived collation after guarded creation.</summary>
@@ -433,22 +562,32 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE collation_sets (value text COLLATE pg_catalog.\"POSIX\");");
+            "CREATE TABLE collation_sets (value text COLLATE pg_catalog.\"POSIX\");",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = ExpressionCollationBuilder(context, expectedCollation);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("expression-key-collation-postflight"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("expression-key-collation-postflight"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.True(Assert.Single(report.Assessments).PostconditionSatisfied);
-        Assert.Equal(1, await MixedCollationIndexCountAsync(connectionString));
+        Assert.True(Assert.Single(report.Assessments)
+            .PostconditionSatisfied);
+
+        Assert.Equal(
+            1,
+            await MixedCollationIndexCountAsync(
+                connectionString,
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Top-level and nested collations cannot match a same-named collation from another namespace.</summary>
@@ -470,7 +609,10 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
             connectionString,
             "CREATE SCHEMA custom; CREATE COLLATION custom.\"C\" FROM pg_catalog.\"C\"; "
             + "CREATE TABLE collation_sets (value text COLLATE pg_catalog.\"POSIX\"); "
-            + "CREATE INDEX ix_collation_set ON collation_sets (" + storedExpression + ");");
+            + "CREATE INDEX ix_collation_set ON collation_sets ("
+            + storedExpression
+            + ");",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var expression = nested
@@ -486,16 +628,23 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("expression-key-collation-namespace-drift"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("expression-key-collation-namespace-drift"),
+                CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
-        Assert.Equal(1, await MixedCollationIndexCountAsync(connectionString));
+        Assert.Equal(
+            1,
+            await MixedCollationIndexCountAsync(
+                connectionString,
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Builds the expression-key contract without changing its authored collation or operator class.</summary>
@@ -512,11 +661,13 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
             new ExpectedIndexDefinition(
                 "ix_collation_set",
                 "collation_sets",
-                [new ExpectedIndexKeyDefinition(
-                    structuredExpression: SqlFunction("lower", "value"),
-                    collation: collation is null
-                        ? null
-                        : new SafeMigrationCollationIdentifier(collation, "pg_catalog"))]),
+                [
+                    new ExpectedIndexKeyDefinition(
+                        structuredExpression: SqlFunction("lower", "value"),
+                        collation: collation is null
+                            ? null
+                            : new SafeMigrationCollationIdentifier(collation, "pg_catalog")),
+                ]),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         return builder;
@@ -527,8 +678,10 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
     /// <param name="collationSchema">The explicit physical collation namespace.</param>
     /// <param name="collationName">The explicit physical collation name.</param>
     /// <returns>The asynchronous fixture setup.</returns>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
     private static Task CreateMixedCollationIndexAsync(
         string connectionString,
+        CancellationToken cancellationToken,
         string collationSchema = "pg_catalog",
         string collationName = "C"
     ) => ExecuteSqlAsync(
@@ -537,8 +690,12 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
         + "value text COLLATE pg_catalog.\"POSIX\", last_key integer NOT NULL);"
         + "INSERT INTO collation_sets VALUES (1, 'entry', 2);"
         + "CREATE INDEX ix_collation_set ON collation_sets "
-        + "(first_key DESC NULLS LAST, value COLLATE " + PostgreSqlIdentifier(collationSchema)
-        + "." + PostgreSqlIdentifier(collationName) + " ASC NULLS LAST, last_key DESC NULLS FIRST);");
+        + "(first_key DESC NULLS LAST, value COLLATE "
+        + PostgreSqlIdentifier(collationSchema)
+        + "."
+        + PostgreSqlIdentifier(collationName)
+        + " ASC NULLS LAST, last_key DESC NULLS FIRST);",
+        cancellationToken: cancellationToken);
 
     /// <summary>Builds the mixed contract without moving explicit collations into the plain-key set.</summary>
     /// <param name="context">The registered PostgreSQL context.</param>
@@ -556,7 +713,9 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureIndex(
             new ExpectedIndexDefinition(
-                alias ? "ix_collation_alias" : "ix_collation_set",
+                alias
+                    ? "ix_collation_alias"
+                    : "ix_collation_set",
                 "collation_sets",
                 [
                     new ExpectedIndexKeyDefinition(
@@ -568,7 +727,9 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
                         sortOrder: SafeMigrationIndexSortOrder.Ascending,
                         nullOrder: SafeMigrationIndexNullOrder.Last,
                         collation: collation,
-                        operatorClass: explicitOperatorClass ? "text_ops" : null),
+                        operatorClass: explicitOperatorClass
+                            ? "text_ops"
+                            : null),
                     new ExpectedIndexKeyDefinition(
                         "last_key",
                         sortOrder: SafeMigrationIndexSortOrder.Descending,
@@ -582,10 +743,12 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
     /// <summary>Counts only indexes on the test-owned table, including any unexpected duplicate alias.</summary>
     /// <param name="connectionString">The test-owned database connection.</param>
     /// <returns>The asynchronous physical-index count.</returns>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
     private static Task<int> MixedCollationIndexCountAsync(
-        string connectionString
+        string connectionString,
+        CancellationToken cancellationToken
     ) => ScalarIntAsync(
         connectionString,
-        "SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND tablename = 'collation_sets';");
-
+        "SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND tablename = 'collation_sets';",
+        cancellationToken: cancellationToken);
 }

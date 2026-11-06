@@ -23,7 +23,8 @@ public sealed class SqlServerProjectedIndexFilterProofTests
         var table = new ExpectedTableDefinition("filters", [column]);
         var operations = new List<SafeMigrationOperation>
         {
-            new(new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition),
+            new(
+                new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition),
                 SafeMigrationPolicy.ThrowIfDifferent),
         };
 
@@ -33,6 +34,7 @@ public sealed class SqlServerProjectedIndexFilterProofTests
         }
 
         var commands = new List<string>();
+
         Task<int> Execute(
             string sql,
             CancellationToken token
@@ -46,7 +48,10 @@ public sealed class SqlServerProjectedIndexFilterProofTests
         // Act
         await analyzer.CaptureProjectedSeedProofsAsync(operations, Execute, CancellationToken.None);
         var analysis = ((ISafeMigrationProjectedKeyAnalyzer)analyzer).ValidateProjectedIndex(
-            (EnsureIndexIntent)operations[^1].Intent, new Source(column), Missing(), Missing());
+            (EnsureIndexIntent)operations[^1].Intent,
+            new Source(column),
+            Missing(),
+            Missing());
 
         // Assert
         Assert.Single(commands);
@@ -68,10 +73,12 @@ public sealed class SqlServerProjectedIndexFilterProofTests
         var replacement = new ExpectedColumnDefinition("Code", typeof(long), true, "bigint");
         var first = Index("IX_filters_first");
         var second = Index("IX_filters_second");
-        var operations = new SafeMigrationOperation[]
+        var operations = new[]
         {
-            new(new EnsureTableIntent(new ExpectedTableDefinition("filters", [initial]),
-                SafeMigrationTableMode.StrictDefinition),
+            new(
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition("filters", [initial]),
+                    SafeMigrationTableMode.StrictDefinition),
                 SafeMigrationPolicy.ThrowIfDifferent),
             first,
             new(new AlterColumnIntent("filters", replacement, initial), SafeMigrationPolicy.RepairIfSafe),
@@ -79,6 +86,7 @@ public sealed class SqlServerProjectedIndexFilterProofTests
         };
 
         var commands = new List<string>();
+
         Task<int> Execute(
             string sql,
             CancellationToken token
@@ -92,10 +100,16 @@ public sealed class SqlServerProjectedIndexFilterProofTests
         // Act
         await analyzer.CaptureProjectedSeedProofsAsync(operations, Execute, CancellationToken.None);
         var stale = ((ISafeMigrationProjectedKeyAnalyzer)analyzer).ValidateProjectedIndex(
-            (EnsureIndexIntent)first.Intent, new Source(replacement), Missing(), Missing());
+            (EnsureIndexIntent)first.Intent,
+            new Source(replacement),
+            Missing(),
+            Missing());
 
         var current = ((ISafeMigrationProjectedKeyAnalyzer)analyzer).ValidateProjectedIndex(
-            (EnsureIndexIntent)second.Intent, new Source(replacement), Missing(), Missing());
+            (EnsureIndexIntent)second.Intent,
+            new Source(replacement),
+            Missing(),
+            Missing());
 
         // Assert
         Assert.Equal(2, commands.Count);
@@ -119,7 +133,8 @@ public sealed class SqlServerProjectedIndexFilterProofTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var builder = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var literal = new SafeMigrationSqlLiteralExpression(value);
 
@@ -130,14 +145,25 @@ public sealed class SqlServerProjectedIndexFilterProofTests
         Assert.Equal(expected, supported);
     }
 
-    private static SafeMigrationOperation Index(string name)
-        => new(new EnsureIndexIntent(new ExpectedIndexDefinition(name, "filters",
-            [new ExpectedIndexKeyDefinition("Code")], unique: true,
-            structuredFilter: new SafeMigrationSqlBinaryExpression(SafeMigrationSql.Identifier("Code"),
-                SafeMigrationSqlBinaryOperator.Equal, SafeMigrationSql.Literal("1")))),
+    private static SafeMigrationOperation Index(
+        string name
+    )
+        => new(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    name,
+                    "filters",
+                    [new ExpectedIndexKeyDefinition("Code")],
+                    unique: true,
+                    structuredFilter: new SafeMigrationSqlBinaryExpression(
+                        SafeMigrationSql.Identifier("Code"),
+                        SafeMigrationSqlBinaryOperator.Equal,
+                        SafeMigrationSql.Literal("1")))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-    private static SqlServerSafeMigrationProviderAnalyzer Analyzer(DbContext context)
+    private static SqlServerSafeMigrationProviderAnalyzer Analyzer(
+        DbContext context
+    )
         => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private static SafeMigrationProviderAnalysis Missing()
@@ -153,7 +179,9 @@ public sealed class SqlServerProjectedIndexFilterProofTests
             [NotNullWhen(true)] out ExpectedColumnDefinition? definition
         )
         {
-            definition = StringComparer.Ordinal.Equals(column.Name, name) ? column : null;
+            definition = StringComparer.Ordinal.Equals(column.Name, name)
+                ? column
+                : null;
 
             return definition is not null;
         }

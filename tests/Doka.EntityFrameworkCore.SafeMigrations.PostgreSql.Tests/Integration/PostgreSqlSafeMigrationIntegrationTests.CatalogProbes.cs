@@ -14,22 +14,27 @@ public sealed class PostgreSqlCatalogProbesIntegrationTests : PostgreSqlSafeMigr
     [Theory]
     [InlineData(0)]
     [InlineData(65)]
-    public async Task Analyzer_PrunesConstantPrerequisitesButKeepsSparseCatalogProofs(int nonconstantCount)
+    public async Task Analyzer_PrunesConstantPrerequisitesButKeepsSparseCatalogProofs(
+        int nonconstantCount
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(
             new NpgsqlConnection(connectionString));
+
         context.Database.SetDbConnection(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         for (var index = 0; index < 65; index++)
         {
             builder.EnsureTable(
                 new ExpectedTableDefinition(
-                    $"constant_probe_{index}", [new ExpectedColumnDefinition("id", typeof(int), false, "integer")]),
+                    $"constant_probe_{index}",
+                    [new ExpectedColumnDefinition("id", typeof(int), false, "integer")]),
                 SafeMigrationTableMode.StrictDefinition,
                 SafeMigrationPolicy.ThrowIfDifferent);
+
             if (index < nonconstantCount)
             {
                 builder.EnsureColumn(
@@ -39,19 +44,29 @@ public sealed class PostgreSqlCatalogProbesIntegrationTests : PostgreSqlSafeMigr
             }
         }
 
-        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        var operations = builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
 
         // Act
-        var results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations);
+        var results = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                CancellationToken.None);
 
         // Assert
         Assert.Equal((nonconstantCount + 31) / 32, connection.PrerequisiteStatementCount);
         Assert.Equal(65 + nonconstantCount, results.Count);
         for (var ordinal = 0; ordinal < results.Count; ordinal++)
         {
-            Assert.Equal(nonconstantCount > 0 && ordinal % 2 == 1
-                ? SafeMigrationObservedState.PrerequisiteMissing
-                : SafeMigrationObservedState.Missing, results[ordinal].ObservedState);
+            Assert.Equal(
+                nonconstantCount > 0 && ordinal % 2 == 1
+                    ? SafeMigrationObservedState.PrerequisiteMissing
+                    : SafeMigrationObservedState.Missing,
+                results[ordinal].ObservedState);
         }
     }
 
@@ -60,30 +75,46 @@ public sealed class PostgreSqlCatalogProbesIntegrationTests : PostgreSqlSafeMigr
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task Analyzer_RejectsMalformedSparsePrerequisiteResults(bool missingRows)
+    public async Task Analyzer_RejectsMalformedSparsePrerequisiteResults(
+        bool missingRows
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(
             new NpgsqlConnection(connectionString),
-            missingRows ? CatalogClassificationResultFault.MissingPrerequisiteRows
+            missingRows
+                ? CatalogClassificationResultFault.MissingPrerequisiteRows
                 : CatalogClassificationResultFault.UnsubmittedPrerequisiteOrdinal);
 
         context.Database.SetDbConnection(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(
             new ExpectedTableDefinition(
-                "pruned_parent", [new ExpectedColumnDefinition("id", typeof(int), false, "integer")]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
-        builder.EnsureColumn(
-            "absent_parent", new ExpectedColumnDefinition("id", typeof(int), true, "integer"),
+                "pruned_parent",
+                [new ExpectedColumnDefinition("id", typeof(int), false, "integer")]),
+            SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
-        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+
+        builder.EnsureColumn(
+            "absent_parent",
+            new ExpectedColumnDefinition("id", typeof(int), true, "integer"),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var operations = builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
 
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations));
+            context
+                .GetService<ISafeMigrationProviderAnalyzer>()
+                .AnalyzeAsync(
+                    context,
+                    operations,
+                    CancellationToken.None));
 
         // Assert
         Assert.True(connection.FaultWasInjected);
@@ -98,22 +129,28 @@ public sealed class PostgreSqlCatalogProbesIntegrationTests : PostgreSqlSafeMigr
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var setup = new System.Text.StringBuilder();
+        var setup = new StringBuilder();
         for (var index = 0; index < 65; index++)
         {
-            setup.Append(CultureInfo.InvariantCulture,
+            setup.Append(
+                CultureInfo.InvariantCulture,
                 $"CREATE TABLE bounded_probe_{index} (value character varying(20) NULL); ");
-            var value = index % 3 == 0 ? "too-long-value" : "ok";
+
+            var value = index % 3 == 0
+                ? "too-long-value"
+                : "ok";
+
             setup.Append(CultureInfo.InvariantCulture, $"INSERT INTO bounded_probe_{index} VALUES ('{value}'); ");
         }
 
-        await ExecuteSqlAsync(connectionString, setup.ToString());
+        await ExecuteSqlAsync(connectionString, setup.ToString(), cancellationToken: CancellationToken.None);
         await using var fallbackContext = CreateContext(connectionString);
         await using var fallback = new CatalogClassificationCountingConnection(new NpgsqlConnection(connectionString));
         fallbackContext.Database.SetDbConnection(fallback);
         await using var nativeContext = CreateContext(connectionString);
         await using var native = new CatalogClassificationCountingConnection(
-            new NpgsqlConnection(connectionString), nativeBatch: true);
+            new NpgsqlConnection(connectionString),
+            nativeBatch: true);
 
         nativeContext.Database.SetDbConnection(native);
         var builder = new MigrationBuilder(fallbackContext.Database.ProviderName!);
@@ -121,21 +158,30 @@ public sealed class PostgreSqlCatalogProbesIntegrationTests : PostgreSqlSafeMigr
         {
             builder.EnsureTable(
                 new ExpectedTableDefinition(
-                    $"missing_constant_{index}", [new ExpectedColumnDefinition("id", typeof(int), false, "integer")]),
-                SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+                    $"missing_constant_{index}",
+                    [new ExpectedColumnDefinition("id", typeof(int), false, "integer")]),
+                SafeMigrationTableMode.StrictDefinition,
+                SafeMigrationPolicy.ThrowIfDifferent);
+
             builder.EnsureColumn(
                 $"bounded_probe_{index}",
                 new ExpectedColumnDefinition("value", typeof(string), true, "character varying(5)", maxLength: 5),
                 SafeMigrationPolicy.RepairIfSafe);
         }
 
-        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        var operations = builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
 
         // Act
-        var fallbackResults = await fallbackContext.GetService<ISafeMigrationProviderAnalyzer>()
-            .AnalyzeAsync(fallbackContext, operations);
-        var nativeResults = await nativeContext.GetService<ISafeMigrationProviderAnalyzer>()
-            .AnalyzeAsync(nativeContext, operations);
+        var fallbackResults = await fallbackContext
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(fallbackContext, operations, CancellationToken.None);
+
+        var nativeResults = await nativeContext
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(nativeContext, operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(3, fallback.NarrowingEligibilityStatementCount);
@@ -169,12 +215,15 @@ public sealed class PostgreSqlCatalogProbesIntegrationTests : PostgreSqlSafeMigr
 
         for (var index = 0; index < 65; index++)
         {
-            var result = nativeResults[(index * 2) + 1];
-            Assert.Equal(index % 3 == 0 ? SafeMigrationObservedState.DataBlocked : SafeMigrationObservedState.Different,
+            var result = nativeResults[index * 2 + 1];
+            Assert.Equal(
+                index % 3 == 0
+                    ? SafeMigrationObservedState.DataBlocked
+                    : SafeMigrationObservedState.Different,
                 result.ObservedState);
+
             Assert.True(result.RequiresLiveDataProof);
             Assert.Contains(result.Differences, difference => difference.Facet == "column_store_type");
         }
     }
-
 }

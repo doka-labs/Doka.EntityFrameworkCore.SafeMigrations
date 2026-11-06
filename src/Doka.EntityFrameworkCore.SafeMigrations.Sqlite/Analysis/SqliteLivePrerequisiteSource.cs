@@ -8,7 +8,9 @@ internal sealed class SqliteLivePrerequisiteSource : ISafeMigrationLivePrerequis
 
     /// <summary>Captures the already-read catalog without querying or consulting the target model.</summary>
     /// <param name="snapshot">The caller-owned immutable native catalog capture.</param>
-    public SqliteLivePrerequisiteSource(SqliteCatalogSnapshot snapshot)
+    public SqliteLivePrerequisiteSource(
+        SqliteCatalogSnapshot snapshot
+    )
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 
@@ -16,26 +18,35 @@ internal sealed class SqliteLivePrerequisiteSource : ISafeMigrationLivePrerequis
     }
 
     /// <inheritdoc />
-    public bool HasLiveColumn(string table, string? schema, string column) => IsMain(schema)
+    public bool HasLiveColumn(
+        string table,
+        string? schema,
+        string column
+    ) => IsMain(schema)
         && _snapshot.Tables.TryGetValue(table, out var owner)
         && owner.Columns.ContainsKey(column);
 
     /// <inheritdoc />
-    public bool RequiresLiveForeignKeyQualification(EnsureForeignKeyIntent intent) =>
-        IsMain(intent.Definition.Schema) && IsMain(intent.Definition.PrincipalSchema)
+    public bool RequiresLiveForeignKeyQualification(
+        EnsureForeignKeyIntent intent
+    ) =>
+        IsMain(intent.Definition.Schema)
+        && IsMain(intent.Definition.PrincipalSchema)
         && _snapshot.Tables.ContainsKey(intent.Definition.Table)
         && _snapshot.Tables.ContainsKey(intent.Definition.PrincipalTable);
 
     /// <inheritdoc />
     public IReadOnlyList<SafeMigrationLiveCandidateKey>? GetLiveForeignKeyCandidateKeys(
         EnsureForeignKeyIntent intent,
-        ISafeMigrationProjectedColumnSource columns)
+        ISafeMigrationProjectedColumnSource columns
+    )
     {
         ArgumentNullException.ThrowIfNull(intent);
         ArgumentNullException.ThrowIfNull(columns);
 
         var definition = intent.Definition;
-        if (!IsMain(definition.Schema) || !IsMain(definition.PrincipalSchema)
+        if (!IsMain(definition.Schema)
+            || !IsMain(definition.PrincipalSchema)
             || !_snapshot.Tables.TryGetValue(definition.PrincipalTable, out var principal)
             || !HasDependentColumns(definition, columns)
             || !HasColumns(principal, definition.PrincipalSchema, definition.PrincipalColumns, columns)
@@ -47,21 +58,25 @@ internal sealed class SqliteLivePrerequisiteSource : ISafeMigrationLivePrerequis
         List<SafeMigrationLiveCandidateKey>? candidates = null;
         if (SqliteCatalogEquivalence.IdentifiersEqual(principal.PrimaryKeyColumns, definition.PrincipalColumns)
             && SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
-                principal, principal.PrimaryKeyKeys, definition.PrincipalColumns))
+                principal,
+                principal.PrimaryKeyKeys,
+                definition.PrincipalColumns))
         {
-            (candidates ??= []).Add(new SafeMigrationLiveCandidateKey(
-                SafeMigrationDatabaseObjectKind.PrimaryKey,
-                principal.PrimaryKeyName ?? "sqlite_primary_key"));
+            (candidates ??= []).Add(
+                new SafeMigrationLiveCandidateKey(
+                    SafeMigrationDatabaseObjectKind.PrimaryKey,
+                    principal.PrimaryKeyName ?? "sqlite_primary_key"));
         }
 
         foreach (var unique in principal.UniqueConstraints)
         {
             if (SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(principal, unique.Keys, definition.PrincipalColumns))
             {
-                (candidates ??= []).Add(new SafeMigrationLiveCandidateKey(
-                    SafeMigrationDatabaseObjectKind.UniqueConstraint,
-                    unique.Name ?? unique.PhysicalName,
-                    unique.PhysicalName));
+                (candidates ??= []).Add(
+                    new SafeMigrationLiveCandidateKey(
+                        SafeMigrationDatabaseObjectKind.UniqueConstraint,
+                        unique.Name ?? unique.PhysicalName,
+                        unique.PhysicalName));
             }
         }
 
@@ -69,23 +84,30 @@ internal sealed class SqliteLivePrerequisiteSource : ISafeMigrationLivePrerequis
         {
             if (index is { Origin: "c", Unique: true, Partial: false }
                 && SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
-                    principal, index.Keys, definition.PrincipalColumns))
+                    principal,
+                    index.Keys,
+                    definition.PrincipalColumns))
             {
-                (candidates ??= []).Add(new SafeMigrationLiveCandidateKey(
-                    SafeMigrationDatabaseObjectKind.Index, index.Name));
+                (candidates ??= []).Add(
+                    new SafeMigrationLiveCandidateKey(
+                        SafeMigrationDatabaseObjectKind.Index,
+                        index.Name));
             }
         }
 
         // WHY: SQLite applies the parent's affinity and collation to child values;
         // child storage need not match. Parent unique-key collations must exactly
         // match its declared columns, even when every projected child value is NULL.
-        return candidates is null ? [] : candidates.AsReadOnly();
+        return candidates is null
+            ? []
+            : candidates.AsReadOnly();
     }
 
     /// <summary>Accepts a missing native child only through a preceding known newly created owner.</summary>
     private bool HasDependentColumns(
         ExpectedForeignKeyDefinition foreignKey,
-        ISafeMigrationProjectedColumnSource columns)
+        ISafeMigrationProjectedColumnSource columns
+    )
     {
         if (_snapshot.Tables.TryGetValue(foreignKey.Table, out var dependent))
         {
@@ -94,7 +116,8 @@ internal sealed class SqliteLivePrerequisiteSource : ISafeMigrationLivePrerequis
 
         if (columns is not ISafeMigrationProjectedTableSource tables
             || !tables.TryGetProjectedTableState(foreignKey.Table, foreignKey.Schema, out var state)
-            || !state.IsNewlyCreated || state.HasUnknownStructure)
+            || !state.IsNewlyCreated
+            || state.HasUnknownStructure)
         {
             return false;
         }
@@ -118,7 +141,8 @@ internal sealed class SqliteLivePrerequisiteSource : ISafeMigrationLivePrerequis
         SqliteTableSnapshot table,
         string? schema,
         IReadOnlyList<string> names,
-        ISafeMigrationProjectedColumnSource columns)
+        ISafeMigrationProjectedColumnSource columns
+    )
     {
         foreach (var name in names)
         {
@@ -136,7 +160,8 @@ internal sealed class SqliteLivePrerequisiteSource : ISafeMigrationLivePrerequis
     private static bool RetainsPrincipalKeyCollations(
         SqliteTableSnapshot principal,
         ExpectedForeignKeyDefinition foreignKey,
-        ISafeMigrationProjectedColumnSource columns)
+        ISafeMigrationProjectedColumnSource columns
+    )
     {
         foreach (var name in foreignKey.PrincipalColumns)
         {
@@ -144,7 +169,8 @@ internal sealed class SqliteLivePrerequisiteSource : ISafeMigrationLivePrerequis
                 && columns.TryGetProjectedColumn(principal.Name, foreignKey.PrincipalSchema, name, out var projected)
                 && (projected.Collation?.Schema is not null
                     || !s_identifierComparer.Equals(
-                        projected.Collation?.Name ?? "BINARY", actual.Collation ?? "BINARY")))
+                        projected.Collation?.Name ?? "BINARY",
+                        actual.Collation ?? "BINARY")))
             {
                 return false;
             }
@@ -154,5 +180,7 @@ internal sealed class SqliteLivePrerequisiteSource : ISafeMigrationLivePrerequis
     }
 
     /// <summary>Rejects attached databases instead of borrowing unrelated main-catalog facts.</summary>
-    private static bool IsMain(string? schema) => schema is null || s_identifierComparer.Equals(schema, "main");
+    private static bool IsMain(
+        string? schema
+    ) => schema is null || s_identifierComparer.Equals(schema, "main");
 }

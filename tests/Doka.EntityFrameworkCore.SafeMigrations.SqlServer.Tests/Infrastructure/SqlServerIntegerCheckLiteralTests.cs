@@ -45,16 +45,21 @@ public sealed class SqlServerIntegerCheckLiteralTests
     )
     {
         // Arrange
-        SafeMigrationSqlExpression scalar = new SafeMigrationSqlLiteralExpression(Value(kind),
-            kind == "cast" ? "bigint" : null);
+        SafeMigrationSqlExpression scalar = new SafeMigrationSqlLiteralExpression(
+            Value(kind),
+            kind == "cast"
+                ? "bigint"
+                : null);
 
         if (negated)
         {
             scalar = new SafeMigrationSqlUnaryExpression(SafeMigrationSqlUnaryOperator.Negate, scalar);
         }
 
-        var predicate = new SafeMigrationSqlBinaryExpression(new SafeMigrationSqlIdentifierExpression(["Value"]),
-            SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, scalar);
+        var predicate = new SafeMigrationSqlBinaryExpression(
+            new SafeMigrationSqlIdentifierExpression(["Value"]),
+            SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+            scalar);
 
         // Act
         var actual = SqlServerSafeMigrationCatalogSqlBuilder.IsSafeIntegerCheckPredicate(predicate);

@@ -23,6 +23,7 @@ internal sealed class MySqlSafeMigrationDesignTimeServices : IDesignTimeServices
         serviceCollection.TryAddEnumerable(
             ServiceDescriptor.Singleton<ISafeMigrationCreateIndexScaffoldingProjector,
                 MySqlSafeMigrationCreateIndexScaffoldingProjector>());
+
         serviceCollection.TryAddEnumerable(
             ServiceDescriptor.Singleton<ISafeMigrationProviderOperationAdapter>(
                 MySqlSafeMigrationProviderOperationAdapter.Instance));

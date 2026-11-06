@@ -22,13 +22,22 @@ public sealed partial class SafeMigrationScaffoldingTests
         table.CheckConstraints.Add(check);
         var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict);
         var source = new IndentedStringBuilder();
-        generator.Generate("migrationBuilder", [inline ? table : check], source);
+        generator.Generate(
+            "migrationBuilder",
+            [
+                inline
+                    ? table
+                    : check,
+            ],
+            source);
 
         var operations = CompileAndExecuteGeneratedOperations(source.ToString());
         var operation = Assert.IsType<SafeMigrationOperation>(Assert.Single(operations));
         var definition = inline
-            ? Assert.Single(Assert.IsType<EnsureTableIntent>(operation.Intent).Definition.CheckConstraints)
-            : Assert.IsType<EnsureCheckConstraintIntent>(operation.Intent).Definition;
+            ? Assert.Single(Assert.IsType<EnsureTableIntent>(operation.Intent)
+                .Definition.CheckConstraints)
+            : Assert.IsType<EnsureCheckConstraintIntent>(operation.Intent)
+                .Definition;
 
         Assert.NotNull(definition.Expression);
         Assert.Null(definition.Sql);
@@ -53,20 +62,23 @@ public sealed partial class SafeMigrationScaffoldingTests
         var references = platform
             .Concat([typeof(Migration).Assembly.Location, typeof(SafeMigrationOperation).Assembly.Location])
             .Distinct(StringComparer.Ordinal)
-            .Select(static path => Microsoft.CodeAnalysis.MetadataReference.CreateFromFile(path));
+            .Select(static path => MetadataReference.CreateFromFile(path));
 
-        var compilation = Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create(
-            "GeneratedMigrationProbe_" + Guid.NewGuid().ToString("N"),
-            [Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(source)],
+        var compilation = CSharpCompilation.Create(
+            "GeneratedMigrationProbe_"
+            + Guid
+                .NewGuid()
+                .ToString("N"),
+            [CSharpSyntaxTree.ParseText(source)],
             references,
-            new Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions(
-                Microsoft.CodeAnalysis.OutputKind.DynamicallyLinkedLibrary));
+            new CSharpCompilationOptions(
+                OutputKind.DynamicallyLinkedLibrary));
 
         using var image = new MemoryStream();
         var emitted = compilation.Emit(image);
         Assert.True(emitted.Success, string.Join(Environment.NewLine, emitted.Diagnostics));
         image.Position = 0;
-        var context = new System.Runtime.Loader.AssemblyLoadContext("generated-check-probe", isCollectible: true);
+        var context = new AssemblyLoadContext("generated-check-probe", isCollectible: true);
 
         try
         {

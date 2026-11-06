@@ -29,18 +29,67 @@ public sealed class LivePerformanceEvidenceTests
         // Assert
         using var document = JsonDocument.Parse(bytes);
         var root = document.RootElement;
-        Assert.Equal(1, root.GetProperty("schemaVersion").GetInt32());
-        Assert.Equal("informational", root.GetProperty("evaluationMode").GetString());
-        Assert.Equal(20, root.GetProperty("sampleCount").GetInt32());
-        Assert.Equal(100, root.GetProperty("expectedTableCount").GetInt32());
-        Assert.Equal(1000, root.GetProperty("foreignTableCount").GetInt32());
-        Assert.Equal(cleanP95, root.GetProperty("clean").GetProperty("P95Milliseconds").GetDouble());
-        Assert.Equal(noisyP95, root.GetProperty("noisy").GetProperty("P95Milliseconds").GetDouble());
-        Assert.Equal((cleanP95 * 2d) + 250d,
-            root.GetProperty("requirement").GetProperty("maximumNoisyP95Milliseconds").GetDouble());
-        Assert.Equal(passed, root.GetProperty("requirement").GetProperty("passed").GetBoolean());
-        Assert.Equal(0, root.GetProperty("noisy").GetProperty("assessmentCount").GetInt32());
-        Assert.Equal(0, root.GetProperty("noisy").GetProperty("unexpectedObjectCount").GetInt32());
+        Assert.Equal(1,
+            root
+                .GetProperty("schemaVersion")
+                .GetInt32());
+
+        Assert.Equal("informational",
+            root
+                .GetProperty("evaluationMode")
+                .GetString());
+
+        Assert.Equal(20,
+            root
+                .GetProperty("sampleCount")
+                .GetInt32());
+
+        Assert.Equal(100,
+            root
+                .GetProperty("expectedTableCount")
+                .GetInt32());
+
+        Assert.Equal(1000,
+            root
+                .GetProperty("foreignTableCount")
+                .GetInt32());
+
+        Assert.Equal(cleanP95,
+            root
+                .GetProperty("clean")
+                .GetProperty("P95Milliseconds")
+                .GetDouble());
+
+        Assert.Equal(noisyP95,
+            root
+                .GetProperty("noisy")
+                .GetProperty("P95Milliseconds")
+                .GetDouble());
+
+        Assert.Equal(
+            cleanP95 * 2d + 250d,
+            root
+                .GetProperty("requirement")
+                .GetProperty("maximumNoisyP95Milliseconds")
+                .GetDouble());
+
+        Assert.Equal(passed,
+            root
+                .GetProperty("requirement")
+                .GetProperty("passed")
+                .GetBoolean());
+
+        Assert.Equal(0,
+            root
+                .GetProperty("noisy")
+                .GetProperty("assessmentCount")
+                .GetInt32());
+
+        Assert.Equal(0,
+            root
+                .GetProperty("noisy")
+                .GetProperty("unexpectedObjectCount")
+                .GetInt32());
     }
 
     /// <summary>Malformed timing observations fail instead of becoming a merely exceeded budget.</summary>
@@ -52,19 +101,42 @@ public sealed class LivePerformanceEvidenceTests
     [InlineData(-1d, false)]
     [InlineData(double.NaN, true)]
     [InlineData(double.MaxValue, true)]
-    public void InvalidMeasurementsRemainFailures(double invalid, bool baseline)
+    public void InvalidMeasurementsRemainFailures(
+        double invalid,
+        bool baseline
+    )
     {
         // Arrange
         var report = CreateReport();
-        var clean = new LivePerformanceMeasurement(0d, baseline ? invalid : 100d, report);
-        var noisy = new LivePerformanceMeasurement(0d, baseline ? 100d : invalid, report);
+        var clean = new LivePerformanceMeasurement(
+            0d,
+            baseline
+                ? invalid
+                : 100d,
+            report);
+
+        var noisy = new LivePerformanceMeasurement(
+            0d,
+            baseline
+                ? 100d
+                : invalid,
+            report);
 
         // Act
         var exception = Assert.Throws<ArgumentOutOfRangeException>(() => LivePerformanceEvidence.SerializePayload(
-            "mariadb", "11.8.9", clean, noisy, 100, 1000));
+            "mariadb",
+            "11.8.9",
+            clean,
+            noisy,
+            100,
+            1000));
 
         // Assert
-        Assert.Equal(baseline ? "clean" : "noisy", exception.ParamName);
+        Assert.Equal(
+            baseline
+                ? "clean"
+                : "noisy",
+            exception.ParamName);
     }
 
     /// <summary>Invalid public fixture metadata cannot produce a misleading informational artifact.</summary>
@@ -74,16 +146,29 @@ public sealed class LivePerformanceEvidenceTests
     [InlineData("version")]
     [InlineData("expectedTableCount")]
     [InlineData("foreignTableCount")]
-    public void InvalidMetadataRemainsAValidationFailure(string invalid)
+    public void InvalidMetadataRemainsAValidationFailure(
+        string invalid
+    )
     {
         // Arrange
         var measurement = new LivePerformanceMeasurement(10d, 100d, CreateReport());
 
         // Act
         var exception = Assert.ThrowsAny<ArgumentException>(() => LivePerformanceEvidence.SerializePayload(
-            invalid == "provider" ? " " : "mariadb", invalid == "version" ? " " : "11.8.9",
-            measurement, measurement, invalid == "expectedTableCount" ? -1 : 100,
-            invalid == "foreignTableCount" ? -1 : 1000));
+            invalid == "provider"
+                ? " "
+                : "mariadb",
+            invalid == "version"
+                ? " "
+                : "11.8.9",
+            measurement,
+            measurement,
+            invalid == "expectedTableCount"
+                ? -1
+                : 100,
+            invalid == "foreignTableCount"
+                ? -1
+                : 1000));
 
         // Assert
         Assert.Equal(invalid, exception.ParamName);
@@ -94,19 +179,21 @@ public sealed class LivePerformanceEvidenceTests
     [Theory]
     [InlineData(1)]
     [InlineData(3)]
-    public async Task ExecutionFailuresAreNotTreatedAsInformationalTiming(int failureCall)
+    public async Task ExecutionFailuresAreNotTreatedAsInformationalTiming(
+        int failureCall
+    )
     {
         // Arrange
         var report = CreateReport();
         var failure = new InvalidOperationException("Deterministic action failure.");
         var calls = 0;
-        Func<Task<SafeMigrationRunReport>> action = () => ++calls == failureCall
+        Func<CancellationToken, Task<SafeMigrationRunReport>> action = _ => ++calls == failureCall
             ? Task.FromException<SafeMigrationRunReport>(failure)
             : Task.FromResult(report);
 
         // Act
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            LivePerformanceEvidence.MeasureAsync(action));
+            LivePerformanceEvidence.MeasureAsync(action, cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Same(failure, exception);
@@ -120,7 +207,7 @@ public sealed class LivePerformanceEvidenceTests
         // Arrange
         var report = CreateReport();
         var calls = 0;
-        Func<Task<SafeMigrationRunReport>> action = () =>
+        Func<CancellationToken, Task<SafeMigrationRunReport>> action = _ =>
         {
             calls++;
 
@@ -128,7 +215,7 @@ public sealed class LivePerformanceEvidenceTests
         };
 
         // Act
-        var measurement = await LivePerformanceEvidence.MeasureAsync(action);
+        var measurement = await LivePerformanceEvidence.MeasureAsync(action, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(21, calls);
@@ -144,9 +231,16 @@ public sealed class LivePerformanceEvidenceTests
     {
         // Arrange
         const string provider = "persistence-tests";
-        var version = Guid.NewGuid().ToString("N");
+        var version = Guid
+            .NewGuid()
+            .ToString("N");
+
         var measurement = new LivePerformanceMeasurement(10d, 100d, CreateReport());
-        var artifactPath = Path.Combine(FindFixtureRepositoryRoot(), "artifacts", "performance", "live",
+        var artifactPath = Path.Combine(
+            FindFixtureRepositoryRoot(),
+            "artifacts",
+            "performance",
+            "live",
             $"{provider}-{version}.json");
 
         // WHY: Only this unique, empty directory belongs to the test. A
@@ -160,8 +254,10 @@ public sealed class LivePerformanceEvidenceTests
                 LivePerformanceEvidence.Write(provider, version, measurement, measurement, 100, 1000));
 
             // Assert
-            Assert.True(exception is IOException or UnauthorizedAccessException,
+            Assert.True(
+                exception is IOException or UnauthorizedAccessException,
                 $"Expected an artifact-write failure, observed {exception?.GetType().Name ?? "success"}.");
+
             Assert.True(Directory.Exists(artifactPath));
             Assert.Empty(Directory.EnumerateFileSystemEntries(artifactPath));
         }
@@ -179,7 +275,8 @@ public sealed class LivePerformanceEvidenceTests
     /// <returns>The ancestor containing the repository's SDK configuration.</returns>
     private static string FindFixtureRepositoryRoot()
     {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null;
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            directory is not null;
             directory = directory.Parent)
         {
             if (File.Exists(Path.Combine(directory.FullName, "global.json")))

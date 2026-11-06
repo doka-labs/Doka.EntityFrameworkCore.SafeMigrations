@@ -25,7 +25,9 @@ internal static partial class SafeMigrationStandardOperationFactory
                 .ToArray(),
             IsUnique = definition.Unique,
             Filter = definition.Filter
-                ?? (definition.StructuredFilter is null ? null : Render(definition.StructuredFilter, renderExpression)),
+                ?? (definition.StructuredFilter is null
+                    ? null
+                    : Render(definition.StructuredFilter, renderExpression)),
             IsDescending = definition
                 .Keys
                 .Select(static key => key.SortOrder == SafeMigrationIndexSortOrder.Descending)

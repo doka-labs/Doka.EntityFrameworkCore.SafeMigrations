@@ -25,11 +25,14 @@ public interface ISafeMigrationProviderAnalyzer
 
     /// <summary>Reads the live provider and server metadata without changing database state.</summary>
     /// <param name="context">The configured DbContext whose database is inspected.</param>
-    /// <param name="cancellationToken">The token used to cancel the asynchronous operation.</param>
+    /// <param name="cancellationToken">
+    /// The required token used to cancel the operation, or <see cref="CancellationToken.None" />
+    /// when the caller deliberately does not require cancellation.
+    /// </param>
     /// <returns>The live provider and server environment.</returns>
     Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
         DbContext context,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     );
 
     /// <summary>
@@ -37,11 +40,14 @@ public interface ISafeMigrationProviderAnalyzer
     /// encloses classification and unexpected-object inventory.
     /// </summary>
     /// <param name="context">The configured DbContext whose database is inspected.</param>
-    /// <param name="cancellationToken">The token used to cancel the asynchronous operation.</param>
+    /// <param name="cancellationToken">
+    /// The required token used to cancel the operation, or <see cref="CancellationToken.None" />
+    /// when the caller deliberately does not require cancellation.
+    /// </param>
     /// <returns>A scope whose disposal releases owned locks and transactions.</returns>
     Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
         DbContext context,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     );
 
     /// <summary>
@@ -50,12 +56,15 @@ public interface ISafeMigrationProviderAnalyzer
     /// </summary>
     /// <param name="context">The configured DbContext whose database is inspected.</param>
     /// <param name="operations">The ordered migration operations.</param>
-    /// <param name="cancellationToken">The token used to cancel the asynchronous operation.</param>
+    /// <param name="cancellationToken">
+    /// The required token used to cancel the operation, or <see cref="CancellationToken.None" />
+    /// when the caller deliberately does not require cancellation.
+    /// </param>
     /// <returns>The ordered provider classifications for the supplied safe operations.</returns>
     Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
         DbContext context,
         IReadOnlyList<SafeMigrationOperation> operations,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     );
 
     /// <summary>
@@ -64,11 +73,14 @@ public interface ISafeMigrationProviderAnalyzer
     /// </summary>
     /// <param name="context">The configured DbContext whose database is inspected.</param>
     /// <param name="operations">The ordered migration operations.</param>
-    /// <param name="cancellationToken">The token used to cancel the asynchronous operation.</param>
+    /// <param name="cancellationToken">
+    /// The required token used to cancel the operation, or <see cref="CancellationToken.None" />
+    /// when the caller deliberately does not require cancellation.
+    /// </param>
     /// <returns>The additive live objects outside the supplied expected catalog.</returns>
     Task<IReadOnlyList<SafeMigrationUnexpectedObject>> FindUnexpectedObjectsAsync(
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     );
 }

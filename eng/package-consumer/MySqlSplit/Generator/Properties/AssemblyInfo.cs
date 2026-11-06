@@ -2,7 +2,7 @@
 using Microsoft.EntityFrameworkCore.Design;
 
 [assembly: DesignTimeServicesReference(
-    "Doka.EntityFrameworkCore.SafeMigrations.MySql.MySqlSafeMigrationDesignTimeServices, "
-    + "Doka.EntityFrameworkCore.SafeMigrations.MySql",
-    "Doka.EntityFrameworkCore.MySql")]
+   "Doka.EntityFrameworkCore.SafeMigrations.MySql.MySqlSafeMigrationDesignTimeServices, "
+   + "Doka.EntityFrameworkCore.SafeMigrations.MySql",
+   "Doka.EntityFrameworkCore.MySql")]
 #endif

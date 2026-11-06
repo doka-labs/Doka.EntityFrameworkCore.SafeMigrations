@@ -8,12 +8,14 @@ public sealed class SqliteSafeMigrationPerformanceIntegrationTests : SqliteSafeM
     [Trait("Category", "LargeScale")]
     public async Task ModelManagedData_FiftyThousandMixedRowsConvergeAndReplayIdempotently()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE large_model_managed_rows ("
-            + "id INTEGER NOT NULL PRIMARY KEY, managed_value TEXT NOT NULL);");
-        await InsertInitialModelManagedRowsAsync(connection);
+            + "id INTEGER NOT NULL PRIMARY KEY, managed_value TEXT NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
+        await InsertInitialModelManagedRowsAsync(connection, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var expectation = ModelManagedDataLargeExecutionContract.Populate(
@@ -26,23 +28,31 @@ public sealed class SqliteSafeMigrationPerformanceIntegrationTests : SqliteSafeM
             .GetService<IMigrationsSqlGenerator>()
             .Generate(builder.Operations, context.Model);
 
-        var initial = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() => runner.AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlite-large-model-managed-data"),
-            CancellationToken.None));
+        var initial = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(
+            token => runner.AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-large-model-managed-data"),
+                token),
+            CancellationToken.None);
 
-        var initialExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() =>
-            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
+        var initialExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(
+            token =>
+                ExecuteOperationsAsync(context, builder.Operations, token),
+            CancellationToken.None);
 
-        var replayExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() =>
-            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
+        var replayExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(
+            token =>
+                ExecuteOperationsAsync(context, builder.Operations, token),
+            CancellationToken.None);
 
-        var replay = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() => runner.AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlite-large-model-managed-data-replay"),
-            CancellationToken.None));
+        var replay = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(
+            token => runner.AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-large-model-managed-data-replay"),
+                token),
+            CancellationToken.None);
 
         ModelManagedDataLargeExecutionEvidence.Write(
             "sqlite",
@@ -52,32 +62,44 @@ public sealed class SqliteSafeMigrationPerformanceIntegrationTests : SqliteSafeM
             initialExecution,
             replayExecution,
             replay.Measurement);
+
         expectation.AssertInitialReport(initial.Result);
         expectation.AssertReplayReport(replay.Result);
         Assert.Equal(
             expectation.FinalRowCount,
-            await ScalarIntAsync(connection, "SELECT COUNT(*) FROM large_model_managed_rows;"));
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM large_model_managed_rows;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             expectation.FinalRowCount,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM large_model_managed_rows WHERE managed_value = 'target';"));
+                "SELECT COUNT(*) FROM large_model_managed_rows WHERE managed_value = 'target';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM large_model_managed_rows WHERE id >= 3000000;"));
+                "SELECT COUNT(*) FROM large_model_managed_rows WHERE id >= 3000000;",
+                cancellationToken: CancellationToken.None));
     }
 
     private static async Task InsertInitialModelManagedRowsAsync(
-        SqliteConnection connection
+        SqliteConnection connection,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var transaction = connection.BeginTransaction();
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText =
             "INSERT INTO large_model_managed_rows (id, managed_value) VALUES ($id, $value);";
+
         var id = command.Parameters.Add("$id", SqliteType.Integer);
         var value = command.Parameters.Add("$value", SqliteType.Text);
 
@@ -86,9 +108,9 @@ public sealed class SqliteSafeMigrationPerformanceIntegrationTests : SqliteSafeM
             id.Value = row.Id;
             value.Value = row.Value;
 
-            _ = await command.ExecuteNonQueryAsync(CancellationToken.None);
+            _ = await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        await transaction.CommitAsync(CancellationToken.None);
+        await transaction.CommitAsync(cancellationToken);
     }
 }

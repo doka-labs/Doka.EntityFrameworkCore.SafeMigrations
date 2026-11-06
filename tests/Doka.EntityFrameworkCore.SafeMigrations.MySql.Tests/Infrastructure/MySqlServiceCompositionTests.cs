@@ -21,12 +21,15 @@ public sealed class MySqlServiceCompositionTests
         Assert.Equal(
             SafeMigrationScaffoldingMode.Strict,
             strict.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>()!.ScaffoldingMode);
+
         Assert.Equal(
             SafeMigrationPolicy.ThrowIfDifferent,
             strict.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>()!.LegacyConvergencePolicy);
+
         Assert.Equal(
             SafeMigrationScaffoldingMode.LegacyConvergence,
             legacy.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>()!.ScaffoldingMode);
+
         Assert.Equal(strictInfo.GetServiceProviderHashCode(), legacyInfo.GetServiceProviderHashCode());
         Assert.True(strictInfo.ShouldUseSameServiceProvider(legacyInfo));
     }
@@ -72,6 +75,7 @@ public sealed class MySqlServiceCompositionTests
 
         Assert.Throws<ArgumentNullException>(() =>
             options.UseMySqlSafeMigrations(configure: null!));
+
         Assert.Null(options.Options.FindExtension<MySqlSafeMigrationsOptionsExtension>());
     }
 
@@ -120,6 +124,7 @@ public sealed class MySqlServiceCompositionTests
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
             MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
 
         using var context = new DbContext(options.Options);
@@ -150,6 +155,7 @@ public sealed class MySqlServiceCompositionTests
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
             MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
 
         using var context = new DbContext(options.Options);
@@ -178,6 +184,7 @@ public sealed class MySqlServiceCompositionTests
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
             MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
 
         using var context = new DbContext(options.Options);
@@ -212,6 +219,7 @@ public sealed class MySqlServiceCompositionTests
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
             MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
 
         using var context = new DbContext(options.Options);
@@ -239,6 +247,7 @@ public sealed class MySqlServiceCompositionTests
         options.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
             MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         ((DbContextOptionsBuilder)options).UseMySqlSafeMigrations();
 
         using var context = new DbContext(options.Options);

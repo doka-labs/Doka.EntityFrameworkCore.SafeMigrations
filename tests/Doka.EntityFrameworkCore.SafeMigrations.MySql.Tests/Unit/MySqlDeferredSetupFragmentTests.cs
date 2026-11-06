@@ -8,7 +8,9 @@ public sealed class MySqlDeferredSetupFragmentTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void DeferredTerminatorInspectionUsesTheEmittedSuffix(bool hexadecimalSuffix)
+    public void DeferredTerminatorInspectionUsesTheEmittedSuffix(
+        bool hexadecimalSuffix
+    )
     {
         // Arrange
         var suffix = hexadecimalSuffix
@@ -16,7 +18,9 @@ public sealed class MySqlDeferredSetupFragmentTests
             : (MySqlSafeMigrationSetupFragment.Part)" \r\n";
 
         var fragment = MySqlSafeMigrationSetupFragment.Compose("DO 0;", suffix, string.Empty, "\t");
-        var expected = hexadecimalSuffix ? "DO 0;3B\t" : "DO 0; \r\n\t";
+        var expected = hexadecimalSuffix
+            ? "DO 0;3B\t"
+            : "DO 0; \r\n\t";
 
         // Act
         var terminated = fragment.EndsWithStatementTerminator;
@@ -34,20 +38,31 @@ public sealed class MySqlDeferredSetupFragmentTests
     [InlineData(1)]
     [InlineData(20)]
     [InlineData(4096)]
-    public void WriteToPreservesPaddingAcrossStoragePaths(int length)
+    public void WriteToPreservesPaddingAcrossStoragePaths(
+        int length
+    )
     {
         // Arrange
         var expected = new string('x', length);
         var fragment = SplitRaw(expected);
-        var destination = Enumerable.Repeat('#', length + 7).ToArray();
+        var destination = Enumerable
+            .Repeat('#', length + 7)
+            .ToArray();
 
         // Act
         fragment.WriteTo(destination.AsSpan(2));
 
         // Assert
         Assert.Equal(expected, new string(destination, 2, length));
-        Assert.All(destination.AsSpan(0, 2).ToArray(), character => Assert.Equal('#', character));
-        Assert.All(destination.AsSpan(length + 2).ToArray(), character => Assert.Equal('#', character));
+        Assert.All(destination
+                .AsSpan(0, 2)
+                .ToArray(),
+            character => Assert.Equal('#', character));
+
+        Assert.All(destination
+                .AsSpan(length + 2)
+                .ToArray(),
+            character => Assert.Equal('#', character));
     }
 
     /// <summary>
@@ -59,7 +74,9 @@ public sealed class MySqlDeferredSetupFragmentTests
     [InlineData("DO 2; -- trailing comment")]
     [InlineData("")]
     [InlineData(" \r\n")]
-    public void UnterminatedDeferredFragmentsRemainIndependent(string independent)
+    public void UnterminatedDeferredFragmentsRemainIndependent(
+        string independent
+    )
     {
         // Arrange
         MySqlSafeMigrationSetupFragment[] setup =
@@ -103,7 +120,10 @@ public sealed class MySqlDeferredSetupFragmentTests
 
         // Act
         var fragment = MySqlSafeMigrationSetupFragment.Compose(
-            string.Empty, sql, MySqlSafeMigrationSetupFragment.Part.Hex(string.Empty), string.Empty);
+            string.Empty,
+            sql,
+            MySqlSafeMigrationSetupFragment.Part.Hex(string.Empty),
+            string.Empty);
 
         // Assert
         Assert.Same(sql, fragment.ToSql());
@@ -122,7 +142,9 @@ public sealed class MySqlDeferredSetupFragmentTests
     [InlineData(5)]
     [InlineData(6)]
     [InlineData(7)]
-    public void RawCompositionPreservesTextAndUtf8Accounting(int caseId)
+    public void RawCompositionPreservesTextAndUtf8Accounting(
+        int caseId
+    )
     {
         // Arrange
         // WHY: Attribute/runner serialization normalizes malformed UTF-16 and can collapse distinct
@@ -144,7 +166,10 @@ public sealed class MySqlDeferredSetupFragmentTests
 
         // Act
         var fragment = MySqlSafeMigrationSetupFragment.Compose(
-            first, string.Empty, MySqlSafeMigrationSetupFragment.Part.Hex(string.Empty), second);
+            first,
+            string.Empty,
+            MySqlSafeMigrationSetupFragment.Part.Hex(string.Empty),
+            second);
 
         var actual = fragment.ToSql();
 
@@ -163,7 +188,9 @@ public sealed class MySqlDeferredSetupFragmentTests
     [InlineData(3)]
     [InlineData(4)]
     [InlineData(5)]
-    public void HexCompositionPreservesIndependentSourceEncoding(int caseId)
+    public void HexCompositionPreservesIndependentSourceEncoding(
+        int caseId
+    )
     {
         // Arrange
         // WHY: Construct unpaired surrogates locally so discovery cannot normalize high and low
@@ -183,7 +210,9 @@ public sealed class MySqlDeferredSetupFragmentTests
 
         // Act
         var fragment = MySqlSafeMigrationSetupFragment.Compose(
-            "SET @sql = 0x", MySqlSafeMigrationSetupFragment.Part.Hex(source), ";");
+            "SET @sql = 0x",
+            MySqlSafeMigrationSetupFragment.Part.Hex(source),
+            ";");
 
         var actual = fragment.ToSql();
 
@@ -199,7 +228,7 @@ public sealed class MySqlDeferredSetupFragmentTests
     {
         // Arrange
         var expected = Convert.ToHexString(Encoding.UTF8.GetBytes("\ud83d"))
-                       + Convert.ToHexString(Encoding.UTF8.GetBytes("\ude00"));
+            + Convert.ToHexString(Encoding.UTF8.GetBytes("\ude00"));
 
         // Act
         var fragment = MySqlSafeMigrationSetupFragment.Compose(
@@ -221,7 +250,9 @@ public sealed class MySqlDeferredSetupFragmentTests
 
         // Act
         var fragment = MySqlSafeMigrationSetupFragment.Compose(
-            "\ud83d", MySqlSafeMigrationSetupFragment.Part.Hex("A"), "\ude00");
+            "\ud83d",
+            MySqlSafeMigrationSetupFragment.Part.Hex("A"),
+            "\ude00");
 
         // Assert
         Assert.Equal(expected, fragment.ToSql());
@@ -258,7 +289,9 @@ public sealed class MySqlDeferredSetupFragmentTests
     [InlineData(4096)]
     [InlineData(4097)]
     [InlineData(8192)]
-    public void LargeMixedCompositionPreservesExactSqlAndUtf8Size(int length)
+    public void LargeMixedCompositionPreservesExactSqlAndUtf8Size(
+        int length
+    )
     {
         // Arrange
         const string prefix = "/* \u20ac */ SET @sql = 0x";
@@ -269,7 +302,9 @@ public sealed class MySqlDeferredSetupFragmentTests
 
         // Act
         var fragment = MySqlSafeMigrationSetupFragment.Compose(
-            prefix, MySqlSafeMigrationSetupFragment.Part.Hex(source), suffix);
+            prefix,
+            MySqlSafeMigrationSetupFragment.Part.Hex(source),
+            suffix);
 
         var actual = fragment.ToSql();
 
@@ -284,7 +319,9 @@ public sealed class MySqlDeferredSetupFragmentTests
     [Theory]
     [InlineData(4096)]
     [InlineData(4097)]
-    public void LargeCompositionReusesMaterializedStringAfterCallerMutation(int length)
+    public void LargeCompositionReusesMaterializedStringAfterCallerMutation(
+        int length
+    )
     {
         // Arrange
         var prefix = new string('x', length - 5);
@@ -313,14 +350,20 @@ public sealed class MySqlDeferredSetupFragmentTests
     [Theory]
     [InlineData(0)]
     [InlineData(5)]
-    public void WriteToPreservesSurroundingDestination(int spareLength)
+    public void WriteToPreservesSurroundingDestination(
+        int spareLength
+    )
     {
         // Arrange
         var fragment = MySqlSafeMigrationSetupFragment.Compose(
-            "SET @sql = 0x", MySqlSafeMigrationSetupFragment.Part.Hex("SELECT '\u20ac';"), ";");
+            "SET @sql = 0x",
+            MySqlSafeMigrationSetupFragment.Part.Hex("SELECT '\u20ac';"),
+            ";");
 
         var expected = "SET @sql = 0x" + Convert.ToHexString(Encoding.UTF8.GetBytes("SELECT '\u20ac';")) + ";";
-        var destination = Enumerable.Repeat('#', expected.Length + spareLength + 1).ToArray();
+        var destination = Enumerable
+            .Repeat('#', expected.Length + spareLength + 1)
+            .ToArray();
 
         // Act
         fragment.WriteTo(destination.AsSpan(1));
@@ -370,7 +413,9 @@ public sealed class MySqlDeferredSetupFragmentTests
     [InlineData(2)]
     [InlineData(3)]
     [InlineData(4)]
-    public void DefaultFragmentIsRejected(int member)
+    public void DefaultFragmentIsRejected(
+        int member
+    )
     {
         // Arrange
         var fragment = default(MySqlSafeMigrationSetupFragment);
@@ -425,7 +470,9 @@ public sealed class MySqlDeferredSetupFragmentTests
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(3)]
-    public void NullSourceIsRejected(int entryPoint)
+    public void NullSourceIsRejected(
+        int entryPoint
+    )
     {
         // Arrange
         string source = null!;
@@ -493,7 +540,9 @@ public sealed class MySqlDeferredSetupFragmentTests
     [InlineData(4095)]
     [InlineData(4096)]
     [InlineData(4097)]
-    public void LargeCompositionBoundaryPreservesMaterializedGrouping(int length)
+    public void LargeCompositionBoundaryPreservesMaterializedGrouping(
+        int length
+    )
     {
         // Arrange
         var prefix = new string(' ', length - 11) + "DO X'";
@@ -547,11 +596,17 @@ public sealed class MySqlDeferredSetupFragmentTests
     [InlineData(10, 2)]
     [InlineData(9, 3)]
     [InlineData(4, 3)]
-    public void DeferredGroupingRetainsSmallerOriginalPayloadCeiling(int bodyLength, int expectedGroups)
+    public void DeferredGroupingRetainsSmallerOriginalPayloadCeiling(
+        int bodyLength,
+        int expectedGroups
+    )
     {
         // Arrange
         string[] materialized = ["DO 1;", "DO 2;", "DO 3;"];
-        var deferred = materialized.Select(SplitRaw).ToArray();
+        var deferred = materialized
+            .Select(SplitRaw)
+            .ToArray();
+
         var body = new string('x', bodyLength);
         var expected = Compact(materialized, body);
 
@@ -579,11 +634,19 @@ public sealed class MySqlDeferredSetupFragmentTests
 
         var body = new string('x', 100);
         var expected = MySqlSafeMigrationSetupCommandCompactor.Compact(
-            materialized, body, ["DO 0;"], providerSetupOffset: 2, providerSetupCount: 2);
+            materialized,
+            body,
+            ["DO 0;"],
+            providerSetupOffset: 2,
+            providerSetupCount: 2);
 
         // Act
         var actual = MySqlSafeMigrationSetupCommandCompactor.Compact(
-            deferred, body, ["DO 0;"], providerSetupOffset: 2, providerSetupCount: 2);
+            deferred,
+            body,
+            ["DO 0;"],
+            providerSetupOffset: 2,
+            providerSetupCount: 2);
 
         // Assert
         Assert.Equal(expected, actual);
@@ -602,7 +665,10 @@ public sealed class MySqlDeferredSetupFragmentTests
         string[] materialized = [assignment, "PREPARE guard FROM @sql;", "EXECUTE guard;", "DEALLOCATE PREPARE guard;"];
         MySqlSafeMigrationSetupFragment[] deferred =
         [
-            MySqlSafeMigrationSetupFragment.Compose("SET @sql = 0x", MySqlSafeMigrationSetupFragment.Part.Hex(source), ";"),
+            MySqlSafeMigrationSetupFragment.Compose(
+                "SET @sql = 0x",
+                MySqlSafeMigrationSetupFragment.Part.Hex(source),
+                ";"),
             SplitRaw(materialized[1]), SplitRaw(materialized[2]), SplitRaw(materialized[3]),
         ];
 
@@ -622,18 +688,28 @@ public sealed class MySqlDeferredSetupFragmentTests
     [Theory]
     [InlineData(126)]
     [InlineData(127)]
-    public void DeferredGroupingCannotHideOversizedOriginalFragmentScope(int setupCount)
+    public void DeferredGroupingCannotHideOversizedOriginalFragmentScope(
+        int setupCount
+    )
     {
         // Arrange
-        var materialized = Enumerable.Repeat("DO 0;", setupCount).ToArray();
-        var deferred = materialized.Select(SplitRaw).ToArray();
+        var materialized = Enumerable
+            .Repeat("DO 0;", setupCount)
+            .ToArray();
+
+        var deferred = materialized
+            .Select(SplitRaw)
+            .ToArray();
+
         var body = new string('x', 100);
         var expected = Compact(materialized, body);
 
         // Act
         var actual = Compact(deferred, body);
         var exception = Record.Exception(() => MySqlMigrationCommandSpec.CreateScoped(
-            actual, body, ["DO 0;", "DO 0;"]));
+            actual,
+            body,
+            ["DO 0;", "DO 0;"]));
 
         // Assert
         Assert.Equal(expected, actual);
@@ -654,7 +730,9 @@ public sealed class MySqlDeferredSetupFragmentTests
         // Act
         var actual = Compact(deferred, "DO 0;");
         var exception = Record.Exception(() => MySqlMigrationCommandSpec.CreateScoped(
-            actual, "DO 0;", ["DO 0;", "DO 0;"]));
+            actual,
+            "DO 0;",
+            ["DO 0;", "DO 0;"]));
 
         // Assert
         Assert.Equal(expected, actual);
@@ -669,18 +747,36 @@ public sealed class MySqlDeferredSetupFragmentTests
     [InlineData(3)]
     [InlineData(9)]
     [InlineData(10)]
-    public void DeferredGroupingAcceptsExactOriginalFragmentAdmission(int fusedCount)
+    public void DeferredGroupingAcceptsExactOriginalFragmentAdmission(
+        int fusedCount
+    )
     {
         // Arrange
-        var materialized = Enumerable.Repeat("DO 0;", 125 - fusedCount).ToArray();
-        var deferred = materialized.Select(SplitRaw).ToArray();
+        var materialized = Enumerable
+            .Repeat("DO 0;", 125 - fusedCount)
+            .ToArray();
+
+        var deferred = materialized
+            .Select(SplitRaw)
+            .ToArray();
+
         var body = new string('x', 100);
         var expected = MySqlSafeMigrationSetupCommandCompactor.Compact(
-            materialized, body, ["DO 0;", "DO 0;"], materialized.Length, 0, fusedCount);
+            materialized,
+            body,
+            ["DO 0;", "DO 0;"],
+            materialized.Length,
+            0,
+            fusedCount);
 
         // Act
         var actual = MySqlSafeMigrationSetupCommandCompactor.Compact(
-            deferred, body, ["DO 0;", "DO 0;"], deferred.Length, 0, fusedCount);
+            deferred,
+            body,
+            ["DO 0;", "DO 0;"],
+            deferred.Length,
+            0,
+            fusedCount);
 
         var scope = MySqlMigrationCommandSpec.CreateScoped(actual, body, ["DO 0;", "DO 0;"]);
 
@@ -696,15 +792,27 @@ public sealed class MySqlDeferredSetupFragmentTests
     [InlineData(9)]
     [InlineData(10)]
     [InlineData(int.MaxValue)]
-    public void DeferredGroupingRejectsOriginalFusedFragmentOverflow(int fusedCount)
+    public void DeferredGroupingRejectsOriginalFusedFragmentOverflow(
+        int fusedCount
+    )
     {
         // Arrange
-        var setupCount = fusedCount == int.MaxValue ? 1 : 126 - fusedCount;
-        var deferred = Enumerable.Repeat(SplitRaw("DO 0;"), setupCount).ToArray();
+        var setupCount = fusedCount == int.MaxValue
+            ? 1
+            : 126 - fusedCount;
+
+        var deferred = Enumerable
+            .Repeat(SplitRaw("DO 0;"), setupCount)
+            .ToArray();
 
         // Act
         var exception = Record.Exception(() => MySqlSafeMigrationSetupCommandCompactor.Compact(
-            deferred, "DO 0;", ["DO 0;", "DO 0;"], deferred.Length, 0, fusedCount));
+            deferred,
+            "DO 0;",
+            ["DO 0;", "DO 0;"],
+            deferred.Length,
+            0,
+            fusedCount));
 
         // Assert
         Assert.IsType<ArgumentException>(exception);
@@ -720,28 +828,45 @@ public sealed class MySqlDeferredSetupFragmentTests
     [InlineData(1, -1, 0)]
     [InlineData(1, 2, 0)]
     [InlineData(1, 0, -1)]
-    public void DeferredGroupingRejectsInvalidRanges(int offset, int count, int fusedCount)
+    public void DeferredGroupingRejectsInvalidRanges(
+        int offset,
+        int count,
+        int fusedCount
+    )
     {
         // Arrange
         MySqlSafeMigrationSetupFragment[] deferred = [SplitRaw("DO 1;"), SplitRaw("DO 2;")];
 
         // Act
         var exception = Record.Exception(() => MySqlSafeMigrationSetupCommandCompactor.Compact(
-            deferred, "DO 0;", ["DO 0;"], offset, count, fusedCount));
+            deferred,
+            "DO 0;",
+            ["DO 0;"],
+            offset,
+            count,
+            fusedCount));
 
         // Assert
         Assert.IsType<ArgumentOutOfRangeException>(exception);
     }
 
     /// <summary>Creates raw deferred pieces without changing the materialized reference SQL.</summary>
-    private static MySqlSafeMigrationSetupFragment SplitRaw(string sql)
+    private static MySqlSafeMigrationSetupFragment SplitRaw(
+        string sql
+    )
         => MySqlSafeMigrationSetupFragment.Compose(sql[..(sql.Length / 2)], sql[(sql.Length / 2)..]);
 
     /// <summary>Uses the production cleanup shape for the existing materialized comparison path.</summary>
-    private static IReadOnlyList<string> Compact(string[] setup, string body)
+    private static IReadOnlyList<string> Compact(
+        string[] setup,
+        string body
+    )
         => MySqlSafeMigrationSetupCommandCompactor.Compact(setup, body, ["DO 0;", "DO 0;"], setup.Length, 0);
 
     /// <summary>Uses the identical production cleanup shape for the deferred materialization path.</summary>
-    private static IReadOnlyList<string> Compact(MySqlSafeMigrationSetupFragment[] setup, string body)
+    private static IReadOnlyList<string> Compact(
+        MySqlSafeMigrationSetupFragment[] setup,
+        string body
+    )
         => MySqlSafeMigrationSetupCommandCompactor.Compact(setup, body, ["DO 0;", "DO 0;"], setup.Length, 0);
 }

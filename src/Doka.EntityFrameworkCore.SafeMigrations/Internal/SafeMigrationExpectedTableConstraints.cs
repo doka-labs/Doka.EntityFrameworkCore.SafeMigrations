@@ -197,6 +197,8 @@ internal sealed partial class SafeMigrationExpectedTableConstraints
             (string? Schema, string Table) value
         ) => HashCode.Combine(
             tableComparer.GetHashCode(value.Table),
-            normalizeSchema(value.Schema) is { } schema ? StringComparer.Ordinal.GetHashCode(schema) : 0);
+            normalizeSchema(value.Schema) is { } schema
+                ? StringComparer.Ordinal.GetHashCode(schema)
+                : 0);
     }
 }

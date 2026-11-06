@@ -13,7 +13,11 @@ public sealed class PostgreSqlNativeDeparseCandidateTests
     [InlineData("-2147483648", "integer", "'-2147483648'")]
     [InlineData("32767", "smallint", "'''32767''::smallint'")]
     [InlineData("9223372036854775807", "bigint", "'''9223372036854775807''::bigint'")]
-    public void ValidIntegerLiteralCastsRetainNativeValueAndType(string input, string target, string expected)
+    public void ValidIntegerLiteralCastsRetainNativeValueAndType(
+        string input,
+        string target,
+        string expected
+    )
     {
         // Arrange
         using var context = Context();
@@ -39,7 +43,10 @@ public sealed class PostgreSqlNativeDeparseCandidateTests
     [InlineData("1.5", "integer")]
     [InlineData("bad", "integer")]
     [InlineData("1\0", "integer")]
-    public void InvalidIntegerConstantDoesNotAcquireFoldedCandidate(string input, string target)
+    public void InvalidIntegerConstantDoesNotAcquireFoldedCandidate(
+        string input,
+        string target
+    )
     {
         // Arrange
         using var context = Context();
@@ -61,8 +68,10 @@ public sealed class PostgreSqlNativeDeparseCandidateTests
         // Arrange
         using var context = Context();
         var renderer = Renderer(context);
-        var ordinary = SafeMigrationSql.Binary(SafeMigrationSql.Identifier("id"),
-            SafeMigrationSqlBinaryOperator.GreaterThan, SafeMigrationSql.Literal(0));
+        var ordinary = SafeMigrationSql.Binary(
+            SafeMigrationSql.Identifier("id"),
+            SafeMigrationSqlBinaryOperator.GreaterThan,
+            SafeMigrationSql.Literal(0));
 
         var opaque = SafeMigrationSql.Opaque("COALESCE(id, CAST('1' AS integer)) > 0");
 
@@ -82,7 +91,9 @@ public sealed class PostgreSqlNativeDeparseCandidateTests
         // Arrange
         using var context = Context();
         var renderer = Renderer(context);
-        var expression = SafeMigrationSql.Function("COALESCE", SafeMigrationSql.Identifier("id"),
+        var expression = SafeMigrationSql.Function(
+            "COALESCE",
+            SafeMigrationSql.Identifier("id"),
             SafeMigrationSql.Literal("fallback"));
 
         // Act
@@ -102,8 +113,10 @@ public sealed class PostgreSqlNativeDeparseCandidateTests
         // Arrange
         using var context = Context();
         var renderer = Renderer(context);
-        var expression = SafeMigrationSql.Binary(SafeMigrationSql.Identifier("member'name"),
-            SafeMigrationSqlBinaryOperator.Equal, SafeMigrationSql.Literal(" +001 "));
+        var expression = SafeMigrationSql.Binary(
+            SafeMigrationSql.Identifier("member'name"),
+            SafeMigrationSqlBinaryOperator.Equal,
+            SafeMigrationSql.Literal(" +001 "));
 
         // Act
         var candidate = renderer.RenderCatalogNativeDeparsedCandidateSql(expression, Literal, "co.conrelid");
@@ -127,13 +140,17 @@ public sealed class PostgreSqlNativeDeparseCandidateTests
     [InlineData("1")]
     [InlineData("not-an-int")]
     [InlineData("1\0")]
-    public void UnknownLiteralWithoutNativeRelationDoesNotFoldIntegerInput(string literal)
+    public void UnknownLiteralWithoutNativeRelationDoesNotFoldIntegerInput(
+        string literal
+    )
     {
         // Arrange
         using var context = Context();
         var renderer = Renderer(context);
-        var expression = SafeMigrationSql.Binary(SafeMigrationSql.Identifier("id"),
-            SafeMigrationSqlBinaryOperator.Equal, SafeMigrationSql.Literal(literal));
+        var expression = SafeMigrationSql.Binary(
+            SafeMigrationSql.Identifier("id"),
+            SafeMigrationSqlBinaryOperator.Equal,
+            SafeMigrationSql.Literal(literal));
 
         // Act
         var candidate = renderer.RenderCatalogNativeDeparsedCandidateSql(expression, Literal);
@@ -152,8 +169,11 @@ public sealed class PostgreSqlNativeDeparseCandidateTests
         // Arrange
         using var context = Context();
         var renderer = Renderer(context);
-        var expression = SafeMigrationSql.Binary(SafeMigrationSql.Function("LOWER",
-            SafeMigrationSql.Identifier("id")), SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+        var expression = SafeMigrationSql.Binary(
+            SafeMigrationSql.Function(
+                "LOWER",
+                SafeMigrationSql.Identifier("id")),
+            SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
             SafeMigrationSql.Literal(string.Empty));
 
         // Act
@@ -181,7 +201,8 @@ public sealed class PostgreSqlNativeDeparseCandidateTests
     [InlineData(SafeMigrationSqlBinaryOperator.Or, true)]
     public void NativeBooleanVariantFlattensOnlyIdenticalStructuredOperators(
         SafeMigrationSqlBinaryOperator operation,
-        bool rightNested)
+        bool rightNested
+    )
     {
         // Arrange
         using var context = Context();
@@ -193,18 +214,30 @@ public sealed class PostgreSqlNativeDeparseCandidateTests
             ? SafeMigrationSql.Binary(first, operation, SafeMigrationSql.Binary(second, operation, third))
             : SafeMigrationSql.Binary(SafeMigrationSql.Binary(first, operation, second), operation, third);
 
-        var token = operation == SafeMigrationSqlBinaryOperator.And ? "AND" : "OR";
+        var token = operation == SafeMigrationSqlBinaryOperator.And
+            ? "AND"
+            : "OR";
 
         // Act
         var candidate = renderer.RenderCatalogNativeDeparsedCandidateSql(expression, Literal);
         var executable = renderer.Render(expression);
 
         // Assert
-        Assert.Equal("('(' || pg_catalog.quote_ident('first') || ' " + token + " ' || "
-            + "pg_catalog.quote_ident('second') || ' " + token + " ' || "
-            + "pg_catalog.quote_ident('third') || ')')", candidate);
-        Assert.Equal(rightNested ? $"(first {token} (second {token} third))"
-            : $"((first {token} second) {token} third)", executable);
+        Assert.Equal(
+            "('(' || pg_catalog.quote_ident('first') || ' "
+            + token
+            + " ' || "
+            + "pg_catalog.quote_ident('second') || ' "
+            + token
+            + " ' || "
+            + "pg_catalog.quote_ident('third') || ')')",
+            candidate);
+
+        Assert.Equal(
+            rightNested
+                ? $"(first {token} (second {token} third))"
+                : $"((first {token} second) {token} third)",
+            executable);
     }
 
     /// <summary>Different Boolean operators retain their nested precedence in the native catalog candidate.</summary>
@@ -218,8 +251,12 @@ public sealed class PostgreSqlNativeDeparseCandidateTests
         var second = SafeMigrationSql.Identifier("second");
         var third = SafeMigrationSql.Identifier("third");
         var fourth = SafeMigrationSql.Identifier("fourth");
-        var expression = SafeMigrationSql.Binary(SafeMigrationSql.Binary(first,
-            SafeMigrationSqlBinaryOperator.And, second), SafeMigrationSqlBinaryOperator.And,
+        var expression = SafeMigrationSql.Binary(
+            SafeMigrationSql.Binary(
+                first,
+                SafeMigrationSqlBinaryOperator.And,
+                second),
+            SafeMigrationSqlBinaryOperator.And,
             SafeMigrationSql.Binary(third, SafeMigrationSqlBinaryOperator.Or, fourth));
 
         // Act
@@ -227,9 +264,12 @@ public sealed class PostgreSqlNativeDeparseCandidateTests
         var executable = renderer.Render(expression);
 
         // Assert
-        Assert.Equal("('(' || pg_catalog.quote_ident('first') || ' AND ' || "
+        Assert.Equal(
+            "('(' || pg_catalog.quote_ident('first') || ' AND ' || "
             + "pg_catalog.quote_ident('second') || ' AND (' || pg_catalog.quote_ident('third') || ' OR ' || "
-            + "pg_catalog.quote_ident('fourth') || '))')", candidate);
+            + "pg_catalog.quote_ident('fourth') || '))')",
+            candidate);
+
         Assert.Equal("((first AND second) AND (third OR fourth))", executable);
     }
 
@@ -248,7 +288,8 @@ public sealed class PostgreSqlNativeDeparseCandidateTests
         string input,
         string source,
         string target,
-        bool folded)
+        bool folded
+    )
     {
         // Arrange
         using var context = Context();
@@ -257,7 +298,9 @@ public sealed class PostgreSqlNativeDeparseCandidateTests
 
         // Act
         var proven = PostgreSqlSafeMigrationSqlExpressionRenderer.TryGetNativeIntegerLiteralValue(
-            expression, target, out var integer);
+            expression,
+            target,
+            out var integer);
 
         var candidate = renderer.RenderCatalogNativeDeparsedCandidateSql(expression, Literal);
         var executable = renderer.Render(expression);
@@ -281,9 +324,13 @@ public sealed class PostgreSqlNativeDeparseCandidateTests
         => new("Host=localhost;Database=unused;Username=unused;Password=unused");
 
     /// <summary>Uses the provider's actual canonical mappings and identifier formatter.</summary>
-    private static PostgreSqlSafeMigrationSqlExpressionRenderer Renderer(DbContext context)
+    private static PostgreSqlSafeMigrationSqlExpressionRenderer Renderer(
+        DbContext context
+    )
         => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     /// <summary>Encodes candidate text independently from the expression's typed literals.</summary>
-    private static string Literal(string value) => "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+    private static string Literal(
+        string value
+    ) => "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
 }

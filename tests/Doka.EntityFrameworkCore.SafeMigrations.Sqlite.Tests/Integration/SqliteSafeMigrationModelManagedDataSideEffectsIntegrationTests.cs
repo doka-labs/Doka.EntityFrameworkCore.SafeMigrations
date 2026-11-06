@@ -15,10 +15,12 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
     [InlineData("INSERT")]
     [InlineData("UPDATE")]
     [InlineData("DELETE")]
-    public async Task SideEffects_ManagedWriteTriggerInvalidatesLiveMatchingRow(string writeKind)
+    public async Task SideEffects_ManagedWriteTriggerInvalidatesLiveMatchingRow(
+        string writeKind
+    )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connection,
@@ -29,13 +31,16 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
             + "INSERT INTO side_effect_rows (id, managed_value) VALUES (1, 'expected');"
             + (writeKind == "INSERT"
                 ? string.Empty
-                : "INSERT INTO side_effect_writes (id, managed_value) VALUES (1, 'source');"));
+                : "INSERT INTO side_effect_writes (id, managed_value) VALUES (1, 'source');"),
+            cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connection,
-            "CREATE TRIGGER side_effect_trigger AFTER " + writeKind
+            "CREATE TRIGGER side_effect_trigger AFTER "
+            + writeKind
             + " ON side_effect_writes BEGIN "
-            + "UPDATE side_effect_rows SET managed_value = 'trigger-change' WHERE id = 1; END;");
+            + "UPDATE side_effect_rows SET managed_value = 'trigger-change' WHERE id = 1; END;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
 
@@ -50,21 +55,26 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-managed-trigger-" + writeKind));
+            new SafeMigrationRunOptions("sqlite-managed-trigger-" + writeKind),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, [builder.Operations[0]]);
+        await ExecuteOperationsAsync(context, [builder.Operations[0]], cancellationToken: CancellationToken.None);
 
         var actual = await runner.AnalyzeAsync(
             context,
             [builder.Operations[1]],
-            new SafeMigrationRunOptions("sqlite-managed-trigger-actual-" + writeKind));
+            new SafeMigrationRunOptions("sqlite-managed-trigger-actual-" + writeKind),
+            cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(
-            () => ExecuteOperationsAsync(context, [builder.Operations[1]]));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [builder.Operations[1]],
+            cancellationToken: CancellationToken.None));
 
         var changedRows = await ScalarIntAsync(
             connection,
-            "SELECT COUNT(*) FROM side_effect_rows WHERE id = 1 AND managed_value = 'trigger-change';");
+            "SELECT COUNT(*) FROM side_effect_rows WHERE id = 1 AND managed_value = 'trigger-change';",
+            cancellationToken: CancellationToken.None);
 
         var origin = preflight.Assessments[1].DeferredOrigin;
 
@@ -76,7 +86,10 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
         Assert.Equal("projected_model_managed_data_state_unknown", preflight.Assessments[1].AnalysisCode);
         Assert.NotNull(origin);
         Assert.Equal(0, origin.OperationOrdinal);
-        Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(actual.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Different,
+            Assert.Single(actual.Assessments)
+                .ObservedState);
+
         Assert.IsType<InvalidOperationException>(exception);
         Assert.Equal(1, changedRows);
     }
@@ -88,12 +101,13 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
     public async Task SideEffects_ExecutedManagedInsertReplayProvesSameRow()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE side_effect_rows (id INTEGER NOT NULL PRIMARY KEY, "
-            + "managed_value TEXT NOT NULL);");
+            + "managed_value TEXT NOT NULL);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
 
@@ -102,28 +116,41 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
         AppendSideEffectEnsure(builder, "side_effect_rows");
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlite-managed-immediate-postcondition"));
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-managed-immediate-postcondition"),
+                cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
-        var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlite-managed-executed-replay"));
+        var replay = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-managed-executed-replay"),
+                cancellationToken: CancellationToken.None);
 
         var rowCount = await ScalarIntAsync(
             connection,
-            "SELECT COUNT(*) FROM side_effect_rows WHERE id = 1 AND managed_value = 'expected';");
+            "SELECT COUNT(*) FROM side_effect_rows WHERE id = 1 AND managed_value = 'expected';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[0].Action);
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(replay.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replay.Assessments)
+                .Action);
+
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(replay.Assessments)
+                .ObservedState);
+
         Assert.Equal(1, rowCount);
     }
 
@@ -134,7 +161,7 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
     public async Task SideEffects_NewlyCreatedPlainTableRemainsReady()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
 
@@ -152,16 +179,20 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
         AppendSideEffectEnsure(builder, "side_effect_rows");
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlite-managed-fresh-table"));
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-managed-fresh-table"),
+                cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var rowCount = await ScalarIntAsync(
             connection,
-            "SELECT COUNT(*) FROM side_effect_rows WHERE id = 1 AND managed_value = 'expected';");
+            "SELECT COUNT(*) FROM side_effect_rows WHERE id = 1 AND managed_value = 'expected';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -178,7 +209,7 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
     public async Task SideEffects_TwoChildDeletesThenParentRemainExecutableWithRuntimeValidation()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connection,
@@ -187,7 +218,8 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
             + "parent_id INTEGER NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY (parent_id) "
             + "REFERENCES side_effect_parents (id) ON DELETE CASCADE); "
             + "INSERT INTO side_effect_parents (id) VALUES (1); "
-            + "INSERT INTO side_effect_children (id, parent_id) VALUES (11, 1), (12, 1);");
+            + "INSERT INTO side_effect_children (id, parent_id) VALUES (11, 1), (12, 1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
 
@@ -198,16 +230,25 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
         AppendSideEffectParentDelete(builder);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlite-managed-two-child-deletes"));
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-managed-two-child-deletes"),
+                cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
-        var parents = await ScalarIntAsync(connection, "SELECT COUNT(*) FROM side_effect_parents;");
+        var parents = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM side_effect_parents;",
+            cancellationToken: CancellationToken.None);
 
-        var children = await ScalarIntAsync(connection, "SELECT COUNT(*) FROM side_effect_children;");
+        var children = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM side_effect_children;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
@@ -230,7 +271,7 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
     public async Task SideEffects_InterveningTriggerRecreationRejectsParentDelete()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connection,
@@ -241,14 +282,17 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
             + "CREATE TABLE side_effect_writes (id INTEGER NOT NULL PRIMARY KEY, "
             + "managed_value TEXT NOT NULL); "
             + "INSERT INTO side_effect_parents (id) VALUES (1); "
-            + "INSERT INTO side_effect_children (id, parent_id) VALUES (11, 1);");
+            + "INSERT INTO side_effect_children (id, parent_id) VALUES (11, 1);",
+            cancellationToken: CancellationToken.None);
 
         const string writeKind = "INSERT";
 
         await ExecuteSqlAsync(
             connection,
-            "CREATE TRIGGER side_effect_trigger AFTER " + writeKind
-            + " ON side_effect_writes BEGIN INSERT INTO side_effect_children (id, parent_id) VALUES (99, 1); END;");
+            "CREATE TRIGGER side_effect_trigger AFTER "
+            + writeKind
+            + " ON side_effect_writes BEGIN INSERT INTO side_effect_children (id, parent_id) VALUES (99, 1); END;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
 
@@ -264,23 +308,34 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-managed-recreated-child"));
+            new SafeMigrationRunOptions("sqlite-managed-recreated-child"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, [builder.Operations[0], builder.Operations[1]]);
+        await ExecuteOperationsAsync(
+            context,
+            [builder.Operations[0], builder.Operations[1]],
+            cancellationToken: CancellationToken.None);
 
         var actual = await runner.AnalyzeAsync(
             context,
             [builder.Operations[2]],
-            new SafeMigrationRunOptions("sqlite-managed-recreated-child-actual"));
+            new SafeMigrationRunOptions("sqlite-managed-recreated-child-actual"),
+            cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(
-            () => ExecuteOperationsAsync(context, [builder.Operations[2]]));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [builder.Operations[2]],
+            cancellationToken: CancellationToken.None));
 
-        var parents = await ScalarIntAsync(connection, "SELECT COUNT(*) FROM side_effect_parents;");
+        var parents = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM side_effect_parents;",
+            cancellationToken: CancellationToken.None);
 
         var recreatedChildren = await ScalarIntAsync(
             connection,
-            "SELECT COUNT(*) FROM side_effect_children WHERE id = 99 AND parent_id = 1;");
+            "SELECT COUNT(*) FROM side_effect_children WHERE id = 99 AND parent_id = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
@@ -288,13 +343,19 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
         Assert.Equal("runtime_validation_required", preflight.Assessments[2].Code);
         Assert.Equal("projected_model_managed_data_state_unknown", preflight.Assessments[2].AnalysisCode);
         Assert.NotNull(preflight.Assessments[2].DeferredOrigin);
-        Assert.Equal(SafeMigrationObservedState.DataBlocked, Assert.Single(actual.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.DataBlocked,
+            Assert.Single(actual.Assessments)
+                .ObservedState);
+
         Assert.IsType<InvalidOperationException>(exception);
         Assert.Equal(1, parents);
         Assert.Equal(1, recreatedChildren);
     }
 
-    private static void AppendSideEffectEnsure(MigrationBuilder builder, string table)
+    private static void AppendSideEffectEnsure(
+        MigrationBuilder builder,
+        string table
+    )
         => builder.EnsureModelManagedDataFromModel(
             table,
             ["id"],
@@ -303,7 +364,10 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
             ["INTEGER", "TEXT"],
             new object?[,] { { 1, "expected" } });
 
-    private static void AppendSideEffectWrite(MigrationBuilder builder, string writeKind)
+    private static void AppendSideEffectWrite(
+        MigrationBuilder builder,
+        string writeKind
+    )
     {
         switch (writeKind)
         {
@@ -345,7 +409,10 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
         }
     }
 
-    private static void AppendSideEffectChildDelete(MigrationBuilder builder, int id)
+    private static void AppendSideEffectChildDelete(
+        MigrationBuilder builder,
+        int id
+    )
         => builder.DeleteModelManagedDataFromModel(
             "side_effect_children",
             ["id"],
@@ -355,7 +422,9 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
             ["INTEGER", "INTEGER"],
             new object?[,] { { id, 1 } });
 
-    private static void AppendSideEffectParentDelete(MigrationBuilder builder)
+    private static void AppendSideEffectParentDelete(
+        MigrationBuilder builder
+    )
         => builder.DeleteModelManagedDataFromModel(
             "side_effect_parents",
             ["id"],

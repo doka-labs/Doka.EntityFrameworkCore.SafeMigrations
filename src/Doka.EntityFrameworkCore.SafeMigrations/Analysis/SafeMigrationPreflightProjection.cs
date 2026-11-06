@@ -3,52 +3,44 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationProjectedColumnSource,
     ISafeMigrationProjectedTableSource
 {
-    private readonly ISafeMigrationProviderOperationProjection? _providerOperationProjection;
-    private readonly ISafeMigrationProjectedKeyAnalyzer? _projectedKeyAnalyzer;
-    private readonly ISafeMigrationProjectedDependencyAnalyzer? _projectedDependencyAnalyzer;
+    private readonly HashSet<IndexKey> _droppedPhysicalKeys;
     private readonly ISafeMigrationIndexPrerequisiteSource? _indexPrerequisiteSource;
-    private readonly ISafeMigrationProjectedColumnAnalyzer? _projectedColumnAnalyzer;
-    private readonly ISafeMigrationRenamedTableAnalyzer? _renamedTableAnalyzer;
     private readonly ISafeMigrationLivePrerequisiteSource? _livePrerequisiteSource;
-    private readonly Dictionary<TableKey, TableKey> _renamedTableSources;
-    private readonly HashSet<TableKey> _projectedForeignKeyOwners;
-    private Dictionary<TableKey, HashSet<string>>? _projectedForeignKeyColumns;
     private readonly ISafeMigrationProviderObjectIdentityNormalizer? _objectIdentityNormalizer;
-    private readonly Dictionary<TableKey, ProjectedTable> _tables;
 
     // WHY: Strict table projections retain complete definitions. This second view
     // records only prerequisites proven by earlier convergence operations, so
     // a later operation cannot infer safety from an object that was rejected.
     private readonly Dictionary<TableKey, ProjectedPrerequisites> _prerequisites;
-    private readonly HashSet<IndexKey> _droppedPhysicalKeys;
-    private readonly HashSet<TableKey> _projectedDataMutationTables;
-    private readonly Dictionary<TableKey, HashSet<string>> _projectedModelManagedUniqueKeys;
+    private readonly HashSet<TableKey> _projectedCandidateKeyMutationTables;
+    private readonly Dictionary<TableKey, HashSet<string>> _projectedChangedColumns;
+    private readonly ISafeMigrationProjectedColumnAnalyzer? _projectedColumnAnalyzer;
 
     // WHY: Table-owned column states make cleanup and rename independent of
     // columns accumulated for unrelated tables in a large operation stream.
 
     private readonly Dictionary<TableKey, Dictionary<string, ProjectedColumnState>> _projectedColumnStates;
-    private readonly HashSet<TableKey> _projectedCandidateKeyMutationTables;
+    private readonly HashSet<TableKey> _projectedDataMutationTables;
+    private readonly ISafeMigrationProjectedDependencyAnalyzer? _projectedDependencyAnalyzer;
+    private readonly HashSet<TableKey> _projectedForeignKeyOwners;
+    private readonly ISafeMigrationProjectedKeyAnalyzer? _projectedKeyAnalyzer;
     private readonly HashSet<TableKey> _projectedMissingTables;
-    private readonly HashSet<TableKey> _projectedUnknownTableStructures;
-    private readonly HashSet<TableKey> _projectedUnknownPhysicalKeys;
+    private readonly Dictionary<TableKey, HashSet<string>> _projectedModelManagedUniqueKeys;
     private readonly HashSet<TableKey> _projectedStructurallyModifiedTables;
-    private HashSet<TableKey>? _projectedColumnDropOnlyTables;
-    private HashSet<TableKey>? _projectedForeignKeyDropOnlyTables;
-    private HashSet<TableKey>? _projectedIntrinsicColumnSourceTables;
-    private HashSet<TableKey>? _projectedIndexDropOnlyTables;
-    private readonly Dictionary<TableKey, HashSet<string>> _projectedChangedColumns;
-    private bool _hasOpaqueProviderPostcondition;
-    private bool _hasOpaqueSqlPostcondition;
+    private readonly HashSet<TableKey> _projectedUnknownPhysicalKeys;
+    private readonly HashSet<TableKey> _projectedUnknownTableStructures;
+    private readonly ISafeMigrationProviderOperationProjection? _providerOperationProjection;
+    private readonly ISafeMigrationRenamedTableAnalyzer? _renamedTableAnalyzer;
+    private readonly Dictionary<TableKey, TableKey> _renamedTableSources;
+    private readonly Dictionary<TableKey, ProjectedTable> _tables;
     private bool _creationCharacterSetChanged;
-    private long _providerDataMutationVersion;
     private int? _deferredProviderOperationOriginOrdinal;
-
-    /// <summary>Gets whether unmodeled SQL has invalidated projected structural postconditions.</summary>
-    internal bool HasOpaqueSqlPostcondition => _hasOpaqueSqlPostcondition;
-
-    /// <summary>Gets the revision of globally invalidated row evidence.</summary>
-    internal long DataMutationVersion => _providerDataMutationVersion;
+    private bool _hasOpaqueProviderPostcondition;
+    private HashSet<TableKey>? _projectedColumnDropOnlyTables;
+    private Dictionary<TableKey, HashSet<string>>? _projectedForeignKeyColumns;
+    private HashSet<TableKey>? _projectedForeignKeyDropOnlyTables;
+    private HashSet<TableKey>? _projectedIndexDropOnlyTables;
+    private HashSet<TableKey>? _projectedIntrinsicColumnSourceTables;
 
     /// <summary>Creates invocation-local ordered evidence without seeding facts from the target model.</summary>
     /// <param name="providerOperationProjection">Provider-certified ordinary-operation effects.</param>
@@ -100,6 +92,12 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
             new ModelManagedRowKeyComparer(objectIdentityNormalizer));
     }
 
+    /// <summary>Gets whether unmodeled SQL has invalidated projected structural postconditions.</summary>
+    internal bool HasOpaqueSqlPostcondition { get; private set; }
+
+    /// <summary>Gets the revision of globally invalidated row evidence.</summary>
+    internal long DataMutationVersion { get; private set; }
+
     /// <summary>Qualifies an immutable live observation against only preceding accepted physical evidence.</summary>
     /// <param name="operation">The current exact safe operation, not a future target-model proposal.</param>
     /// <param name="liveAnalysis">The independently captured initial provider observation.</param>
@@ -128,7 +126,7 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
             return liveAnalysis;
         }
 
-        if (_hasOpaqueSqlPostcondition)
+        if (HasOpaqueSqlPostcondition)
         {
             // WHY: Provider analysis is captured before ordered operations run.
             // Raw SQL can invalidate even sequence-aware results computed from
@@ -352,10 +350,10 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
             {
                 ObservedState: SafeMigrationObservedState.Different,
                 RepairCapability: SafeMigrationRepairCapability.Safe,
-                RepairMutatesData: false
+                RepairMutatesData: false,
             }
             && _projectedColumnAnalyzer is not null
-            && (operation.Intent switch
+            && operation.Intent switch
             {
                 AlterColumnIntent alter => CanReuseColumnProofAfterColumnPreservingChanges(
                     alter,
@@ -370,7 +368,7 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
                             new TableKey(ensure.Table, ensure.Schema),
                             allowUntouchedSource: true)),
                 _ => false,
-            });
+            };
 
         var preservesIndexDropColumnProofs = decision.Action == SafeMigrationAction.Repair
             && analysis is
@@ -463,7 +461,7 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
 
         ObserveProjectedForeignKeyChange(operation.Intent, decision.Action);
 
-        if ((decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.Repair)
+        if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.Repair
             && operation.Intent is not EnsureTableIntent
             && operation.Intent is not DropTableIntent)
         {
@@ -480,9 +478,11 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
                     .Any(),
                 preservesIndexDropColumnProofs: preservesIndexDropColumnProofs,
                 preservesIndexDropSources: operation.Intent is DropIndexIntent indexDrop
-                    && liveAnalysis.ObservedState == SafeMigrationObservedState.Matching
-                    && !operation.GetAnnotations().Any()
-                    && _projectedColumnAnalyzer?.PreservesColumnSourcesAfterIndexDrop(indexDrop, liveAnalysis) == true);
+                && liveAnalysis.ObservedState == SafeMigrationObservedState.Matching
+                && !operation
+                    .GetAnnotations()
+                    .Any()
+                && _projectedColumnAnalyzer?.PreservesColumnSourcesAfterIndexDrop(indexDrop, liveAnalysis) == true);
         }
     }
 
@@ -569,7 +569,7 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
                 // inferred structure so an opaque SQL operation cannot make a
                 // later additive constraint appear safe.
                 SetOpaqueProviderPostcondition(mayMutateData: true);
-                _hasOpaqueSqlPostcondition |= operation is SqlOperation;
+                HasOpaqueSqlPostcondition |= operation is SqlOperation;
                 break;
         }
 
@@ -613,7 +613,9 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         }
 
         return Analysis(
-            equals(actual, expected) ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
+            equals(actual, expected)
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different,
             repairCapability);
     }
 
@@ -630,7 +632,9 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
         }
 
         return Analysis(
-            equals(actual, expected) ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different);
+            equals(actual, expected)
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different);
     }
 
     private static SafeMigrationProviderAnalysis Analysis(

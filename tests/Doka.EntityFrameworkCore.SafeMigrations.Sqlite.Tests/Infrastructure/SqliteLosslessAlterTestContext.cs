@@ -10,7 +10,10 @@ internal sealed class SqliteLosslessAlterTestContext<TValue> : DbContext
     /// <summary>Uses an open isolated connection without taking ownership of it.</summary>
     /// <param name="connection">The isolated test database.</param>
     /// <param name="internalServices">The fixture-owned shared EF provider services.</param>
-    public SqliteLosslessAlterTestContext(DbConnection connection, IServiceProvider internalServices)
+    public SqliteLosslessAlterTestContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    )
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(internalServices);
@@ -20,9 +23,12 @@ internal sealed class SqliteLosslessAlterTestContext<TValue> : DbContext
     }
 
     /// <inheritdoc />
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    protected override void OnConfiguring(
+        DbContextOptionsBuilder optionsBuilder
+    )
     {
         optionsBuilder.UseSqlite(_connection);
+
         // WHY: These tests execute against the exact runtime context and do
         // not redirect migration discovery. Sharing this service configuration
         // avoids a separate internal provider for every CLR boundary fixture.
@@ -31,14 +37,23 @@ internal sealed class SqliteLosslessAlterTestContext<TValue> : DbContext
     }
 
     /// <inheritdoc />
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    protected override void OnModelCreating(
+        ModelBuilder modelBuilder
+    )
     {
         modelBuilder.Entity<LosslessAlterEntity>(entity =>
         {
             entity.ToTable("lossless_alter_records");
-            entity.HasKey(value => value.Id).HasName("pk_lossless_alter_records");
-            entity.Property(value => value.Id).ValueGeneratedNever();
-            entity.Property(value => value.Value)
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_lossless_alter_records");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
+
+            entity
+                .Property(value => value.Value)
                 .IsRequired(Nullable.GetUnderlyingType(typeof(TValue)) is null);
         });
     }
@@ -60,7 +75,10 @@ internal sealed class SqliteDefaultAlterTestContext : DbContext
     /// <summary>Uses the isolated repair database.</summary>
     /// <param name="connection">The open test connection.</param>
     /// <param name="internalServices">The fixture-owned shared EF provider services.</param>
-    public SqliteDefaultAlterTestContext(DbConnection connection, IServiceProvider internalServices)
+    public SqliteDefaultAlterTestContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    )
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(internalServices);
@@ -70,7 +88,9 @@ internal sealed class SqliteDefaultAlterTestContext : DbContext
     }
 
     /// <inheritdoc />
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    protected override void OnConfiguring(
+        DbContextOptionsBuilder optionsBuilder
+    )
     {
         optionsBuilder.UseSqlite(_connection);
         optionsBuilder.UseSqliteSafeMigrations();
@@ -78,14 +98,24 @@ internal sealed class SqliteDefaultAlterTestContext : DbContext
     }
 
     /// <inheritdoc />
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    protected override void OnModelCreating(
+        ModelBuilder modelBuilder
+    )
     {
         modelBuilder.Entity<DefaultAlterEntity>(entity =>
         {
             entity.ToTable("lossless_alter_records");
-            entity.HasKey(value => value.Id).HasName("pk_lossless_alter_records");
-            entity.Property(value => value.Id).ValueGeneratedNever();
-            entity.Property(value => value.Value).HasDefaultValue(7L);
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_lossless_alter_records");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
+
+            entity
+                .Property(value => value.Value)
+                .HasDefaultValue(7L);
         });
     }
 
@@ -126,10 +156,17 @@ internal sealed class SqliteLosslessAlterDdlCounter : DbCommandInterceptor
     public int Count { get; private set; }
 
     /// <inheritdoc />
-    public override InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData,
-        InterceptionResult<int> result)
+    public override InterceptionResult<int> NonQueryExecuting(
+        DbCommand command,
+        CommandEventData eventData,
+        InterceptionResult<int> result
+    )
     {
-        var sql = command.CommandText.AsSpan().TrimStart();
+        var sql = command
+            .CommandText
+            .AsSpan()
+            .TrimStart();
+
         if (sql.StartsWith("CREATE ", StringComparison.OrdinalIgnoreCase)
             || sql.StartsWith("ALTER ", StringComparison.OrdinalIgnoreCase)
             || sql.StartsWith("DROP ", StringComparison.OrdinalIgnoreCase))
@@ -141,9 +178,10 @@ internal sealed class SqliteLosslessAlterDdlCounter : DbCommandInterceptor
     }
 
     /// <inheritdoc />
-    public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command,
-        CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
-    {
-        return ValueTask.FromResult(NonQueryExecuting(command, eventData, result));
-    }
+    public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+        DbCommand command,
+        CommandEventData eventData,
+        InterceptionResult<int> result,
+        CancellationToken cancellationToken = default
+    ) => ValueTask.FromResult(NonQueryExecuting(command, eventData, result));
 }

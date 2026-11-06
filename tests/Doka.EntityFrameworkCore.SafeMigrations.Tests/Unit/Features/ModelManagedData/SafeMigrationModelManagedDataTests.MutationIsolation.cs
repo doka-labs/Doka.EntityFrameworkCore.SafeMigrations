@@ -7,7 +7,9 @@ public sealed partial class SafeMigrationModelManagedDataTests
     [Theory]
     [InlineData(SafeMigrationTableMode.StrictDefinition)]
     [InlineData(SafeMigrationTableMode.ConvergenceContainer)]
-    public void ConfinedSeedInsertPreservesUnrelatedCyclicForeignKeys(SafeMigrationTableMode mode)
+    public void ConfinedSeedInsertPreservesUnrelatedCyclicForeignKeys(
+        SafeMigrationTableMode mode
+    )
     {
         // Arrange
         var projection = MutationIsolationProjection(mode);
@@ -34,15 +36,21 @@ public sealed partial class SafeMigrationModelManagedDataTests
     [InlineData("primary-key")]
     [InlineData("unique-constraint")]
     [InlineData("required-column")]
-    public void ConfinedSeedInsertPreservesUnrelatedKeyAndColumnRowProofs(string kind)
+    public void ConfinedSeedInsertPreservesUnrelatedKeyAndColumnRowProofs(
+        string kind
+    )
     {
         // Arrange
         var projection = ProjectionWithNewRoleTable();
-        var unrelated = new ExpectedTableDefinition("unrelated", RoleTable().Columns);
+        var unrelated = new ExpectedTableDefinition("unrelated",
+            RoleTable()
+                .Columns);
 
-        Accept(projection,
+        Accept(
+            projection,
             Operation(new EnsureTableIntent(unrelated, SafeMigrationTableMode.StrictDefinition)),
             SafeMigrationObservedState.Missing);
+
         ObserveAppliedMutation(projection, RoleEnsure(), SafeMigrationObservedState.PrerequisiteMissing);
 
         SafeMigrationIntent intent = kind switch
@@ -51,7 +59,8 @@ public sealed partial class SafeMigrationModelManagedDataTests
                 new ExpectedPrimaryKeyDefinition("pk_unrelated", "unrelated", ["id"])),
             "unique-constraint" => new EnsureUniqueConstraintIntent(
                 new ExpectedUniqueConstraintDefinition("uq_unrelated_name", "unrelated", ["name"])),
-            "required-column" => new EnsureColumnIntent("unrelated",
+            "required-column" => new EnsureColumnIntent(
+                "unrelated",
                 new ExpectedColumnDefinition("rank", typeof(int), isNullable: false, storeType: "int")),
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
@@ -61,7 +70,10 @@ public sealed partial class SafeMigrationModelManagedDataTests
         // Act
         var projected = projection.Project(operation, Live(SafeMigrationObservedState.PrerequisiteMissing));
         var decision = SafeMigrationDecisionPlanner.Plan(
-            intent.Kind, projected.ObservedState, operation.Policy, projected.RepairCapability);
+            intent.Kind,
+            projected.ObservedState,
+            operation.Policy,
+            projected.RepairCapability);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, projected.ObservedState);
@@ -74,19 +86,22 @@ public sealed partial class SafeMigrationModelManagedDataTests
     [Theory]
     [InlineData(SafeMigrationTableMode.StrictDefinition)]
     [InlineData(SafeMigrationTableMode.ConvergenceContainer)]
-    public void ConfinedSeedInsertInvalidatesItsOwnForeignKeyRowProof(SafeMigrationTableMode mode)
+    public void ConfinedSeedInsertInvalidatesItsOwnForeignKeyRowProof(
+        SafeMigrationTableMode mode
+    )
     {
         // Arrange
         var projection = MutationIsolationProjection(mode);
-        var ensure = Operation(new EnsureModelManagedDataIntent(
-            "first",
-            ["id"],
-            ["int"],
-            ["id", "reference_id"],
-            ["int", "int"],
-            new object?[,] { { 1, 42 } },
-            schema: null,
-            uniqueKeys: null));
+        var ensure = Operation(
+            new EnsureModelManagedDataIntent(
+                "first",
+                ["id"],
+                ["int"],
+                ["id", "reference_id"],
+                ["int", "int"],
+                new object?[,] { { 1, 42 } },
+                schema: null,
+                uniqueKeys: null));
 
         ObserveAppliedMutation(projection, ensure, SafeMigrationObservedState.PrerequisiteMissing);
 
@@ -107,9 +122,11 @@ public sealed partial class SafeMigrationModelManagedDataTests
         // Arrange
         var projection = MutationIsolationProjection();
 
-        Accept(projection,
+        Accept(
+            projection,
             Operation(new EnsureTableIntent(RoleTable(), SafeMigrationTableMode.ConvergenceContainer)),
             SafeMigrationObservedState.Matching);
+
         ObserveAppliedMutation(projection, RoleEnsure(), SafeMigrationObservedState.Missing);
 
         // Act
@@ -127,21 +144,32 @@ public sealed partial class SafeMigrationModelManagedDataTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ManagedUpdateOrDeleteInvalidatesUnrelatedForeignKeyRowProof(bool delete)
+    public void ManagedUpdateOrDeleteInvalidatesUnrelatedForeignKeyRowProof(
+        bool delete
+    )
     {
         // Arrange
         var projection = MutationIsolationProjection();
 
-        Accept(projection,
+        Accept(
+            projection,
             Operation(new EnsureTableIntent(RoleTable(), SafeMigrationTableMode.StrictDefinition)),
             SafeMigrationObservedState.Missing);
+
         ObserveAppliedMutation(projection, RoleEnsure(), SafeMigrationObservedState.PrerequisiteMissing);
 
         var mutation = delete
-            ? Operation(new DeleteModelManagedDataIntent(
-                "roles", ["id"], ["int"], new object?[,] { { 1 } },
-                ["id", "name"], ["int", "varchar(64)"], new object?[,] { { 1, "administrator" } },
-                schema: null, foreignKeys: null))
+            ? Operation(
+                new DeleteModelManagedDataIntent(
+                    "roles",
+                    ["id"],
+                    ["int"],
+                    new object?[,] { { 1 } },
+                    ["id", "name"],
+                    ["int", "varchar(64)"],
+                    new object?[,] { { 1, "administrator" } },
+                    schema: null,
+                    foreignKeys: null))
             : RoleUpdate();
 
         ObserveAppliedMutation(projection, mutation, SafeMigrationObservedState.PrerequisiteMissing);
@@ -164,13 +192,14 @@ public sealed partial class SafeMigrationModelManagedDataTests
         var projection = MutationIsolationProjection();
 
         projection.ObserveProviderPostcondition(ProviderRoleTable());
-        projection.ObserveProviderPostcondition(new InsertDataOperation
-        {
-            Table = "roles",
-            Columns = ["id", "name"],
-            ColumnTypes = ["int", "varchar(64)"],
-            Values = new object?[,] { { 1, "administrator" } },
-        });
+        projection.ObserveProviderPostcondition(
+            new InsertDataOperation
+            {
+                Table = "roles",
+                Columns = ["id", "name"],
+                ColumnTypes = ["int", "varchar(64)"],
+                Values = new object?[,] { { 1, "administrator" } },
+            });
 
         // Act
         var projected = projection.Project(
@@ -191,15 +220,19 @@ public sealed partial class SafeMigrationModelManagedDataTests
     [InlineData("structured-computed")]
     [InlineData("sql-check")]
     [InlineData("structured-check")]
-    public void ExpressionBearingSeedTableInvalidatesUnrelatedForeignKeyRowProof(string hazard)
+    public void ExpressionBearingSeedTableInvalidatesUnrelatedForeignKeyRowProof(
+        string hazard
+    )
     {
         // Arrange
         var projection = MutationIsolationProjection();
         var table = MutationIsolationHazardTable(hazard);
 
-        Accept(projection,
+        Accept(
+            projection,
             Operation(new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition)),
             SafeMigrationObservedState.Missing);
+
         ObserveAppliedMutation(projection, RoleEnsure(), SafeMigrationObservedState.PrerequisiteMissing);
 
         // Act
@@ -223,12 +256,15 @@ public sealed partial class SafeMigrationModelManagedDataTests
     [InlineData("index-structured-filter")]
     [InlineData("index-method")]
     [InlineData("index-operator-class")]
-    public void AddedExpressionArtifactInvalidatesUnrelatedForeignKeyRowProof(string hazard)
+    public void AddedExpressionArtifactInvalidatesUnrelatedForeignKeyRowProof(
+        string hazard
+    )
     {
         // Arrange
         var projection = MutationIsolationProjection();
 
-        Accept(projection,
+        Accept(
+            projection,
             Operation(new EnsureTableIntent(RoleTable(), SafeMigrationTableMode.StrictDefinition)),
             SafeMigrationObservedState.Missing);
 
@@ -237,7 +273,10 @@ public sealed partial class SafeMigrationModelManagedDataTests
         var artifact = Operation(MutationIsolationHazardArtifact(hazard));
         var accepted = Live(SafeMigrationObservedState.Missing);
         var decision = SafeMigrationDecisionPlanner.Plan(
-            artifact.Intent.Kind, accepted.ObservedState, artifact.Policy, accepted.RepairCapability);
+            artifact.Intent.Kind,
+            accepted.ObservedState,
+            artifact.Policy,
+            accepted.RepairCapability);
 
         projection.Observe(artifact, accepted, accepted, decision);
         ObserveAppliedMutation(projection, RoleEnsure(), SafeMigrationObservedState.PrerequisiteMissing);
@@ -258,16 +297,24 @@ public sealed partial class SafeMigrationModelManagedDataTests
     {
         // Arrange
         var projection = MutationIsolationProjection();
-        var table = new ExpectedTableDefinition("roles",
-        [
-            .. RoleTable().Columns,
-            new ExpectedColumnDefinition("rank", typeof(int), isNullable: false, storeType: "int",
-                defaultValue: SafeMigrationDefaultValue.Literal(0)),
-        ]);
+        var table = new ExpectedTableDefinition(
+            "roles",
+            [
+                .. RoleTable()
+                    .Columns,
+                new ExpectedColumnDefinition(
+                    "rank",
+                    typeof(int),
+                    isNullable: false,
+                    storeType: "int",
+                    defaultValue: SafeMigrationDefaultValue.Literal(0)),
+            ]);
 
-        Accept(projection,
+        Accept(
+            projection,
             Operation(new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition)),
             SafeMigrationObservedState.Missing);
+
         ObserveAppliedMutation(projection, RoleEnsure(), SafeMigrationObservedState.PrerequisiteMissing);
 
         // Act
@@ -287,14 +334,20 @@ public sealed partial class SafeMigrationModelManagedDataTests
         // Arrange
         var projection = MutationIsolationProjection();
 
-        Accept(projection,
+        Accept(
+            projection,
             Operation(new EnsureTableIntent(RoleTable(), SafeMigrationTableMode.StrictDefinition)),
             SafeMigrationObservedState.Missing);
-        Accept(projection,
+
+        Accept(
+            projection,
             Operation(new RenameTableIntent("roles", newName: "application_roles")),
             SafeMigrationObservedState.Matching);
-        ObserveAppliedMutation(projection,
-            RoleEnsure("application_roles"), SafeMigrationObservedState.PrerequisiteMissing);
+
+        ObserveAppliedMutation(
+            projection,
+            RoleEnsure("application_roles"),
+            SafeMigrationObservedState.PrerequisiteMissing);
 
         // Act
         var projected = projection.Project(
@@ -313,13 +366,17 @@ public sealed partial class SafeMigrationModelManagedDataTests
         // Arrange
         var projection = MutationIsolationProjection();
 
-        ObserveAppliedMutation(projection,
-            MutationIsolationReferenceSeed(), SafeMigrationObservedState.PrerequisiteMissing);
-        projection.ObserveProviderPostcondition(new RenameTableOperation
-        {
-            Name = "first",
-            NewName = "renamed_first",
-        });
+        ObserveAppliedMutation(
+            projection,
+            MutationIsolationReferenceSeed(),
+            SafeMigrationObservedState.PrerequisiteMissing);
+
+        projection.ObserveProviderPostcondition(
+            new RenameTableOperation
+            {
+                Name = "first",
+                NewName = "renamed_first",
+            });
 
         // Act
         var projected = projection.Project(
@@ -339,13 +396,18 @@ public sealed partial class SafeMigrationModelManagedDataTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void RecreatedPopulatedSeedTableRestoresForeignKeyEmptyRowProof(bool providerDrop, bool providerCreate)
+    public void RecreatedPopulatedSeedTableRestoresForeignKeyEmptyRowProof(
+        bool providerDrop,
+        bool providerCreate
+    )
     {
         // Arrange
         var projection = MutationIsolationProjection();
 
-        ObserveAppliedMutation(projection,
-            MutationIsolationReferenceSeed(), SafeMigrationObservedState.PrerequisiteMissing);
+        ObserveAppliedMutation(
+            projection,
+            MutationIsolationReferenceSeed(),
+            SafeMigrationObservedState.PrerequisiteMissing);
 
         if (providerDrop)
         {
@@ -358,14 +420,25 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
         var recreated = new CreateTableOperation { Name = "first" };
 
-        recreated.Columns.Add(new AddColumnOperation
-        {
-            Table = "first", Name = "id", ClrType = typeof(int), ColumnType = "int", IsNullable = false,
-        });
-        recreated.Columns.Add(new AddColumnOperation
-        {
-            Table = "first", Name = "reference_id", ClrType = typeof(int), ColumnType = "int", IsNullable = false,
-        });
+        recreated.Columns.Add(
+            new AddColumnOperation
+            {
+                Table = "first",
+                Name = "id",
+                ClrType = typeof(int),
+                ColumnType = "int",
+                IsNullable = false,
+            });
+
+        recreated.Columns.Add(
+            new AddColumnOperation
+            {
+                Table = "first",
+                Name = "reference_id",
+                ClrType = typeof(int),
+                ColumnType = "int",
+                IsNullable = false,
+            });
 
         if (providerCreate)
         {
@@ -373,9 +446,12 @@ public sealed partial class SafeMigrationModelManagedDataTests
         }
         else
         {
-            Accept(projection,
-                Operation(new EnsureTableIntent(SafeMigrationExpectedDefinitionFactory.From(recreated),
-                    SafeMigrationTableMode.StrictDefinition)),
+            Accept(
+                projection,
+                Operation(
+                    new EnsureTableIntent(
+                        SafeMigrationExpectedDefinitionFactory.From(recreated),
+                        SafeMigrationTableMode.StrictDefinition)),
                 SafeMigrationObservedState.Missing);
         }
 
@@ -396,9 +472,11 @@ public sealed partial class SafeMigrationModelManagedDataTests
         // Arrange
         var projection = MutationIsolationProjection();
 
-        Accept(projection,
+        Accept(
+            projection,
             Operation(new EnsureTableIntent(RoleTable(), SafeMigrationTableMode.StrictDefinition)),
             SafeMigrationObservedState.Missing);
+
         projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT side_effect();" });
 
         // Act
@@ -421,9 +499,11 @@ public sealed partial class SafeMigrationModelManagedDataTests
         // Arrange
         var projection = MutationIsolationProjection();
 
-        Accept(projection,
+        Accept(
+            projection,
             Operation(new EnsureTableIntent(RoleTable(), SafeMigrationTableMode.StrictDefinition)),
             SafeMigrationObservedState.Missing);
+
         projection.ObserveProviderPostcondition(new AlterTableOperation { Name = "roles" });
         ObserveAppliedMutation(projection, RoleEnsure(), SafeMigrationObservedState.PrerequisiteMissing);
 
@@ -443,14 +523,27 @@ public sealed partial class SafeMigrationModelManagedDataTests
     {
         // Arrange
         var projection = MutationIsolationProjection();
-        var definition = new ExpectedTableDefinition("roles", RoleTable().Columns, schema: "new_schema");
-        var ensure = Operation(new EnsureModelManagedDataIntent(
-            "roles", ["id"], ["int"], ["id", "name"], ["int", "varchar(64)"],
-            new object?[,] { { 1, "administrator" } }, schema: "existing_schema", uniqueKeys: null));
+        var definition = new ExpectedTableDefinition("roles",
+            RoleTable()
+                .Columns,
+            schema: "new_schema");
 
-        Accept(projection,
+        var ensure = Operation(
+            new EnsureModelManagedDataIntent(
+                "roles",
+                ["id"],
+                ["int"],
+                ["id", "name"],
+                ["int", "varchar(64)"],
+                new object?[,] { { 1, "administrator" } },
+                schema: "existing_schema",
+                uniqueKeys: null));
+
+        Accept(
+            projection,
             Operation(new EnsureTableIntent(definition, SafeMigrationTableMode.StrictDefinition)),
             SafeMigrationObservedState.Missing);
+
         ObserveAppliedMutation(projection, ensure, SafeMigrationObservedState.Missing);
 
         // Act
@@ -470,14 +563,20 @@ public sealed partial class SafeMigrationModelManagedDataTests
         // Arrange
         var projection = MutationIsolationProjection();
 
-        Accept(projection,
-            Operation(new EnsureTableIntent(MutationIsolationHazardTable("sql-default"),
-                SafeMigrationTableMode.StrictDefinition)),
+        Accept(
+            projection,
+            Operation(
+                new EnsureTableIntent(
+                    MutationIsolationHazardTable("sql-default"),
+                    SafeMigrationTableMode.StrictDefinition)),
             SafeMigrationObservedState.Missing);
+
         Accept(projection, Operation(new DropTableIntent("roles")), SafeMigrationObservedState.Missing);
-        Accept(projection,
+        Accept(
+            projection,
             Operation(new EnsureTableIntent(RoleTable(), SafeMigrationTableMode.StrictDefinition)),
             SafeMigrationObservedState.Missing);
+
         ObserveAppliedMutation(projection, RoleEnsure(), SafeMigrationObservedState.PrerequisiteMissing);
 
         // Act
@@ -496,12 +595,16 @@ public sealed partial class SafeMigrationModelManagedDataTests
     {
         // Arrange
         var projection = ProjectionWithNewRoleTable();
-        var otherTable = new ExpectedTableDefinition("other_roles", RoleTable().Columns);
+        var otherTable = new ExpectedTableDefinition("other_roles",
+            RoleTable()
+                .Columns);
 
         ObserveAppliedMutation(projection, RoleEnsure(), SafeMigrationObservedState.PrerequisiteMissing);
-        Accept(projection,
+        Accept(
+            projection,
             Operation(new EnsureTableIntent(otherTable, SafeMigrationTableMode.StrictDefinition)),
             SafeMigrationObservedState.Missing);
+
         ObserveAppliedMutation(projection, RoleEnsure("other_roles"), SafeMigrationObservedState.PrerequisiteMissing);
 
         // Act
@@ -521,11 +624,13 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
         foreach (var table in new[] { "first", "second" })
         {
-            var definition = new ExpectedTableDefinition(table,
-            [
-                new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "int"),
-                new ExpectedColumnDefinition("reference_id", typeof(int), isNullable: false, storeType: "int"),
-            ], primaryKey: new ExpectedPrimaryKeyDefinition($"pk_{table}", table, ["id"]));
+            var definition = new ExpectedTableDefinition(
+                table,
+                [
+                    new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "int"),
+                    new ExpectedColumnDefinition("reference_id", typeof(int), isNullable: false, storeType: "int"),
+                ],
+                primaryKey: new ExpectedPrimaryKeyDefinition($"pk_{table}", table, ["id"]));
 
             Accept(projection, Operation(new EnsureTableIntent(definition, mode)), SafeMigrationObservedState.Missing);
         }
@@ -534,15 +639,29 @@ public sealed partial class SafeMigrationModelManagedDataTests
     }
 
     /// <summary>Creates one missing foreign key whose data safety requires the empty-table proof.</summary>
-    private static SafeMigrationOperation MutationIsolationForeignKey(string dependent, string principal) => Operation(
-        new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition(
-            $"fk_{dependent}_{principal}", dependent, ["reference_id"], principal, ["id"])));
+    private static SafeMigrationOperation MutationIsolationForeignKey(
+        string dependent,
+        string principal
+    ) => Operation(
+        new EnsureForeignKeyIntent(
+            new ExpectedForeignKeyDefinition(
+                $"fk_{dependent}_{principal}",
+                dependent,
+                ["reference_id"],
+                principal,
+                ["id"])));
 
     /// <summary>Populates the first cyclic-FK table with a reference that has no known matching principal.</summary>
     private static SafeMigrationOperation MutationIsolationReferenceSeed() => Operation(
         new EnsureModelManagedDataIntent(
-            "first", ["id"], ["int"], ["id", "reference_id"], ["int", "int"],
-            new object?[,] { { 1, 42 } }, schema: null, uniqueKeys: null));
+            "first",
+            ["id"],
+            ["int"],
+            ["id", "reference_id"],
+            ["int", "int"],
+            new object?[,] { { 1, 42 } },
+            schema: null,
+            uniqueKeys: null));
 
     /// <summary>Observes a managed mutation and proves that the arranged write was actually accepted.</summary>
     private static void ObserveAppliedMutation(
@@ -554,25 +673,46 @@ public sealed partial class SafeMigrationModelManagedDataTests
         var live = Live(liveState);
         var analysis = projection.Project(operation, live);
         var decision = SafeMigrationDecisionPlanner.Plan(
-            operation.Intent.Kind, analysis.ObservedState, operation.Policy, analysis.RepairCapability);
+            operation.Intent.Kind,
+            analysis.ObservedState,
+            operation.Policy,
+            analysis.RepairCapability);
 
         Assert.Equal(SafeMigrationAction.Apply, decision.Action);
         projection.Observe(operation, live, analysis, decision);
     }
 
     /// <summary>Builds a seed table with a SQL expression that Core cannot certify as side-effect free.</summary>
-    private static ExpectedTableDefinition MutationIsolationHazardTable(string hazard)
+    private static ExpectedTableDefinition MutationIsolationHazardTable(
+        string hazard
+    )
     {
         var expression = SafeMigrationSql.Function("side_effect");
         var extra = hazard switch
         {
-            "sql-default" => new ExpectedColumnDefinition("extra", typeof(int), true, "int",
+            "sql-default" => new ExpectedColumnDefinition(
+                "extra",
+                typeof(int),
+                true,
+                "int",
                 defaultValue: SafeMigrationDefaultValue.Sql("side_effect()")),
-            "structured-default" => new ExpectedColumnDefinition("extra", typeof(int), true, "int",
+            "structured-default" => new ExpectedColumnDefinition(
+                "extra",
+                typeof(int),
+                true,
+                "int",
                 defaultValue: SafeMigrationDefaultValue.Sql(expression)),
-            "sql-computed" => new ExpectedColumnDefinition("extra", typeof(int), true, "int",
+            "sql-computed" => new ExpectedColumnDefinition(
+                "extra",
+                typeof(int),
+                true,
+                "int",
                 computedColumnSql: "side_effect()"),
-            "structured-computed" => new ExpectedColumnDefinition("extra", typeof(int), true, "int",
+            "structured-computed" => new ExpectedColumnDefinition(
+                "extra",
+                typeof(int),
+                true,
+                "int",
                 computedExpression: expression),
             "sql-check" or "structured-check" => null,
             _ => throw new ArgumentOutOfRangeException(nameof(hazard)),
@@ -585,31 +725,68 @@ public sealed partial class SafeMigrationModelManagedDataTests
             _ => [],
         };
 
-        return new ExpectedTableDefinition("roles",
-            extra is null ? RoleTable().Columns : [.. RoleTable().Columns, extra], checkConstraints: checks);
+        return new ExpectedTableDefinition(
+            "roles",
+            extra is null
+                ? RoleTable()
+                    .Columns
+                :
+                [
+                    .. RoleTable()
+                        .Columns,
+                    extra
+                ],
+            checkConstraints: checks);
     }
 
     /// <summary>Builds a later artifact whose SQL evaluation invalidates insert confinement.</summary>
-    private static SafeMigrationIntent MutationIsolationHazardArtifact(string hazard) => hazard switch
+    private static SafeMigrationIntent MutationIsolationHazardArtifact(
+        string hazard
+    ) => hazard switch
     {
-        "column-default" => new EnsureColumnIntent("roles",
-            new ExpectedColumnDefinition("extra", typeof(int), true, "int",
+        "column-default" => new EnsureColumnIntent(
+            "roles",
+            new ExpectedColumnDefinition(
+                "extra",
+                typeof(int),
+                true,
+                "int",
                 defaultValue: SafeMigrationDefaultValue.Sql("side_effect()"))),
         "check" => new EnsureCheckConstraintIntent(
             new ExpectedCheckConstraintDefinition("ck_roles", "roles", "side_effect() > 0")),
-        "index-expression" => new EnsureIndexIntent(new ExpectedIndexDefinition("ix_roles", "roles",
-            [new ExpectedIndexKeyDefinition(expression: "side_effect(name)")])),
-        "index-filter" => new EnsureIndexIntent(new ExpectedIndexDefinition("ix_roles", "roles",
-            [new ExpectedIndexKeyDefinition(column: "name")], filter: "side_effect(name) > 0")),
-        "index-structured-expression" => new EnsureIndexIntent(new ExpectedIndexDefinition("ix_roles", "roles",
-            [new ExpectedIndexKeyDefinition(structuredExpression: SafeMigrationSql.Function("side_effect"))])),
-        "index-structured-filter" => new EnsureIndexIntent(new ExpectedIndexDefinition("ix_roles", "roles",
-            [new ExpectedIndexKeyDefinition(column: "name")],
-            structuredFilter: SafeMigrationSql.Function("side_effect"))),
-        "index-method" => new EnsureIndexIntent(new ExpectedIndexDefinition("ix_roles", "roles",
-            [new ExpectedIndexKeyDefinition(column: "name")], method: "custom_method")),
-        "index-operator-class" => new EnsureIndexIntent(new ExpectedIndexDefinition("ix_roles", "roles",
-            [new ExpectedIndexKeyDefinition(column: "name", operatorClass: "custom_ops")])),
+        "index-expression" => new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "ix_roles",
+                "roles",
+                [new ExpectedIndexKeyDefinition(expression: "side_effect(name)")])),
+        "index-filter" => new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "ix_roles",
+                "roles",
+                [new ExpectedIndexKeyDefinition(column: "name")],
+                filter: "side_effect(name) > 0")),
+        "index-structured-expression" => new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "ix_roles",
+                "roles",
+                [new ExpectedIndexKeyDefinition(structuredExpression: SafeMigrationSql.Function("side_effect"))])),
+        "index-structured-filter" => new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "ix_roles",
+                "roles",
+                [new ExpectedIndexKeyDefinition(column: "name")],
+                structuredFilter: SafeMigrationSql.Function("side_effect"))),
+        "index-method" => new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "ix_roles",
+                "roles",
+                [new ExpectedIndexKeyDefinition(column: "name")],
+                method: "custom_method")),
+        "index-operator-class" => new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "ix_roles",
+                "roles",
+                [new ExpectedIndexKeyDefinition(column: "name", operatorClass: "custom_ops")])),
         _ => throw new ArgumentOutOfRangeException(nameof(hazard)),
     };
 }

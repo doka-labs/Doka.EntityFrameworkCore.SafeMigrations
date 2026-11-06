@@ -82,6 +82,7 @@ internal static partial class SafeMigrationSqlExpressionInspector
     )
     {
         var parts = new string[expression.Parts.Count];
+
         // WHY: Copy identifier parts into matching destination positions and rewrite only the selected role.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -117,6 +118,7 @@ internal static partial class SafeMigrationSqlExpressionInspector
                 SafeMigrationSqlFunctionExpression value => new SafeMigrationSqlExpression[value.Arguments.Count],
                 _ => null,
             };
+
             _clauses = expression is SafeMigrationSqlCaseExpression @case
                 ? new SafeMigrationSqlCaseWhenClause[@case.WhenClauses.Count]
                 : null;

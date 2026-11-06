@@ -17,7 +17,9 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
             connectionString,
             "CREATE TABLE parents (id integer NOT NULL PRIMARY KEY); "
             + "CREATE TABLE children (id integer NOT NULL, parent_id integer NULL, "
-            + "code character varying(30) NULL, quantity integer NOT NULL);");
+            + "code character varying(30) NULL, quantity integer NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var add = new MigrationBuilder(context.Database.ProviderName!);
         add.AddPrimaryKeyIfNotExists("pk_children", "children", ["id"]);
@@ -28,6 +30,7 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
                 "children",
                 SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         add.AddForeignKeyIfNotExists(
             "fk_children_parents",
             "children",
@@ -35,10 +38,11 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
             "parents",
             ["id"],
             onDelete: ReferentialAction.SetNull);
+
         foreach (var operation in add.Operations)
         {
-            await ExecuteOperationsAsync(context, [operation]);
-            await ExecuteOperationsAsync(context, [operation]);
+            await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+            await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         }
 
         Assert.Equal(
@@ -49,7 +53,8 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
                 + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
                 + "WHERE c.relname = 'children' AND co.conname IN "
                 + "('pk_children', 'uq_children_code', 'ck_children_quantity', "
-                + "'fk_children_parents');"));
+                + "'fk_children_parents');",
+                cancellationToken: CancellationToken.None));
 
         var drop = new MigrationBuilder(context.Database.ProviderName!);
         drop.DropForeignKeyIfExists("fk_children_parents", "children");
@@ -58,8 +63,8 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
         drop.DropPrimaryKeyIfExists("pk_children", "children");
         foreach (var operation in drop.Operations)
         {
-            await ExecuteOperationsAsync(context, [operation]);
-            await ExecuteOperationsAsync(context, [operation]);
+            await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+            await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         }
 
         Assert.Equal(
@@ -70,7 +75,8 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
                 + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
                 + "WHERE c.relname = 'children' AND co.conname IN "
                 + "('pk_children', 'uq_children_code', 'ck_children_quantity', "
-                + "'fk_children_parents');"));
+                + "'fk_children_parents');",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -88,7 +94,9 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
             + "CONSTRAINT uq_constraint_code UNIQUE (alternate_code), "
             + "CONSTRAINT ck_constraint_quantity CHECK (quantity > 10), "
             + "CONSTRAINT fk_constraint_parent FOREIGN KEY (alternate_parent_id) "
-            + "REFERENCES constraint_parents (id));");
+            + "REFERENCES constraint_parents (id));",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddPrimaryKeyIfNotExists("pk_constraint_drift", "constraint_drift", ["id"]);
@@ -99,6 +107,7 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
                 "constraint_drift",
                 SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.AddForeignKeyIfNotExists(
             "fk_constraint_parent",
             "constraint_drift",
@@ -108,7 +117,11 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("test-instance"),
+                CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.All(
@@ -118,10 +131,14 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
                 Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
                 Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
             });
+
         foreach (var operation in builder.Operations)
         {
             var exception =
-                await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context, [operation]));
+                await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(
+                    context,
+                    [operation],
+                    CancellationToken.None));
 
             Assert.Equal("P1001", exception.SqlState);
         }
@@ -139,7 +156,9 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
             + "parent_id integer NOT NULL); "
             + "INSERT INTO blocker_parents VALUES (1); "
             + "INSERT INTO blocker_children VALUES "
-            + "(1, 'duplicate', -1, 999), (1, 'duplicate', 1, 999);");
+            + "(1, 'duplicate', -1, 999), (1, 'duplicate', 1, 999);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddPrimaryKeyIfNotExists("pk_blocker_children", "blocker_children", ["id"]);
@@ -150,17 +169,23 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
                 "blocker_children",
                 SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.AddForeignKeyIfNotExists(
             "fk_blocker_children_parent",
             "blocker_children",
             ["parent_id"],
             "blocker_parents",
             ["id"]);
+
         builder.CreateIndexIfNotExists("ux_blocker_children_code", "blocker_children", ["code"], unique: true);
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("test-instance"),
+                CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.All(
@@ -170,7 +195,10 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
         foreach (var operation in builder.Operations)
         {
             var exception =
-                await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context, [operation]));
+                await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(
+                    context,
+                    [operation],
+                    CancellationToken.None));
 
             Assert.Equal("P1003", exception.SqlState);
         }
@@ -181,13 +209,15 @@ public sealed class PostgreSqlConstraintsIntegrationTests : PostgreSqlSafeMigrat
                 connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
                 + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-                + "WHERE c.relname = 'blocker_children' AND co.contype = 'c';"));
+                + "WHERE c.relname = 'blocker_children' AND co.contype = 'c';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_class c "
-                + "WHERE c.relname = 'ux_blocker_children_code' AND c.relkind = 'i';"));
+                + "WHERE c.relname = 'ux_blocker_children_code' AND c.relkind = 'i';",
+                cancellationToken: CancellationToken.None));
     }
-
 }

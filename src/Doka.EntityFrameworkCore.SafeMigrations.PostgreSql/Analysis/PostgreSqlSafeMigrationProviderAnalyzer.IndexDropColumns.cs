@@ -2,9 +2,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 {
+    private bool _columnConstraintCatalogReadable;
     private HashSet<DropIndexIntent>? _columnPreservingIndexDrops;
     private bool _indexDropCatalogReadable;
-    private bool _columnConstraintCatalogReadable;
 
     /// <inheritdoc />
     public bool PreservesColumnSourcesAfterIndexDrop(
@@ -25,7 +25,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             || liveAnalysis is
             {
                 ObservedState: SafeMigrationObservedState.Different,
-                RepairCapability: SafeMigrationRepairCapability.Safe
+                RepairCapability: SafeMigrationRepairCapability.Safe,
             })
         && PostgreSqlSafeMigrationCatalogSqlBuilder.IsIntegerWidening(intent)
         && (!columns.TryGetProjectedColumn(intent.Table, intent.Schema, intent.Definition.Name, out var projected)
@@ -33,6 +33,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
     /// <summary>Retains source evidence only inside the captured schema and callback-free native lifetime.</summary>
     private bool CanRetainIndexDropColumnProofs()
+
         // WHY: DROP INDEX and unchanged-nullability widening emit no row writes.
         // Installed DML triggers are harmless here; a preceding reachable write
         // is still fenced by its recorded trigger origin.

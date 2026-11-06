@@ -11,7 +11,8 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         // WHY: Native standalone DROP INDEX changes neither stored columns nor
         // their values. Constraint-backed automatic indexes are not removable
         // through this contract and cannot certify surviving column evidence.
-        if (intent.Schema is not null || liveAnalysis.ObservedState != SafeMigrationObservedState.Matching
+        if (intent.Schema is not null
+            || liveAnalysis.ObservedState != SafeMigrationObservedState.Matching
             || _dropProjectionSnapshot is not { } snapshot
             || !snapshot.Tables.TryGetValue(intent.Table, out var table))
         {

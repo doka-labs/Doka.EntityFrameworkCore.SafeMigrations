@@ -14,7 +14,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         if (TryParseVarcharLength(storeType, out var targetLength)
             && definition.ClrType == typeof(string))
         {
-            var narrowing = $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS narrowing_column "
+            var narrowing = "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS narrowing_column "
                 + "WHERE narrowing_column.TABLE_SCHEMA = DATABASE() "
                 + $"AND narrowing_column.TABLE_NAME = {Literal(table)} "
                 + $"AND narrowing_column.COLUMN_NAME = {Literal(definition.Name)} "
@@ -99,6 +99,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     }
 
     private static string BooleanSourceDefaultIsRepresentable() =>
+
         // WHY: A BIT(1) value is losslessly representable as TINYINT(1), but an
         // arbitrary default expression is a separate behavioral contract. Only
         // the catalog spellings proven to represent the Boolean literal domain
@@ -128,6 +129,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // coupled transition, so ownership remains with an explicit migration.
         builder
             .Append("NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE dependency ")
+
             // WHY: Incoming FKs can belong to another database. Restrict only
             // the dependent owner of the outgoing arm, never the complete
             // inventory before testing this database's referenced owner.
@@ -164,8 +166,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // headroom keeps ordinary identifiers on one backing buffer;
         // StringBuilder can still grow for heavily escaped or long names.
         var initialCapacity = checked(5800
-            + (Literal(table).Length * 7)
-            + (Literal(definition.Name).Length * 6));
+            + Literal(table)
+                .Length
+            * 7
+            + Literal(definition.Name)
+                .Length
+            * 6);
 
         var builder = new StringBuilder(initialCapacity);
 
@@ -213,8 +219,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     )
     {
         var initialCapacity = checked(3900
-            + (Literal(table).Length * 6)
-            + (Literal(definition.Name).Length * 5));
+            + Literal(table)
+                .Length
+            * 6
+            + Literal(definition.Name)
+                .Length
+            * 5);
 
         var builder = new StringBuilder(initialCapacity);
 
@@ -289,7 +299,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         if (targetScalarBytes is { } scalarBytes)
         {
-            builder.Append(scalarBytes.ToString(CultureInfo.InvariantCulture)).Append(' ');
+            builder
+                .Append(scalarBytes.ToString(CultureInfo.InvariantCulture))
+                .Append(' ');
         }
         else if (targetLength is { } varcharLength)
         {
@@ -357,7 +369,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             .Append(" AND ti.COLUMN_NAME = ")
             .Append(Literal(column));
 
-        if (targetLength is null && targetScalarBytes is null)
+        if (targetLength is null
+            && targetScalarBytes is null)
         {
             // MySQL and MariaDB require a prefix for non-FULLTEXT indexes over
             // a TEXT column. Existing prefix and FULLTEXT indexes retain their
@@ -377,15 +390,17 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             .Append("WHEN ip.COLUMN_NAME = ")
             .Append(Literal(column))
             .Append(" AND ip.SUB_PART IS NULL THEN ")
-            .Append(targetScalarBytes is { } scalarBytes
-                ? scalarBytes.ToString(CultureInfo.InvariantCulture)
-                : targetLength!.Value.ToString(CultureInfo.InvariantCulture) + " * COALESCE(cs.MAXLEN, 1)")
+            .Append(
+                targetScalarBytes is { } scalarBytes
+                    ? scalarBytes.ToString(CultureInfo.InvariantCulture)
+                    : targetLength!.Value.ToString(CultureInfo.InvariantCulture) + " * COALESCE(cs.MAXLEN, 1)")
             .Append(' ')
             .Append("WHEN ip.SUB_PART IS NOT NULL ")
             .Append("THEN ip.SUB_PART * CASE WHEN ic.COLLATION_NAME IS NULL ")
             .Append("THEN 1 ELSE COALESCE(cs.MAXLEN, 1) END ")
             .Append("WHEN ic.CHARACTER_OCTET_LENGTH IS NOT NULL ")
             .Append("THEN ic.CHARACTER_OCTET_LENGTH ")
+
             // WHY: A native UUID key retains its full sixteen-byte value; it
             // must not inherit an unknown-family overflow during sibling repair.
             .Append("WHEN LOWER(ic.DATA_TYPE) = 'uuid' THEN 16 ")
@@ -443,7 +458,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         out int length
     )
     {
-        var value = storeType.AsSpan().Trim();
+        var value = storeType
+            .AsSpan()
+            .Trim();
+
         const string prefix = "varchar(";
         if (!value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
             || value[^1] != ')'
@@ -488,25 +506,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             && StringComparer.OrdinalIgnoreCase.Equals(storeType.Trim(), "tinyint(1)");
     }
 
-    private sealed record MySqlColumnRepairTransition(
-        string InvariantExpression,
-        string DataBlockedExpression,
-        string ExecutionInvariantExpression,
-        MySqlSafeMigrationDataProbe? DataProbe,
-        SafeMigrationOperationalImpact OperationalImpact
-    )
-    {
-        public bool HasDataProbe => DataProbe is not null;
-
-        public static MySqlColumnRepairTransition None { get; } = new(
-            "FALSE",
-            "FALSE",
-            "TRUE",
-            DataProbe: null,
-            SafeMigrationOperationalImpact.NotApplicable);
-    }
-
     private static string OrdinaryColumnExtraMatches() =>
+
         // MySQL and MariaDB require the complete column definition for MODIFY
         // COLUMN. Reject unmodeled EXTRA metadata because omitting ON UPDATE,
         // INVISIBLE, or a similar modifier would silently erase it. MySQL may
@@ -568,5 +569,23 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var clrType = Nullable.GetUnderlyingType(definition.ClrType) ?? definition.ClrType;
 
         return clrType == typeof(byte[]) || clrType == typeof(DateTime) || clrType == typeof(DateTimeOffset);
+    }
+
+    private sealed record MySqlColumnRepairTransition(
+        string InvariantExpression,
+        string DataBlockedExpression,
+        string ExecutionInvariantExpression,
+        MySqlSafeMigrationDataProbe? DataProbe,
+        SafeMigrationOperationalImpact OperationalImpact
+    )
+    {
+        public bool HasDataProbe => DataProbe is not null;
+
+        public static MySqlColumnRepairTransition None { get; } = new(
+            "FALSE",
+            "FALSE",
+            "TRUE",
+            DataProbe: null,
+            SafeMigrationOperationalImpact.NotApplicable);
     }
 }

@@ -9,7 +9,9 @@ internal interface ISafeMigrationCreateIndexScaffoldingProjector
     /// <summary>Projects one EF Core create-index operation.</summary>
     /// <param name="operation">The original provider-produced operation.</param>
     /// <returns>The sanitized operation and provider-neutral index metadata.</returns>
-    SafeMigrationCreateIndexScaffoldingProjection Project(CreateIndexOperation operation);
+    SafeMigrationCreateIndexScaffoldingProjection Project(
+        CreateIndexOperation operation
+    );
 }
 
 /// <summary>Contains one immutable create-index scaffolding projection.</summary>

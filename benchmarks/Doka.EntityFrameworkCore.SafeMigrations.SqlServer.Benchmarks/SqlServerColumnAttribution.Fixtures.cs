@@ -1,30 +1,84 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks;
 
-internal static partial class SqlServerColumnAttribution
+public partial class SqlServerColumnAttribution
 {
     /// <summary>Includes matching replays and independent facet/data/dependency refusals.</summary>
     private static IEnumerable<Scenario> CreateScenarios()
     {
         foreach (var count in new[] { 1, 16, 64 })
         {
-            yield return new Scenario("matching_alter_" + count, count, 128, "", false,
-                SafeMigrationObservedState.Matching, false);
-            yield return new Scenario("matching_ensure_" + count, count, 128, "", true,
-                SafeMigrationObservedState.Matching, false);
+            yield return new Scenario(
+                "matching_alter_" + count,
+                count,
+                128,
+                "",
+                false,
+                SafeMigrationObservedState.Matching,
+                false);
+
+            yield return new Scenario(
+                "matching_ensure_" + count,
+                count,
+                128,
+                "",
+                true,
+                SafeMigrationObservedState.Matching,
+                false);
         }
 
-        yield return new Scenario("safe_repair_then_replay", 1, 64, "", false,
-            SafeMigrationObservedState.Matching, false);
-        yield return new Scenario("wrong_source_length", 1, 32, "", false,
-            SafeMigrationObservedState.Different, true);
-        yield return new Scenario("unexpected_default", 1, 64, " DEFAULT N'other'", false,
-            SafeMigrationObservedState.Different, true);
-        yield return new Scenario("unexpected_collation", 1, 64, " COLLATE Latin1_General_100_BIN2", false,
-            SafeMigrationObservedState.Different, true);
-        yield return new Scenario("nullability_data_blocked", 1, 64, "", false,
-            SafeMigrationObservedState.DataBlocked, true);
-        yield return new Scenario("caller_owned_index", 1, 64, "", false,
-            SafeMigrationObservedState.Different, true);
+        yield return new Scenario(
+            "safe_repair_then_replay",
+            1,
+            64,
+            "",
+            false,
+            SafeMigrationObservedState.Matching,
+            false);
+
+        yield return new Scenario(
+            "wrong_source_length",
+            1,
+            32,
+            "",
+            false,
+            SafeMigrationObservedState.Different,
+            true);
+
+        yield return new Scenario(
+            "unexpected_default",
+            1,
+            64,
+            " DEFAULT N'other'",
+            false,
+            SafeMigrationObservedState.Different,
+            true);
+
+        yield return new Scenario(
+            "unexpected_collation",
+            1,
+            64,
+            " COLLATE Latin1_General_100_BIN2",
+            false,
+            SafeMigrationObservedState.Different,
+            true);
+
+        yield return new Scenario(
+            "nullability_data_blocked",
+            1,
+            64,
+            "",
+            false,
+            SafeMigrationObservedState.DataBlocked,
+            true);
+
+        yield return new Scenario(
+            "caller_owned_index",
+            1,
+            64,
+            "",
+            false,
+            SafeMigrationObservedState.Different,
+            true);
     }
 
     /// <summary>Builds only predeclared synthetic identifiers and keeps all data/metadata deterministic.</summary>
@@ -33,13 +87,28 @@ internal static partial class SqlServerColumnAttribution
         int rows
     )
     {
-        var definitions = string.Join(", ", Enumerable.Range(0, scenario.Columns).Select(index =>
-            $"[value_{index}] nvarchar({scenario.ActualLength})"
-            + (scenario.Name == "unexpected_collation" ? scenario.Extra : "")
-            + " NULL" + (scenario.Name == "unexpected_default" ? scenario.Extra : "")));
+        var definitions = string.Join(
+            ", ",
+            Enumerable
+                .Range(0, scenario.Columns)
+                .Select(index =>
+                    $"[value_{index}] nvarchar({scenario.ActualLength})"
+                    + (scenario.Name == "unexpected_collation"
+                        ? scenario.Extra
+                        : "")
+                    + " NULL"
+                    + (scenario.Name == "unexpected_default"
+                        ? scenario.Extra
+                        : "")));
 
-        var values = string.Join(", ", Enumerable.Range(0, scenario.Columns).Select(_ =>
-            scenario.Name == "nullability_data_blocked" ? "NULL" : "N'short'"));
+        var values = string.Join(
+            ", ",
+            Enumerable
+                .Range(0, scenario.Columns)
+                .Select(_ =>
+                    scenario.Name == "nullability_data_blocked"
+                        ? "NULL"
+                        : "N'short'"));
 
         var fixture = $"CREATE TABLE dbo.attribution_items ([Id] int NOT NULL, {definitions});\n"
             + ";WITH numbers AS (SELECT 1 AS value UNION ALL SELECT value + 1 FROM numbers "
@@ -63,8 +132,12 @@ internal static partial class SqlServerColumnAttribution
         for (var index = 0; index < scenario.Columns; index++)
         {
             var name = "value_" + index.ToString(CultureInfo.InvariantCulture);
-            var target = new ExpectedColumnDefinition(name, typeof(string),
-                scenario.Name != "nullability_data_blocked", "nvarchar(128)", maxLength: 128);
+            var target = new ExpectedColumnDefinition(
+                name,
+                typeof(string),
+                scenario.Name != "nullability_data_blocked",
+                "nvarchar(128)",
+                maxLength: 128);
 
             var source = new ExpectedColumnDefinition(name, typeof(string), true, "nvarchar(64)", maxLength: 64);
             SafeMigrationIntent intent = scenario.Ensure
@@ -106,8 +179,15 @@ internal static partial class SqlServerColumnAttribution
             throw new InvalidOperationException($"{scenario.Name}: fixture snapshot is missing.");
         }
 
-        var snapshot = reader.GetString(0) + ":" + reader.GetString(1) + ":" + reader.GetString(2)
-            + ":" + reader.GetInt64(3).ToString(CultureInfo.InvariantCulture);
+        var snapshot = reader.GetString(0)
+            + ":"
+            + reader.GetString(1)
+            + ":"
+            + reader.GetString(2)
+            + ":"
+            + reader
+                .GetInt64(3)
+                .ToString(CultureInfo.InvariantCulture);
 
         return snapshot;
     }

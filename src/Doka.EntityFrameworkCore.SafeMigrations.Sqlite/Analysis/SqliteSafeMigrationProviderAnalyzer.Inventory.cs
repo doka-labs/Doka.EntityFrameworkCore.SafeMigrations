@@ -6,7 +6,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
     public Task<IReadOnlyList<SafeMigrationUnexpectedObject>> FindUnexpectedObjectsAsync(
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -35,6 +35,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
                         table: null,
                         table.Name,
                         "unexpected_table"));
+
                 continue;
             }
 
@@ -52,7 +53,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
 
             // ReSharper disable once LoopCanBeConvertedToQuery
             foreach (var index in table.Indexes.Where(index => index.Origin == "c"
-                         && !Contains(expectedTable.Indexes, index.Name)))
+                && !Contains(expectedTable.Indexes, index.Name)))
             {
                 result.Add(
                     new SafeMigrationUnexpectedObject(
@@ -126,8 +127,8 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
 
         var semanticAliases = new HashSet<int>();
         foreach (var candidates in SafeMigrationSemanticCandidateFactory
-                     .Create(operations, findings, projectUniqueIndexesAsUniqueConstraints: true)
-                     .Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
+            .Create(operations, findings, projectUniqueIndexesAsUniqueConstraints: true)
+            .Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
         {
             // WHY: These windows belong to one read-only inventory invocation.
             // Re-reading the full catalog for every 512 candidates repeats all

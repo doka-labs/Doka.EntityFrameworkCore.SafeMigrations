@@ -5,6 +5,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// </summary>
 public sealed class SqlServerCatalogPreambleTests
 {
+    private const string ConnectionString = "Server=localhost;Database=doka_sm_preamble;Integrated Security=true;";
+
     /// <summary>The identical context and reference set reuse the proven identifier verdict.</summary>
     [Fact]
     public void SameContextAndReferences_ReuseTheProvenVerdict()
@@ -110,7 +112,9 @@ public sealed class SqlServerCatalogPreambleTests
     [InlineData("missing_principal")]
     [InlineData("missing_login")]
     [InlineData("dml_triggers")]
-    public void ChangedEnvironment_RequiresANewIdentifierProof(string change)
+    public void ChangedEnvironment_RequiresANewIdentifierProof(
+        string change
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
@@ -137,24 +141,30 @@ public sealed class SqlServerCatalogPreambleTests
         Assert.False(covers);
     }
 
-    private const string ConnectionString = "Server=localhost;Database=doka_sm_preamble;Integrated Security=true;";
-
     private static SqlServerSafeMigrationProviderAnalyzer.SqlServerCatalogPreamble Preamble(
         DbContext context,
         IReadOnlyList<SqlServerIdentifierReference> references
     ) => new(
         context,
         new SqlServerSafeMigrationProviderAnalyzer.SqlServerCatalogEnvironment(
-            "dbo", true, true, "Latin1_General_100_CI_AS", 1, "01"),
+            "dbo",
+            true,
+            true,
+            "Latin1_General_100_CI_AS",
+            1,
+            "01"),
         references,
         IdentifierSafe: true);
 
     private static SqlServerIdentifierReference[] References(
         string table,
         params string[] columns
-    ) => [.. columns.Select(column => new SqlServerIdentifierReference(
-        SqlServerIdentifierScope.Column,
-        "dbo",
-        table,
-        column))];
+    ) =>
+    [
+        .. columns.Select(column => new SqlServerIdentifierReference(
+            SqlServerIdentifierScope.Column,
+            "dbo",
+            table,
+            column)),
+    ];
 }

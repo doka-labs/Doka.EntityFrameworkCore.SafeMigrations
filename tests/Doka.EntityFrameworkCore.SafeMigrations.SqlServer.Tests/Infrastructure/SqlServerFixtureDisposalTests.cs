@@ -14,23 +14,28 @@ public sealed class SqlServerFixtureDisposalTests
         var databaseFailure = new InvalidOperationException("Injected database cleanup failure.");
         var containerFailure = new InvalidOperationException("Injected container cleanup failure.");
         var attempts = new List<string>();
-        using var fixture = new SqlServerContainerFixture(RootConnectionString, (_, _) =>
-        {
-            attempts.Add("create");
+        using var fixture = new SqlServerContainerFixture(
+            RootConnectionString,
+            (_, _) =>
+            {
+                attempts.Add("create");
 
-            return Task.CompletedTask;
-        }, (_, _) =>
-        {
-            attempts.Add("database");
+                return Task.CompletedTask;
+            },
+            (_, _) =>
+            {
+                attempts.Add("database");
 
-            return Task.FromException(databaseFailure);
-        }, () =>
-        {
-            attempts.Add("container");
+                return Task.FromException(databaseFailure);
+            },
+            () =>
+            {
+                attempts.Add("container");
 
-            return Task.FromException(containerFailure);
-        });
-        await fixture.CreateDatabaseAsync();
+                return Task.FromException(containerFailure);
+            });
+
+        await fixture.CreateDatabaseAsync(cancellationToken: CancellationToken.None);
 
         // Act
         var observed = await Record.ExceptionAsync(fixture.DisposeAsync);
@@ -39,9 +44,11 @@ public sealed class SqlServerFixtureDisposalTests
         var failure = Assert.IsType<InvalidOperationException>(observed);
         var aggregate = Assert.IsType<AggregateException>(failure.InnerException);
 
-        Assert.Collection(aggregate.InnerExceptions,
+        Assert.Collection(
+            aggregate.InnerExceptions,
             exception => Assert.Same(databaseFailure, exception),
             exception => Assert.Same(containerFailure, exception));
+
         Assert.Equal(["create", "database", "container"], attempts);
     }
 
@@ -57,25 +64,36 @@ public sealed class SqlServerFixtureDisposalTests
         // Arrange
         var expected = new InvalidOperationException("Injected single cleanup failure.");
         var attempts = new List<string>();
-        using var fixture = new SqlServerContainerFixture(RootConnectionString, (_, _) => Task.CompletedTask,
+        using var fixture = new SqlServerContainerFixture(
+            RootConnectionString,
+            (_, _) => Task.CompletedTask,
             (_, _) =>
             {
                 attempts.Add("database");
 
-                return failDatabaseCleanup ? Task.FromException(expected) : Task.CompletedTask;
-            }, () =>
+                return failDatabaseCleanup
+                    ? Task.FromException(expected)
+                    : Task.CompletedTask;
+            },
+            () =>
             {
                 attempts.Add("container");
 
-                return failDatabaseCleanup ? Task.CompletedTask : Task.FromException(expected);
+                return failDatabaseCleanup
+                    ? Task.CompletedTask
+                    : Task.FromException(expected);
             });
-        await fixture.CreateDatabaseAsync();
+
+        await fixture.CreateDatabaseAsync(cancellationToken: CancellationToken.None);
 
         // Act
         var observed = await Record.ExceptionAsync(fixture.DisposeAsync);
 
         // Assert
-        Assert.Same(expected, Assert.IsType<InvalidOperationException>(observed).InnerException);
+        Assert.Same(expected,
+            Assert.IsType<InvalidOperationException>(observed)
+                .InnerException);
+
         Assert.Equal(["database", "container"], attempts);
     }
 
@@ -88,25 +106,30 @@ public sealed class SqlServerFixtureDisposalTests
         var droppedNames = new List<string>();
         var databasesAtContainerDisposal = -1;
         var containerDisposals = 0;
-        using var fixture = new SqlServerContainerFixture(RootConnectionString, (database, _) =>
-        {
-            createdNames.Add(database);
+        using var fixture = new SqlServerContainerFixture(
+            RootConnectionString,
+            (database, _) =>
+            {
+                createdNames.Add(database);
 
-            return Task.CompletedTask;
-        }, (database, _) =>
-        {
-            droppedNames.Add(database);
+                return Task.CompletedTask;
+            },
+            (database, _) =>
+            {
+                droppedNames.Add(database);
 
-            return Task.CompletedTask;
-        }, () =>
-        {
-            databasesAtContainerDisposal = createdNames.Count - droppedNames.Count;
-            containerDisposals++;
+                return Task.CompletedTask;
+            },
+            () =>
+            {
+                databasesAtContainerDisposal = createdNames.Count - droppedNames.Count;
+                containerDisposals++;
 
-            return Task.CompletedTask;
-        });
-        await fixture.CreateDatabaseAsync();
-        await fixture.CreateDatabaseAsync();
+                return Task.CompletedTask;
+            });
+
+        await fixture.CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await fixture.CreateDatabaseAsync(cancellationToken: CancellationToken.None);
 
         // Act
         await fixture.DisposeAsync();

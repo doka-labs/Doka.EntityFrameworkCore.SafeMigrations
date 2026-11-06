@@ -16,7 +16,9 @@ public sealed class SafeMigrationExpressionInspectorStackTests
     [InlineData("cast")]
     [InlineData("collate")]
     [InlineData("null-test")]
-    public void DeepTreesRetainIdentifiersAndStructuralEligibility(string shape)
+    public void DeepTreesRetainIdentifiersAndStructuralEligibility(
+        string shape
+    )
     {
         // Arrange
         var expression = Nest(shape, SafeMigrationSql.Identifier("owner", "source"));
@@ -48,21 +50,28 @@ public sealed class SafeMigrationExpressionInspectorStackTests
     [InlineData("cast")]
     [InlineData("collate")]
     [InlineData("null-test")]
-    public void DeepRenamesPreserveQualifiedMembers(string shape)
+    public void DeepRenamesPreserveQualifiedMembers(
+        string shape
+    )
     {
         // Arrange
         var expression = Nest(shape, SafeMigrationSql.Identifier("Source", "source"));
 
         // Act
         var renamed = SafeMigrationSqlExpressionInspector.RenameColumnIdentifier(
-            expression, "SOURCE", "target", StringComparer.OrdinalIgnoreCase);
+            expression,
+            "SOURCE",
+            "target",
+            StringComparer.OrdinalIgnoreCase);
 
         // Assert
         Assert.True(SafeMigrationSqlExpressionInspector.ReferencesIdentifier(renamed, "target"));
         Assert.False(SafeMigrationSqlExpressionInspector.ReferencesIdentifier(renamed, "source"));
         Assert.True(SafeMigrationSqlExpressionInspector.ReferencesIdentifier(expression, "source"));
         var leaf = Terminal(shape, renamed);
-        Assert.Equal(["Source", "target"], Assert.IsType<SafeMigrationSqlIdentifierExpression>(leaf).Parts);
+        Assert.Equal(["Source", "target"],
+            Assert.IsType<SafeMigrationSqlIdentifierExpression>(leaf)
+                .Parts);
     }
 
     /// <summary>Opaque leaves remain a refusal, including when the leaf is beyond normal call-stack depth.</summary>
@@ -75,7 +84,9 @@ public sealed class SafeMigrationExpressionInspectorStackTests
     [InlineData("in")]
     [InlineData("function")]
     [InlineData("case")]
-    public void DeepOpaqueLeavesRemainUnproven(string shape)
+    public void DeepOpaqueLeavesRemainUnproven(
+        string shape
+    )
     {
         // Arrange
         var expression = Nest(shape, SafeMigrationSql.Opaque("private_payload"));
@@ -94,8 +105,10 @@ public sealed class SafeMigrationExpressionInspectorStackTests
     public void InCollectionAndReferenceSearchPreserveTheirOriginalOrder()
     {
         // Arrange
-        var expression = SafeMigrationSql.In(SafeMigrationSql.Identifier("operand"),
+        var expression = SafeMigrationSql.In(
+            SafeMigrationSql.Identifier("operand"),
             [SafeMigrationSql.Identifier("first"), SafeMigrationSql.Identifier("second")]);
+
         var collected = new RecordingSet();
         var comparer = new RecordingComparer();
 
@@ -117,11 +130,15 @@ public sealed class SafeMigrationExpressionInspectorStackTests
         var expression = new SafeMigrationSqlCaseExpression(
             [new(SafeMigrationSql.Identifier("condition"), SafeMigrationSql.Identifier("result"))],
             SafeMigrationSql.Identifier("fallback"));
+
         var comparer = new RecordingComparer();
 
         // Act
         var renamed = SafeMigrationSqlExpressionInspector.RenameColumnIdentifier(
-            expression, "absent", "target", comparer);
+            expression,
+            "absent",
+            "target",
+            comparer);
 
         // Assert
         Assert.Equal(["fallback", "condition", "result"], comparer.Seen);
@@ -134,24 +151,41 @@ public sealed class SafeMigrationExpressionInspectorStackTests
     [InlineData("function")]
     [InlineData("in")]
     [InlineData("case")]
-    public void WideRenamesRetainEveryOrderedChild(string shape)
+    public void WideRenamesRetainEveryOrderedChild(
+        string shape
+    )
     {
         // Arrange
-        var names = Enumerable.Range(0, 9_999).Select(static value => $"member{value}").Append("source").ToArray();
-        var children = names.Select(static value => SafeMigrationSql.Identifier(value)).ToArray();
+        var names = Enumerable
+            .Range(0, 9_999)
+            .Select(static value => $"member{value}")
+            .Append("source")
+            .ToArray();
+
+        var children = names
+            .Select(static value => SafeMigrationSql.Identifier(value))
+            .ToArray();
+
         SafeMigrationSqlExpression expression = shape switch
         {
             "function" => new SafeMigrationSqlFunctionExpression("COALESCE", children),
             "in" => new SafeMigrationSqlInExpression(SafeMigrationSql.Identifier("operand"), children),
-            "case" => new SafeMigrationSqlCaseExpression(children.Select(static value =>
-                new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.Literal(true), value)),
+            "case" => new SafeMigrationSqlCaseExpression(
+                children.Select(static value =>
+                    new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.Literal(true), value)),
                 SafeMigrationSql.Identifier("fallback")),
             _ => throw new ArgumentOutOfRangeException(nameof(shape)),
         };
 
-        var expected = names[..^1].Append("target");
-        expected = shape == "in" ? expected.Prepend("operand")
-            : shape == "case" ? expected.Append("fallback") : expected;
+        var expected = names[..^1]
+            .Append("target");
+
+        expected = shape == "in"
+            ? expected.Prepend("operand")
+            : shape == "case"
+                ? expected.Append("fallback")
+                : expected;
+
         var collected = new RecordingSet();
 
         // Act
@@ -161,7 +195,12 @@ public sealed class SafeMigrationExpressionInspectorStackTests
 
         // Assert
         Assert.Equal(expected, collected.Seen);
-        Assert.Equal(shape == "function" ? 10_000 : 10_001, collected.Count);
+        Assert.Equal(
+            shape == "function"
+                ? 10_000
+                : 10_001,
+            collected.Count);
+
         Assert.False(sourceRemains);
         Assert.True(SafeMigrationSqlExpressionInspector.IsStructurallyComparable(renamed));
     }
@@ -173,7 +212,9 @@ public sealed class SafeMigrationExpressionInspectorStackTests
         // Arrange
         var search = SafeMigrationSql.In(new UnknownExpression(), [SafeMigrationSql.Identifier("match")]);
         var comparison = SafeMigrationSql.Binary(
-            SafeMigrationSql.Opaque("opaque"), SafeMigrationSqlBinaryOperator.Add, new UnknownExpression());
+            SafeMigrationSql.Opaque("opaque"),
+            SafeMigrationSqlBinaryOperator.Add,
+            new UnknownExpression());
 
         // Act
         var found = SafeMigrationSqlExpressionInspector.ReferencesIdentifier(search, "match");
@@ -193,18 +234,24 @@ public sealed class SafeMigrationExpressionInspectorStackTests
 
         // Act
         var collected = Record.Exception(() => SafeMigrationSqlExpressionInspector.CollectIdentifiers(
-            expression, new HashSet<string>()));
+            expression,
+            new HashSet<string>()));
+
         var searched = Record.Exception(() => SafeMigrationSqlExpressionInspector.ReferencesIdentifier(
-            expression, "absent"));
+            expression,
+            "absent"));
+
         var compared = Record.Exception(() => SafeMigrationSqlExpressionInspector.IsStructurallyComparable(expression));
         var renamed = Record.Exception(() => SafeMigrationSqlExpressionInspector.RenameIdentifier(
-            expression, "source", "target"));
+            expression,
+            "source",
+            "target"));
 
         // Assert
-        Assert.IsType<System.Diagnostics.UnreachableException>(collected);
-        Assert.IsType<System.Diagnostics.UnreachableException>(searched);
-        Assert.IsType<System.Diagnostics.UnreachableException>(compared);
-        Assert.IsType<System.Diagnostics.UnreachableException>(renamed);
+        Assert.IsType<UnreachableException>(collected);
+        Assert.IsType<UnreachableException>(searched);
+        Assert.IsType<UnreachableException>(compared);
+        Assert.IsType<UnreachableException>(renamed);
     }
 
     /// <summary>Preserves a non-recursive legacy leaf fast path for immutable literal objects.</summary>
@@ -228,7 +275,8 @@ public sealed class SafeMigrationExpressionInspectorStackTests
         // Arrange
         var flat = string.Join(" + ", Enumerable.Repeat("value", 300));
         var nested = new string('(', SafeMigrationSqlExpressionParser.MaximumDepth + 1)
-            + "value" + new string(')', SafeMigrationSqlExpressionParser.MaximumDepth + 1);
+            + "value"
+            + new string(')', SafeMigrationSqlExpressionParser.MaximumDepth + 1);
 
         // Act
         var accepted = SafeMigrationSqlExpressionParser.TryParse(flat, out var expression, out var failure);
@@ -245,7 +293,10 @@ public sealed class SafeMigrationExpressionInspectorStackTests
     }
 
     /// <summary>Builds a public tree without recursive fixture construction.</summary>
-    private static SafeMigrationSqlExpression Nest(string shape, SafeMigrationSqlExpression expression)
+    private static SafeMigrationSqlExpression Nest(
+        string shape,
+        SafeMigrationSqlExpression expression
+    )
     {
         var literal = SafeMigrationSql.Literal(1);
         for (var depth = 0; depth < 20_000; depth++)
@@ -270,22 +321,38 @@ public sealed class SafeMigrationExpressionInspectorStackTests
     }
 
     /// <summary>Checks the reconstructed terminal path without using recursive assertions.</summary>
-    private static SafeMigrationSqlExpression Terminal(string shape, SafeMigrationSqlExpression expression)
+    private static SafeMigrationSqlExpression Terminal(
+        string shape,
+        SafeMigrationSqlExpression expression
+    )
     {
         for (var depth = 0; depth < 20_000; depth++)
         {
             expression = shape switch
             {
-                "left" => Assert.IsType<SafeMigrationSqlBinaryExpression>(expression).Left,
-                "right" => Assert.IsType<SafeMigrationSqlBinaryExpression>(expression).Right,
-                "unary" => Assert.IsType<SafeMigrationSqlUnaryExpression>(expression).Operand,
-                "between" => Assert.IsType<SafeMigrationSqlBetweenExpression>(expression).Lower,
-                "in" => Assert.IsType<SafeMigrationSqlInExpression>(expression).Values[0],
-                "function" => Assert.IsType<SafeMigrationSqlFunctionExpression>(expression).Arguments[0],
-                "case" => Assert.IsType<SafeMigrationSqlCaseExpression>(expression).WhenClauses[0].Result,
-                "cast" => Assert.IsType<SafeMigrationSqlCastExpression>(expression).Operand,
-                "collate" => Assert.IsType<SafeMigrationSqlCollateExpression>(expression).Operand,
-                "null-test" => Assert.IsType<SafeMigrationSqlNullTestExpression>(expression).Operand,
+                "left" => Assert.IsType<SafeMigrationSqlBinaryExpression>(expression)
+                    .Left,
+                "right" => Assert.IsType<SafeMigrationSqlBinaryExpression>(expression)
+                    .Right,
+                "unary" => Assert.IsType<SafeMigrationSqlUnaryExpression>(expression)
+                    .Operand,
+                "between" => Assert.IsType<SafeMigrationSqlBetweenExpression>(expression)
+                    .Lower,
+                "in" => Assert
+                    .IsType<SafeMigrationSqlInExpression>(expression)
+                    .Values[0],
+                "function" => Assert
+                    .IsType<SafeMigrationSqlFunctionExpression>(expression)
+                    .Arguments[0],
+                "case" => Assert
+                    .IsType<SafeMigrationSqlCaseExpression>(expression)
+                    .WhenClauses[0].Result,
+                "cast" => Assert.IsType<SafeMigrationSqlCastExpression>(expression)
+                    .Operand,
+                "collate" => Assert.IsType<SafeMigrationSqlCollateExpression>(expression)
+                    .Operand,
+                "null-test" => Assert.IsType<SafeMigrationSqlNullTestExpression>(expression)
+                    .Operand,
                 _ => throw new ArgumentOutOfRangeException(nameof(shape)),
             };
         }
@@ -299,21 +366,28 @@ public sealed class SafeMigrationExpressionInspectorStackTests
     {
         public List<string> Seen { get; } = [];
 
-        public bool Equals(string? left, string? right)
+        public bool Equals(
+            string? left,
+            string? right
+        )
         {
             Seen.Add(left!);
 
             return StringComparer.Ordinal.Equals(left, right);
         }
 
-        public int GetHashCode(string value) => StringComparer.Ordinal.GetHashCode(value);
+        public int GetHashCode(
+            string value
+        ) => StringComparer.Ordinal.GetHashCode(value);
     }
 
     private sealed class RecordingSet : HashSet<string>, ISet<string>
     {
         public List<string> Seen { get; } = [];
 
-        bool ISet<string>.Add(string item)
+        bool ISet<string>.Add(
+            string item
+        )
         {
             Seen.Add(item);
 

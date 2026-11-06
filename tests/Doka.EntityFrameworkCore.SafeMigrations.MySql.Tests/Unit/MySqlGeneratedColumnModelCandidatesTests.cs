@@ -13,22 +13,29 @@ public sealed class MySqlGeneratedColumnModelCandidatesTests
             MySqlServerVersion.MariaDb(new Version(11, 8, 8)));
 
         var migration = new GeneratedFacetPendingDropMigration();
-        var first = new SafeMigrationOperation(new DropColumnIntent("unrelated", "generated_facet_pending_drop"),
+        var first = new SafeMigrationOperation(
+            new DropColumnIntent("unrelated", "generated_facet_pending_drop"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var second = new SafeMigrationOperation(new DropColumnIntent("another", "generated_facet_pending_drop"),
+        var second = new SafeMigrationOperation(
+            new DropColumnIntent("another", "generated_facet_pending_drop"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         MigrationOperation[] operations = [first, second];
         IModel?[] targets = [migration.TargetModel, migration.TargetModel];
 
         // Act
-        var candidates = MySqlGeneratedColumnModelCandidates.CaptureTargets(operations, targets, context.Model,
+        var candidates = MySqlGeneratedColumnModelCandidates.CaptureTargets(
+            operations,
+            targets,
+            context.Model,
             context.GetService<IModelRuntimeInitializer>());
 
         // Assert
         Assert.Same(candidates[first], candidates[second]);
-        var column = Assert.Single(Assert.Single(candidates[first]).Columns);
+        var column = Assert.Single(Assert.Single(candidates[first])
+            .Columns);
+
         Assert.Equal("candidate-marker", column.Comment);
         Assert.Equal("utf8mb4_bin", column.Collation?.Name);
     }
@@ -38,12 +45,15 @@ public sealed class MySqlGeneratedColumnModelCandidatesTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void PendingFacetFixtureMatchesCanonicalModelWithoutDatabase(bool isMariaDb)
+    public void PendingFacetFixtureMatchesCanonicalModelWithoutDatabase(
+        bool isMariaDb
+    )
     {
         // Arrange
         using var context = new GeneratedFacetPendingDropDbContext(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
-            isMariaDb ? MySqlServerVersion.MariaDb(new Version(11, 8, 8))
+            isMariaDb
+                ? MySqlServerVersion.MariaDb(new Version(11, 8, 8))
                 : MySqlServerVersion.MySql(new Version(8, 4, 11)));
 
         const string provider = "model-candidate-fixture";
@@ -52,7 +62,10 @@ public sealed class MySqlGeneratedColumnModelCandidatesTests
         var fingerprint = SafeMigrationRunner.ValidateCanonicalMigrationModelAndCreateFingerprint(context, provider);
 
         // Assert
-        Assert.Equal(SafeMigrationModelFingerprint.Create(context.GetService<IDesignTimeModel>().Model, provider),
+        Assert.Equal(
+            SafeMigrationModelFingerprint.Create(context.GetService<IDesignTimeModel>()
+                    .Model,
+                provider),
             fingerprint);
     }
 
@@ -68,15 +81,26 @@ public sealed class MySqlGeneratedColumnModelCandidatesTests
         MigrationOperation[] operations = [first, second];
         IModel?[] targets =
         [
-            original.GetService<IDesignTimeModel>().Model, changed.GetService<IDesignTimeModel>().Model,
+            original.GetService<IDesignTimeModel>()
+                .Model,
+            changed.GetService<IDesignTimeModel>()
+                .Model,
         ];
 
         // Act
         var candidates = MySqlGeneratedColumnModelCandidates.CaptureTargets(operations, targets, changed.Model);
 
         // Assert
-        Assert.Equal("candidate-marker", Assert.Single(Assert.Single(candidates[first]).Columns).Comment);
-        Assert.Equal("changed-marker", Assert.Single(Assert.Single(candidates[second]).Columns).Comment);
+        Assert.Equal("candidate-marker",
+            Assert.Single(Assert.Single(candidates[first])
+                    .Columns)
+                .Comment);
+
+        Assert.Equal("changed-marker",
+            Assert.Single(Assert.Single(candidates[second])
+                    .Columns)
+                .Comment);
+
         Assert.NotSame(candidates[first], candidates[second]);
     }
 
@@ -89,7 +113,9 @@ public sealed class MySqlGeneratedColumnModelCandidatesTests
         var first = Drop();
         var second = Drop();
         MigrationOperation[] operations = [first, second];
-        var model = context.GetService<IDesignTimeModel>().Model;
+        var model = context.GetService<IDesignTimeModel>()
+            .Model;
+
         IModel?[] targets = [model, model];
 
         // Act
@@ -97,7 +123,10 @@ public sealed class MySqlGeneratedColumnModelCandidatesTests
 
         // Assert
         Assert.Same(candidates[first], candidates[second]);
-        Assert.Equal("candidate-marker", Assert.Single(Assert.Single(candidates[first]).Columns).Comment);
+        Assert.Equal("candidate-marker",
+            Assert.Single(Assert.Single(candidates[first])
+                    .Columns)
+                .Comment);
     }
 
     /// <summary>An explicitly missing historical target is not replaced by the current complete model.</summary>
@@ -110,8 +139,11 @@ public sealed class MySqlGeneratedColumnModelCandidatesTests
         IModel?[] targets = [null];
 
         // Act
-        var candidates = MySqlGeneratedColumnModelCandidates.CaptureTargets(operations, targets,
-            context.GetService<IDesignTimeModel>().Model);
+        var candidates = MySqlGeneratedColumnModelCandidates.CaptureTargets(
+            operations,
+            targets,
+            context.GetService<IDesignTimeModel>()
+                .Model);
 
         // Assert
         Assert.Empty(candidates);
@@ -139,15 +171,20 @@ public sealed class MySqlGeneratedColumnModelCandidatesTests
     {
         // Arrange
         using var context = new FacetedCandidateContext();
-        var model = context.GetService<IDesignTimeModel>().Model;
+        var model = context.GetService<IDesignTimeModel>()
+            .Model;
+
         var nativeTable = Assert.IsAssignableFrom<ITable>(
-            model.GetRelationalModel().FindTable("model_candidate_facets", null));
+            model
+                .GetRelationalModel()
+                .FindTable("model_candidate_facets", null));
 
         var nativeColumn = Assert.IsAssignableFrom<IColumn>(nativeTable.FindColumn("result"));
 
         MigrationOperation[] operations =
         [
-            new SafeMigrationOperation(new DropColumnIntent("unrelated", "model_candidate_facets"),
+            new SafeMigrationOperation(
+                new DropColumnIntent("unrelated", "model_candidate_facets"),
                 SafeMigrationPolicy.ThrowIfDifferent),
         ];
 
@@ -159,7 +196,9 @@ public sealed class MySqlGeneratedColumnModelCandidatesTests
         Assert.Null(nativeColumn.FindAnnotation(RelationalAnnotationNames.Collation));
         Assert.Equal("candidate-marker", nativeColumn.Comment);
         Assert.Equal("utf8mb4_bin", nativeColumn.Collation);
-        var column = Assert.Single(Assert.Single(candidates).Columns);
+        var column = Assert.Single(Assert.Single(candidates)
+            .Columns);
+
         Assert.Equal("candidate-marker", column.Comment);
         Assert.Equal("utf8mb4_bin", column.Collation?.Name);
     }
@@ -172,7 +211,8 @@ public sealed class MySqlGeneratedColumnModelCandidatesTests
         using var context = new FacetedCandidateContext();
         MigrationOperation[] operations =
         [
-            new SafeMigrationOperation(new DropColumnIntent("unrelated", "model_candidate_facets"),
+            new SafeMigrationOperation(
+                new DropColumnIntent("unrelated", "model_candidate_facets"),
                 SafeMigrationPolicy.ThrowIfDifferent),
         ];
 
@@ -183,6 +223,10 @@ public sealed class MySqlGeneratedColumnModelCandidatesTests
         Assert.Empty(candidates);
     }
 
+    /// <summary>Creates a distinct immutable operation reference with the same native owner identity.</summary>
+    private static SafeMigrationOperation Drop() =>
+        new(new DropColumnIntent("unrelated", "model_candidate_facets"), SafeMigrationPolicy.ThrowIfDifferent);
+
     /// <summary>Exposes complete design-time metadata and its intentionally reduced EF runtime counterpart.</summary>
     private class FacetedCandidateContext : DbContext
     {
@@ -190,23 +234,36 @@ public sealed class MySqlGeneratedColumnModelCandidatesTests
         protected virtual string CandidateComment => "candidate-marker";
 
         /// <inheritdoc />
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) => optionsBuilder
-            .UseMySql("Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
+        protected override void OnConfiguring(
+            DbContextOptionsBuilder optionsBuilder
+        ) => optionsBuilder
+            .UseMySql(
+                "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
                 MySqlServerVersion.MySql(new Version(8, 4, 11)));
 
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        )
         {
-            modelBuilder.Entity("candidate", entity =>
-            {
-                entity.ToTable("model_candidate_facets");
-                entity.Property<int>("id").ValueGeneratedNever();
-                entity.HasKey("id");
-                entity.Property<int?>("unrelated");
-                entity.Property<string>("result").HasColumnType("varchar(20)")
-                    .HasComputedColumnSql("'fixed'", stored: false).HasComment(CandidateComment)
-                    .UseCollation("utf8mb4_bin");
-            });
+            modelBuilder.Entity(
+                "candidate",
+                entity =>
+                {
+                    entity.ToTable("model_candidate_facets");
+                    entity
+                        .Property<int>("id")
+                        .ValueGeneratedNever();
+
+                    entity.HasKey("id");
+                    entity.Property<int?>("unrelated");
+                    entity
+                        .Property<string>("result")
+                        .HasColumnType("varchar(20)")
+                        .HasComputedColumnSql("'fixed'", stored: false)
+                        .HasComment(CandidateComment)
+                        .UseCollation("utf8mb4_bin");
+                });
         }
     }
 
@@ -216,8 +273,4 @@ public sealed class MySqlGeneratedColumnModelCandidatesTests
         /// <inheritdoc />
         protected override string CandidateComment => "changed-marker";
     }
-
-    /// <summary>Creates a distinct immutable operation reference with the same native owner identity.</summary>
-    private static SafeMigrationOperation Drop() =>
-        new(new DropColumnIntent("unrelated", "model_candidate_facets"), SafeMigrationPolicy.ThrowIfDifferent);
 }

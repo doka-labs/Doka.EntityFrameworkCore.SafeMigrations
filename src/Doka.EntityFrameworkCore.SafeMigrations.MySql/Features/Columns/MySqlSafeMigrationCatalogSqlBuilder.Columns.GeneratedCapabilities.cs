@@ -11,8 +11,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         var target = intent switch
         {
-            EnsureColumnIntent value => (value.Table, Definition: value.Definition),
-            AlterColumnIntent value => (value.Table, Definition: value.Definition),
+            EnsureColumnIntent value => (value.Table, value.Definition),
+            AlterColumnIntent value => (value.Table, value.Definition),
             _ => default,
         };
 

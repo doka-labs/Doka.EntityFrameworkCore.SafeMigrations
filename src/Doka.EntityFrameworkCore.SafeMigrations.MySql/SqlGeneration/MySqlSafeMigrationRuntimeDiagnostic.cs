@@ -22,24 +22,43 @@ internal sealed class MySqlSafeMigrationRuntimeDiagnostic
 
         Context = SafeMigrationRuntimeDiagnosticContext.Create(operation);
         Ordinal = ordinal;
-        Correlation = Guid.NewGuid().ToString("N");
+        Correlation = Guid
+            .NewGuid()
+            .ToString("N");
+
         var ordinalText = ordinal.ToString(CultureInfo.InvariantCulture);
 
         // WHY: Keep the nonce fresh while avoiding the five-piece concatenation
         // argument array on every generated operation. The marker text is exact.
-        Marker = string.Create(MarkerPrefix.Length + ordinalText.Length + 1 + Correlation.Length + MarkerSuffix.Length,
-            (Ordinal: ordinalText, Correlation), static (destination, state) =>
+        Marker = string.Create(
+            MarkerPrefix.Length + ordinalText.Length + 1 + Correlation.Length + MarkerSuffix.Length,
+            (Ordinal: ordinalText, Correlation),
+            static (destination, state) =>
             {
                 var offset = 0;
-                MarkerPrefix.AsSpan().CopyTo(destination);
+                MarkerPrefix
+                    .AsSpan()
+                    .CopyTo(destination);
+
                 offset += MarkerPrefix.Length;
-                state.Ordinal.AsSpan().CopyTo(destination[offset..]);
+                state
+                    .Ordinal
+                    .AsSpan()
+                    .CopyTo(destination[offset..]);
+
                 offset += state.Ordinal.Length;
                 destination[offset++] = ':';
-                state.Correlation.AsSpan().CopyTo(destination[offset..]);
+                state
+                    .Correlation
+                    .AsSpan()
+                    .CopyTo(destination[offset..]);
+
                 offset += state.Correlation.Length;
-                MarkerSuffix.AsSpan().CopyTo(destination[offset..]);
+                MarkerSuffix
+                    .AsSpan()
+                    .CopyTo(destination[offset..]);
             });
+
         QualificationCode = plan.CurrentDatabaseQualificationFailureCode;
         UnsupportedCode = plan.UnsupportedCode;
         HasRequiredAddStatus = plan.RequiredColumnAddPlan is not null;
@@ -71,10 +90,19 @@ internal sealed class MySqlSafeMigrationRuntimeDiagnostic
     private string? RequiredAddGuardName { get; }
     private string? RequiredAddOwner { get; }
 
+    /// <summary>Gets the immutable existing native constraint vocabulary.</summary>
+    internal static IReadOnlyList<string> GuardCodes { get; } = Array.AsReadOnly<string>(
+    [
+        "doka_sm_different", "doka_sm_unsupported", "doka_sm_data_blocked", "doka_sm_prerequisite_missing",
+        "doka_sm_postcondition",
+    ]);
+
     /// <summary>Maps a bounded native payload slot back to an evidenced, non-sensitive reason code.</summary>
     /// <param name="slot">The slot emitted by the already materialized operation-local facts.</param>
     /// <returns>The exact reason code, or null when only the guard category was established.</returns>
-    internal string? GetReasonCode(int slot) => slot switch
+    internal string? GetReasonCode(
+        int slot
+    ) => slot switch
     {
         0 => null,
         1 => QualificationCode,
@@ -93,8 +121,11 @@ internal sealed class MySqlSafeMigrationRuntimeDiagnostic
     /// <summary>Uses completed proof variables only; reporting must not issue another catalog or row query.</summary>
     internal string BuildReasonSlotExpression()
     {
-        if (QualificationCode is null && UnsupportedCode is null && !HasRequiredAddStatus
-            && !HasNullabilityProof && !HasTransitionDataProof)
+        if (QualificationCode is null
+            && UnsupportedCode is null
+            && !HasRequiredAddStatus
+            && !HasNullabilityProof
+            && !HasTransitionDataProof)
         {
             return "0";
         }
@@ -107,7 +138,8 @@ internal sealed class MySqlSafeMigrationRuntimeDiagnostic
 
         if (HasRequiredAddStatus)
         {
-            builder.Append("WHEN @doka_sm_add_status = 'conflict' THEN 3 ")
+            builder
+                .Append("WHEN @doka_sm_add_status = 'conflict' THEN 3 ")
                 .Append("WHEN @doka_sm_add_status = 'unavailable' THEN 4 ")
                 .Append("WHEN @doka_sm_add_status = 'set_null' THEN 5 ")
                 .Append("WHEN @doka_sm_add_status = 'staged' AND @doka_sm_state = 'data_blocked' THEN 6 ")
@@ -129,7 +161,9 @@ internal sealed class MySqlSafeMigrationRuntimeDiagnostic
             builder.Append("WHEN @doka_sm_state = 'unsupported' THEN 2 ");
         }
 
-        return builder.Append("ELSE 0 END").ToString();
+        return builder
+            .Append("ELSE 0 END")
+            .ToString();
     }
 
     /// <summary>Recognizes only a complete leading marker and rejects stale or malformed ownership.</summary>
@@ -137,11 +171,18 @@ internal sealed class MySqlSafeMigrationRuntimeDiagnostic
     /// <param name="ordinal">The parsed operation ordinal.</param>
     /// <param name="correlation">The bounded correlation span without a copied SQL payload.</param>
     /// <returns>Whether an exact authored marker is available.</returns>
-    internal static bool TryReadMarker(string sql, out int ordinal, out ReadOnlySpan<char> correlation)
+    internal static bool TryReadMarker(
+        string sql,
+        out int ordinal,
+        out ReadOnlySpan<char> correlation
+    )
     {
         ordinal = -1;
         correlation = default;
-        var text = sql.AsSpan().TrimStart();
+        var text = sql
+            .AsSpan()
+            .TrimStart();
+
         if (!text.StartsWith(MarkerPrefix, StringComparison.Ordinal))
         {
             return false;
@@ -159,7 +200,8 @@ internal sealed class MySqlSafeMigrationRuntimeDiagnostic
         }
 
         var token = text.Slice(separator + 1, 32);
-        if (!text[(separator + 33)..].StartsWith(MarkerSuffix, StringComparison.Ordinal))
+        if (!text[(separator + 33)..]
+            .StartsWith(MarkerSuffix, StringComparison.Ordinal))
         {
             return false;
         }
@@ -184,7 +226,11 @@ internal sealed class MySqlSafeMigrationRuntimeDiagnostic
     /// <param name="guardCode">The exact owned guard constraint.</param>
     /// <param name="reasonSlot">The bounded materialized diagnostic slot.</param>
     /// <returns>Whether the SQLSTATE, correlation value and key all identify this operation.</returns>
-    internal bool TryReadFailure(MySqlException failure, out string guardCode, out int reasonSlot)
+    internal bool TryReadFailure(
+        MySqlException failure,
+        out string guardCode,
+        out int reasonSlot
+    )
         => TryReadFailure(failure.Number, failure.SqlState, failure.Message, out guardCode, out reasonSlot);
 
     /// <summary>Parses the closed native transport independently of exception construction.</summary>
@@ -194,7 +240,13 @@ internal sealed class MySqlSafeMigrationRuntimeDiagnostic
     /// <param name="guardCode">The exact owned guard constraint.</param>
     /// <param name="reasonSlot">The materialized diagnostic slot.</param>
     /// <returns>Whether all correlation and native-error invariants hold.</returns>
-    internal bool TryReadFailure(int number, string? sqlState, string message, out string guardCode, out int reasonSlot)
+    internal bool TryReadFailure(
+        int number,
+        string? sqlState,
+        string message,
+        out string guardCode,
+        out int reasonSlot
+    )
     {
         guardCode = string.Empty;
         reasonSlot = 0;
@@ -206,7 +258,8 @@ internal sealed class MySqlSafeMigrationRuntimeDiagnostic
             return true;
         }
 
-        if (number != 1062 || !StringComparer.Ordinal.Equals(sqlState, "23000"))
+        if (number != 1062
+            || !StringComparer.Ordinal.Equals(sqlState, "23000"))
         {
             return false;
         }
@@ -238,7 +291,8 @@ internal sealed class MySqlSafeMigrationRuntimeDiagnostic
         }
 
         const string keySeparator = "' for key '";
-        if (!remaining[slotEnd..].StartsWith(keySeparator, StringComparison.Ordinal))
+        if (!remaining[slotEnd..]
+            .StartsWith(keySeparator, StringComparison.Ordinal))
         {
             return false;
         }
@@ -249,7 +303,8 @@ internal sealed class MySqlSafeMigrationRuntimeDiagnostic
             remaining = remaining["__doka_sm_assert.".Length..];
         }
 
-        if (remaining.IsEmpty || remaining[^1] != '\'')
+        if (remaining.IsEmpty
+            || remaining[^1] != '\'')
         {
             return false;
         }
@@ -257,7 +312,8 @@ internal sealed class MySqlSafeMigrationRuntimeDiagnostic
         var key = remaining[..^1];
         foreach (var candidate in GuardCodes)
         {
-            if (key.Equals(candidate, StringComparison.Ordinal) && ReasonSlotAppliesToGuard(reasonSlot, candidate))
+            if (key.Equals(candidate, StringComparison.Ordinal)
+                && ReasonSlotAppliesToGuard(reasonSlot, candidate))
             {
                 guardCode = candidate;
 
@@ -270,9 +326,14 @@ internal sealed class MySqlSafeMigrationRuntimeDiagnostic
 
     /// <summary>Recognizes the certified atomic NOT NULL barrier by its entire owner-and-target fingerprint.</summary>
     /// <remarks>There is no namespace-prefix or error-number-only match and no inferred writer timing.</remarks>
-    private bool TryReadRequiredAddCheckFailure(int number, string? sqlState, string message)
+    private bool TryReadRequiredAddCheckFailure(
+        int number,
+        string? sqlState,
+        string message
+    )
     {
-        if (RequiredAddGuardName is null || RequiredAddOwner is null)
+        if (RequiredAddGuardName is null
+            || RequiredAddOwner is null)
         {
             return false;
         }
@@ -281,30 +342,36 @@ internal sealed class MySqlSafeMigrationRuntimeDiagnostic
         // exact CHECK contract. Its durable recovery name cannot use the
         // per-generation nonce; foreign or merely similarly named CHECKs
         // are not evidence of this target and must keep their native errors.
-        if (number == 3819 && StringComparer.Ordinal.Equals(sqlState, "HY000"))
+        if (number == 3819
+            && StringComparer.Ordinal.Equals(sqlState, "HY000"))
         {
-            return StringComparer.Ordinal.Equals(message, "Check constraint '" + RequiredAddGuardName
+            return StringComparer.Ordinal.Equals(
+                message,
+                "Check constraint '"
+                + RequiredAddGuardName
                 + "' is violated.");
         }
 
         var prefix = "CONSTRAINT `" + RequiredAddGuardName + "` failed for `";
 
-        return number == 4025 && StringComparer.Ordinal.Equals(sqlState, "23000")
+        return number == 4025
+            && StringComparer.Ordinal.Equals(sqlState, "23000")
             && message.StartsWith(prefix, StringComparison.Ordinal)
-            && message.AsSpan(prefix.Length).EndsWith("`.`" + RequiredAddOwner + "`", StringComparison.Ordinal);
+            && message
+                .AsSpan(prefix.Length)
+                .EndsWith("`.`" + RequiredAddOwner + "`", StringComparison.Ordinal);
     }
 
     /// <summary>Rejects slot/category combinations that the selected runtime branch cannot produce.</summary>
-    internal static bool ReasonSlotAppliesToGuard(int slot, string guard) => slot == 0 || (guard switch
-    {
-        "doka_sm_unsupported" => slot is >= 1 and <= 5,
-        "doka_sm_different" => slot == 3,
-        "doka_sm_data_blocked" => slot is >= 6 and <= 10,
-        _ => false,
-    });
-
-    /// <summary>Gets the immutable existing native constraint vocabulary.</summary>
-    internal static IReadOnlyList<string> GuardCodes { get; } = Array.AsReadOnly<string>(
-        ["doka_sm_different", "doka_sm_unsupported", "doka_sm_data_blocked", "doka_sm_prerequisite_missing",
-            "doka_sm_postcondition"]);
+    internal static bool ReasonSlotAppliesToGuard(
+        int slot,
+        string guard
+    ) => slot == 0
+        || guard switch
+        {
+            "doka_sm_unsupported" => slot is >= 1 and <= 5,
+            "doka_sm_different" => slot == 3,
+            "doka_sm_data_blocked" => slot is >= 6 and <= 10,
+            _ => false,
+        };
 }

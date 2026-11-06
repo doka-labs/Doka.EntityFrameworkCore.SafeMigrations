@@ -2,11 +2,6 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal static class MySqlExpressionCanonicalizer
 {
-    private readonly record struct CatalogToken(
-        string Text,
-        bool IsTopLevelBooleanOperator = false
-    );
-
     /// <summary>Retains literal roles before MySQL converts quotes into catalog-only escaped delimiters.</summary>
     internal static IReadOnlyList<MySqlExpressionCatalogCandidate> BuildComparisonCandidates(
         string expression,
@@ -38,6 +33,7 @@ internal static class MySqlExpressionCanonicalizer
         var builder = new StringBuilder(expression.Length);
         List<MySqlExpressionCatalogLiteral>? literals = null;
         var bytes = 0;
+
         // WHY: Advance exact UTF-16 offsets across quoted tokens so escapes cannot expose a false SQL boundary.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -51,7 +47,7 @@ internal static class MySqlExpressionCanonicalizer
                 {
                     index++;
                 } while (index < expression.Length
-                         && expression[index] is not ('\'' or '"' or '`'));
+                    && expression[index] is not ('\'' or '"' or '`'));
 
                 var part = expression.AsSpan(start, index - start);
                 builder.Append(part);
@@ -62,7 +58,9 @@ internal static class MySqlExpressionCanonicalizer
             index = FindQuotedEnd(expression, index, quote);
             var token = expression[start..index];
             var rendered = mySqlEncoded
-                ? quote == '`' ? RenderMySqlCatalogIdentifier(token) : RenderMySqlCatalogString(token, quote)
+                ? quote == '`'
+                    ? RenderMySqlCatalogIdentifier(token)
+                    : RenderMySqlCatalogString(token, quote)
                 : mariaDbEscaped && quote != '`'
                     ? RenderMariaDbCatalogString(token, quote)
                     : token;
@@ -79,7 +77,9 @@ internal static class MySqlExpressionCanonicalizer
 
         return new MySqlExpressionCatalogCandidate(
             builder.ToString(),
-            literals is null ? Array.Empty<MySqlExpressionCatalogLiteral>() : literals.ToArray());
+            literals is null
+                ? Array.Empty<MySqlExpressionCatalogLiteral>()
+                : literals.ToArray());
     }
 
     /// <summary>Serializes a proven quoted value in MariaDB's native apostrophe-escape display form.</summary>
@@ -147,7 +147,10 @@ internal static class MySqlExpressionCanonicalizer
                 }
 
                 // WHY: Both display forms use the same immutable term; render and trim it once.
-                var trimmedTerm = term.ToString().Trim();
+                var trimmedTerm = term
+                    .ToString()
+                    .Trim();
+
                 var booleanOperator = token.Text.Trim();
                 unwrapped
                     .Append(RemoveBalancedOuterParentheses(trimmedTerm))
@@ -166,6 +169,7 @@ internal static class MySqlExpressionCanonicalizer
             var finalTerm = term
                 .ToString()
                 .Trim();
+
             unwrapped
                 .Append(' ')
                 .Append(RemoveBalancedOuterParentheses(finalTerm));
@@ -201,7 +205,7 @@ internal static class MySqlExpressionCanonicalizer
             if (char.IsWhiteSpace(current))
             {
                 while (index < expression.Length
-                       && char.IsWhiteSpace(expression[index]))
+                    && char.IsWhiteSpace(expression[index]))
                 {
                     index++;
                 }
@@ -214,7 +218,12 @@ internal static class MySqlExpressionCanonicalizer
             {
                 var end = FindQuotedEnd(expression, index, current);
                 var token = expression[index..end];
-                tokens.Add(new CatalogToken(encodeForMySqlCatalog ? RenderMySqlCatalogIdentifier(token) : token));
+                tokens.Add(
+                    new CatalogToken(
+                        encodeForMySqlCatalog
+                            ? RenderMySqlCatalogIdentifier(token)
+                            : token));
+
                 index = end;
                 continue;
             }
@@ -223,7 +232,12 @@ internal static class MySqlExpressionCanonicalizer
             {
                 var end = FindQuotedEnd(expression, index, current);
                 var token = expression[index..end];
-                tokens.Add(new CatalogToken(encodeForMySqlCatalog ? RenderMySqlCatalogString(token, current) : token));
+                tokens.Add(
+                    new CatalogToken(
+                        encodeForMySqlCatalog
+                            ? RenderMySqlCatalogString(token, current)
+                            : token));
+
                 index = end;
                 continue;
             }
@@ -249,9 +263,9 @@ internal static class MySqlExpressionCanonicalizer
             {
                 var start = index++;
                 while (index < expression.Length
-                       && (expression[index] == '_'
-                           || expression[index] == '$'
-                           || char.IsLetterOrDigit(expression[index])))
+                    && (expression[index] == '_'
+                        || expression[index] == '$'
+                        || char.IsLetterOrDigit(expression[index])))
                 {
                     index++;
                 }
@@ -264,7 +278,7 @@ internal static class MySqlExpressionCanonicalizer
                     caseDepth++;
                 }
                 else if (word == "end"
-                         && caseDepth > 0)
+                    && caseDepth > 0)
                 {
                     caseDepth--;
                 }
@@ -346,6 +360,7 @@ internal static class MySqlExpressionCanonicalizer
         var inner = token[1..^1]
             .Replace(new string(quote, 2), quote.ToString(), StringComparison.Ordinal)
             .Replace("\\", "\\\\", StringComparison.Ordinal)
+
             // WHY: MySQL's catalog display escapes the literal's own quote
             // before escaping its surrounding serialized string. A value
             // apostrophe therefore has three backslashes, not the delimiter's one.
@@ -361,10 +376,11 @@ internal static class MySqlExpressionCanonicalizer
     )
     {
         while (expression is ['(', _, ..]
-               && expression[^1] == ')'
-               && OuterParenthesesEncloseExpression(expression))
+            && expression[^1] == ')'
+            && OuterParenthesesEncloseExpression(expression))
         {
-            expression = expression[1..^1].Trim();
+            expression = expression[1..^1]
+                .Trim();
         }
 
         return expression;
@@ -376,6 +392,7 @@ internal static class MySqlExpressionCanonicalizer
     {
         var depth = 0;
         var quote = '\0';
+
         // WHY: Track quote escapes and parenthesis depth at exact UTF-16 offsets before slicing SQL.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -436,4 +453,9 @@ internal static class MySqlExpressionCanonicalizer
 
         return depth == 0 && quote == '\0';
     }
+
+    private readonly record struct CatalogToken(
+        string Text,
+        bool IsTopLevelBooleanOperator = false
+    );
 }

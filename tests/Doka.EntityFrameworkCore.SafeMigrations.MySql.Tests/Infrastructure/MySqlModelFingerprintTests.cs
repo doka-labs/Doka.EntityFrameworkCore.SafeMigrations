@@ -18,6 +18,7 @@ public sealed class MySqlModelFingerprintTests
             "safe-relational-model:v1:Doka.EntityFrameworkCore.MySql:sha256:",
             firstFingerprint,
             StringComparison.Ordinal);
+
         Assert.Equal(64, firstFingerprint[(firstFingerprint.LastIndexOf(':') + 1)..].Length);
         Assert.Equal(
             "safe-relational-model:v1:Doka.EntityFrameworkCore.MySql:sha256:"
@@ -40,6 +41,7 @@ public sealed class MySqlModelFingerprintTests
         using var context = new JsonArtifactContext();
         var model = context.GetService<IDesignTimeModel>()
             .Model;
+
         var jsonColumn = model
             .GetRelationalModel()
             .Tables
@@ -87,6 +89,7 @@ public sealed class MySqlModelFingerprintTests
                     .Property(static value => value.Name)
                     .HasMaxLength(maxLength)
                     .UseCollation("utf8mb4_bin");
+
                 entity
                     .HasIndex(static value => value.Name)
                     .HasDatabaseName("ix_alpha_name");
@@ -193,7 +196,7 @@ public sealed class MySqlModelFingerprintTests
     {
         public string Name { get; set; } = string.Empty;
 
-        public JsonArtifactDetails Details { get; set; } = new();
+        public JsonArtifactDetails Details { get; } = new();
     }
 
     private sealed class JsonArtifactDetails

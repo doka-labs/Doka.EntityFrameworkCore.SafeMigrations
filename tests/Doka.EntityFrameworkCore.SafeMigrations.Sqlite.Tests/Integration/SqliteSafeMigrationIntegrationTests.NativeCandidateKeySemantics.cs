@@ -18,19 +18,28 @@ public sealed class SqliteSafeMigrationNativeCandidateKeySemanticsIntegrationTes
     public async Task NativeCandidateKey_DefaultDefinitionCannotMatchDifferentPhysicalSemantics(
         SafeMigrationOperationKind kind,
         string keySql,
-        bool matches)
+        bool matches
+    )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        var keyName = kind == SafeMigrationOperationKind.EnsurePrimaryKey ? "pk_native_parent" : "uq_native_parent";
-        var keyKind = kind == SafeMigrationOperationKind.EnsurePrimaryKey ? "PRIMARY KEY" : "UNIQUE";
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        var keyName = kind == SafeMigrationOperationKind.EnsurePrimaryKey
+            ? "pk_native_parent"
+            : "uq_native_parent";
+
+        var keyKind = kind == SafeMigrationOperationKind.EnsurePrimaryKey
+            ? "PRIMARY KEY"
+            : "UNIQUE";
 
         // WHY: INTEGER table-level primary keys can alias rowid and ignore
         // apparent key clauses. TEXT forces an observable native key index,
         // so collation and sort counterfactuals test real physical semantics.
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             $"CREATE TABLE constraint_parents (Id TEXT NOT NULL, CONSTRAINT {keyName} {keyKind}({keySql})); "
-            + "INSERT INTO constraint_parents(Id) VALUES(1);");
+            + "INSERT INTO constraint_parents(Id) VALUES(1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (kind == SafeMigrationOperationKind.EnsurePrimaryKey)
@@ -43,18 +52,45 @@ public sealed class SqliteSafeMigrationNativeCandidateKeySemanticsIntegrationTes
         }
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-native-key-semantics"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-native-key-semantics"),
+                cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connection, "SELECT COUNT(*) FROM constraint_parents WHERE Id = 1;");
+        var rows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM constraint_parents WHERE Id = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
-        Assert.Equal(matches ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(matches ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
+        Assert.Equal(
+            matches
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
+            report.Status);
+
+        Assert.Equal(
+            matches
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different,
             assessment.ObservedState);
-        Assert.Equal(matches ? SafeMigrationAction.NoOp : SafeMigrationAction.RejectDifferent, assessment.Action);
-        Assert.Equal(matches ? "classified_matching" : "classified_different", assessment.AnalysisCode);
+
+        Assert.Equal(
+            matches
+                ? SafeMigrationAction.NoOp
+                : SafeMigrationAction.RejectDifferent,
+            assessment.Action);
+
+        Assert.Equal(
+            matches
+                ? "classified_matching"
+                : "classified_different",
+            assessment.AnalysisCode);
+
         if (matches)
         {
             Assert.Empty(assessment.Differences);
@@ -63,9 +99,12 @@ public sealed class SqliteSafeMigrationNativeCandidateKeySemanticsIntegrationTes
         {
             var difference = Assert.Single(assessment.Differences);
 
-            Assert.Equal(kind == SafeMigrationOperationKind.EnsurePrimaryKey
-                ? "primary_key_key_semantics"
-                : "unique_key_semantics", difference.Facet);
+            Assert.Equal(
+                kind == SafeMigrationOperationKind.EnsurePrimaryKey
+                    ? "primary_key_key_semantics"
+                    : "unique_key_semantics",
+                difference.Facet);
+
             Assert.Equal("declared_column_collations_ascending", difference.Expected);
             Assert.Equal("different", difference.Actual);
         }

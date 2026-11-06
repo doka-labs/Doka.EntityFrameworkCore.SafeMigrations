@@ -21,7 +21,7 @@ on:
         default: 14
         type: number
       capture-sqlserver-baseline:
-        description: Capture diagnostic medians in addition to informational benchmark reports.
+        description: Retain a SQL Server BenchmarkDotNet Short run in addition to execution smoke evidence.
         required: false
         default: false
         type: boolean
@@ -65,6 +65,7 @@ jobs:
           python3 -m unittest eng/tests/test_dependency_license_exceptions.py -v
           python3 -m unittest eng/tests/test_dependency_snapshot_inputs.py -v
           python3 -m unittest eng/tests/test_dependency_review_workflow.py -v
+          python3 -m unittest eng/tests/test_benchmark_workflow.py -v
           python3 -m unittest eng/tests/test_dependency_review_handoff.py -v
           python3 -m unittest eng/tests/test_parallel_test_configuration.py -v
           python3 -m unittest eng/tests/test_runner_configuration.py -v
@@ -124,53 +125,53 @@ jobs:
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks.csproj
           --configuration Release --no-build --no-restore --
-          --capture-baseline --output artifacts/performance/sqlserver-baseline.json
+          --filter '*' --job Short --artifacts artifacts/performance/sqlserver-baseline
 
       - name: Upload SQL Server baseline evidence
         if: ${{ always() && inputs.capture-sqlserver-baseline }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sqlserver-baseline-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifacts/performance/sqlserver-baseline.json
-          if-no-files-found: warn
+          path: artifacts/performance/sqlserver-baseline
+          if-no-files-found: error
           retention-days: ${{ inputs.artifact-retention-days }}
 
-      # Budget overruns are evidence, not CI failures on shared runner hardware.
-      # Report-only preserves fatal configuration, execution and output errors.
-      - name: Core performance and allocation report
+      # Dry validates case execution and full JSON export, not statistical performance.
+      # Configuration, build, execution and missing/invalid evidence remain fatal.
+      - name: Core BenchmarkDotNet execution smoke
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj
           --configuration Release --no-build --no-restore --
-          --report-only --output artifacts/performance/core-results.json
+          --filter '*' --job Dry --artifacts artifacts/performance/core
 
-      - name: MySQL and MariaDB performance and allocation report
+      - name: MySQL and MariaDB BenchmarkDotNet execution smoke
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks.csproj
           --configuration Release --no-build --no-restore --
-          --report-only --output artifacts/performance/mysql-results.json
+          --filter '*' --job Dry --artifacts artifacts/performance/mysql
 
-      - name: PostgreSQL performance and allocation report
+      - name: PostgreSQL BenchmarkDotNet execution smoke
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj
           --configuration Release --no-build --no-restore --
-          --report-only --output artifacts/performance/postgresql-results.json
+          --filter '*' --job Dry --artifacts artifacts/performance/postgresql
 
-      - name: SQLite performance and allocation report
+      - name: SQLite BenchmarkDotNet execution smoke
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks.csproj
           --configuration Release --no-build --no-restore --
-          --report-only --output artifacts/performance/sqlite-results.json
+          --filter '*' --job Dry --artifacts artifacts/performance/sqlite
 
-      - name: SQL Server performance and allocation report
+      - name: SQL Server BenchmarkDotNet execution smoke
         run: >-
           dotnet run
           --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks.csproj
           --configuration Release --no-build --no-restore --
-          --report-only --output artifacts/performance/sqlserver-results.json
+          --filter '*' --job Dry --artifacts artifacts/performance/sqlserver
 
       - name: Qualify reproducible packages
         env:

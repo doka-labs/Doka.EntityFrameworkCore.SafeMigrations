@@ -25,8 +25,13 @@ public sealed class MySqlSignedIntegerWideningTests
     [InlineData("custom_int", "bigint", typeof(int), typeof(long), false)]
     [InlineData("tinyint", "bigint", typeof(bool), typeof(long), false)]
     [InlineData("int", "bigint", typeof(int), typeof(int), false)]
-    public void SignedStorageDomainsRemainExact(string sourceType, string targetType, Type sourceClr,
-        Type targetClr, bool expected)
+    public void SignedStorageDomainsRemainExact(
+        string sourceType,
+        string targetType,
+        Type sourceClr,
+        Type targetClr,
+        bool expected
+    )
     {
         // Arrange
         var source = new ExpectedColumnDefinition("value", sourceClr, false, sourceType);
@@ -50,20 +55,38 @@ public sealed class MySqlSignedIntegerWideningTests
     [InlineData("generation")]
     [InlineData("computed")]
     [InlineData("precision")]
-    public void NonTypeFacetChangesAreRejected(string facet)
+    public void NonTypeFacetChangesAreRejected(
+        string facet
+    )
     {
         // Arrange
         var source = new ExpectedColumnDefinition("value", typeof(int), false, "int");
-        var target = new ExpectedColumnDefinition("value", typeof(long), facet == "nullable", "bigint",
-            precision: facet == "precision" ? 19 : null,
-            collation: facet == "collation" ? new SafeMigrationCollationIdentifier("utf8mb4_unicode_ci") : null,
-            comment: facet == "comment" ? "changed" : null,
-            defaultValue: facet == "default" ? SafeMigrationDefaultValue.Literal(1L)
-                : facet == "sql_default" ? SafeMigrationDefaultValue.Sql("1") : null,
-            computedColumnSql: facet == "computed" ? "1" : null)
+        var target = new ExpectedColumnDefinition(
+            "value",
+            typeof(long),
+            facet == "nullable",
+            "bigint",
+            precision: facet == "precision"
+                ? 19
+                : null,
+            collation: facet == "collation"
+                ? new SafeMigrationCollationIdentifier("utf8mb4_unicode_ci")
+                : null,
+            comment: facet == "comment"
+                ? "changed"
+                : null,
+            defaultValue: facet == "default"
+                ? SafeMigrationDefaultValue.Literal(1L)
+                : facet == "sql_default"
+                    ? SafeMigrationDefaultValue.Sql("1")
+                    : null,
+            computedColumnSql: facet == "computed"
+                ? "1"
+                : null)
         {
             ProviderAnnotations = facet == "generation"
-                ? AutoIncrementMetadata() : [],
+                ? AutoIncrementMetadata()
+                : [],
         };
 
         // Act
@@ -78,9 +101,18 @@ public sealed class MySqlSignedIntegerWideningTests
     public void EqualSignedLiteralDefaultsArePreserved()
     {
         // Arrange
-        var source = new ExpectedColumnDefinition("value", typeof(int), false, "int",
+        var source = new ExpectedColumnDefinition(
+            "value",
+            typeof(int),
+            false,
+            "int",
             defaultValue: SafeMigrationDefaultValue.Literal(int.MinValue));
-        var target = new ExpectedColumnDefinition("value", typeof(long), false, "bigint",
+
+        var target = new ExpectedColumnDefinition(
+            "value",
+            typeof(long),
+            false,
+            "bigint",
             defaultValue: SafeMigrationDefaultValue.Literal((long)int.MinValue));
 
         // Act

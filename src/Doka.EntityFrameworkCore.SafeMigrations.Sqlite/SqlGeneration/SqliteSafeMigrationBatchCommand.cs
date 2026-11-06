@@ -3,16 +3,16 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 /// <summary>Executes one ordered SQLite structural segment as an atomic guarded batch.</summary>
 internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
 {
-    private readonly ISqliteSafeMigrationsBaselineGenerator _baselineGenerator;
     private readonly SqliteSafeMigrationProviderAnalyzer _analyzer;
+    private readonly ISqliteSafeMigrationsBaselineGenerator _baselineGenerator;
     private readonly SqliteSafeMigrationExecutionState _executionState;
     private readonly SqliteSafeMigrationSqlExpressionRenderer _expressionRenderer;
+    private readonly int _firstOperationOrdinal;
     private readonly IModel? _model;
     private readonly IReadOnlyList<MigrationOperation> _operations;
     private readonly MigrationsSqlGenerationOptions _options;
     private readonly SqliteRebuildArtifactContract _rebuildArtifacts;
     private readonly bool _requiresForeignKeySuspension;
-    private readonly int _firstOperationOrdinal;
 
     /// <summary>Initializes an ordered SQLite structural batch.</summary>
     public SqliteSafeMigrationBatchCommand(
@@ -79,7 +79,8 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
     {
         if (connection.CurrentTransaction is not null)
         {
-            return ExecuteInCurrentTransaction(connection, parameterValues).Affected;
+            return ExecuteInCurrentTransaction(connection, parameterValues)
+                .Affected;
         }
 
         using var localTransaction = connection.BeginTransaction();
@@ -121,6 +122,7 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
             try
             {
                 var affected = ExecuteInCurrentTransaction(connection, parameterValues);
+
                 // WHY: A batch containing only accepted no-ops never rebuilds
                 // an owner. Auditing unrelated pre-existing orphans would turn
                 // an idempotent absence into a rejection without any mutation.
@@ -203,8 +205,12 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
 
             if (decision.Action.RejectsExecution())
             {
-                throw new InvalidOperationException(SqliteSafeMigrationDiagnosticMessages.FormatBlocked(
-                    safeOperation, analysis, decision, _firstOperationOrdinal + operationIndex));
+                throw new InvalidOperationException(
+                    SqliteSafeMigrationDiagnosticMessages.FormatBlocked(
+                        safeOperation,
+                        analysis,
+                        decision,
+                        _firstOperationOrdinal + operationIndex));
             }
 
             projection.Observe(safeOperation, liveAnalysis, analysis, decision);
@@ -214,7 +220,9 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
                     SafeMigrationStandardOperationFactory.Create(
                         safeOperation.Intent,
                         _expressionRenderer.Render,
-                        static collation => collation.Schema is null ? collation.Name : null));
+                        static collation => collation.Schema is null
+                            ? collation.Name
+                            : null));
             }
         }
 
@@ -232,17 +240,20 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
         {
             if (candidate is SafeMigrationOperation safeOperation)
             {
-                postconditions.Add(_analyzer.Analyze(
-                    postSnapshot,
-                    connection.DbConnection,
-                    transaction,
-                    safeOperation,
-                    _rebuildArtifacts));
+                postconditions.Add(
+                    _analyzer.Analyze(
+                        postSnapshot,
+                        connection.DbConnection,
+                        transaction,
+                        safeOperation,
+                        _rebuildArtifacts));
             }
         }
 
         var renamedTables = SafeMigrationPostflightProjection.CreateRenamedTableProbes(
-            _operations, postconditions, _analyzer);
+            _operations,
+            postconditions,
+            _analyzer);
 
         if (renamedTables is not null)
         {
@@ -253,7 +264,11 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
             foreach (var probe in renamedTables)
             {
                 postconditions[probe.SafeOrdinal] = _analyzer.Analyze(
-                    postSnapshot, connection.DbConnection, transaction, probe.Operation, _rebuildArtifacts);
+                    postSnapshot,
+                    connection.DbConnection,
+                    transaction,
+                    probe.Operation,
+                    _rebuildArtifacts);
             }
         }
 
@@ -278,11 +293,14 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
 
             var postcondition = postconditions[safeOrdinal++];
 
-            if (!postcondition.PostconditionSatisfied && !postflight.IsSuperseded(index))
+            if (!postcondition.PostconditionSatisfied
+                && !postflight.IsSuperseded(index))
             {
                 throw new InvalidOperationException(
                     SafeMigrationDiagnosticMessages.FormatPostcondition(
-                        operation, postcondition, _firstOperationOrdinal + index));
+                        operation,
+                        postcondition,
+                        _firstOperationOrdinal + index));
             }
         }
 
@@ -293,7 +311,8 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
     private int ExecuteAcceptedOperations(
         IRelationalConnection connection,
         IReadOnlyDictionary<string, object?>? parameterValues,
-        List<MigrationOperation> operations)
+        List<MigrationOperation> operations
+    )
     {
         Dictionary<string, CreateTableOperation>? creators = null;
         var windowStart = 0;
@@ -312,8 +331,8 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
                 _ = creators.TryAdd(create.Name, create);
             }
             else if (operations[ordinal] is AddForeignKeyOperation foreignKey
-                     && creators?.TryGetValue(foreignKey.Table, out var creator) == true
-                     && !CreatorContainsForeignKeyColumns(creator, foreignKey))
+                && creators?.TryGetValue(foreignKey.Table, out var creator) == true
+                && !CreatorContainsForeignKeyColumns(creator, foreignKey))
             {
                 // WHY: EF 10's private rewrite otherwise embeds the FK before
                 // its separately authored ADD column, yielding invalid DDL.
@@ -321,14 +340,24 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
                 // owned transaction; final snapshot and integrity checks stay
                 // shared and strict table column contracts remain unchanged.
                 affected += ExecuteAcceptedWindow(
-                    connection, parameterValues, operations, windowStart, ordinal - windowStart);
+                    connection,
+                    parameterValues,
+                    operations,
+                    windowStart,
+                    ordinal - windowStart);
+
                 windowStart = ordinal;
                 creators.Clear();
             }
         }
 
-        return affected + ExecuteAcceptedWindow(
-            connection, parameterValues, operations, windowStart, operations.Count - windowStart);
+        return affected
+            + ExecuteAcceptedWindow(
+                connection,
+                parameterValues,
+                operations,
+                windowStart,
+                operations.Count - windowStart);
     }
 
     /// <summary>Executes one baseline window without allocating a slice on the normal unsplit path.</summary>
@@ -337,10 +366,12 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
         IReadOnlyDictionary<string, object?>? parameterValues,
         List<MigrationOperation> operations,
         int start,
-        int count)
+        int count
+    )
     {
         IReadOnlyList<MigrationOperation> window = start == 0 && count == operations.Count
-            ? operations : operations.GetRange(start, count);
+            ? operations
+            : operations.GetRange(start, count);
 
         var commands = _baselineGenerator.Generate(window, _model, _options, guardedOperations: _operations);
 
@@ -350,7 +381,8 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
     /// <summary>Checks only declared local creator columns, never future ADDs or target-model wishes.</summary>
     private static bool CreatorContainsForeignKeyColumns(
         CreateTableOperation creator,
-        AddForeignKeyOperation foreignKey)
+        AddForeignKeyOperation foreignKey
+    )
     {
         // WHY: Check each required FK member against the creator's explicitly indexed column list.
         // ReSharper disable once ForCanBeConvertedToForeach
@@ -365,7 +397,8 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
             for (var candidate = 0; candidate < creator.Columns.Count; candidate++)
             {
                 if (SqliteIdentifierComparer.Instance.Equals(
-                        creator.Columns[candidate].Name, foreignKey.Columns[ordinal]))
+                    creator.Columns[candidate].Name,
+                    foreignKey.Columns[ordinal]))
                 {
                     present = true;
                     break;
@@ -504,6 +537,7 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
         command.CommandText = enabled
             ? "PRAGMA foreign_keys = ON;"
             : "PRAGMA foreign_keys = OFF;";
+
         _ = command.ExecuteNonQuery();
 
         if (ReadForeignKeysEnabled(connection) != enabled)
@@ -533,15 +567,24 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
 
             // WHY: PRAGMA's second field is a row key, not structural context.
             // Keep integrity failures actionable without disclosing that value.
-            var principal = reader.IsDBNull(2) ? null : reader.GetString(2);
-            var foreignKeyOrdinal = reader.IsDBNull(3) ? (long?)null : reader.GetInt64(3);
+            var principal = reader.IsDBNull(2)
+                ? null
+                : reader.GetString(2);
+
+            var foreignKeyOrdinal = reader.IsDBNull(3)
+                ? (long?)null
+                : reader.GetInt64(3);
+
             var foreignKey = snapshot.Tables.TryGetValue(validationTable, out var owner)
                 ? owner.ForeignKeys.FirstOrDefault(candidate => candidate.Id == foreignKeyOrdinal)
                 : null;
 
             throw new InvalidOperationException(
                 SqliteSafeMigrationDiagnosticMessages.FormatForeignKeyValidation(
-                    validationTable, principal, foreignKeyOrdinal, foreignKey));
+                    validationTable,
+                    principal,
+                    foreignKeyOrdinal,
+                    foreignKey));
         }
     }
 
@@ -551,7 +594,11 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
 
     private static bool IsForeignKeyPragma(
         MigrationCommand command
-    ) => command.CommandText.AsSpan().Trim().StartsWith(
-        "PRAGMA foreign_keys",
-        StringComparison.OrdinalIgnoreCase);
+    ) => command
+        .CommandText
+        .AsSpan()
+        .Trim()
+        .StartsWith(
+            "PRAGMA foreign_keys",
+            StringComparison.OrdinalIgnoreCase);
 }

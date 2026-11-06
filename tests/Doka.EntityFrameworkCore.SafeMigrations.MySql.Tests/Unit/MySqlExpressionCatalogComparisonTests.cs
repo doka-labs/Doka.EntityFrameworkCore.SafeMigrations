@@ -15,9 +15,14 @@ public sealed class MySqlExpressionCatalogComparisonTests
 
         // Assert
         Assert.Contains("CONVERT(catalog USING utf8mb4)", predicate, StringComparison.Ordinal);
-        Assert.Contains("SUBSTRING(CAST(CONVERT(catalog USING utf8mb4) AS BINARY), 8, 6)", predicate,
+        Assert.Contains(
+            "SUBSTRING(CAST(CONVERT(catalog USING utf8mb4) AS BINARY), 8, 6)",
+            predicate,
             StringComparison.Ordinal);
-        Assert.Contains("SUBSTRING(CAST(CONVERT(catalog USING utf8mb4) AS BINARY), 26, 6)", predicate,
+
+        Assert.Contains(
+            "SUBSTRING(CAST(CONVERT(catalog USING utf8mb4) AS BINARY), 26, 6)",
+            predicate,
             StringComparison.Ordinal);
     }
 
@@ -86,5 +91,7 @@ public sealed class MySqlExpressionCatalogComparisonTests
     }
 
     /// <summary>Tests parameter-role placement without interpreting or executing the SQL expression.</summary>
-    private static string Literal(string value) => "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+    private static string Literal(
+        string value
+    ) => "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
 }

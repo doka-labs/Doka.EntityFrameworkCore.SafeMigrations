@@ -4,7 +4,8 @@ internal static class SafeMigrationAttributedEnumName
 {
     public static TEnum Parse<TEnum>(
         string value
-    ) where TEnum : struct, Enum
+    )
+        where TEnum : struct, Enum
     {
         if (Enum.TryParse<TEnum>(value, ignoreCase: true, out var parsed))
         {
@@ -14,13 +15,17 @@ internal static class SafeMigrationAttributedEnumName
         foreach (var candidate in Enum.GetValues<TEnum>())
         {
             var member = Member(candidate);
-            var jsonName = member.GetCustomAttribute<JsonStringEnumMemberNameAttribute>()?.Name;
+            var jsonName = member.GetCustomAttribute<JsonStringEnumMemberNameAttribute>()
+                ?.Name;
+
             if (StringComparer.OrdinalIgnoreCase.Equals(jsonName, value))
             {
                 return candidate;
             }
 
-            var contractName = member.GetCustomAttribute<EnumMemberAttribute>()?.Value;
+            var contractName = member.GetCustomAttribute<EnumMemberAttribute>()
+                ?.Value;
+
             if (StringComparer.OrdinalIgnoreCase.Equals(contractName, value))
             {
                 return candidate;
@@ -35,18 +40,22 @@ internal static class SafeMigrationAttributedEnumName
 
     public static string Format<TEnum>(
         TEnum value
-    ) where TEnum : struct, Enum
+    )
+        where TEnum : struct, Enum
     {
         var member = Member(value);
 
-        return member.GetCustomAttribute<JsonStringEnumMemberNameAttribute>()?.Name
-            ?? member.GetCustomAttribute<EnumMemberAttribute>()?.Value
+        return member.GetCustomAttribute<JsonStringEnumMemberNameAttribute>()
+                ?.Name
+            ?? member.GetCustomAttribute<EnumMemberAttribute>()
+                ?.Value
             ?? value.ToString();
     }
 
     public static int MaximumLength<TEnum>(
         int defaultMaximumLength = 0
-    ) where TEnum : struct, Enum
+    )
+        where TEnum : struct, Enum
     {
         var maximumLength = defaultMaximumLength;
         foreach (var name in Enum.GetNames<TEnum>())
@@ -56,7 +65,9 @@ internal static class SafeMigrationAttributedEnumName
 
         foreach (var value in Enum.GetValues<TEnum>())
         {
-            maximumLength = Math.Max(maximumLength, Format(value).Length);
+            maximumLength = Math.Max(maximumLength,
+                Format(value)
+                    .Length);
         }
 
         return maximumLength;
@@ -64,7 +75,8 @@ internal static class SafeMigrationAttributedEnumName
 
     private static MemberInfo Member<TEnum>(
         TEnum value
-    ) where TEnum : struct, Enum
+    )
+        where TEnum : struct, Enum
     {
         var members = typeof(TEnum).GetMember(value.ToString());
 

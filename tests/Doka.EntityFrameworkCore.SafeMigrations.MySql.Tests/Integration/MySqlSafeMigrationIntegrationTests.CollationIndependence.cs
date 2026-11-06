@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the CollationIndependence migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlCollationIndependenceIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlCollationIndependenceIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlCollationIndependenceIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlCollationIndependenceIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>Generated guards run under a connection collation other than the character-set default.</summary>
     /// <remarks>
@@ -14,7 +16,6 @@ public sealed partial class MySqlCollationIndependenceIntegrationTests : MySqlSa
     /// collation rather than the connection collation. A set-oriented guard unites such a literal
     /// with plain ones, which raised error 1271 under utf8mb4_unicode_ci while passing under the
     /// server default. The analyzer path parameterises and therefore never reproduced it.
-    ///
     /// Both collations below exist on MySQL and on MariaDB, and each differs from the character
     /// set default of at least one of them, so the case is exercised on either engine.
     /// </remarks>
@@ -22,14 +23,17 @@ public sealed partial class MySqlCollationIndependenceIntegrationTests : MySqlSa
     [Theory]
     [InlineData("utf8mb4_general_ci")]
     [InlineData("utf8mb4_unicode_ci")]
-    public async Task GeneratedGuards_RunUnderAnyUtf8Mb4ConnectionCollation(string collation)
+    public async Task GeneratedGuards_RunUnderAnyUtf8Mb4ConnectionCollation(
+        string collation
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `collation_guard` (`plain` int NOT NULL, "
-            + "`escaped` int NOT NULL COMMENT 'a\\\\b');");
+            + "`escaped` int NOT NULL COMMENT 'a\\\\b');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);

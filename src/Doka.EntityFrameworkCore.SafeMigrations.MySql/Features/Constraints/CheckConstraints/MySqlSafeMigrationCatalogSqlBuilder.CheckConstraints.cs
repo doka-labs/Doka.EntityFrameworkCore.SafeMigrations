@@ -19,7 +19,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var exists = ConstraintExists(definition.Table, definition.Name, "CHECK");
         var matching = CheckConstraintMatches(definition, isMariaDb, requireExpectedName: true);
         var semanticAlias = CheckConstraintMatches(definition, isMariaDb, requireExpectedName: false);
-        var nameCollision = isMariaDb ? "FALSE" : DatabaseConstraintNameExists(definition.Name, "CHECK");
+        var nameCollision = isMariaDb
+            ? "FALSE"
+            : DatabaseConstraintNameExists(definition.Name, "CHECK");
+
         var dataBlocked = CheckConstraintDataBlocked(definition);
         var satisfied = $"({matching}) OR (NOT ({exists}) AND ({semanticAlias}))";
         var semanticCandidates = CheckConstraintMatchQuery(
@@ -28,19 +31,19 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             $"tc.CONSTRAINT_NAME <> {Literal(definition.Name)}");
 
         return Plan(
-            $"CASE WHEN NOT {BaseTableExists(definition.Table)} THEN 'prerequisite_missing' "
-            + $"WHEN {exists} AND {matching} THEN 'matching' "
-            + $"WHEN {exists} THEN 'different' "
-            + $"WHEN {semanticAlias} THEN 'matching' "
-            + $"WHEN {nameCollision} THEN 'different' "
-            + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
-            satisfied) with
-        {
-            MatchedObjectNameExpression = ResolveMatchingObjectName(
-                matching,
-                Literal(definition.Name),
-                semanticCandidates),
-        };
+                $"CASE WHEN NOT {BaseTableExists(definition.Table)} THEN 'prerequisite_missing' "
+                + $"WHEN {exists} AND {matching} THEN 'matching' "
+                + $"WHEN {exists} THEN 'different' "
+                + $"WHEN {semanticAlias} THEN 'matching' "
+                + $"WHEN {nameCollision} THEN 'different' "
+                + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
+                satisfied) with
+            {
+                MatchedObjectNameExpression = ResolveMatchingObjectName(
+                    matching,
+                    Literal(definition.Name),
+                    semanticCandidates),
+            };
     }
 
     private MySqlSafeMigrationRuntimePlan BuildDropCheckConstraint(
@@ -81,7 +84,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var candidates = new[]
             {
                 MySqlExpressionCanonicalizer.CreateComparisonCandidate(expression),
-                MySqlExpressionCanonicalizer.CreateComparisonCandidate($"({expression})")
+                MySqlExpressionCanonicalizer.CreateComparisonCandidate($"({expression})"),
             }
             .Concat(
                 MySqlExpressionCanonicalizer.BuildComparisonCandidates(
@@ -99,16 +102,23 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + "JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc "
             + "ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA "
             + "AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME "
+
             // MariaDB 12.1 made user-visible constraint names table-scoped.
             // MySQL's catalog omits TABLE_NAME because names remain schema-wide.
-            + (isMariaDb ? "AND cc.TABLE_NAME = tc.TABLE_NAME " : string.Empty)
+            + (isMariaDb
+                ? "AND cc.TABLE_NAME = tc.TABLE_NAME "
+                : string.Empty)
             + $"WHERE tc.CONSTRAINT_SCHEMA = DATABASE() AND tc.TABLE_NAME = {Literal(definition.Table)} "
             + $"AND {namePredicate} "
             + "AND tc.CONSTRAINT_TYPE = 'CHECK' "
+
             // A disabled MySQL check has the same catalog expression but does
             // not enforce the contract. MariaDB does not expose this facet.
-            + (isMariaDb ? string.Empty : "AND tc.ENFORCED = 'YES' ")
-            + "AND " + MySqlExpressionCatalogComparison.Build("cc.CHECK_CLAUSE", candidates, Literal);
+            + (isMariaDb
+                ? string.Empty
+                : "AND tc.ENFORCED = 'YES' ")
+            + "AND "
+            + MySqlExpressionCatalogComparison.Build("cc.CHECK_CLAUSE", candidates, Literal);
     }
 
     private string CheckConstraintSatisfied(
@@ -127,7 +137,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         ExpectedCheckConstraintDefinition definition
     )
     {
-        var expression = definition.CapturedSql ?? definition.Sql
+        var expression = definition.CapturedSql
+            ?? definition.Sql
             ?? MySqlCapturedExpressionContract.RenderExecutable(definition.Expression!, _expressionRenderer);
 
         return $"EXISTS (SELECT 1 FROM {Delimited(definition.Table, definition.Schema)} "

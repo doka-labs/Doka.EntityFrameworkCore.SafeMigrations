@@ -16,9 +16,19 @@ public sealed class CoreSchedulingContractTests
         var root = configuration.RootElement;
 
         // Assert
-        Assert.True(root.GetProperty("parallelizeAssembly").GetBoolean());
-        Assert.True(root.GetProperty("parallelizeTestCollections").GetBoolean());
-        Assert.Equal("conservative", root.GetProperty("parallelAlgorithm").GetString());
+        Assert.True(root
+            .GetProperty("parallelizeAssembly")
+            .GetBoolean());
+
+        Assert.True(root
+            .GetProperty("parallelizeTestCollections")
+            .GetBoolean());
+
+        Assert.Equal("conservative",
+            root
+                .GetProperty("parallelAlgorithm")
+                .GetString());
+
         Assert.False(root.TryGetProperty("parallelizeAssemblies", out _));
         Assert.False(root.TryGetProperty("maxParallelThreads", out _));
     }
@@ -36,17 +46,19 @@ public sealed class CoreSchedulingContractTests
             typeof(SafeMigrationDiagnosticTruncationAllocationTests),
             typeof(SafeMigrationDiagnosticMessagesAllocationTests),
             typeof(SafeMigrationModelManagedKeyIdentityAllocationTests),
-            typeof(Infrastructure.BenchmarkRunnerMeasurementTests),
         ];
 
         // Act
-        var actual = typeof(CoreSchedulingContractTests).Assembly.GetTypes()
+        var actual = typeof(CoreSchedulingContractTests)
+            .Assembly
+            .GetTypes()
             .Where(static type => CollectionName(type) == ProcessWideTestGroup.Name);
 
         var definition = typeof(ProcessWideTestGroup).GetCustomAttribute<CollectionDefinitionAttribute>();
 
         // Assert
-        Assert.Equal(expected.OrderBy(static type => type.FullName, StringComparer.Ordinal),
+        Assert.Equal(
+            expected.OrderBy(static type => type.FullName, StringComparer.Ordinal),
             actual.OrderBy(static type => type.FullName, StringComparer.Ordinal));
 
         Assert.NotNull(definition);
@@ -92,21 +104,17 @@ public sealed class CoreSchedulingContractTests
                 nameof(SafeMigrationModelManagedKeyIdentityAllocationTests
                     .CompositeKeyAlreadyOrderedPathAvoidsAllocations),
             ],
-            [typeof(Infrastructure.BenchmarkRunnerMeasurementTests)] =
-            [
-                nameof(Infrastructure.BenchmarkRunnerMeasurementTests.CompletePreservesExceededBudgetEvidence),
-                nameof(Infrastructure.BenchmarkRunnerMeasurementTests.CompleteAcceptsMeasurementsWithinBudgets),
-                nameof(Infrastructure.BenchmarkRunnerMeasurementTests.MeasureRejectsDuplicateBenchmarkNames),
-                nameof(Infrastructure.BenchmarkRunnerMeasurementTests.MeasurePropagatesExecutionFailures),
-                nameof(Infrastructure.BenchmarkRunnerMeasurementTests.CompletePropagatesOutputFailures),
-                nameof(Infrastructure.BenchmarkRunnerMeasurementTests.CompleteHonorsCommandLineBudgetPolicy),
-            ],
         };
 
         // Act
-        var actual = expected.Keys.ToDictionary(static type => type,
-            static type => type.GetMethods().Where(static method => method.IsDefined(typeof(FactAttribute), true))
-                .Select(static method => method.Name).OrderBy(static name => name, StringComparer.Ordinal).ToArray());
+        var actual = expected.Keys.ToDictionary(
+            static type => type,
+            static type => type
+                .GetMethods()
+                .Where(static method => method.IsDefined(typeof(FactAttribute), true))
+                .Select(static method => method.Name)
+                .OrderBy(static name => name, StringComparer.Ordinal)
+                .ToArray());
 
         // Assert
         foreach (var (type, methods) in expected)
@@ -114,9 +122,6 @@ public sealed class CoreSchedulingContractTests
             Assert.Equal(typeof(object), type.BaseType);
             Assert.Equal(methods.OrderBy(static name => name, StringComparer.Ordinal), actual[type]);
         }
-
-        Assert.DoesNotContain(typeof(Infrastructure.BenchmarkFixture).GetMethods(),
-            static method => method.IsDefined(typeof(FactAttribute), true));
     }
 
     /// <summary>
@@ -134,16 +139,20 @@ public sealed class CoreSchedulingContractTests
             typeof(SafeMigrationDiagnosticMessagesTests),
             typeof(SafeMigrationModelManagedKeyIdentityTests),
             typeof(SafeMigrationAnalysisTelemetryTests),
-            typeof(Infrastructure.BenchmarkRunnerTests),
         ];
 
         // Act
-        var collections = ordinary.Select(static type => type.GetCustomAttribute<CollectionAttribute>()).ToArray();
+        var collections = ordinary
+            .Select(static type => type.GetCustomAttribute<CollectionAttribute>())
+            .ToArray();
 
         // Assert
         Assert.All(collections, static collection => Assert.Null(collection));
-        Assert.All(ordinary, static type => Assert.Contains(type.GetMethods(),
-            static method => method.IsDefined(typeof(FactAttribute), true)));
+        Assert.All(
+            ordinary,
+            static type => Assert.Contains(
+                type.GetMethods(),
+                static method => method.IsDefined(typeof(FactAttribute), true)));
     }
 
     /// <summary>
@@ -160,8 +169,11 @@ public sealed class CoreSchedulingContractTests
         var collection = planner.GetCustomAttribute<CollectionAttribute>();
         var collectionName = CollectionName(planner);
         var definition = collectionDefinition.GetCustomAttribute<CollectionDefinitionAttribute>();
-        var methods = planner.GetMethods().Where(static method => method.IsDefined(typeof(FactAttribute), true))
-            .Select(static method => method.Name).ToArray();
+        var methods = planner
+            .GetMethods()
+            .Where(static method => method.IsDefined(typeof(FactAttribute), true))
+            .Select(static method => method.Name)
+            .ToArray();
 
         // Assert
         Assert.NotNull(collection);
@@ -169,17 +181,22 @@ public sealed class CoreSchedulingContractTests
         Assert.NotNull(definition);
         Assert.True(definition.DisableParallelization);
         Assert.Equal(
-            [nameof(SafeMigrationDecisionPlannerGarbageCollectionTests
-                .ActionOnly_DoesNotAllocateAfterGarbageCollection)],
+            [
+                nameof(SafeMigrationDecisionPlannerGarbageCollectionTests
+                    .ActionOnly_DoesNotAllocateAfterGarbageCollection),
+            ],
             methods);
     }
 
     /// <summary>Reads the constructor metadata used by xUnit v2 collection discovery.</summary>
     /// <param name="type">The test class whose declared collection is inspected.</param>
     /// <returns>The declared collection name, or null when no named collection is declared.</returns>
-    private static string? CollectionName(Type type)
+    private static string? CollectionName(
+        Type type
+    )
     {
-        var collection = type.GetCustomAttributesData()
+        var collection = type
+            .GetCustomAttributesData()
             .SingleOrDefault(static attribute => attribute.AttributeType == typeof(CollectionAttribute));
 
         // WHY: xUnit v2 exposes collection identity through discovery metadata, not a public Name property.

@@ -5,18 +5,26 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
 {
     /// <summary>Shares the engine while retaining one isolated database lease per test.</summary>
     /// <param name="fixture">The assembly-owned native engine.</param>
-    public MySqlPersistedStringDefaultIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlPersistedStringDefaultIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>Reopened TEXT defaults preserve actual newlines rather than their escaped spelling.</summary>
     /// <param name="noBackslashEscapes">Whether the defining session disables backslash escapes.</param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task EnsureColumnStructuredNewlineSurvivesPersistedDefaultReparse(bool noBackslashEscapes)
+    public async Task EnsureColumnStructuredNewlineSurvivesPersistedDefaultReparse(
+        bool noBackslashEscapes
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `persisted_defaults` (`id` int NOT NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `persisted_defaults` (`id` int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         var settings = new MySqlConnectionStringBuilder(connectionString)
         {
             NoBackslashEscapes = noBackslashEscapes,
@@ -24,34 +32,59 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
 
         await using var context = CreateContext(settings.ConnectionString);
         await context.Database.OpenConnectionAsync();
-        await SetEscapeModeAsync(context.Database.GetDbConnection(), noBackslashEscapes);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("persisted_defaults",
-            new ExpectedColumnDefinition("value", typeof(string), false, "text",
-                defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal("N\new")))),
+        await SetEscapeModeAsync(
+            context.Database.GetDbConnection(),
+            noBackslashEscapes,
+            cancellationToken: CancellationToken.None);
+
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "persisted_defaults",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(string),
+                    false,
+                    "text",
+                    defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal("N\new")))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("persisted-newline-default"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("persisted-newline-default"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, [operation]);
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         await context.Database.CloseConnectionAsync();
-        var stored = await InsertReopenedDefaultsAsync(connectionString);
+        var stored = await InsertReopenedDefaultsAsync(connectionString, cancellationToken: CancellationToken.None);
         await context.Database.OpenConnectionAsync();
-        await SetEscapeModeAsync(context.Database.GetDbConnection(), noBackslashEscapes);
-        var replay = await runner.AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("persisted-newline-default-replay"), CancellationToken.None);
+        await SetEscapeModeAsync(
+            context.Database.GetDbConnection(),
+            noBackslashEscapes,
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, [operation]);
+        var replay = await runner.AnalyzeAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("persisted-newline-default-replay"),
+            CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(preflight.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
         Assert.Equal(2, stored.Length);
         Assert.All(stored, static value => Assert.Equal("4E0A6577", value));
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replay.Assessments)
+                .Action);
     }
 
     /// <summary>Known defaults retain exact bytes across create, add, persistence and idempotent replay.</summary>
@@ -80,14 +113,17 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         bool createTable,
         bool structured,
         string value,
-        bool noBackslashEscapes)
+        bool noBackslashEscapes
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         if (!createTable)
         {
-            await ExecuteSqlAsync(connectionString,
-                "CREATE TABLE `persisted_defaults` (`id` int NOT NULL) DEFAULT CHARSET=utf8mb4;");
+            await ExecuteSqlAsync(
+                connectionString,
+                "CREATE TABLE `persisted_defaults` (`id` int NOT NULL) DEFAULT CHARSET=utf8mb4;",
+                cancellationToken: CancellationToken.None);
         }
 
         var settings = new MySqlConnectionStringBuilder(connectionString)
@@ -97,7 +133,11 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
 
         await using var context = CreateContext(settings.ConnectionString);
         await context.Database.OpenConnectionAsync();
-        await SetEscapeModeAsync(context.Database.GetDbConnection(), noBackslashEscapes);
+        await SetEscapeModeAsync(
+            context.Database.GetDbConnection(),
+            noBackslashEscapes,
+            cancellationToken: CancellationToken.None);
+
         var defaultValue = structured
             ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(value))
             : SafeMigrationDefaultValue.Literal(value);
@@ -106,7 +146,11 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         var expectedHex = Convert.ToHexString(Encoding.UTF8.GetBytes(value));
 
         // Act
-        var result = await ExecuteDefaultCycleAsync(context, connectionString, operation);
+        var result = await ExecuteDefaultCycleAsync(
+            context,
+            connectionString,
+            operation,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         AssertDefaultCycle(result, SafeMigrationAction.Apply, expectedHex);
@@ -124,13 +168,17 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     public async Task NestedStructuredDefaultsPreserveSelectedStringBranch(
         bool createTable,
         string value,
-        bool noBackslashEscapes)
+        bool noBackslashEscapes
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         if (!createTable)
         {
-            await ExecuteSqlAsync(connectionString, "CREATE TABLE `persisted_defaults` (`id` int NOT NULL);");
+            await ExecuteSqlAsync(
+                connectionString,
+                "CREATE TABLE `persisted_defaults` (`id` int NOT NULL);",
+                cancellationToken: CancellationToken.None);
         }
 
         var settings = new MySqlConnectionStringBuilder(connectionString)
@@ -140,16 +188,28 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
 
         await using var context = CreateContext(settings.ConnectionString);
         await context.Database.OpenConnectionAsync();
-        await SetEscapeModeAsync(context.Database.GetDbConnection(), noBackslashEscapes);
-        var expression = SafeMigrationSql.Function("COALESCE", SafeMigrationSql.Literal(null),
-            SafeMigrationSql.Function("COALESCE", SafeMigrationSql.Literal(value),
+        await SetEscapeModeAsync(
+            context.Database.GetDbConnection(),
+            noBackslashEscapes,
+            cancellationToken: CancellationToken.None);
+
+        var expression = SafeMigrationSql.Function(
+            "COALESCE",
+            SafeMigrationSql.Literal(null),
+            SafeMigrationSql.Function(
+                "COALESCE",
+                SafeMigrationSql.Literal(value),
                 SafeMigrationSql.Literal("unselected\\fallback")));
 
         var operation = CreateStringDefaultOperation(createTable, SafeMigrationDefaultValue.Sql(expression));
         var expectedHex = Convert.ToHexString(Encoding.UTF8.GetBytes(value));
 
         // Act
-        var result = await ExecuteDefaultCycleAsync(context, connectionString, operation);
+        var result = await ExecuteDefaultCycleAsync(
+            context,
+            connectionString,
+            operation,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         AssertDefaultCycle(result, SafeMigrationAction.Apply, expectedHex);
@@ -160,13 +220,18 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     [MySqlPersistedDefaultTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task AlterColumnNewlineBackfillAndReopenedDefaultAgree(bool noBackslashEscapes)
+    public async Task AlterColumnNewlineBackfillAndReopenedDefaultAgree(
+        bool noBackslashEscapes
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `persisted_defaults` (`id` int NOT NULL, `value` varchar(20) NULL) "
-            + "DEFAULT CHARSET=utf8mb4; INSERT INTO `persisted_defaults` VALUES (7, NULL);");
+            + "DEFAULT CHARSET=utf8mb4; INSERT INTO `persisted_defaults` VALUES (7, NULL);",
+            cancellationToken: CancellationToken.None);
+
         var settings = new MySqlConnectionStringBuilder(connectionString)
         {
             NoBackslashEscapes = noBackslashEscapes,
@@ -174,17 +239,34 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
 
         await using var context = CreateContext(settings.ConnectionString);
         await context.Database.OpenConnectionAsync();
-        await SetEscapeModeAsync(context.Database.GetDbConnection(), noBackslashEscapes);
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("persisted_defaults",
-            new ExpectedColumnDefinition("value", typeof(string), false, "text",
-                defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal("N\new"))),
-            new ExpectedColumnDefinition("value", typeof(string), true, "varchar(20)")),
+        await SetEscapeModeAsync(
+            context.Database.GetDbConnection(),
+            noBackslashEscapes,
+            cancellationToken: CancellationToken.None);
+
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "persisted_defaults",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(string),
+                    false,
+                    "text",
+                    defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal("N\new"))),
+                new ExpectedColumnDefinition("value", typeof(string), true, "varchar(20)")),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var result = await ExecuteDefaultCycleAsync(context, connectionString, operation);
-        var backfilled = await ScalarStringAsync(connectionString,
-            "SELECT HEX(`value`) FROM `persisted_defaults` WHERE `id` = 7;");
+        var result = await ExecuteDefaultCycleAsync(
+            context,
+            connectionString,
+            operation,
+            cancellationToken: CancellationToken.None);
+
+        var backfilled = await ScalarStringAsync(
+            connectionString,
+            "SELECT HEX(`value`) FROM `persisted_defaults` WHERE `id` = 7;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         AssertDefaultCycle(result, SafeMigrationAction.Repair, "4E0A6577");
@@ -198,13 +280,18 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task EnsureColumnDefaultRepairPreservesNullAndReopenedDefault(bool noBackslashEscapes)
+    public async Task EnsureColumnDefaultRepairPreservesNullAndReopenedDefault(
+        bool noBackslashEscapes
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `persisted_defaults` (`id` int NOT NULL, `value` text NULL) "
-            + "DEFAULT CHARSET=utf8mb4; INSERT INTO `persisted_defaults` VALUES (7, NULL);");
+            + "DEFAULT CHARSET=utf8mb4; INSERT INTO `persisted_defaults` VALUES (7, NULL);",
+            cancellationToken: CancellationToken.None);
+
         var settings = new MySqlConnectionStringBuilder(connectionString)
         {
             NoBackslashEscapes = noBackslashEscapes,
@@ -212,16 +299,33 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
 
         await using var context = CreateContext(settings.ConnectionString);
         await context.Database.OpenConnectionAsync();
-        await SetEscapeModeAsync(context.Database.GetDbConnection(), noBackslashEscapes);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("persisted_defaults",
-            new ExpectedColumnDefinition("value", typeof(string), true, "text",
-                defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal("N\new")))),
+        await SetEscapeModeAsync(
+            context.Database.GetDbConnection(),
+            noBackslashEscapes,
+            cancellationToken: CancellationToken.None);
+
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "persisted_defaults",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(string),
+                    true,
+                    "text",
+                    defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal("N\new")))),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var result = await ExecuteDefaultCycleAsync(context, connectionString, operation);
-        var unchanged = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `persisted_defaults` WHERE `id` = 7 AND `value` IS NULL;");
+        var result = await ExecuteDefaultCycleAsync(
+            context,
+            connectionString,
+            operation,
+            cancellationToken: CancellationToken.None);
+
+        var unchanged = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `persisted_defaults` WHERE `id` = 7 AND `value` IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         AssertDefaultCycle(result, SafeMigrationAction.Repair, "4E0A6577");
@@ -239,33 +343,51 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     [InlineData(false, "N\\new", "N\new")]
     [InlineData(true, "N\new", "N\\new")]
     [InlineData(true, "N\\new", "N\new")]
-    public async Task DistinctEscapedDefaultCannotBeAcceptedAsMatching(bool createTable, string expected, string actual)
+    public async Task DistinctEscapedDefaultCannotBeAcceptedAsMatching(
+        bool createTable,
+        string expected,
+        string actual
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var actualHex = Convert.ToHexString(Encoding.UTF8.GetBytes(actual));
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `persisted_defaults` (`id` int NOT NULL, "
             + "`value` text COLLATE utf8mb4_unicode_ci NOT NULL "
-            + $"DEFAULT (CONVERT(0x{actualHex} USING utf8mb4)));");
+            + $"DEFAULT (CONVERT(0x{actualHex} USING utf8mb4)));",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
-        var operation = CreateStringDefaultOperation(createTable,
+        var operation = CreateStringDefaultOperation(
+            createTable,
             SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(expected)));
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("distinct-persisted-default"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("distinct-persisted-default"),
+            CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var stored = await InsertReopenedDefaultsAsync(connectionString);
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [operation],
+            CancellationToken.None));
+
+        var stored = await InsertReopenedDefaultsAsync(connectionString, cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(preflight.Assessments);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
-        Assert.Equal("doka_sm_different", Assert.IsType<SafeMigrationExecutionException>(failure).GuardCode);
+        Assert.Equal("doka_sm_different",
+            Assert.IsType<SafeMigrationExecutionException>(failure)
+                .GuardCode);
+
         Assert.Equal(2, stored.Length);
         Assert.All(stored, value => Assert.Equal(actualHex, value));
     }
@@ -280,12 +402,18 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     [InlineData('\n', true)]
     [InlineData('\\', false)]
     [InlineData('\'', true)]
-    public async Task StructuredCharDefaultPreservesExactCharacter(char value, bool noBackslashEscapes)
+    public async Task StructuredCharDefaultPreservesExactCharacter(
+        char value,
+        bool noBackslashEscapes
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE `persisted_defaults` (`id` int NOT NULL) DEFAULT CHARSET=utf8mb4;");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `persisted_defaults` (`id` int NOT NULL) DEFAULT CHARSET=utf8mb4;",
+            cancellationToken: CancellationToken.None);
+
         var settings = new MySqlConnectionStringBuilder(connectionString)
         {
             NoBackslashEscapes = noBackslashEscapes,
@@ -293,16 +421,32 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
 
         await using var context = CreateContext(settings.ConnectionString);
         await context.Database.OpenConnectionAsync();
-        await SetEscapeModeAsync(context.Database.GetDbConnection(), noBackslashEscapes);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("persisted_defaults",
-            new ExpectedColumnDefinition("value", typeof(char), false, "char(1)", maxLength: 1, isFixedLength: true,
-                defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(value)))),
+        await SetEscapeModeAsync(
+            context.Database.GetDbConnection(),
+            noBackslashEscapes,
+            cancellationToken: CancellationToken.None);
+
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "persisted_defaults",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(char),
+                    false,
+                    "char(1)",
+                    maxLength: 1,
+                    isFixedLength: true,
+                    defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(value)))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var expectedHex = Convert.ToHexString(Encoding.UTF8.GetBytes(value.ToString()));
 
         // Act
-        var result = await ExecuteDefaultCycleAsync(context, connectionString, operation);
+        var result = await ExecuteDefaultCycleAsync(
+            context,
+            connectionString,
+            operation,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         AssertDefaultCycle(result, SafeMigrationAction.Apply, expectedHex);
@@ -315,12 +459,14 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     [MySqlPersistedDefaultTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task StrictPolicyRejectsLegacyModeDependentDefaultWithoutMutation(bool noBackslashEscapes)
+    public async Task StrictPolicyRejectsLegacyModeDependentDefaultWithoutMutation(
+        bool noBackslashEscapes
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateLegacyNewlineDefaultAsync(connectionString);
-        var beforeCatalog = await ReadDefaultCatalogAsync(connectionString);
+        await CreateLegacyNewlineDefaultAsync(connectionString, cancellationToken: CancellationToken.None);
+        var beforeCatalog = await ReadDefaultCatalogAsync(connectionString, cancellationToken: CancellationToken.None);
         var settings = new MySqlConnectionStringBuilder(connectionString)
         {
             NoBackslashEscapes = noBackslashEscapes,
@@ -328,28 +474,52 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
 
         await using var context = CreateContext(settings.ConnectionString);
         await context.Database.OpenConnectionAsync();
-        await SetEscapeModeAsync(context.Database.GetDbConnection(), noBackslashEscapes);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("persisted_defaults",
-            new ExpectedColumnDefinition("value", typeof(string), true, "text",
-                defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal("N\new")))),
+        await SetEscapeModeAsync(
+            context.Database.GetDbConnection(),
+            noBackslashEscapes,
+            cancellationToken: CancellationToken.None);
+
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "persisted_defaults",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(string),
+                    true,
+                    "text",
+                    defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal("N\new")))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("legacy-mode-dependent-default"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                new SafeMigrationRunOptions("legacy-mode-dependent-default"),
+                CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [operation],
+            CancellationToken.None));
+
         await context.Database.CloseConnectionAsync();
-        var stored = await InsertReopenedDefaultsAsync(connectionString);
-        var afterCatalog = await ReadDefaultCatalogAsync(connectionString);
-        var unchanged = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `persisted_defaults` WHERE `id` = 7 AND `value` IS NULL;");
+        var stored = await InsertReopenedDefaultsAsync(connectionString, cancellationToken: CancellationToken.None);
+        var afterCatalog = await ReadDefaultCatalogAsync(connectionString, cancellationToken: CancellationToken.None);
+        var unchanged = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `persisted_defaults` WHERE `id` = 7 AND `value` IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(preflight.Assessments);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
-        Assert.Equal("doka_sm_different", Assert.IsType<SafeMigrationExecutionException>(failure).GuardCode);
+        Assert.Equal("doka_sm_different",
+            Assert.IsType<SafeMigrationExecutionException>(failure)
+                .GuardCode);
+
         Assert.Equal(beforeCatalog, afterCatalog);
         Assert.Equal(2, stored.Length);
         Assert.Equal("4E0A6577", stored[0]);
@@ -364,11 +534,13 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     [MySqlPersistedDefaultTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task RepairPolicyReplacesLegacyModeDependentDefaultAndReplays(bool noBackslashEscapes)
+    public async Task RepairPolicyReplacesLegacyModeDependentDefaultAndReplays(
+        bool noBackslashEscapes
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateLegacyNewlineDefaultAsync(connectionString);
+        await CreateLegacyNewlineDefaultAsync(connectionString, cancellationToken: CancellationToken.None);
         var settings = new MySqlConnectionStringBuilder(connectionString)
         {
             NoBackslashEscapes = noBackslashEscapes,
@@ -376,16 +548,33 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
 
         await using var context = CreateContext(settings.ConnectionString);
         await context.Database.OpenConnectionAsync();
-        await SetEscapeModeAsync(context.Database.GetDbConnection(), noBackslashEscapes);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("persisted_defaults",
-            new ExpectedColumnDefinition("value", typeof(string), true, "text",
-                defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal("N\new")))),
+        await SetEscapeModeAsync(
+            context.Database.GetDbConnection(),
+            noBackslashEscapes,
+            cancellationToken: CancellationToken.None);
+
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "persisted_defaults",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(string),
+                    true,
+                    "text",
+                    defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal("N\new")))),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var result = await ExecuteDefaultCycleAsync(context, connectionString, operation);
-        var unchanged = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `persisted_defaults` WHERE `id` = 7 AND `value` IS NULL;");
+        var result = await ExecuteDefaultCycleAsync(
+            context,
+            connectionString,
+            operation,
+            cancellationToken: CancellationToken.None);
+
+        var unchanged = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `persisted_defaults` WHERE `id` = 7 AND `value` IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         AssertDefaultCycle(result, SafeMigrationAction.Repair, "4E0A6577");
@@ -397,11 +586,17 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task BinaryDefaultRemainsOutsideStringConversion(bool noBackslashEscapes)
+    public async Task BinaryDefaultRemainsOutsideStringConversion(
+        bool noBackslashEscapes
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `persisted_defaults` (`id` int NOT NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `persisted_defaults` (`id` int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         var settings = new MySqlConnectionStringBuilder(connectionString)
         {
             NoBackslashEscapes = noBackslashEscapes,
@@ -409,10 +604,29 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
 
         await using var context = CreateContext(settings.ConnectionString);
         await context.Database.OpenConnectionAsync();
-        await SetEscapeModeAsync(context.Database.GetDbConnection(), noBackslashEscapes);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("persisted_defaults",
-            new ExpectedColumnDefinition("value", typeof(byte[]), false, "varbinary(8)", maxLength: 8,
-                defaultValue: SafeMigrationDefaultValue.Literal(new byte[] { 1, 10, 92, 110, 255 }))),
+        await SetEscapeModeAsync(
+            context.Database.GetDbConnection(),
+            noBackslashEscapes,
+            cancellationToken: CancellationToken.None);
+
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "persisted_defaults",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(byte[]),
+                    false,
+                    "varbinary(8)",
+                    maxLength: 8,
+                    defaultValue: SafeMigrationDefaultValue.Literal(
+                        new byte[]
+                        {
+                            1,
+                            10,
+                            92,
+                            110,
+                            255,
+                        }))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         DefaultCycleResult? result = null;
@@ -420,13 +634,19 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         // Act
         var failure = await Record.ExceptionAsync(async () =>
         {
-            result = await ExecuteDefaultCycleAsync(context, connectionString, operation);
+            result = await ExecuteDefaultCycleAsync(
+                context,
+                connectionString,
+                operation,
+                cancellationToken: CancellationToken.None);
         });
 
-        var catalog = await ScalarStringAsync(connectionString,
+        var catalog = await ScalarStringAsync(
+            connectionString,
             "SELECT CONCAT(COALESCE(COLUMN_DEFAULT, '<null>'), '|', HEX(COALESCE(COLUMN_DEFAULT, '')), '|', EXTRA) "
             + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'persisted_defaults' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'persisted_defaults' AND COLUMN_NAME = 'value';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.True(failure is null, $"Native binary default failure: {failure}. Synthetic catalog: {catalog}");
@@ -445,32 +665,54 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     [InlineData("000102", true)]
     [InlineData("010003", true)]
     [InlineData("010200", true)]
-    public async Task BinaryZeroBytesRetainNativeLiteralAndExpressionIdentity(string hex, bool structured)
+    public async Task BinaryZeroBytesRetainNativeLiteralAndExpressionIdentity(
+        string hex,
+        bool structured
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE `persisted_defaults` (`id` int NOT NULL); INSERT INTO `persisted_defaults` VALUES (7);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `persisted_defaults` (`id` int NOT NULL); INSERT INTO `persisted_defaults` VALUES (7);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var bytes = Convert.FromHexString(hex);
         var defaultValue = structured
             ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(bytes))
             : SafeMigrationDefaultValue.Literal(bytes);
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("persisted_defaults",
-            new ExpectedColumnDefinition("value", typeof(byte[]), false, "varbinary(8)", maxLength: 8,
-                defaultValue: defaultValue)),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "persisted_defaults",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(byte[]),
+                    false,
+                    "varbinary(8)",
+                    maxLength: 8,
+                    defaultValue: defaultValue)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var result = await ExecuteDefaultCycleAsync(context, connectionString, operation);
+        var result = await ExecuteDefaultCycleAsync(
+            context,
+            connectionString,
+            operation,
+            cancellationToken: CancellationToken.None);
+
         var nativeDefault = structured
             ? null
-            : await ScalarStringAsync(connectionString,
-                "SELECT HEX(DEFAULT(`value`)) FROM `persisted_defaults` LIMIT 1;");
+            : await ScalarStringAsync(
+                connectionString,
+                "SELECT HEX(DEFAULT(`value`)) FROM `persisted_defaults` LIMIT 1;",
+                cancellationToken: CancellationToken.None);
 
-        var retainedRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `persisted_defaults` WHERE `id` = 7;");
+        var retainedRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `persisted_defaults` WHERE `id` = 7;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         AssertDefaultCycle(result, SafeMigrationAction.Apply, hex);
@@ -501,35 +743,59 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         bool nullable,
         bool populated,
         bool fixedLength,
-        string hex)
+        string hex
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         if (!createTable)
         {
-            await ExecuteSqlAsync(connectionString, "CREATE TABLE `persisted_defaults` (`id` int NOT NULL);"
-                + (populated ? " INSERT INTO `persisted_defaults` VALUES (7);" : string.Empty));
+            await ExecuteSqlAsync(
+                connectionString,
+                "CREATE TABLE `persisted_defaults` (`id` int NOT NULL);"
+                + (populated
+                    ? " INSERT INTO `persisted_defaults` VALUES (7);"
+                    : string.Empty),
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
-        var column = new ExpectedColumnDefinition("value", typeof(byte[]), nullable,
-            fixedLength ? "binary(8)" : "varbinary(8)", maxLength: 8, isFixedLength: fixedLength,
+        var column = new ExpectedColumnDefinition(
+            "value",
+            typeof(byte[]),
+            nullable,
+            fixedLength
+                ? "binary(8)"
+                : "varbinary(8)",
+            maxLength: 8,
+            isFixedLength: fixedLength,
             defaultValue: SafeMigrationDefaultValue.Literal(Convert.FromHexString(hex)));
 
         SafeMigrationIntent intent = createTable
-            ? new EnsureTableIntent(new ExpectedTableDefinition("persisted_defaults",
+            ? new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "persisted_defaults",
                     [new ExpectedColumnDefinition("id", typeof(int), false, "int"), column]),
                 SafeMigrationTableMode.StrictDefinition)
             : new EnsureColumnIntent("persisted_defaults", column);
 
         var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
-        var expectedHex = fixedLength ? hex.PadRight(16, '0') : hex;
+        var expectedHex = fixedLength
+            ? hex.PadRight(16, '0')
+            : hex;
 
         // Act
-        var result = await ExecuteDefaultCycleAsync(context, connectionString, operation);
+        var result = await ExecuteDefaultCycleAsync(
+            context,
+            connectionString,
+            operation,
+            cancellationToken: CancellationToken.None);
+
         var existing = populated
-            ? await ScalarStringAsync(connectionString,
-                "SELECT HEX(`value`) FROM `persisted_defaults` WHERE `id` = 7;")
+            ? await ScalarStringAsync(
+                connectionString,
+                "SELECT HEX(`value`) FROM `persisted_defaults` WHERE `id` = 7;",
+                cancellationToken: CancellationToken.None)
             : null;
 
         // Assert
@@ -545,23 +811,42 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     [Theory]
     [InlineData("000102")]
     [InlineData("010200")]
-    public async Task BinaryLiteralRepairRefreshesDefaultProofAndReplays(string hex)
+    public async Task BinaryLiteralRepairRefreshesDefaultProofAndReplays(
+        string hex
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `persisted_defaults` (`id` int NOT NULL, `value` varbinary(8) NULL); "
-            + "INSERT INTO `persisted_defaults` VALUES (7, NULL);");
+            + "INSERT INTO `persisted_defaults` VALUES (7, NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("persisted_defaults",
-            new ExpectedColumnDefinition("value", typeof(byte[]), true, "varbinary(8)", maxLength: 8,
-                defaultValue: SafeMigrationDefaultValue.Literal(Convert.FromHexString(hex)))),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "persisted_defaults",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(byte[]),
+                    true,
+                    "varbinary(8)",
+                    maxLength: 8,
+                    defaultValue: SafeMigrationDefaultValue.Literal(Convert.FromHexString(hex)))),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var result = await ExecuteDefaultCycleAsync(context, connectionString, operation);
-        var unchanged = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `persisted_defaults` WHERE `id` = 7 AND `value` IS NULL;");
+        var result = await ExecuteDefaultCycleAsync(
+            context,
+            connectionString,
+            operation,
+            cancellationToken: CancellationToken.None);
+
+        var unchanged = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `persisted_defaults` WHERE `id` = 7 AND `value` IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         AssertDefaultCycle(result, SafeMigrationAction.Repair, hex);
@@ -573,30 +858,49 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     [MySqlPersistedDefaultTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task GeneratedBinaryDefaultUsesExactExpressionProofWithoutLiteralBinding(bool structured)
+    public async Task GeneratedBinaryDefaultUsesExactExpressionProofWithoutLiteralBinding(
+        bool structured
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `persisted_defaults` (`id` int NOT NULL, "
-            + "`value` varbinary(8) NOT NULL DEFAULT (0x010003));");
+            + "`value` varbinary(8) NOT NULL DEFAULT (0x010003));",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var bytes = Convert.FromHexString("010003");
         var defaultValue = structured
             ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(bytes))
             : SafeMigrationDefaultValue.Literal(bytes);
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("persisted_defaults",
-            new ExpectedColumnDefinition("value", typeof(byte[]), false, "varbinary(8)", maxLength: 8,
-                defaultValue: defaultValue)),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "persisted_defaults",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(byte[]),
+                    false,
+                    "varbinary(8)",
+                    maxLength: 8,
+                    defaultValue: defaultValue)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var result = await ExecuteDefaultCycleAsync(context, connectionString, operation);
-        var generated = await ScalarIntAsync(connectionString,
+        var result = await ExecuteDefaultCycleAsync(
+            context,
+            connectionString,
+            operation,
+            cancellationToken: CancellationToken.None);
+
+        var generated = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'persisted_defaults' AND COLUMN_NAME = 'value' "
-            + "AND FIND_IN_SET('DEFAULT_GENERATED', REPLACE(EXTRA, ' ', ',')) > 0;");
+            + "AND FIND_IN_SET('DEFAULT_GENERATED', REPLACE(EXTRA, ' ', ',')) > 0;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         AssertDefaultCycle(result, SafeMigrationAction.NoOp, "010003");
@@ -609,40 +913,70 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     [MySqlPersistedDefaultTheory]
     [InlineData("literal`owners", "value`part")]
     [InlineData("@doka_sm_binary_default_0", "__DOKA_SM_BINARY_DEFAULT_0__")]
-    public async Task NativeBinaryDefaultProofRetainsQuotedOwnerIdentity(string table, string column)
+    public async Task NativeBinaryDefaultProofRetainsQuotedOwnerIdentity(
+        string table,
+        string column
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var quotedTable = QuoteIdentifier(table);
         var quotedColumn = QuoteIdentifier(column);
-        await ExecuteSqlAsync(connectionString,
-            $"CREATE TABLE {quotedTable} (`id` int NOT NULL, {quotedColumn} varbinary(8) NOT NULL DEFAULT 0x010003);");
+        await ExecuteSqlAsync(
+            connectionString,
+            $"CREATE TABLE {quotedTable} (`id` int NOT NULL, {quotedColumn} varbinary(8) NOT NULL DEFAULT 0x010003);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent(table,
-            new ExpectedColumnDefinition(column, typeof(byte[]), false, "varbinary(8)", maxLength: 8,
-                defaultValue: SafeMigrationDefaultValue.Literal(Convert.FromHexString("010003")))),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                table,
+                new ExpectedColumnDefinition(
+                    column,
+                    typeof(byte[]),
+                    false,
+                    "varbinary(8)",
+                    maxLength: 8,
+                    defaultValue: SafeMigrationDefaultValue.Literal(Convert.FromHexString("010003")))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("quoted-native-binary-default"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("quoted-native-binary-default"),
+            CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, [operation]);
-        var stored = await InsertReopenedDefaultsAsync(connectionString, table, column);
-        var postflight = await runner.VerifyAsync(context, [operation],
-            new SafeMigrationRunOptions("quoted-native-binary-default-postflight"), CancellationToken.None);
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+        var stored = await InsertReopenedDefaultsAsync(connectionString, CancellationToken.None, table, column);
+        var postflight = await runner.VerifyAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("quoted-native-binary-default-postflight"),
+            CancellationToken.None);
 
-        var replay = await runner.AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("quoted-native-binary-default-replay"), CancellationToken.None);
+        var replay = await runner.AnalyzeAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("quoted-native-binary-default-replay"),
+            CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, [operation]);
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(preflight.Assessments).Action);
-        Assert.True(Assert.Single(postflight.Assessments).PostconditionSatisfied);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
+        Assert.True(Assert.Single(postflight.Assessments)
+            .PostconditionSatisfied);
+
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replay.Assessments)
+                .Action);
+
         Assert.Equal(2, stored.Length);
         Assert.All(stored, static value => Assert.Equal("010003", value));
     }
@@ -654,18 +988,34 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     [MySqlPersistedDefaultTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task NativeBinaryDefaultProofCleansAcquiredSessionState(bool different)
+    public async Task NativeBinaryDefaultProofCleansAcquiredSessionState(
+        bool different
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `persisted_defaults` (`id` int NOT NULL, "
-            + "`value` varbinary(8) NOT NULL DEFAULT 0x010003);");
+            + "`value` varbinary(8) NOT NULL DEFAULT 0x010003);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync();
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("persisted_defaults",
-            new ExpectedColumnDefinition("value", typeof(byte[]), false, "varbinary(8)", maxLength: 8,
-                defaultValue: SafeMigrationDefaultValue.Literal(Convert.FromHexString(different ? "01" : "010003")))),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "persisted_defaults",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(byte[]),
+                    false,
+                    "varbinary(8)",
+                    maxLength: 8,
+                    defaultValue: SafeMigrationDefaultValue.Literal(
+                        Convert.FromHexString(
+                            different
+                                ? "01"
+                                : "010003")))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // WHY: The reserved variable is deliberately poisoned with the shorter
@@ -673,21 +1023,43 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         await context.Database.ExecuteSqlRawAsync("SET @doka_sm_binary_default_0 = 0x01;");
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("native-binary-default-proof-cleanup"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                new SafeMigrationRunOptions("native-binary-default-proof-cleanup"),
+                CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var cleared = await ContextScalarIntAsync(context, "SELECT @doka_sm_binary_default_0 IS NULL;");
-        var columns = await ScalarIntAsync(connectionString,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [operation],
+            CancellationToken.None));
+
+        var cleared = await ContextScalarIntAsync(
+            context,
+            "SELECT @doka_sm_binary_default_0 IS NULL;",
+            cancellationToken: CancellationToken.None);
+
+        var columns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'persisted_defaults' AND COLUMN_NAME = 'value' AND COLUMN_TYPE = 'varbinary(8)';");
+            + "AND TABLE_NAME = 'persisted_defaults' AND COLUMN_NAME = 'value' AND COLUMN_TYPE = 'varbinary(8)';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(different ? SafeMigrationAction.RejectDifferent : SafeMigrationAction.NoOp,
-            Assert.Single(preflight.Assessments).Action);
+        Assert.Equal(
+            different
+                ? SafeMigrationAction.RejectDifferent
+                : SafeMigrationAction.NoOp,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
         if (different)
         {
-            Assert.Equal("doka_sm_different", Assert.IsType<SafeMigrationExecutionException>(failure).GuardCode);
+            Assert.Equal("doka_sm_different",
+                Assert.IsType<SafeMigrationExecutionException>(failure)
+                    .GuardCode);
         }
         else
         {
@@ -708,34 +1080,59 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     [InlineData("3F", "FF")]
     [InlineData("010003", "01")]
     [InlineData("010200", "0102")]
-    public async Task IncompleteBinaryCatalogCannotImpersonateDifferentBytes(string actualHex, string expectedHex)
+    public async Task IncompleteBinaryCatalogCannotImpersonateDifferentBytes(
+        string actualHex,
+        string expectedHex
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `persisted_defaults` (`id` int NOT NULL, "
-            + $"`value` varbinary(8) NOT NULL DEFAULT 0x{actualHex});");
-        var beforeCatalog = await ReadDefaultCatalogAsync(connectionString);
+            + $"`value` varbinary(8) NOT NULL DEFAULT 0x{actualHex});",
+            cancellationToken: CancellationToken.None);
+
+        var beforeCatalog = await ReadDefaultCatalogAsync(connectionString, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("persisted_defaults",
-            new ExpectedColumnDefinition("value", typeof(byte[]), false, "varbinary(8)", maxLength: 8,
-                defaultValue: SafeMigrationDefaultValue.Sql(
-                    SafeMigrationSql.Literal(Convert.FromHexString(expectedHex))))),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "persisted_defaults",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(byte[]),
+                    false,
+                    "varbinary(8)",
+                    maxLength: 8,
+                    defaultValue: SafeMigrationDefaultValue.Sql(
+                        SafeMigrationSql.Literal(Convert.FromHexString(expectedHex))))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("ambiguous-binary-default"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                new SafeMigrationRunOptions("ambiguous-binary-default"),
+                CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var stored = await InsertReopenedDefaultsAsync(connectionString);
-        var afterCatalog = await ReadDefaultCatalogAsync(connectionString);
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [operation],
+            CancellationToken.None));
+
+        var stored = await InsertReopenedDefaultsAsync(connectionString, cancellationToken: CancellationToken.None);
+        var afterCatalog = await ReadDefaultCatalogAsync(connectionString, cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(preflight.Assessments);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
-        Assert.Equal("doka_sm_different", Assert.IsType<SafeMigrationExecutionException>(failure).GuardCode);
+        Assert.Equal("doka_sm_different",
+            Assert.IsType<SafeMigrationExecutionException>(failure)
+                .GuardCode);
+
         Assert.Equal(beforeCatalog, afterCatalog);
         Assert.Equal(2, stored.Length);
         Assert.All(stored, value => Assert.Equal(actualHex, value));
@@ -743,19 +1140,26 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
 
     /// <summary>Creates the independently reproduced legacy expression while fixing its defining SQL mode.</summary>
     /// <param name="connectionString">The root lease for this test's isolated database.</param>
-    private static async Task CreateLegacyNewlineDefaultAsync(string connectionString)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static async Task CreateLegacyNewlineDefaultAsync(
+        string connectionString,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync(CancellationToken.None);
-        await SetEscapeModeAsync(connection, noBackslashEscapes: false);
+        await connection.OpenAsync(cancellationToken);
+        await SetEscapeModeAsync(connection, noBackslashEscapes: false, cancellationToken: cancellationToken);
         await using var command = connection.CreateCommand();
+
         // WHY: The raw native expression reproduces persisted legacy metadata independently
         // of the corrected SafeMigrations renderer; the existing NULL row must not be repaired.
         command.CommandText = "CREATE TABLE `persisted_defaults` (`id` int NOT NULL, "
             + "`value` text NULL DEFAULT (_utf8mb4 X'4E0A6577')) DEFAULT CHARSET=utf8mb4; "
             + "INSERT INTO `persisted_defaults` VALUES (7, NULL);";
 
-        await command.ExecuteNonQueryAsync(CancellationToken.None);
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>
@@ -763,9 +1167,15 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     /// </summary>
     /// <param name="connectionString">The root lease for this test's isolated database.</param>
     /// <returns>The encoded default plus expression flags used to detect unintended mutation.</returns>
-    private static Task<string> ReadDefaultCatalogAsync(string connectionString) => ScalarStringAsync(connectionString,
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static Task<string> ReadDefaultCatalogAsync(
+        string connectionString,
+        CancellationToken cancellationToken
+    ) => ScalarStringAsync(
+        connectionString,
         "SELECT CONCAT(HEX(COALESCE(COLUMN_DEFAULT, '')), '|', EXTRA) FROM INFORMATION_SCHEMA.COLUMNS "
-        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'persisted_defaults' AND COLUMN_NAME = 'value';");
+        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'persisted_defaults' AND COLUMN_NAME = 'value';",
+        cancellationToken: cancellationToken);
 
     /// <summary>
     /// Builds independently authored create and add contracts with the same complete expected default.
@@ -775,15 +1185,23 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     /// <returns>The strict operation without relaxing repair or matching permissions.</returns>
     private static SafeMigrationOperation CreateStringDefaultOperation(
         bool createTable,
-        SafeMigrationDefaultValue defaultValue)
+        SafeMigrationDefaultValue defaultValue
+    )
     {
         // WHY: The oldest qualified MariaDB image defaults to latin1. Explicit
         // column collation keeps the UTF-8 fixture independent of image defaults.
-        var column = new ExpectedColumnDefinition("value", typeof(string), false, "text",
-            collation: new SafeMigrationCollationIdentifier("utf8mb4_unicode_ci"), defaultValue: defaultValue);
+        var column = new ExpectedColumnDefinition(
+            "value",
+            typeof(string),
+            false,
+            "text",
+            collation: new SafeMigrationCollationIdentifier("utf8mb4_unicode_ci"),
+            defaultValue: defaultValue);
 
         SafeMigrationIntent intent = createTable
-            ? new EnsureTableIntent(new ExpectedTableDefinition("persisted_defaults",
+            ? new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "persisted_defaults",
                     [new ExpectedColumnDefinition("id", typeof(int), false, "int"), column]),
                 SafeMigrationTableMode.StrictDefinition)
             : new EnsureColumnIntent("persisted_defaults", column);
@@ -798,30 +1216,44 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     /// <param name="connectionString">The isolated database's root lease.</param>
     /// <param name="operation">The operation whose persisted default must remain stable.</param>
     /// <returns>The independent reports and byte-level values used by assertions.</returns>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<DefaultCycleResult> ExecuteDefaultCycleAsync(
         SafeMigrationDbContext context,
         string connectionString,
-        SafeMigrationOperation operation)
+        SafeMigrationOperation operation,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var runner = context.GetService<ISafeMigrationRunner>();
-        var preflight = await runner.AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("persisted-default"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("persisted-default"),
+            cancellationToken);
 
         preflight.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, [operation]);
+        await ExecuteOperationsAsync(context, [operation], cancellationToken);
         await context.Database.CloseConnectionAsync();
-        var stored = await InsertReopenedDefaultsAsync(connectionString);
-        await context.Database.OpenConnectionAsync();
+        var stored = await InsertReopenedDefaultsAsync(connectionString, cancellationToken: cancellationToken);
+        await context.Database.OpenConnectionAsync(cancellationToken: cancellationToken);
         var connection = context.Database.GetDbConnection();
         var noBackslashEscapes = new MySqlConnectionStringBuilder(connection.ConnectionString).NoBackslashEscapes;
-        await SetEscapeModeAsync(connection, noBackslashEscapes);
-        var postflight = await runner.VerifyAsync(context, [operation],
-            new SafeMigrationRunOptions("persisted-default-postflight"), CancellationToken.None);
+        await SetEscapeModeAsync(connection, noBackslashEscapes, cancellationToken: cancellationToken);
+        var postflight = await runner.VerifyAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("persisted-default-postflight"),
+            cancellationToken);
 
-        var replay = await runner.AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("persisted-default-replay"), CancellationToken.None);
+        var replay = await runner.AnalyzeAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("persisted-default-replay"),
+            cancellationToken);
 
-        await ExecuteOperationsAsync(context, [operation]);
+        await ExecuteOperationsAsync(context, [operation], cancellationToken);
 
         return new DefaultCycleResult(preflight, postflight, replay, stored);
     }
@@ -836,10 +1268,18 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         string expectedHex
     )
     {
-        Assert.Equal(initialAction, Assert.Single(result.Preflight.Assessments).Action);
+        Assert.Equal(initialAction,
+            Assert.Single(result.Preflight.Assessments)
+                .Action);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, result.Postflight.Status);
-        Assert.True(Assert.Single(result.Postflight.Assessments).PostconditionSatisfied);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(result.Replay.Assessments).Action);
+        Assert.True(Assert.Single(result.Postflight.Assessments)
+            .PostconditionSatisfied);
+
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(result.Replay.Assessments)
+                .Action);
+
         Assert.Equal(2, result.Stored.Length);
         Assert.All(result.Stored, value => Assert.Equal(expectedHex, value));
     }
@@ -849,11 +1289,16 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     /// <param name="table">The exact owned table name, including escaped identifier characters.</param>
     /// <param name="column">The exact column whose persisted default is evaluated.</param>
     /// <returns>The UTF-8 bytes produced independently by ordinary and no-backslash sessions.</returns>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<string[]> InsertReopenedDefaultsAsync(
         string connectionString,
+        CancellationToken cancellationToken,
         string table = "persisted_defaults",
-        string column = "value")
+        string column = "value"
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var stored = new string[2];
         var quotedTable = QuoteIdentifier(table);
         var quotedColumn = QuoteIdentifier(column);
@@ -866,16 +1311,20 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
             };
 
             await using var connection = new MySqlConnection(settings.ConnectionString);
-            await connection.OpenAsync(CancellationToken.None);
-            await SetEscapeModeAsync(connection, noBackslashEscapes);
+            await connection.OpenAsync(cancellationToken);
+            await SetEscapeModeAsync(connection, noBackslashEscapes, cancellationToken: cancellationToken);
             await using var command = connection.CreateCommand();
+
             // WHY: A warm table definition can hide corrupt expression serialization.
             // FLUSH targets only this test-owned table and forces the next open to reparse it.
             command.CommandText = $"FLUSH TABLES {quotedTable}; "
                 + $"INSERT INTO {quotedTable} (`id`) VALUES ({index}); "
                 + $"SELECT HEX({quotedColumn}) FROM {quotedTable} WHERE `id` = {index};";
-            stored[index] = Convert.ToString(await command.ExecuteScalarAsync(CancellationToken.None),
-                CultureInfo.InvariantCulture) ?? "<null>";
+
+            stored[index] = Convert.ToString(
+                    await command.ExecuteScalarAsync(cancellationToken),
+                    CultureInfo.InvariantCulture)
+                ?? "<null>";
         }
 
         return stored;
@@ -884,21 +1333,30 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     /// <summary>Quotes the independently authored fixture names without interpreting marker-shaped content.</summary>
     /// <param name="identifier">The exact synthetic table or column name.</param>
     /// <returns>A native MySQL identifier with embedded backticks escaped.</returns>
-    private static string QuoteIdentifier(string identifier) =>
+    private static string QuoteIdentifier(
+        string identifier
+    ) =>
         "`" + identifier.Replace("`", "``", StringComparison.Ordinal) + "`";
 
     /// <summary>Sets an explicit mode instead of relying on a container or connection-pool default.</summary>
     /// <param name="connection">The already-open native connection.</param>
     /// <param name="noBackslashEscapes">Whether backslash escapes must be disabled.</param>
-    private static async Task SetEscapeModeAsync(System.Data.Common.DbConnection connection, bool noBackslashEscapes)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static async Task SetEscapeModeAsync(
+        DbConnection connection,
+        bool noBackslashEscapes,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var command = connection.CreateCommand();
         command.CommandText = noBackslashEscapes
             ? "SET SESSION sql_mode = CONCAT_WS(',', @@SESSION.sql_mode, 'NO_BACKSLASH_ESCAPES');"
             : "SET SESSION sql_mode = TRIM(BOTH ',' FROM REPLACE(CONCAT(',', @@SESSION.sql_mode, ','), "
-                + "',NO_BACKSLASH_ESCAPES,', ','));";
+            + "',NO_BACKSLASH_ESCAPES,', ','));";
 
-        await command.ExecuteNonQueryAsync(CancellationToken.None);
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>Keeps reports associated with the exact persisted values used for the same native cycle.</summary>
@@ -910,7 +1368,8 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         SafeMigrationRunReport Preflight,
         SafeMigrationRunReport Postflight,
         SafeMigrationRunReport Replay,
-        string[] Stored);
+        string[] Stored
+    );
 
     /// <summary>
     /// Selects MySQL's persisted expression-default contract without changing MariaDB's separate repair capability.
@@ -922,7 +1381,10 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         /// </summary>
         public MySqlPersistedDefaultTheoryAttribute()
         {
-            var engine = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_MYSQL_ENGINE")?.Trim();
+            var engine = Environment
+                .GetEnvironmentVariable("SAFE_MIGRATIONS_MYSQL_ENGINE")
+                ?.Trim();
+
             if (!string.Equals(engine, "mysql", StringComparison.OrdinalIgnoreCase))
             {
                 Skip = "This case qualifies MySQL-specific expression-default serialization or repair behavior.";

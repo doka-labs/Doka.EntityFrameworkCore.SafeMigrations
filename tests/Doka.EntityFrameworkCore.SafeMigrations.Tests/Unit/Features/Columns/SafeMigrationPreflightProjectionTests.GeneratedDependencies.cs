@@ -12,31 +12,53 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("empty", false)]
     [InlineData("raw", null)]
     [InlineData("nested_opaque", null)]
-    public void CompleteAcceptedOwnerProvidesGeneratedDependencyTriState(string shape, bool? expected)
+    public void CompleteAcceptedOwnerProvidesGeneratedDependencyTriState(
+        string shape,
+        bool? expected
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        var columns = new List<ExpectedColumnDefinition> { Column("value"), Column("other"), };
+        var columns = new List<ExpectedColumnDefinition>
+        {
+            Column("value"),
+            Column("other"),
+        };
+
         if (shape != "empty")
         {
-            columns.Add(shape == "raw"
-                ? new ExpectedColumnDefinition("derived", typeof(int), true, "int", computedColumnSql: "opaque(value)")
-                : GeneratedDependencyColumn(shape switch
-                {
-                    "dependent" => SafeMigrationSql.Identifier("VALUE"),
-                    "literal" => SafeMigrationSql.Literal("value"),
-                    "nested_opaque" => SafeMigrationSql.Binary(SafeMigrationSql.Identifier("other"),
-                        SafeMigrationSqlBinaryOperator.Add, SafeMigrationSql.Opaque("opaque(value)")),
-                    _ => SafeMigrationSql.Identifier("other"),
-                }));
+            columns.Add(
+                shape == "raw"
+                    ? new ExpectedColumnDefinition("derived",
+                        typeof(int),
+                        true,
+                        "int",
+                        computedColumnSql: "opaque(value)")
+                    : GeneratedDependencyColumn(
+                        shape switch
+                        {
+                            "dependent" => SafeMigrationSql.Identifier("VALUE"),
+                            "literal" => SafeMigrationSql.Literal("value"),
+                            "nested_opaque" => SafeMigrationSql.Binary(
+                                SafeMigrationSql.Identifier("other"),
+                                SafeMigrationSqlBinaryOperator.Add,
+                                SafeMigrationSql.Opaque("opaque(value)")),
+                            _ => SafeMigrationSql.Identifier("other"),
+                        }));
         }
 
-        Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items", columns),
-            SafeMigrationTableMode.StrictDefinition));
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("items", columns),
+                SafeMigrationTableMode.StrictDefinition));
 
         // Act
         var dependency = ((ISafeMigrationProjectedTableSource)projection).HasProjectedGeneratedColumnDependency(
-            "items", null, "value", StringComparer.OrdinalIgnoreCase);
+            "items",
+            null,
+            "value",
+            StringComparer.OrdinalIgnoreCase);
 
         // Assert
         Assert.Equal(expected, dependency);
@@ -50,7 +72,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("existence_matching")]
     [InlineData("raw")]
     [InlineData("drop_owner")]
-    public void IncompleteOrExpiredOwnerCannotProveGeneratedNondependency(string boundary)
+    public void IncompleteOrExpiredOwnerCannotProveGeneratedNondependency(
+        string boundary
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
@@ -58,7 +82,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var operation = new SafeMigrationOperation(
             new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition),
             boundary.StartsWith("existence", StringComparison.Ordinal)
-                ? SafeMigrationPolicy.ExistenceOnly : SafeMigrationPolicy.ThrowIfDifferent);
+                ? SafeMigrationPolicy.ExistenceOnly
+                : SafeMigrationPolicy.ThrowIfDifferent);
 
         var state = boundary switch
         {
@@ -69,13 +94,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         var live = Live(state);
         var analysis = projection.Project(operation, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, analysis.ObservedState,
-            operation.Policy, analysis.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            analysis.ObservedState,
+            operation.Policy,
+            analysis.RepairCapability);
 
         projection.Observe(operation, live, analysis, decision);
         if (boundary == "raw")
         {
-            projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;", });
+            projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;" });
         }
         else if (boundary == "drop_owner")
         {
@@ -84,7 +112,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         // Act
         var dependency = ((ISafeMigrationProjectedTableSource)projection).HasProjectedGeneratedColumnDependency(
-            "items", null, "value", StringComparer.OrdinalIgnoreCase);
+            "items",
+            null,
+            "value",
+            StringComparer.OrdinalIgnoreCase);
 
         // Assert
         Assert.Null(dependency);
@@ -95,26 +126,47 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void GeneratedDependencyQueryObservesOnlyAcceptedEarlierOperations(bool accepted)
+    public void GeneratedDependencyQueryObservesOnlyAcceptedEarlierOperations(
+        bool accepted
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items", [Column("value")]),
-            SafeMigrationTableMode.StrictDefinition));
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("items", [Column("value")]),
+                SafeMigrationTableMode.StrictDefinition));
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items",
-            GeneratedDependencyColumn(SafeMigrationSql.Identifier("value"))), SafeMigrationPolicy.ThrowIfDifferent);
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "items",
+                GeneratedDependencyColumn(SafeMigrationSql.Identifier("value"))),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
-        var live = Live(accepted ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Unsupported);
-        var analysis = accepted ? projection.Project(operation, live) : live;
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, analysis.ObservedState,
-            operation.Policy, analysis.RepairCapability);
+        var live = Live(
+            accepted
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.Unsupported);
+
+        var analysis = accepted
+            ? projection.Project(operation, live)
+            : live;
+
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            analysis.ObservedState,
+            operation.Policy,
+            analysis.RepairCapability);
 
         projection.Observe(operation, live, analysis, decision);
 
         // Act
         var dependency = ((ISafeMigrationProjectedTableSource)projection).HasProjectedGeneratedColumnDependency(
-            "items", null, "value", StringComparer.Ordinal);
+            "items",
+            null,
+            "value",
+            StringComparer.Ordinal);
 
         // Assert
         Assert.Equal(accepted, dependency);
@@ -126,17 +178,27 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items",
-            [Column("value"), GeneratedDependencyColumn(SafeMigrationSql.Identifier("value"))]),
-            SafeMigrationTableMode.StrictDefinition));
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "items",
+                    [Column("value"), GeneratedDependencyColumn(SafeMigrationSql.Identifier("value"))]),
+                SafeMigrationTableMode.StrictDefinition));
 
         Apply(projection, new DropTableIntent("items"));
-        Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items", [Column("value")]),
-            SafeMigrationTableMode.StrictDefinition));
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("items", [Column("value")]),
+                SafeMigrationTableMode.StrictDefinition));
 
         // Act
         var dependency = ((ISafeMigrationProjectedTableSource)projection).HasProjectedGeneratedColumnDependency(
-            "items", null, "value", StringComparer.Ordinal);
+            "items",
+            null,
+            "value",
+            StringComparer.Ordinal);
 
         // Assert
         Assert.False(dependency);
@@ -147,25 +209,45 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void SparseAcceptedGeneratedMemberCanOnlyProvePositiveDependency(bool references)
+    public void SparseAcceptedGeneratedMemberCanOnlyProvePositiveDependency(
+        bool references
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        ObserveAccepted(projection, new EnsureColumnIntent("items", Column("value")),
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("items", Column("value")),
             SafeMigrationObservedState.Matching);
 
-        ObserveAccepted(projection, new EnsureColumnIntent("items", Column("other")),
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("items", Column("other")),
             SafeMigrationObservedState.Matching);
 
-        Apply(projection, new EnsureColumnIntent("items", GeneratedDependencyColumn(
-            SafeMigrationSql.Identifier(references ? "value" : "other"))));
+        Apply(
+            projection,
+            new EnsureColumnIntent(
+                "items",
+                GeneratedDependencyColumn(
+                    SafeMigrationSql.Identifier(
+                        references
+                            ? "value"
+                            : "other"))));
 
         // Act
         var dependency = ((ISafeMigrationProjectedTableSource)projection).HasProjectedGeneratedColumnDependency(
-            "items", null, "value", StringComparer.Ordinal);
+            "items",
+            null,
+            "value",
+            StringComparer.Ordinal);
 
         // Assert
-        Assert.Equal(references ? true : null, dependency);
+        Assert.Equal(
+            references
+                ? true
+                : null,
+            dependency);
     }
 
     /// <summary>Complete generated sets survive known member effects without proving physical layout or rows.</summary>
@@ -180,26 +262,45 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("raw", null)]
     [InlineData("provider_unknown", null)]
     [InlineData("existence", null)]
-    public void AcceptedCompleteGeneratedSetSurvivesOnlyKnownMemberEffects(string change, bool? expected)
+    public void AcceptedCompleteGeneratedSetSurvivesOnlyKnownMemberEffects(
+        string change,
+        bool? expected
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        var columns = new List<ExpectedColumnDefinition> { Column("value"), Column("other"), };
+        var columns = new List<ExpectedColumnDefinition>
+        {
+            Column("value"),
+            Column("other"),
+        };
+
         if (!change.StartsWith("add", StringComparison.Ordinal))
         {
-            columns.Add(GeneratedDependencyColumn(SafeMigrationSql.Identifier(
-                change.StartsWith("drop", StringComparison.Ordinal) ? "value" : "other")));
+            columns.Add(
+                GeneratedDependencyColumn(
+                    SafeMigrationSql.Identifier(
+                        change.StartsWith("drop", StringComparison.Ordinal)
+                            ? "value"
+                            : "other")));
         }
 
-        var intent = new EnsureTableIntent(new ExpectedTableDefinition("items", columns),
+        var intent = new EnsureTableIntent(
+            new ExpectedTableDefinition("items", columns),
             SafeMigrationTableMode.StrictDefinition);
 
-        var operation = new SafeMigrationOperation(intent, change == "existence"
-            ? SafeMigrationPolicy.ExistenceOnly : SafeMigrationPolicy.ThrowIfDifferent);
+        var operation = new SafeMigrationOperation(
+            intent,
+            change == "existence"
+                ? SafeMigrationPolicy.ExistenceOnly
+                : SafeMigrationPolicy.ThrowIfDifferent);
 
         var live = Live(SafeMigrationObservedState.Matching);
         var analysis = projection.Project(operation, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(intent.Kind, analysis.ObservedState, operation.Policy,
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            intent.Kind,
+            analysis.ObservedState,
+            operation.Policy,
             analysis.RepairCapability);
 
         projection.Observe(operation, live, analysis, decision);
@@ -213,14 +314,28 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 break;
             case "add_dependent":
             case "add_unrelated":
-                Apply(projection, new EnsureColumnIntent("items", GeneratedDependencyColumn(
-                    SafeMigrationSql.Identifier(change == "add_dependent" ? "value" : "other"))));
+                Apply(
+                    projection,
+                    new EnsureColumnIntent(
+                        "items",
+                        GeneratedDependencyColumn(
+                            SafeMigrationSql.Identifier(
+                                change == "add_dependent"
+                                    ? "value"
+                                    : "other"))));
+
                 break;
             case "raw":
-                projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;", });
+                projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;" });
                 break;
             case "provider_unknown":
-                var provider = new AddColumnOperation { Table = "items", Name = "outside", ClrType = typeof(int), };
+                var provider = new AddColumnOperation
+                {
+                    Table = "items",
+                    Name = "outside",
+                    ClrType = typeof(int),
+                };
+
                 provider.AddAnnotation("Test:UnknownMetadataEffect", true);
                 projection.ObserveProviderPostcondition(provider);
                 break;
@@ -228,9 +343,15 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         // Act
         var dependency = ((ISafeMigrationProjectedTableSource)projection).HasProjectedGeneratedColumnDependency(
-            "items", null, "value", StringComparer.Ordinal);
+            "items",
+            null,
+            "value",
+            StringComparer.Ordinal);
+
         var hasState = ((ISafeMigrationProjectedTableSource)projection).TryGetProjectedTableState(
-            "items", null, out var state);
+            "items",
+            null,
+            out var state);
 
         // Assert
         Assert.Equal(expected, dependency);
@@ -255,20 +376,32 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("raw", null)]
     [InlineData("rejected", null)]
     [InlineData("source_added", null)]
-    public void NativeEmptyGeneratedCertificateRespectsAcceptedLifetime(string boundary, bool? expected)
+    public void NativeEmptyGeneratedCertificateRespectsAcceptedLifetime(
+        string boundary,
+        bool? expected
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        ObserveAccepted(projection, new EnsureColumnIntent("items", Column("value")),
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("items", Column("value")),
             SafeMigrationObservedState.Matching);
+
         if (boundary == "added_generated")
         {
-            Apply(projection, new EnsureColumnIntent("items", GeneratedDependencyColumn(
-                SafeMigrationSql.Identifier("value"))));
+            Apply(
+                projection,
+                new EnsureColumnIntent(
+                    "items",
+                    GeneratedDependencyColumn(
+                        SafeMigrationSql.Identifier("value"))));
         }
         else if (boundary == "earlier_drop")
         {
-            ObserveAccepted(projection, new DropColumnIntent("retired", "items"),
+            ObserveAccepted(
+                projection,
+                new DropColumnIntent("retired", "items"),
                 SafeMigrationObservedState.Matching);
         }
         else if (boundary == "owner_dropped")
@@ -277,33 +410,41 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         }
         else if (boundary == "raw")
         {
-            projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;", });
+            projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;" });
         }
         else if (boundary == "source_added")
         {
             Apply(projection, new EnsureColumnIntent("items", Column("removed_generated")));
         }
 
-        var operation = new SafeMigrationOperation(new DropColumnIntent("removed_generated", "items"),
+        var operation = new SafeMigrationOperation(
+            new DropColumnIntent("removed_generated", "items"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var live = Live(boundary switch
-        {
-            "rejected" => SafeMigrationObservedState.Unsupported,
-            "source_added" => SafeMigrationObservedState.Missing,
-            _ => SafeMigrationObservedState.Matching,
-        });
+        var live = Live(
+            boundary switch
+            {
+                "rejected" => SafeMigrationObservedState.Unsupported,
+                "source_added" => SafeMigrationObservedState.Missing,
+                _ => SafeMigrationObservedState.Matching,
+            });
 
         var certified = WithEmptyGeneratedSurvivors(live);
         var analysis = projection.Project(operation, certified);
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, analysis.ObservedState,
-            operation.Policy, analysis.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            analysis.ObservedState,
+            operation.Policy,
+            analysis.RepairCapability);
 
         projection.Observe(operation, certified, analysis, decision);
 
         // Act
         var dependency = ((ISafeMigrationProjectedTableSource)projection).HasProjectedGeneratedColumnDependency(
-            "items", null, "value", StringComparer.Ordinal);
+            "items",
+            null,
+            "value",
+            StringComparer.Ordinal);
 
         // Assert
         Assert.Equal(expected, dependency);
@@ -314,12 +455,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         }
     }
 
-    private static SafeMigrationProviderAnalysis WithEmptyGeneratedSurvivors(SafeMigrationProviderAnalysis source)
+    private static SafeMigrationProviderAnalysis WithEmptyGeneratedSurvivors(
+        SafeMigrationProviderAnalysis source
+    )
         => new(source.ObservedState, source.RepairCapability, source.PostconditionSatisfied, source.Code)
         {
             DropLeavesNoGeneratedColumns = true,
         };
 
-    private static ExpectedColumnDefinition GeneratedDependencyColumn(SafeMigrationSqlExpression expression) =>
+    private static ExpectedColumnDefinition GeneratedDependencyColumn(
+        SafeMigrationSqlExpression expression
+    ) =>
         new("derived", typeof(int), true, "int", computedExpression: expression);
 }

@@ -6,8 +6,12 @@ public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMig
     [Fact]
     public async Task PreCancelledAnalysis_LeavesCatalogUnchanged()
     {
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, "CREATE TABLE cancellation_probe (Id INTEGER NOT NULL);");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE cancellation_probe (Id INTEGER NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<string>(
@@ -15,6 +19,7 @@ public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMig
             "cancellation_probe",
             type: "TEXT",
             nullable: true);
+
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
@@ -30,7 +35,8 @@ public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMig
             0,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('cancellation_probe') WHERE name = 'Value';"));
+                "SELECT COUNT(*) FROM pragma_table_xinfo('cancellation_probe') WHERE name = 'Value';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -49,8 +55,14 @@ public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMig
             using var start = new Barrier(2);
 
             var results = await Task.WhenAll(
-                Task.Run(() => ExecuteConcurrentMigrationAsync(connectionString, start)),
-                Task.Run(() => ExecuteConcurrentMigrationAsync(connectionString, start)));
+                Task.Run(() => ExecuteConcurrentMigrationAsync(
+                    connectionString,
+                    start,
+                    cancellationToken: CancellationToken.None)),
+                Task.Run(() => ExecuteConcurrentMigrationAsync(
+                    connectionString,
+                    start,
+                    cancellationToken: CancellationToken.None)));
 
             await using var verification = new SqliteConnection(connectionString);
             await verification.OpenAsync(CancellationToken.None);
@@ -60,23 +72,29 @@ public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMig
                 results,
                 static result => Assert.True(
                     result is ConcurrentExecutionResult.Completed or ConcurrentExecutionResult.Busy));
+
             Assert.Equal(
                 1,
                 await ScalarIntAsync(
                     verification,
-                    "SELECT COUNT(*) FROM pragma_table_xinfo('pipeline_state') WHERE name = 'payload';"));
+                    "SELECT COUNT(*) FROM pragma_table_xinfo('pipeline_state') WHERE name = 'payload';",
+                    cancellationToken: CancellationToken.None));
+
             Assert.Equal(
                 1,
                 await ScalarIntAsync(
                     verification,
                     "SELECT COUNT(*) FROM main.sqlite_schema "
-                    + "WHERE type = 'table' AND name = 'pipeline_probe';"));
+                    + "WHERE type = 'table' AND name = 'pipeline_probe';",
+                    cancellationToken: CancellationToken.None));
+
             Assert.Equal(
                 1,
                 await ScalarIntAsync(
                     verification,
                     "SELECT COUNT(*) FROM __EFMigrationsHistory "
-                    + $"WHERE MigrationId = '{SqliteCoreConvergenceMigration.MigrationIdentifier}';"));
+                    + $"WHERE MigrationId = '{SqliteCoreConvergenceMigration.MigrationIdentifier}';",
+                    cancellationToken: CancellationToken.None));
         }
         finally
         {
@@ -88,31 +106,40 @@ public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMig
     /// <returns>The GUID-qualified native database path owned by its caller.</returns>
     internal static string CreateOwnedDatabasePath() => Path.Combine(
         Path.GetTempPath(),
-        "sqlite-safe-migrations-" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture) + ".db");
+        "sqlite-safe-migrations-"
+        + Guid
+            .NewGuid()
+            .ToString("N", CultureInfo.InvariantCulture)
+        + ".db");
 
     /// <summary>Prevents file ownership from requiring a process-wide pool reset during cleanup.</summary>
     /// <param name="databasePath">The independently allocated path owned by this invocation.</param>
     /// <returns>The same migration-lock connection options with pooling explicitly disabled.</returns>
-    internal static string CreateOwnedFileConnectionString(string databasePath) =>
+    internal static string CreateOwnedFileConnectionString(
+        string databasePath
+    ) =>
         $"Data Source={databasePath};Mode=ReadWriteCreate;Cache=Private;"
         + "Default Timeout=10;Foreign Keys=True;Pooling=False";
 
     private static async Task<ConcurrentExecutionResult> ExecuteConcurrentMigrationAsync(
         string connectionString,
-        Barrier start
+        Barrier start,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new SqliteConnection(connectionString);
-        await connection.OpenAsync(CancellationToken.None);
+        await connection.OpenAsync(cancellationToken);
         await using var context = CreateContext(connection);
-        if (!start.SignalAndWait(TimeSpan.FromSeconds(10)))
+        if (!start.SignalAndWait(TimeSpan.FromSeconds(10), cancellationToken))
         {
             throw new TimeoutException("Concurrent SQLite migrators did not reach the start barrier.");
         }
 
         try
         {
-            await context.Database.MigrateAsync(CancellationToken.None);
+            await context.Database.MigrateAsync(cancellationToken);
 
             return ConcurrentExecutionResult.Completed;
         }

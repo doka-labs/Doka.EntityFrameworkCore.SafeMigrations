@@ -19,13 +19,19 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        ObserveAccepted(projection, new EnsureColumnIntent("items", Column("left_value")),
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("items", Column("left_value")),
             SafeMigrationObservedState.Matching);
 
-        ObserveAccepted(projection, new EnsureColumnIntent("items", Column("right_value")),
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("items", Column("right_value")),
             SafeMigrationObservedState.Matching);
 
-        var index = new ExpectedIndexDefinition("ix_items", "items",
+        var index = new ExpectedIndexDefinition(
+            "ix_items",
+            "items",
             [new ExpectedIndexKeyDefinition(column: "left_value")]);
 
         Apply(projection, new EnsureIndexIntent(index));
@@ -35,16 +41,27 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         }
         else if (scenario == "opaque")
         {
-            projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;", });
+            projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;" });
         }
 
-        var target = new ExpectedIndexDefinition(scenario == "alias" ? "ix_alias" : "ix_items",
-            scenario == "unrelated_owner" ? "other_items" : "items",
-            [new ExpectedIndexKeyDefinition(column: scenario == "different" ? "right_value" : "left_value")]);
+        var target = new ExpectedIndexDefinition(
+            scenario == "alias"
+                ? "ix_alias"
+                : "ix_items",
+            scenario == "unrelated_owner"
+                ? "other_items"
+                : "items",
+            [
+                new ExpectedIndexKeyDefinition(
+                    column: scenario == "different"
+                        ? "right_value"
+                        : "left_value"),
+            ]);
 
         // Act
         var analysis = ((ISafeMigrationProjectedColumnSource)projection).GetProjectedIndexIdentityAnalysis(
-            target, Live(SafeMigrationObservedState.Missing));
+            target,
+            Live(SafeMigrationObservedState.Missing));
 
         // Assert
         Assert.Equal(expected, analysis?.ObservedState);
@@ -58,27 +75,42 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
-    public void ProjectedIndexIdentityIncludesOnlyCertifiedConstraintBackingNames(bool primary, bool nativeBackingNames)
+    public void ProjectedIndexIdentityIncludesOnlyCertifiedConstraintBackingNames(
+        bool primary,
+        bool nativeBackingNames
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        var table = new ExpectedTableDefinition("items",
+        var table = new ExpectedTableDefinition(
+            "items",
             [Column("value"), Column("derived"), Column("retired")],
-            primaryKey: primary ? new ExpectedPrimaryKeyDefinition("ix_result", "items", ["value"]) : null,
-            uniqueConstraints: primary ? [] :
-                [new ExpectedUniqueConstraintDefinition("ix_result", "items", ["value"])]);
+            primaryKey: primary
+                ? new ExpectedPrimaryKeyDefinition("ix_result", "items", ["value"])
+                : null,
+            uniqueConstraints: primary
+                ? []
+                : [new ExpectedUniqueConstraintDefinition("ix_result", "items", ["value"])]);
 
         Apply(projection, new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition));
         Apply(projection, new DropColumnIntent("retired", "items"));
-        var target = new ExpectedIndexDefinition("ix_result", "items",
+        var target = new ExpectedIndexDefinition(
+            "ix_result",
+            "items",
             [new ExpectedIndexKeyDefinition(column: "derived")]);
 
         // Act
         var analysis = ((ISafeMigrationProjectedColumnSource)projection).GetProjectedIndexIdentityAnalysis(
-            target, Live(SafeMigrationObservedState.Missing), nativeBackingNames);
+            target,
+            Live(SafeMigrationObservedState.Missing),
+            nativeBackingNames);
 
         // Assert
-        Assert.Equal(nativeBackingNames ? SafeMigrationObservedState.Different : null, analysis?.ObservedState);
+        Assert.Equal(
+            nativeBackingNames
+                ? SafeMigrationObservedState.Different
+                : null,
+            analysis?.ObservedState);
     }
 
     /// <summary>Removed accepted keys cannot keep a stale backing-index namespace collision alive.</summary>
@@ -86,25 +118,39 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void DroppedConstraintDoesNotRetainBackingIndexCollision(bool primary)
+    public void DroppedConstraintDoesNotRetainBackingIndexCollision(
+        bool primary
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        var table = new ExpectedTableDefinition("items", [Column("value"), Column("derived")],
-            primaryKey: primary ? new ExpectedPrimaryKeyDefinition("ix_result", "items", ["value"]) : null,
-            uniqueConstraints: primary ? [] :
-                [new ExpectedUniqueConstraintDefinition("ix_result", "items", ["value"])]);
+        var table = new ExpectedTableDefinition(
+            "items",
+            [Column("value"), Column("derived")],
+            primaryKey: primary
+                ? new ExpectedPrimaryKeyDefinition("ix_result", "items", ["value"])
+                : null,
+            uniqueConstraints: primary
+                ? []
+                : [new ExpectedUniqueConstraintDefinition("ix_result", "items", ["value"])]);
 
         Apply(projection, new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition));
-        Apply(projection, primary ? new DropPrimaryKeyIntent("ix_result", "items")
-            : new DropUniqueConstraintIntent("ix_result", "items"));
+        Apply(
+            projection,
+            primary
+                ? new DropPrimaryKeyIntent("ix_result", "items")
+                : new DropUniqueConstraintIntent("ix_result", "items"));
 
-        var target = new ExpectedIndexDefinition("ix_result", "items",
+        var target = new ExpectedIndexDefinition(
+            "ix_result",
+            "items",
             [new ExpectedIndexKeyDefinition(column: "derived")]);
 
         // Act
         var analysis = ((ISafeMigrationProjectedColumnSource)projection).GetProjectedIndexIdentityAnalysis(
-            target, Live(SafeMigrationObservedState.Missing), includeConstraintBackingIndexNames: true);
+            target,
+            Live(SafeMigrationObservedState.Missing),
+            includeConstraintBackingIndexNames: true);
 
         // Assert
         Assert.NotEqual(SafeMigrationObservedState.Different, analysis?.ObservedState);
@@ -115,24 +161,45 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ConstraintBackingIndexCollisionUsesPhysicalNameNotSemanticAlias(bool physicalName)
+    public void ConstraintBackingIndexCollisionUsesPhysicalNameNotSemanticAlias(
+        bool physicalName
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        ObserveAccepted(projection, new EnsureColumnIntent("items", Column("value")),
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("items", Column("value")),
             SafeMigrationObservedState.Matching);
 
-        ObserveAccepted(projection, new EnsureUniqueConstraintIntent(new ExpectedUniqueConstraintDefinition(
-                "logical_key", "items", ["value"])), SafeMigrationObservedState.Matching, "physical_key");
+        ObserveAccepted(
+            projection,
+            new EnsureUniqueConstraintIntent(
+                new ExpectedUniqueConstraintDefinition(
+                    "logical_key",
+                    "items",
+                    ["value"])),
+            SafeMigrationObservedState.Matching,
+            "physical_key");
 
-        var target = new ExpectedIndexDefinition(physicalName ? "physical_key" : "logical_key", "items",
+        var target = new ExpectedIndexDefinition(
+            physicalName
+                ? "physical_key"
+                : "logical_key",
+            "items",
             [new ExpectedIndexKeyDefinition(column: "value")]);
 
         // Act
         var analysis = ((ISafeMigrationProjectedColumnSource)projection).GetProjectedIndexIdentityAnalysis(
-            target, Live(SafeMigrationObservedState.Missing), includeConstraintBackingIndexNames: true);
+            target,
+            Live(SafeMigrationObservedState.Missing),
+            includeConstraintBackingIndexNames: true);
 
         // Assert
-        Assert.Equal(physicalName ? SafeMigrationObservedState.Different : null, analysis?.ObservedState);
+        Assert.Equal(
+            physicalName
+                ? SafeMigrationObservedState.Different
+                : null,
+            analysis?.ObservedState);
     }
 }

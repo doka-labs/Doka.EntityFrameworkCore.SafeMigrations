@@ -23,13 +23,15 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.filter_items (Id int NOT NULL, Code int NULL, Flag int NULL); "
             + "INSERT dbo.filter_items (Id, Code, Flag) VALUES (1, 7, 1), (2, 7, 1); "
-            + "CREATE TABLE dbo.filter_ddl_events (Id int NOT NULL);");
-        await CreateFilterPredicateAuditAsync(connectionString);
+            + "CREATE TABLE dbo.filter_ddl_events (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
+        await CreateFilterPredicateAuditAsync(connectionString, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var definition = new ExpectedIndexDefinition(
             "IX_filter_items_Code",
@@ -45,22 +47,46 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
         var ordinaryPrefix = new SqlOperation { Sql = "CREATE TABLE dbo.before_filter_rejection (Id int NOT NULL);" };
 
         // Act
-        var originalTableId = await ScalarIntAsync(connectionString, "SELECT OBJECT_ID(N'dbo.filter_items', N'U');");
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-        var failure = await Record.ExceptionAsync(() =>
-            ExecuteOperationsAsync(context, [ordinaryPrefix, operation]));
+        var originalTableId = await ScalarIntAsync(
+            connectionString,
+            "SELECT OBJECT_ID(N'dbo.filter_items', N'U');",
+            cancellationToken: CancellationToken.None);
 
-        var remainingTableId = await ScalarIntAsync(connectionString, "SELECT OBJECT_ID(N'dbo.filter_items', N'U');");
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                cancellationToken: CancellationToken.None);
+
+        var failure = await Record.ExceptionAsync(() =>
+            ExecuteOperationsAsync(context, [ordinaryPrefix, operation], cancellationToken: CancellationToken.None));
+
+        var remainingTableId = await ScalarIntAsync(
+            connectionString,
+            "SELECT OBJECT_ID(N'dbo.filter_items', N'U');",
+            cancellationToken: CancellationToken.None);
+
         var indexCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.filter_items', N'U') "
-            + "AND name = N'IX_filter_items_Code';");
+            + "AND name = N'IX_filter_items_Code';",
+            cancellationToken: CancellationToken.None);
 
-        var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.filter_items WHERE Code = 7;");
-        var ddlEvents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.filter_ddl_events;");
+        var rowCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.filter_items WHERE Code = 7;",
+            cancellationToken: CancellationToken.None);
+
+        var ddlEvents = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.filter_ddl_events;",
+            cancellationToken: CancellationToken.None);
+
         var ordinaryTables = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE name = N'before_filter_rejection';");
+            "SELECT COUNT(*) FROM sys.tables WHERE name = N'before_filter_rejection';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
@@ -89,10 +115,13 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         if (kind == "alias")
         {
-            await ExecuteSqlAsync(connectionString, "CREATE TYPE dbo.FilterFlag FROM int;");
+            await ExecuteSqlAsync(
+                connectionString,
+                "CREATE TYPE dbo.FilterFlag FROM int;",
+                cancellationToken: CancellationToken.None);
         }
 
         var column = kind switch
@@ -107,38 +136,79 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.filter_items (Id int NOT NULL, Code int NULL" + column + "); "
+            "CREATE TABLE dbo.filter_items (Id int NOT NULL, Code int NULL"
+            + column
+            + "); "
             + "INSERT dbo.filter_items (Id, Code) VALUES (1, 7), (2, 7); "
-            + "CREATE TABLE dbo.filter_ddl_events (Id int NOT NULL);");
-        await CreateFilterPredicateAuditAsync(connectionString);
+            + "CREATE TABLE dbo.filter_ddl_events (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
+        await CreateFilterPredicateAuditAsync(connectionString, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operation = new SafeMigrationOperation(
-            new EnsureIndexIntent(new ExpectedIndexDefinition(
-                "IX_filter_items_Code",
-                "filter_items",
-                [new ExpectedIndexKeyDefinition("Code")],
-                unique: true,
-                filter: "[Special] IS NOT NULL")),
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "IX_filter_items_Code",
+                    "filter_items",
+                    [new ExpectedIndexKeyDefinition("Code")],
+                    unique: true,
+                    filter: "[Special] IS NOT NULL")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var originalTableId = await ScalarIntAsync(connectionString, "SELECT OBJECT_ID(N'dbo.filter_items', N'U');");
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var remainingTableId = await ScalarIntAsync(connectionString, "SELECT OBJECT_ID(N'dbo.filter_items', N'U');");
+        var originalTableId = await ScalarIntAsync(
+            connectionString,
+            "SELECT OBJECT_ID(N'dbo.filter_items', N'U');",
+            cancellationToken: CancellationToken.None);
+
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                cancellationToken: CancellationToken.None);
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [operation],
+            cancellationToken: CancellationToken.None));
+
+        var remainingTableId = await ScalarIntAsync(
+            connectionString,
+            "SELECT OBJECT_ID(N'dbo.filter_items', N'U');",
+            cancellationToken: CancellationToken.None);
+
         var indexCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.filter_items', N'U') "
-            + "AND name = N'IX_filter_items_Code';");
+            + "AND name = N'IX_filter_items_Code';",
+            cancellationToken: CancellationToken.None);
 
-        var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.filter_items WHERE Code = 7;");
-        var ddlEvents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.filter_ddl_events;");
+        var rowCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.filter_items WHERE Code = 7;",
+            cancellationToken: CancellationToken.None);
+
+        var ddlEvents = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.filter_ddl_events;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(
-            kind == "missing" ? SafeMigrationObservedState.PrerequisiteMissing : SafeMigrationObservedState.Unsupported,
-            Assert.Single(analyses).ObservedState);
-        Assert.Equal(kind == "missing" ? 51004 : 51002, Assert.IsType<SqlException>(failure).Number);
+            kind == "missing"
+                ? SafeMigrationObservedState.PrerequisiteMissing
+                : SafeMigrationObservedState.Unsupported,
+            Assert.Single(analyses)
+                .ObservedState);
+
+        Assert.Equal(
+            kind == "missing"
+                ? 51004
+                : 51002,
+            Assert.IsType<SqlException>(failure)
+                .Number);
+
         Assert.Equal(originalTableId, remainingTableId);
         Assert.Equal(0, indexCount);
         Assert.Equal(2, rowCount);
@@ -157,14 +227,16 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.filter_items (Id int NOT NULL, Code int NULL, Flag int NULL); "
             + "INSERT dbo.filter_items (Id, Code, Flag) VALUES "
             + "(1, 10, 1), (2, 20, 2), (3, NULL, 3), (4, NULL, NULL); "
-            + "CREATE TABLE dbo.filter_ddl_events (Id int NOT NULL);");
-        await CreateFilterPredicateAuditAsync(connectionString);
+            + "CREATE TABLE dbo.filter_ddl_events (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
+        await CreateFilterPredicateAuditAsync(connectionString, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexIfNotExists(
@@ -173,35 +245,55 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
             ["Code"],
             unique: true,
             filter: filter);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("supported-filter-before"));
+            new SafeMigrationRunOptions("supported-filter-before"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var ddlEvents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.filter_ddl_events;");
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var replayDdlEvents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.filter_ddl_events;");
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        var ddlEvents = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.filter_ddl_events;",
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        var replayDdlEvents = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.filter_ddl_events;",
+            cancellationToken: CancellationToken.None);
+
         var postflight = await runner.VerifyAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("supported-filter-after"));
+            new SafeMigrationRunOptions("supported-filter-after"),
+            cancellationToken: CancellationToken.None);
 
         var indexCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.filter_items', N'U') "
-            + "AND name = N'IX_filter_items_Code' AND is_unique = 1 AND has_filter = 1;");
+            + "AND name = N'IX_filter_items_Code' AND is_unique = 1 AND has_filter = 1;",
+            cancellationToken: CancellationToken.None);
 
-        var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.filter_items;");
+        var rowCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.filter_items;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(preflight.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.True(Assert.Single(postflight.Assessments).PostconditionSatisfied);
+        Assert.True(Assert.Single(postflight.Assessments)
+            .PostconditionSatisfied);
+
         Assert.Equal(1, indexCount);
         Assert.True(ddlEvents > 0);
         Assert.Equal(ddlEvents, replayDdlEvents);
@@ -222,37 +314,64 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.filter_items (Id int NOT NULL, Code int NULL, Flag int NULL); "
             + "INSERT dbo.filter_items (Id, Code, Flag) VALUES (1, NULL, 1), (2, NULL, 1), (3, 7, 1); "
-            + "CREATE TABLE dbo.filter_ddl_events (Id int NOT NULL);");
-        await CreateFilterPredicateAuditAsync(connectionString);
+            + "CREATE TABLE dbo.filter_ddl_events (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
+        await CreateFilterPredicateAuditAsync(connectionString, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operation = new SafeMigrationOperation(
-            new EnsureIndexIntent(new ExpectedIndexDefinition(
-                "IX_filter_items_Code",
-                "filter_items",
-                [new ExpectedIndexKeyDefinition("Code")],
-                unique: true,
-                filter: filter)),
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "IX_filter_items_Code",
+                    "filter_items",
+                    [new ExpectedIndexKeyDefinition("Code")],
+                    unique: true,
+                    filter: filter)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                cancellationToken: CancellationToken.None);
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [operation],
+            cancellationToken: CancellationToken.None));
+
         var indexCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.filter_items', N'U') "
-            + "AND name = N'IX_filter_items_Code';");
+            + "AND name = N'IX_filter_items_Code';",
+            cancellationToken: CancellationToken.None);
 
-        var ddlEvents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.filter_ddl_events;");
+        var ddlEvents = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.filter_ddl_events;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(safe ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.DataBlocked,
-            Assert.Single(analyses).ObservedState);
-        Assert.Equal(safe ? 1 : 0, indexCount);
+        Assert.Equal(
+            safe
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.DataBlocked,
+            Assert.Single(analyses)
+                .ObservedState);
+
+        Assert.Equal(
+            safe
+                ? 1
+                : 0,
+            indexCount);
+
         if (safe)
         {
             Assert.Null(failure);
@@ -260,7 +379,10 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
         }
         else
         {
-            Assert.Equal(51003, Assert.IsType<SqlException>(failure).Number);
+            Assert.Equal(51003,
+                Assert.IsType<SqlException>(failure)
+                    .Number);
+
             Assert.Equal(0, ddlEvents);
         }
     }
@@ -282,7 +404,7 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -293,6 +415,7 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
                 Code = table.Column<int>(type: "int", nullable: true),
             },
             constraints: table => table.PrimaryKey("PK_projected_filter_items", row => row.Id));
+
         builder.AddColumnIfNotExists<int>("Flag", "projected_filter_items", type: "int", nullable: true);
         builder.CreateIndexIfNotExists(
             "IX_projected_filter_items_Code",
@@ -302,14 +425,18 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
             filter: filter);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("projected-filter-validation"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("projected-filter-validation"),
+                cancellationToken: CancellationToken.None);
 
         var tableCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE name = N'projected_filter_items';");
+            "SELECT COUNT(*) FROM sys.tables WHERE name = N'projected_filter_items';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var expectedStatus = expectedAction == SafeMigrationAction.Apply
@@ -331,9 +458,11 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
     }
 
     private static Task CreateFilterPredicateAuditAsync(
-        string connectionString
+        string connectionString,
+        CancellationToken cancellationToken
     ) => ExecuteSqlAsync(
         connectionString,
         "CREATE TRIGGER doka_filter_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS, DDL_INDEX_EVENTS "
-        + "AS INSERT dbo.filter_ddl_events VALUES (1);");
+        + "AS INSERT dbo.filter_ddl_events VALUES (1);",
+        cancellationToken: cancellationToken);
 }

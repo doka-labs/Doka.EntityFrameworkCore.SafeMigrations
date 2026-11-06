@@ -7,7 +7,10 @@ internal static class SqliteColumnRepairProof
     /// <param name="source">The exact source definition captured by the migration.</param>
     /// <param name="target">The requested target definition.</param>
     /// <returns>Whether copying existing values cannot change their declared storage or CLR domain.</returns>
-    internal static bool HasLosslessShape(ExpectedColumnDefinition source, ExpectedColumnDefinition target)
+    internal static bool HasLosslessShape(
+        ExpectedColumnDefinition source,
+        ExpectedColumnDefinition target
+    )
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(target);
@@ -22,7 +25,9 @@ internal static class SqliteColumnRepairProof
     }
 
     /// <summary>Reads the only supported SQLite-owned generation annotation without allocating.</summary>
-    private static bool Autoincrement(ExpectedColumnDefinition definition)
+    private static bool Autoincrement(
+        ExpectedColumnDefinition definition
+    )
     {
         // WHY: Indexing avoids an interface enumerator for each source/target annotation check.
         // ReSharper disable once ForCanBeConvertedToForeach

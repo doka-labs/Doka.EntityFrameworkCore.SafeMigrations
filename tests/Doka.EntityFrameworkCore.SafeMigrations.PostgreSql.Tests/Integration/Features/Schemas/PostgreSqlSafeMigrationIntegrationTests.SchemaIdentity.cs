@@ -34,18 +34,28 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, SchemaIdentityFixtureSql(kind));
+        await ExecuteSqlAsync(
+            connectionString,
+            SchemaIdentityFixtureSql(kind),
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = SchemaIdentityReplacement(context, kind, qualifiedDrop);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
         var preflight = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("current-schema-replacement"));
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("current-schema-replacement"),
+            CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var postflight = await runner.VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("current-schema-final-writer"));
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("current-schema-final-writer"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -58,24 +68,36 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     [Theory]
     [InlineData("identity_module")]
     [InlineData("identity_missing,identity_module,public")]
-    public async Task NonPublicCurrentSchemaReplacement_PreservesItsVerifiedAlias(string searchPath)
+    public async Task NonPublicCurrentSchemaReplacement_PreservesItsVerifiedAlias(
+        string searchPath
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
-            "CREATE SCHEMA identity_module; CREATE TABLE identity_module.identity_target (id integer NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE SCHEMA identity_module; CREATE TABLE identity_module.identity_target (id integer NULL);",
+            cancellationToken: CancellationToken.None);
 
         var configured = new NpgsqlConnectionStringBuilder(connectionString) { SearchPath = searchPath };
         await using var context = CreateContext(configured.ConnectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTableIfExists("identity_target", "identity_module");
-        builder.EnsureTable(new ExpectedTableDefinition("identity_target",
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "identity_target",
                 [new ExpectedColumnDefinition("id", typeof(int), true, "integer")]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("nonpublic-current-schema"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("nonpublic-current-schema"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -87,34 +109,67 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task OrdinaryColumnAddAndSafeIndex_ShareVerifiedCurrentSchemaAliases(bool qualifiedProvider)
+    public async Task OrdinaryColumnAddAndSafeIndex_ShareVerifiedCurrentSchemaAliases(
+        bool qualifiedProvider
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE public.identity_target (id integer NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE public.identity_target (id integer NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AddColumn<int>("added", "identity_target", type: "integer", nullable: true,
-            schema: qualifiedProvider ? "public" : null);
-        builder.EnsureIndex(new ExpectedIndexDefinition("ix_identity_added", "identity_target",
-                [new ExpectedIndexKeyDefinition(column: "added")], qualifiedProvider ? null : "public"),
+        builder.AddColumn<int>(
+            "added",
+            "identity_target",
+            type: "integer",
+            nullable: true,
+            schema: qualifiedProvider
+                ? "public"
+                : null);
+
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "ix_identity_added",
+                "identity_target",
+                [new ExpectedIndexKeyDefinition(column: "added")],
+                qualifiedProvider
+                    ? null
+                    : "public"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("ordinary-safe-current-schema-aliases"));
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("ordinary-safe-current-schema-aliases"),
+                CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var postflight = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("ordinary-safe-current-schema-postflight"));
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var postflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("ordinary-safe-current-schema-postflight"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, preflight.Status);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[1].Action);
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, postflight.Status);
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'public' "
-            + "AND tablename = 'identity_target' AND indexname = 'ix_identity_added';"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'public' "
+                + "AND tablename = 'identity_target' AND indexname = 'ix_identity_added';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A typed ordinary column drop clears the same physical owner seen by an aliased safe ensure.</summary>
@@ -122,34 +177,64 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task OrdinaryColumnDropAndSafeEnsure_ShareVerifiedCurrentSchemaAliases(bool qualifiedProvider)
+    public async Task OrdinaryColumnDropAndSafeEnsure_ShareVerifiedCurrentSchemaAliases(
+        bool qualifiedProvider
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE public.identity_target (id integer NULL, restored integer NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE public.identity_target (id integer NULL, restored integer NULL);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.DropColumn("restored", "identity_target", schema: qualifiedProvider ? "public" : null);
-        builder.AddColumnIfNotExists<int>("restored", "identity_target", type: "integer", nullable: true,
-            schema: qualifiedProvider ? null : "public");
+        builder.DropColumn(
+            "restored",
+            "identity_target",
+            schema: qualifiedProvider
+                ? "public"
+                : null);
+
+        builder.AddColumnIfNotExists<int>(
+            "restored",
+            "identity_target",
+            type: "integer",
+            nullable: true,
+            schema: qualifiedProvider
+                ? null
+                : "public");
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("ordinary-drop-safe-ensure-schema-aliases"));
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("ordinary-drop-safe-ensure-schema-aliases"),
+                CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var postflight = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("ordinary-drop-safe-ensure-postflight"));
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var postflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("ordinary-drop-safe-ensure-postflight"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, preflight.Status);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[1].Action);
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, postflight.Status);
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' "
-            + "AND table_name = 'identity_target' AND column_name = 'restored';"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' "
+                + "AND table_name = 'identity_target' AND column_name = 'restored';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A fallback native owner is rejected before reading or changing the other schema.</summary>
@@ -158,8 +243,10 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
-            "CREATE SCHEMA identity_module; CREATE TABLE public.identity_target (id integer NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE SCHEMA identity_module; CREATE TABLE public.identity_target (id integer NULL);",
+            cancellationToken: CancellationToken.None);
 
         var configured = new NpgsqlConnectionStringBuilder(connectionString)
         {
@@ -171,19 +258,28 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
         builder.AddColumnIfNotExists<int>("added", "identity_target", type: "integer", nullable: true);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("search-path-fallback"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("search-path-fallback"),
+                CancellationToken.None);
 
-        var failure = await Assert.ThrowsAsync<PostgresException>(
-            () => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Assert.ThrowsAsync<PostgresException>(() =>
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Unsupported, report.Assessments[0].ObservedState);
         Assert.Equal("schema_search_path_mismatch", report.Assessments[0].AnalysisCode);
         Assert.Equal("P1002", failure.SqlState);
-        Assert.Equal(0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'identity_target' "
-            + "AND column_name = 'added';"));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'identity_target' "
+                + "AND column_name = 'added';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A metadata-only owner refusal shares classification rather than adding a prerequisite batch.</summary>
@@ -192,7 +288,11 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE public.identity_target (id integer NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE public.identity_target (id integer NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(
             new NpgsqlConnection(connectionString));
@@ -201,13 +301,23 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("CREATE TEMPORARY TABLE identity_target (id integer NULL);");
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureTable(new ExpectedTableDefinition("identity_target",
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "identity_target",
                 [new ExpectedColumnDefinition("id", typeof(int), true, "integer")]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
-            context, builder.Operations.Cast<SafeMigrationOperation>().ToArray());
+        var results = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                builder
+                    .Operations
+                    .Cast<SafeMigrationOperation>()
+                    .ToArray(),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(0, connection.PrerequisiteStatementCount);
@@ -222,8 +332,10 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
-            "CREATE SCHEMA identity_module; CREATE TABLE public.identity_target (id integer NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE SCHEMA identity_module; CREATE TABLE public.identity_target (id integer NULL);",
+            cancellationToken: CancellationToken.None);
 
         var configured = new NpgsqlConnectionStringBuilder(connectionString)
         {
@@ -232,20 +344,33 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
 
         await using var context = CreateContext(configured.ConnectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AddColumnIfNotExists<int>("added", "identity_target", type: "integer", nullable: true,
+        builder.AddColumnIfNotExists<int>(
+            "added",
+            "identity_target",
+            type: "integer",
+            nullable: true,
             schema: "public");
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("qualified-fallback"));
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("qualified-fallback"),
+                CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' "
-            + "AND table_name = 'identity_target' AND column_name = 'added';"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' "
+                + "AND table_name = 'identity_target' AND column_name = 'added';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A runtime table contract borrows standalone constraints only from its verified current alias.</summary>
@@ -253,23 +378,37 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task MixedCurrentSchemaTableAndStandaloneConstraint_ShareRuntimeContract(bool qualifiedTable)
+    public async Task MixedCurrentSchemaTableAndStandaloneConstraint_ShareRuntimeContract(
+        bool qualifiedTable
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE public.identity_target (id integer NULL, CONSTRAINT uq_identity_target UNIQUE (id));");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE public.identity_target (id integer NULL, CONSTRAINT uq_identity_target UNIQUE (id));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = SchemaIdentityTableConstraint(context, qualifiedTable, "public");
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("current-schema-transition-contract"));
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("current-schema-transition-contract"),
+                CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var postflight = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("current-schema-transition-postflight"));
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var postflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("current-schema-transition-postflight"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -283,28 +422,39 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE SCHEMA identity_foreign; CREATE TABLE identity_foreign.identity_target (id integer NULL); "
-            + "CREATE TABLE public.identity_target (id integer NULL, CONSTRAINT uq_identity_target UNIQUE (id));");
+            + "CREATE TABLE public.identity_target (id integer NULL, CONSTRAINT uq_identity_target UNIQUE (id));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = SchemaIdentityTableConstraint(context, qualifiedTable: false, "identity_foreign");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("foreign-transition-contract"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("foreign-transition-contract"),
+                CancellationToken.None);
 
-        var failure = await Assert.ThrowsAsync<PostgresException>(
-            () => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Assert.ThrowsAsync<PostgresException>(() =>
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Different, report.Assessments[0].ObservedState);
         Assert.Equal("P1001", failure.SqlState);
-        Assert.Equal(0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_constraint constraint_object "
-            + "JOIN pg_catalog.pg_class relation ON relation.oid = constraint_object.conrelid "
-            + "JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace "
-            + "WHERE namespace.nspname = 'identity_foreign' AND constraint_object.conname = 'uq_identity_target';"));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_constraint constraint_object "
+                + "JOIN pg_catalog.pg_class relation ON relation.oid = constraint_object.conrelid "
+                + "JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace "
+                + "WHERE namespace.nspname = 'identity_foreign' AND constraint_object.conname = 'uq_identity_target';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Implicit temporary-schema precedence cannot redirect a guard to a shadow relation.</summary>
@@ -313,7 +463,11 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE public.identity_target (id integer NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE public.identity_target (id integer NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("CREATE TEMPORARY TABLE identity_target (id integer NULL);");
@@ -321,18 +475,27 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
         builder.DropTableIfExists("identity_target");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("temporary-owner-shadow"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("temporary-owner-shadow"),
+                CancellationToken.None);
 
-        var failure = await Assert.ThrowsAsync<PostgresException>(
-            () => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Assert.ThrowsAsync<PostgresException>(() =>
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         // Assert
         Assert.Equal("schema_search_path_mismatch", report.Assessments[0].AnalysisCode);
         Assert.Equal("P1002", failure.SqlState);
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' "
-            + "AND table_name = 'identity_target';"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' "
+                + "AND table_name = 'identity_target';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A qualified operation remains valid when the connection has no effective default schema.</summary>
@@ -344,24 +507,42 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
         var configured = new NpgsqlConnectionStringBuilder(connectionString) { SearchPath = "identity_missing" };
         await using var context = CreateContext(configured.ConnectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureTable(new ExpectedTableDefinition("identity_target",
-                [new ExpectedColumnDefinition("id", typeof(int), true, "integer")], "public"),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "identity_target",
+                [new ExpectedColumnDefinition("id", typeof(int), true, "integer")],
+                "public"),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("qualified-no-default-schema"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("qualified-no-default-schema"),
+                CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var verification = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("qualified-no-default-schema-postflight"));
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var verification = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("qualified-no-default-schema-postflight"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(SafeMigrationReportStatus.Ready, verification.Status);
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' "
-            + "AND table_name = 'identity_target';"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' "
+                + "AND table_name = 'identity_target';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>An unavailable default schema cannot be inferred from another authored qualifier.</summary>
@@ -376,11 +557,16 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
         builder.DropTableIfExists("identity_target");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("unqualified-no-default-schema"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("unqualified-no-default-schema"),
+                CancellationToken.None);
 
-        var failure = await Assert.ThrowsAsync<PostgresException>(
-            () => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Assert.ThrowsAsync<PostgresException>(() =>
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         // Assert
         Assert.Equal("schema_search_path_mismatch", report.Assessments[0].AnalysisCode);
@@ -393,22 +579,37 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE public.identity_target (id integer NULL, CONSTRAINT uq_identity_target UNIQUE (id));");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE public.identity_target (id integer NULL, CONSTRAINT uq_identity_target UNIQUE (id));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureTable(new ExpectedTableDefinition("identity_target",
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "identity_target",
                 [new ExpectedColumnDefinition("id", typeof(int), true, "integer")]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.Sql("SET search_path TO public;");
-        builder.EnsureUniqueConstraint(new ExpectedUniqueConstraintDefinition(
-                "uq_identity_target", "identity_target", ["id"], "public"),
+        builder.EnsureUniqueConstraint(
+            new ExpectedUniqueConstraintDefinition(
+                "uq_identity_target",
+                "identity_target",
+                ["id"],
+                "public"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("opaque-schema-contract-boundary"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("opaque-schema-contract-boundary"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -422,10 +623,12 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE SCHEMA identity_first; CREATE SCHEMA identity_second; "
             + "CREATE TABLE identity_first.identity_target (id integer NULL); "
-            + "CREATE TABLE identity_second.identity_target (id integer NULL);");
+            + "CREATE TABLE identity_second.identity_target (id integer NULL);",
+            cancellationToken: CancellationToken.None);
 
         var configured = new NpgsqlConnectionStringBuilder(connectionString) { SearchPath = "identity_first" };
         await using var context = CreateContext(configured.ConnectionString);
@@ -435,12 +638,18 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var firstReport = await runner.AnalyzeAsync(context, first.Operations,
-            new SafeMigrationRunOptions("first-current-schema"));
+        var firstReport = await runner.AnalyzeAsync(
+            context,
+            first.Operations,
+            new SafeMigrationRunOptions("first-current-schema"),
+            CancellationToken.None);
 
         await context.Database.ExecuteSqlRawAsync("SET search_path TO identity_second;");
-        var secondReport = await runner.AnalyzeAsync(context, second.Operations,
-            new SafeMigrationRunOptions("second-current-schema"));
+        var secondReport = await runner.AnalyzeAsync(
+            context,
+            second.Operations,
+            new SafeMigrationRunOptions("second-current-schema"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, firstReport.Assessments[^1].Action);
@@ -455,18 +664,25 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE SCHEMA \"Scope\"; CREATE SCHEMA \"scope\"; "
             + "CREATE TABLE \"Scope\".identity_target (id integer NULL); "
-            + "CREATE TABLE \"scope\".identity_target (id integer NULL);");
+            + "CREATE TABLE \"scope\".identity_target (id integer NULL);",
+            cancellationToken: CancellationToken.None);
 
         var configured = new NpgsqlConnectionStringBuilder(connectionString) { SearchPath = "scope" };
         await using var context = CreateContext(configured.ConnectionString);
         var builder = SchemaIdentityTableReplacement(context, "Scope");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("quoted-schema-case"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("quoted-schema-case"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -479,29 +695,44 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE SCHEMA identity_final; CREATE TABLE public.identity_target (id integer NULL); "
-            + "CREATE TABLE identity_final.identity_target (id integer NULL);");
+            + "CREATE TABLE identity_final.identity_target (id integer NULL);",
+            cancellationToken: CancellationToken.None);
 
         var configured = new NpgsqlConnectionStringBuilder(connectionString) { SearchPath = "identity_final" };
         await using var context = CreateContext(configured.ConnectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTableIfExists("identity_target");
         builder.Sql("SET search_path TO identity_final;");
-        builder.EnsureTable(new ExpectedTableDefinition("identity_target",
-                [new ExpectedColumnDefinition("id", typeof(int), true, "integer")], "identity_final"),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "identity_target",
+                [new ExpectedColumnDefinition("id", typeof(int), true, "integer")],
+                "identity_final"),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("historical-owner-not-proven"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("historical-owner-not-proven"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.False(report.Assessments[0].PostconditionSatisfied);
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' "
-            + "AND table_name = 'identity_target';"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' "
+                + "AND table_name = 'identity_target';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>An explicit historical owner remains verifiable across a search-path boundary.</summary>
@@ -510,25 +741,37 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
-            "CREATE SCHEMA identity_final; CREATE TABLE identity_final.identity_target (id integer NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE SCHEMA identity_final; CREATE TABLE identity_final.identity_target (id integer NULL);",
+            cancellationToken: CancellationToken.None);
 
         var configured = new NpgsqlConnectionStringBuilder(connectionString) { SearchPath = "identity_final" };
         await using var context = CreateContext(configured.ConnectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTableIfExists("identity_target", "public");
         builder.Sql("SET search_path TO identity_final;");
-        builder.EnsureTable(new ExpectedTableDefinition("identity_target",
-                [new ExpectedColumnDefinition("id", typeof(int), true, "integer")], "identity_final"),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "identity_target",
+                [new ExpectedColumnDefinition("id", typeof(int), true, "integer")],
+                "identity_final"),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("explicit-historical-owner"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("explicit-historical-owner"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, report.Status);
-        Assert.All(report.Assessments.Where(static assessment => assessment.IsSafeOperation),
+        Assert.All(
+            report.Assessments.Where(static assessment => assessment.IsSafeOperation),
             assessment => Assert.True(assessment.PostconditionSatisfied));
     }
 
@@ -538,26 +781,43 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE public.identity_target (id integer NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE public.identity_target (id integer NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureIndex(new ExpectedIndexDefinition(
-                "ix_identity_target", "identity_target", [new ExpectedIndexKeyDefinition(column: "id")]),
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "ix_identity_target",
+                "identity_target",
+                [new ExpectedIndexKeyDefinition(column: "id")]),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.Sql("UPDATE public.identity_target SET id = 7;");
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("historical-unqualified-index"));
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("historical-unqualified-index"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.False(report.Assessments[0].PostconditionSatisfied);
         Assert.Equal("postcondition_identity_unproven", report.Assessments[0].Code);
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'public' "
-            + "AND tablename = 'identity_target' AND indexname = 'ix_identity_target';"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'public' "
+                + "AND tablename = 'identity_target' AND indexname = 'ix_identity_target';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Raw SQL can establish the current owner which an initial fallback lookup could not prove.</summary>
@@ -566,8 +826,10 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
-            "CREATE SCHEMA identity_module; CREATE TABLE public.identity_target (id integer NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE SCHEMA identity_module; CREATE TABLE public.identity_target (id integer NULL);",
+            cancellationToken: CancellationToken.None);
 
         var configured = new NpgsqlConnectionStringBuilder(connectionString)
         {
@@ -580,20 +842,34 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
         builder.AddColumnIfNotExists<int>("added", "identity_target", type: "integer", nullable: true);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("raw-sql-current-owner"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("raw-sql-current-owner"),
+                CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, report.Assessments[^1].Action);
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'identity_module' "
-            + "AND table_name = 'identity_target' AND column_name = 'added';"));
-        Assert.Equal(0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' "
-            + "AND table_name = 'identity_target' AND column_name = 'added';"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'identity_module' "
+                + "AND table_name = 'identity_target' AND column_name = 'added';",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' "
+                + "AND table_name = 'identity_target' AND column_name = 'added';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Creating a missing leading path schema invalidates the initial unqualified owner proof.</summary>
@@ -602,7 +878,11 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE public.identity_target (id integer NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE public.identity_target (id integer NULL);",
+            cancellationToken: CancellationToken.None);
+
         var configured = new NpgsqlConnectionStringBuilder(connectionString)
         {
             SearchPath = "identity_new,public",
@@ -611,32 +891,50 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
         await using var context = CreateContext(configured.ConnectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureSchemaExists("identity_new");
-        builder.EnsureTable(new ExpectedTableDefinition("identity_target",
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "identity_target",
                 [new ExpectedColumnDefinition("id", typeof(int), true, "integer")]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("schema-activation-boundary"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("schema-activation-boundary"),
+                CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, report.Assessments[^1].Action);
-        Assert.Equal(2, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'identity_target' "
-            + "AND table_schema IN ('identity_new', 'public');"));
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'identity_target' "
+                + "AND table_schema IN ('identity_new', 'public');",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Creates a minimal replacement with a qualified source and unqualified target.</summary>
-    private static MigrationBuilder SchemaIdentityTableReplacement(DbContext context, string schema)
+    private static MigrationBuilder SchemaIdentityTableReplacement(
+        DbContext context,
+        string schema
+    )
     {
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTableIfExists("identity_target", schema);
-        builder.EnsureTable(new ExpectedTableDefinition("identity_target",
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "identity_target",
                 [new ExpectedColumnDefinition("id", typeof(int), true, "integer")]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         return builder;
     }
@@ -649,19 +947,33 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     )
     {
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureTable(new ExpectedTableDefinition("identity_target",
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "identity_target",
                 [new ExpectedColumnDefinition("id", typeof(int), true, "integer")],
-                qualifiedTable ? qualifier : null),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
-        builder.EnsureUniqueConstraint(new ExpectedUniqueConstraintDefinition(
-                "uq_identity_target", "identity_target", ["id"], qualifiedTable ? null : qualifier),
+                qualifiedTable
+                    ? qualifier
+                    : null),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        builder.EnsureUniqueConstraint(
+            new ExpectedUniqueConstraintDefinition(
+                "uq_identity_target",
+                "identity_target",
+                ["id"],
+                qualifiedTable
+                    ? null
+                    : qualifier),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         return builder;
     }
 
     /// <summary>Builds a minimal live resource without introducing unrelated schema dependencies.</summary>
-    private static string SchemaIdentityFixtureSql(string kind)
+    private static string SchemaIdentityFixtureSql(
+        string kind
+    )
     {
         var resource = kind switch
         {
@@ -687,57 +999,97 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
     )
     {
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        var dropSchema = qualifiedDrop ? "public" : null;
-        var ensureSchema = qualifiedDrop ? null : "public";
+        var dropSchema = qualifiedDrop
+            ? "public"
+            : null;
+
+        var ensureSchema = qualifiedDrop
+            ? null
+            : "public";
+
         switch (kind)
         {
             case "table":
                 builder.DropTableIfExists("identity_target", dropSchema);
-                builder.EnsureTable(new ExpectedTableDefinition(
-                    "identity_target",
-                    [
-                        new ExpectedColumnDefinition("id", typeof(int), false, "integer"),
-                        new ExpectedColumnDefinition("parent_id", typeof(int), true, "integer"),
-                        new ExpectedColumnDefinition("code", typeof(int), true, "integer"),
-                    ],
-                    ensureSchema), SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+                builder.EnsureTable(
+                    new ExpectedTableDefinition(
+                        "identity_target",
+                        [
+                            new ExpectedColumnDefinition("id", typeof(int), false, "integer"),
+                            new ExpectedColumnDefinition("parent_id", typeof(int), true, "integer"),
+                            new ExpectedColumnDefinition("code", typeof(int), true, "integer"),
+                        ],
+                        ensureSchema),
+                    SafeMigrationTableMode.StrictDefinition,
+                    SafeMigrationPolicy.ThrowIfDifferent);
+
                 break;
             case "column":
                 builder.DropColumnIfExists("code", "identity_target", dropSchema);
-                builder.EnsureColumn("identity_target",
+                builder.EnsureColumn(
+                    "identity_target",
                     new ExpectedColumnDefinition("code", typeof(int), true, "integer"),
-                    SafeMigrationPolicy.ThrowIfDifferent, ensureSchema);
+                    SafeMigrationPolicy.ThrowIfDifferent,
+                    ensureSchema);
+
                 break;
             case "index":
                 builder.DropIndexIfExists("ix_identity_target", "identity_target", dropSchema);
-                builder.EnsureIndex(new ExpectedIndexDefinition(
-                    "ix_identity_target", "identity_target", [new ExpectedIndexKeyDefinition(column: "code")],
-                    ensureSchema), SafeMigrationPolicy.ThrowIfDifferent);
+                builder.EnsureIndex(
+                    new ExpectedIndexDefinition(
+                        "ix_identity_target",
+                        "identity_target",
+                        [new ExpectedIndexKeyDefinition(column: "code")],
+                        ensureSchema),
+                    SafeMigrationPolicy.ThrowIfDifferent);
+
                 break;
             case "primary":
                 builder.DropPrimaryKeyIfExists("pk_identity_target", "identity_target", dropSchema);
-                builder.EnsurePrimaryKey(new ExpectedPrimaryKeyDefinition(
-                    "pk_identity_target", "identity_target", ["id"], ensureSchema),
+                builder.EnsurePrimaryKey(
+                    new ExpectedPrimaryKeyDefinition(
+                        "pk_identity_target",
+                        "identity_target",
+                        ["id"],
+                        ensureSchema),
                     SafeMigrationPolicy.ThrowIfDifferent);
+
                 break;
             case "unique":
                 builder.DropUniqueConstraintIfExists("uq_identity_target", "identity_target", dropSchema);
-                builder.EnsureUniqueConstraint(new ExpectedUniqueConstraintDefinition(
-                    "uq_identity_target", "identity_target", ["code"], ensureSchema),
+                builder.EnsureUniqueConstraint(
+                    new ExpectedUniqueConstraintDefinition(
+                        "uq_identity_target",
+                        "identity_target",
+                        ["code"],
+                        ensureSchema),
                     SafeMigrationPolicy.ThrowIfDifferent);
+
                 break;
             case "check":
                 builder.DropCheckConstraintIfExists("ck_identity_target", "identity_target", dropSchema);
-                builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression(
-                    "ck_identity_target", "identity_target",
-                    SqlColumnAndInt("id", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0), ensureSchema),
+                builder.EnsureCheckConstraint(
+                    ExpectedCheckConstraintDefinition.FromExpression(
+                        "ck_identity_target",
+                        "identity_target",
+                        SqlColumnAndInt("id", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0),
+                        ensureSchema),
                     SafeMigrationPolicy.ThrowIfDifferent);
+
                 break;
             case "foreign":
                 builder.DropForeignKeyIfExists("fk_identity_target", "identity_target", dropSchema);
-                builder.EnsureForeignKey(new ExpectedForeignKeyDefinition(
-                    "fk_identity_target", "identity_target", ["parent_id"], "identity_parent", ["id"],
-                    ensureSchema, "public"), SafeMigrationPolicy.ThrowIfDifferent);
+                builder.EnsureForeignKey(
+                    new ExpectedForeignKeyDefinition(
+                        "fk_identity_target",
+                        "identity_target",
+                        ["parent_id"],
+                        "identity_parent",
+                        ["id"],
+                        ensureSchema,
+                        "public"),
+                    SafeMigrationPolicy.ThrowIfDifferent);
+
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(kind));
@@ -745,5 +1097,4 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
 
         return builder;
     }
-
 }

@@ -11,11 +11,35 @@ public sealed class SqlServerManagedValueRepresentationTests
     {
         yield return ["datetime", DateTime.MinValue, false];
         yield return ["datetime", new DateTime(1753, 1, 1), true];
-        yield return ["datetime", new DateTime(9999, 12, 31, 23, 59, 59, 997), true];
+        yield return
+        [
+            "datetime", new DateTime(
+                9999,
+                12,
+                31,
+                23,
+                59,
+                59,
+                997),
+            true,
+        ];
+
         yield return ["datetime", DateTime.MaxValue, false];
         yield return ["smalldatetime", new DateTime(1899, 12, 31), false];
         yield return ["smalldatetime", new DateTime(1900, 1, 1), true];
-        yield return ["smalldatetime", new DateTime(2079, 6, 6, 23, 59, 29, 998), true];
+        yield return
+        [
+            "smalldatetime", new DateTime(
+                2079,
+                6,
+                6,
+                23,
+                59,
+                29,
+                998),
+            true,
+        ];
+
         yield return ["smalldatetime", new DateTime(2079, 6, 6, 23, 59, 30), false];
         yield return ["datetime2(7)", DateTime.MinValue, true];
         yield return ["datetime2(7)", DateTime.MaxValue, true];
@@ -61,13 +85,22 @@ public sealed class SqlServerManagedValueRepresentationTests
     [Theory]
     [InlineData("datetime")]
     [InlineData("smalldatetime")]
-    public void ManagedTemporalOverflow_IsUnsupportedBeforeRelations(string storeType)
+    public void ManagedTemporalOverflow_IsUnsupportedBeforeRelations(
+        string storeType
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = Catalog(context);
-        var intent = new EnsureModelManagedDataIntent("dates", ["Id"], ["int"],
-            ["Id", "Date"], ["int", storeType], new object?[,] { { 1, DateTime.MinValue } }, null, null);
+        var intent = new EnsureModelManagedDataIntent(
+            "dates",
+            ["Id"],
+            ["int"],
+            ["Id", "Date"],
+            ["int", storeType],
+            new object?[,] { { 1, DateTime.MinValue } },
+            null,
+            null);
 
         // Act
         var plan = catalog.Build(new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent));
@@ -87,8 +120,15 @@ public sealed class SqlServerManagedValueRepresentationTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = Catalog(context);
-        var intent = new EnsureModelManagedDataIntent("dates", ["Id"], ["int"],
-            ["Id", "Date"], ["int", "datetime2(7)"], new object?[,] { { 1, DateTime.MinValue } }, null, null);
+        var intent = new EnsureModelManagedDataIntent(
+            "dates",
+            ["Id"],
+            ["int"],
+            ["Id", "Date"],
+            ["int", "datetime2(7)"],
+            new object?[,] { { 1, DateTime.MinValue } },
+            null,
+            null);
 
         var columns = new[]
         {
@@ -140,7 +180,9 @@ public sealed class SqlServerManagedValueRepresentationTests
     [Theory]
     [InlineData("nvarchar(max)")]
     [InlineData("varchar(max)")]
-    public void ManagedLargeCharacterValue_RemainsSupported(string storeType)
+    public void ManagedLargeCharacterValue_RemainsSupported(
+        string storeType
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
@@ -154,6 +196,8 @@ public sealed class SqlServerManagedValueRepresentationTests
         Assert.Equal("1 = 1", guard);
     }
 
-    private static SqlServerSafeMigrationCatalogSqlBuilder Catalog(DbContext context)
+    private static SqlServerSafeMigrationCatalogSqlBuilder Catalog(
+        DbContext context
+    )
         => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 }

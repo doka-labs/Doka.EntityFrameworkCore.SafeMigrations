@@ -1,3 +1,5 @@
+using System.Data;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed partial class MySqlSafeMigrationProviderAnalyzer
@@ -5,14 +7,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     public async Task<IReadOnlyList<SafeMigrationUnexpectedObject>> FindUnexpectedObjectsAsync(
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(operations);
 
         var connection = context.Database.GetDbConnection();
-        var openedHere = connection.State != System.Data.ConnectionState.Open;
+        var openedHere = connection.State != ConnectionState.Open;
         if (openedHere)
         {
             await connection.OpenAsync(cancellationToken);
@@ -25,8 +27,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
             var expected = new Dictionary<string, SafeMigrationExpectedTableInventory>(StringComparer.Ordinal);
             foreach (var table in SafeMigrationExpectedCatalog.Create(
-                         operations,
-                         schema => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase)))
+                operations,
+                schema => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase)))
             {
                 if (table.Schema is not null
                     && !StringComparer.Ordinal.Equals(table.Schema, _currentDatabase))
@@ -108,8 +110,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         await SafeMigrationCatalogProbeBatch.ReadAsync(
             connection,
             1
-            + ((tables.Length + SafeMigrationCatalogQueryLimits.MaximumInventoryValues - 1)
-                / SafeMigrationCatalogQueryLimits.MaximumInventoryValues),
+            + (tables.Length + SafeMigrationCatalogQueryLimits.MaximumInventoryValues - 1)
+            / SafeMigrationCatalogQueryLimits.MaximumInventoryValues,
             maximumPayloadBytes,
             commandTimeout,
             (command, slot) =>
@@ -168,8 +170,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         // large legacy catalog cannot materialize a cross-product in memory.
         var semanticAliases = new HashSet<int>();
         foreach (var candidates in SafeMigrationSemanticCandidateFactory
-                     .Create(operations, findings, projectUniqueIndexesAsUniqueConstraints: true)
-                     .Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
+            .Create(operations, findings, projectUniqueIndexesAsUniqueConstraints: true)
+            .Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
         {
             var analyses = await AnalyzeAsync(
                 context,
@@ -218,8 +220,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             var objectName = reader.GetString(2);
             var providerGeneratedJsonCheck = reader.GetBoolean(3);
             if (permittedTables is null
-                    ? kind != SafeMigrationDatabaseObjectKind.Table
-                    : kind == SafeMigrationDatabaseObjectKind.Table || !permittedTables.Contains(tableName))
+                ? kind != SafeMigrationDatabaseObjectKind.Table
+                : kind == SafeMigrationDatabaseObjectKind.Table || !permittedTables.Contains(tableName))
             {
                 throw new InvalidOperationException("MySQL returned an unowned inventory object.");
             }
@@ -264,7 +266,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         SafeMigrationDatabaseObjectKind.PrimaryKey => table.Constraints.Values.Contains(
             SafeMigrationDatabaseObjectKind.PrimaryKey),
         SafeMigrationDatabaseObjectKind.UniqueConstraint when table.UniqueIndexes.Contains(name) => true,
-        _ => table.Constraints.TryGetValue(name, out var expectedKind) && expectedKind == kind
+        _ => table.Constraints.TryGetValue(name, out var expectedKind) && expectedKind == kind,
     };
 
     private static SafeMigrationUnexpectedObject Unexpected(

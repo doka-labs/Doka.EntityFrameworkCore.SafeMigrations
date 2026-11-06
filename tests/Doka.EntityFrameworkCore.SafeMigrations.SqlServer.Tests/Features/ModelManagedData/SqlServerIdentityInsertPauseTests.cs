@@ -5,6 +5,50 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// </summary>
 public sealed class SqlServerIdentityInsertPauseTests
 {
+    /// <summary>Distinguishes an expired readiness token from an independent post-attention observer.</summary>
+    /// <param name="reuseReadinessToken">
+    /// Whether the observation incorrectly reuses the canceled prior-phase token.
+    /// </param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PostAttentionObservationSeparatesExpiredReadinessFromNativeDispatch(
+        bool reuseReadinessToken
+    )
+    {
+        // Arrange
+        using var readiness = new CancellationTokenSource();
+        readiness.Cancel();
+        using var observer = new SqlConnection();
+        var method = typeof(SqlServerIdentityInsertOwnershipIntegrationTests).GetMethod(
+            "ReadMarkerIsNullAsync",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+
+        var observationToken = reuseReadinessToken
+            ? readiness.Token
+            : CancellationToken.None;
+
+        // Act
+        var exception = await Record.ExceptionAsync(() => (Task<bool>)method.Invoke(
+            null,
+            [observer, observationToken])!);
+
+        // Assert
+        if (reuseReadinessToken)
+        {
+            var canceled = Assert.IsAssignableFrom<OperationCanceledException>(exception);
+            Assert.Equal(readiness.Token, canceled.CancellationToken);
+        }
+        else
+        {
+            // WHY: An unopened connection proves command admission without contacting a server.
+            // This control must reach native dispatch, rather than being short-circuited by expired readiness.
+            Assert.IsType<InvalidOperationException>(exception);
+        }
+
+        Assert.Equal(ConnectionState.Closed, observer.State);
+    }
+
     /// <summary>
     /// Binds the observation to explicit SQL integer metadata without interpolating the resource.
     /// </summary>
@@ -24,8 +68,10 @@ public sealed class SqlServerIdentityInsertPauseTests
 
         // Assert
         Assert.Same(observer, command.Connection);
-        Assert.Equal("SELECT CONVERT(int, APPLOCK_TEST(N'public', @resource, N'Exclusive', N'Session'));",
+        Assert.Equal(
+            "SELECT CONVERT(int, APPLOCK_TEST(N'public', @resource, N'Exclusive', N'Session'));",
             command.CommandText);
+
         Assert.Equal(5, command.CommandTimeout);
         var parameter = Assert.Single(command.Parameters.Cast<SqlParameter>());
 
@@ -82,7 +128,7 @@ public sealed class SqlServerIdentityInsertPauseTests
     )
     {
         // Arrange
-        Func<bool> parse = () => SqlServerIdentityInsertPauseInterceptor.ParseMarkerAvailability(scalar);
+        var parse = () => SqlServerIdentityInsertPauseInterceptor.ParseMarkerAvailability(scalar);
 
         // Act
         var exception = Record.Exception(() => parse());
@@ -137,7 +183,10 @@ public sealed class SqlServerIdentityInsertPauseTests
 
         // Act
         var paused = SqlServerIdentityInsertPauseInterceptor.BuildPausedCommand(command, resource);
-        var body = isolatedGuard ? SqlServerGuardedSqlTestContract.DecodeScope(paused) : paused;
+        var body = isolatedGuard
+            ? SqlServerGuardedSqlTestContract.DecodeScope(paused)
+            : paused;
+
         var baseline = SqlServerGuardedSqlTestContract.DecodeScope(
             body.Substring(body.IndexOf("EXEC sys.sp_executesql N'", StringComparison.Ordinal)));
 
@@ -151,8 +200,11 @@ public sealed class SqlServerIdentityInsertPauseTests
         Assert.Contains("@Resource = N''" + nestedResource + "''", body, StringComparison.Ordinal);
         Assert.Contains("@LockOwner = N''Session''", body, StringComparison.Ordinal);
         Assert.Contains("@LockTimeout = 0", body, StringComparison.Ordinal);
-        Assert.Contains("@Resource = N'" + resource.Replace("'", "''", StringComparison.Ordinal) + "'",
-            baseline, StringComparison.Ordinal);
+        Assert.Contains(
+            "@Resource = N'" + resource.Replace("'", "''", StringComparison.Ordinal) + "'",
+            baseline,
+            StringComparison.Ordinal);
+
         Assert.DoesNotContain("RAISERROR", paused, StringComparison.Ordinal);
         Assert.DoesNotContain("NOWAIT", paused, StringComparison.Ordinal);
     }
@@ -185,7 +237,9 @@ public sealed class SqlServerIdentityInsertPauseTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void PauseSql_ConfirmedOwnershipAndAttemptGapAreDistinct(bool beforeConfirmation)
+    public void PauseSql_ConfirmedOwnershipAndAttemptGapAreDistinct(
+        bool beforeConfirmation
+    )
     {
         // Arrange
         const string sql = "EXEC sys.sp_executesql N'SET IDENTITY_INSERT [dbo].[identity_roles] ON; "
@@ -193,10 +247,15 @@ public sealed class SqlServerIdentityInsertPauseTests
 
         // Act
         var paused = SqlServerIdentityInsertPauseInterceptor.BuildPausedCommand(
-            sql, "ownership_marker", beforeConfirmation);
+            sql,
+            "ownership_marker",
+            beforeConfirmation);
+
         var identityOn = paused.IndexOf("SET IDENTITY_INSERT [dbo].[identity_roles] ON;", StringComparison.Ordinal);
         var acquired = paused.IndexOf(
-            SqlServerSafeMigrationIdentityInsertScope.AcquiredMarkerComment, StringComparison.Ordinal);
+            SqlServerSafeMigrationIdentityInsertScope.AcquiredMarkerComment,
+            StringComparison.Ordinal);
+
         var wait = paused.IndexOf("WAITFOR", StringComparison.Ordinal);
 
         // Assert
@@ -218,11 +277,15 @@ public sealed class SqlServerIdentityInsertPauseTests
         await using var observer = new SqlConnection();
         var interceptor = new SqlServerIdentityInsertPauseInterceptor("ready_marker");
         var originalFailure = new InvalidOperationException("command failed before IDENTITY_INSERT ON");
-        var execution = commandFails ? Task.FromException(originalFailure) : Task.CompletedTask;
+        var execution = commandFails
+            ? Task.FromException(originalFailure)
+            : Task.CompletedTask;
 
         // Act
         var readinessFailure = await Record.ExceptionAsync(() => interceptor.WaitUntilReadyAsync(
-            observer, execution, CancellationToken.None));
+            observer,
+            execution,
+            CancellationToken.None));
 
         // Assert
         var failure = Assert.IsType<InvalidOperationException>(readinessFailure);
@@ -253,7 +316,9 @@ public sealed class SqlServerIdentityInsertPauseTests
 
         // Act
         var readinessFailure = await Record.ExceptionAsync(() => interceptor.WaitUntilReadyAsync(
-            observer, execution.Task, cancellation.Token));
+            observer,
+            execution.Task,
+            cancellation.Token));
 
         // Assert
         var failure = Assert.IsType<OperationCanceledException>(readinessFailure);

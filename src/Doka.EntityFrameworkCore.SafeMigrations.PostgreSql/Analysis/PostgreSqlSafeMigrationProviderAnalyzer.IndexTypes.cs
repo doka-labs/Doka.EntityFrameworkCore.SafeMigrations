@@ -2,17 +2,19 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 {
+    private HashSet<int>? _indexInputOrderedReplacementOrdinals;
     private Dictionary<IndexInputRequest, bool?>? _indexInputProofs;
     private Dictionary<int, string>? _indexInputShortCircuitCodes;
-    private HashSet<int>? _indexInputOrderedReplacementOrdinals;
     private Dictionary<int, List<ProviderIndexColumnProposal>>? _providerIndexColumnProposals;
 
     /// <summary>
     /// Qualifies newly executable physical index inputs against accepted definitions or real live types.
     /// </summary>
     private SafeMigrationProviderAnalysis? QualifyProjectedIndexTypes(
-        SafeMigrationOperation operation, SafeMigrationProviderAnalysis analysis,
-        ISafeMigrationProjectedColumnSource columns)
+        SafeMigrationOperation operation,
+        SafeMigrationProviderAnalysis analysis,
+        ISafeMigrationProjectedColumnSource columns
+    )
     {
         if (analysis.ObservedState != SafeMigrationObservedState.Missing
             || operation.Intent is not EnsureIndexIntent intent)
@@ -32,10 +34,21 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
             physical = true;
             if (!IndexMemberTableMatches(definition, member)
-                || !TryGetCurrentForeignKeyStorage(definition.Table, definition.Schema,
-                    member.Name, columns, out var storage)
-                || _indexInputProofs?.TryGetValue(IndexInputIdentity(storage.TypeOid,
-                    definition, key, member), out var proof) != true || proof is null)
+                || !TryGetCurrentForeignKeyStorage(
+                    definition.Table,
+                    definition.Schema,
+                    member.Name,
+                    columns,
+                    out var storage)
+                || _indexInputProofs?.TryGetValue(
+                    IndexInputIdentity(
+                        storage.TypeOid,
+                        definition,
+                        key,
+                        member),
+                    out var proof)
+                != true
+                || proof is null)
             {
                 unproven = true;
 
@@ -48,11 +61,15 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             }
         }
 
-        if (!physical && PostgreSqlSafeMigrationCatalogSqlBuilder.IndexRequiredFlags(definition)
+        if (!physical
+            && PostgreSqlSafeMigrationCatalogSqlBuilder.IndexRequiredFlags(definition)
             != PostgreSqlIndexRequiredFlags.None)
         {
-            if (_indexInputProofs?.TryGetValue(IndexInputIdentity(0, definition, null, null),
-                out var proof) != true || proof is null)
+            if (_indexInputProofs?.TryGetValue(
+                    IndexInputIdentity(0, definition, null, null),
+                    out var proof)
+                != true
+                || proof is null)
             {
                 unproven = true;
             }
@@ -65,19 +82,25 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         // WHY: Computed keys retain their separate return-type/execution
         // contract. Their underlying column OID is never substituted as an
         // expression-result certificate. INCLUDE is not an opclass input.
-        return unproven ? IndexInputRejected(unsupported: false) : null;
+        return unproven
+            ? IndexInputRejected(unsupported: false)
+            : null;
     }
 
     /// <summary>Captures just real native input alternatives referenced before a requested index's ordinal.</summary>
     private async Task<Dictionary<IndexInputRequest, bool?>?> CaptureIndexInputProofsAsync(
-        DbConnection connection, IReadOnlyList<SafeMigrationOperation> operations,
+        DbConnection connection,
+        IReadOnlyList<SafeMigrationOperation> operations,
         IReadOnlyList<SafeMigrationProviderAnalysis> results,
         Dictionary<LiveColumnIdentity, LiveColumnStorage>? liveColumns,
         Dictionary<LiveColumnTypeIdentity, LiveColumnStorage>? liveTypes,
-        int? commandTimeout, CancellationToken cancellationToken)
+        int? commandTimeout,
+        CancellationToken cancellationToken
+    )
     {
         HashSet<LiveColumnIdentity>? relevant = null;
         var hasIndex = false;
+
         // WHY: Select index inputs using each operation's matching analysis ordinal.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -95,8 +118,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             {
                 if (PostgreSqlSafeMigrationCatalogSqlBuilder.IndexPhysicalMember(key) is { } member)
                 {
-                    (relevant ??= []).Add(LiveColumnKey(
-                        index.Definition.Table, index.Definition.Schema, member.Name));
+                    (relevant ??= []).Add(
+                        LiveColumnKey(
+                            index.Definition.Table,
+                            index.Definition.Schema,
+                            member.Name));
                 }
             }
         }
@@ -110,6 +136,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         HashSet<LiveColumnIdentity>? priorCases = null;
         var requested = new HashSet<IndexInputRequest>();
         var requests = new List<IndexInputRequest>();
+
         // WHY: Advance authored column state in operation order before index capture.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -157,22 +184,29 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 renamed.UnionWith(types);
             }
 
-            if (intent is not EnsureIndexIntent index || !NeedsIndexInputCapture(results[ordinal], ordinal))
+            if (intent is not EnsureIndexIntent index
+                || !NeedsIndexInputCapture(results[ordinal], ordinal))
             {
                 continue;
             }
 
             Add(IndexInputIdentity(0, index.Definition, null, null));
-            if (!index.Definition.Unique && index.Definition.Keys.Any(key =>
-                PostgreSqlSafeMigrationCatalogSqlBuilder.IndexPhysicalMember(key) is { } member
-                && priorCases?.Contains(LiveColumnKey(index.Definition.Table,
-                    index.Definition.Schema, member.Name)) == true))
+            if (!index.Definition.Unique
+                && index.Definition.Keys.Any(key =>
+                    PostgreSqlSafeMigrationCatalogSqlBuilder.IndexPhysicalMember(key) is { } member
+                    && priorCases?.Contains(
+                        LiveColumnKey(
+                            index.Definition.Table,
+                            index.Definition.Schema,
+                            member.Name))
+                    == true))
             {
                 // WHY: Member absence cannot prove availability in PostgreSQL's
                 // shared schema relation namespace. Capture that separate fact
                 // in the existing bounded metadata batch, not another roundtrip.
                 Add(GeneratedIndexAbsenceIdentity(index.Definition));
             }
+
             foreach (var key in index.Definition.Keys)
             {
                 if (PostgreSqlSafeMigrationCatalogSqlBuilder.IndexPhysicalMember(key) is not { } member
@@ -198,8 +232,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         }
 
         var proofs = new Dictionary<IndexInputRequest, bool?>(requests.Count);
-        await SafeMigrationCatalogProbeBatch.ReadAsync(connection, requests.Count,
-            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes, commandTimeout,
+        await SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection,
+            requests.Count,
+            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
+            commandTimeout,
             (command, offset) => BuildIndexInputStatement(command, requests, offset),
             async (reader, offset, count, token) =>
             {
@@ -211,13 +248,20 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 var next = offset;
                 while (await reader.ReadAsync(token))
                 {
-                    if (reader.GetValue(0) is not int ordinal || ordinal != next || ordinal >= offset + count
-                        || !reader.IsDBNull(1) && reader.GetValue(1) is not bool)
+                    if (reader.GetValue(0) is not int ordinal
+                        || ordinal != next
+                        || ordinal >= offset + count
+                        || (!reader.IsDBNull(1) && reader.GetValue(1) is not bool))
                     {
                         throw InvalidLivePrerequisiteEvidence();
                     }
 
-                    proofs.Add(requests[ordinal], reader.IsDBNull(1) ? null : reader.GetBoolean(1));
+                    proofs.Add(
+                        requests[ordinal],
+                        reader.IsDBNull(1)
+                            ? null
+                            : reader.GetBoolean(1));
+
                     next++;
                 }
 
@@ -225,13 +269,16 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 {
                     throw InvalidLivePrerequisiteEvidence();
                 }
-            }, cancellationToken);
+            },
+            cancellationToken);
 
         cancellationToken.ThrowIfCancellationRequested();
 
         return proofs;
 
-        void Add(IndexInputRequest request)
+        void Add(
+            IndexInputRequest request
+        )
         {
             if (requested.Add(request))
             {
@@ -239,10 +286,15 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             }
         }
 
-        void Record(string table, string? schema, ExpectedColumnDefinition column)
+        void Record(
+            string table,
+            string? schema,
+            ExpectedColumnDefinition column
+        )
         {
             var name = LiveColumnKey(table, schema, column.Name);
-            if (relevant?.Contains(name) != true || ProjectedColumnTypeIdentity(column) is not { } type
+            if (relevant?.Contains(name) != true
+                || ProjectedColumnTypeIdentity(column) is not { } type
                 || liveTypes?.TryGetValue(type, out var storage) != true)
             {
                 return;
@@ -259,8 +311,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     }
 
     /// <summary>Uses the existing statement, native batch, parameter, timeout and UTF-8 payload limits.</summary>
-    private SafeMigrationCatalogProbeStatement BuildIndexInputStatement(SafeMigrationCatalogCommand command,
-        IReadOnlyList<IndexInputRequest> requests, int offset)
+    private SafeMigrationCatalogProbeStatement BuildIndexInputStatement(
+        SafeMigrationCatalogCommand command,
+        IReadOnlyList<IndexInputRequest> requests,
+        int offset
+    )
     {
         var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
         var selections = new List<string>();
@@ -271,33 +326,55 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             var ordinal = offset + selections.Count;
             var request = requests[ordinal];
             var checkpoint = parameters.Capture();
-            var input = new PostgreSqlIndexInputSql(request.TypeOid.ToString(CultureInfo.InvariantCulture) + "::oid",
-                parameters.AddString(request.Method), request.OperatorClassName is null ? null
-                    : parameters.AddString(request.OperatorClassName), request.OperatorClassSchema is null ? null
-                    : parameters.AddString(request.OperatorClassSchema), request.RequiredFlags);
+            var input = new PostgreSqlIndexInputSql(
+                request.TypeOid.ToString(CultureInfo.InvariantCulture) + "::oid",
+                parameters.AddString(request.Method),
+                request.OperatorClassName is null
+                    ? null
+                    : parameters.AddString(request.OperatorClassName),
+                request.OperatorClassSchema is null
+                    ? null
+                    : parameters.AddString(request.OperatorClassSchema),
+                request.RequiredFlags);
 
             var proof = PostgreSqlIndexInputEligibilitySql.Render(input);
             if (request.AbsentRelationName is not null)
             {
                 proof = "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class rel JOIN pg_catalog.pg_namespace ns "
                     + "ON ns.oid = rel.relnamespace WHERE ns.nspname = "
-                    + (request.OwnerSchema is null ? "pg_catalog.current_schema()"
+                    + (request.OwnerSchema is null
+                        ? "pg_catalog.current_schema()"
                         : parameters.AddString(request.OwnerSchema))
-                    + " AND rel.relname = " + parameters.AddString(request.AbsentRelationName) + ")";
+                    + " AND rel.relname = "
+                    + parameters.AddString(request.AbsentRelationName)
+                    + ")";
             }
+
             if (request.MemberSchema is not null)
             {
                 var owner = request.OwnerSchema is null
-                    ? "current_schema()" : parameters.AddString(request.OwnerSchema);
-                proof = "CASE WHEN " + parameters.AddString(request.MemberSchema) + " = " + owner
-                    + " THEN (" + proof + ") ELSE NULL::boolean END";
+                    ? "current_schema()"
+                    : parameters.AddString(request.OwnerSchema);
+
+                proof = "CASE WHEN "
+                    + parameters.AddString(request.MemberSchema)
+                    + " = "
+                    + owner
+                    + " THEN ("
+                    + proof
+                    + ") ELSE NULL::boolean END";
             }
 
             var selection = "SELECT " + ordinal.ToString(CultureInfo.InvariantCulture) + ", (" + proof + ")";
-            var nextBytes = sqlBytes + Encoding.UTF8.GetByteCount(selection)
-                + (selections.Count == 0 ? 0 : Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator));
+            var nextBytes = sqlBytes
+                + Encoding.UTF8.GetByteCount(selection)
+                + (selections.Count == 0
+                    ? 0
+                    : Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator));
 
-            if (SafeMigrationCatalogQueryLimits.Exceeded(parameters.Count, nextBytes + parameters.Utf8PayloadBytes,
+            if (SafeMigrationCatalogQueryLimits.Exceeded(
+                parameters.Count,
+                nextBytes + parameters.Utf8PayloadBytes,
                 SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes))
             {
                 var rejectedParameters = parameters.Count;
@@ -306,7 +383,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 if (selections.Count == 0)
                 {
                     throw SafeMigrationCatalogQueryLimits.OversizedOperation(
-                        ordinal, rejectedParameters, rejectedBytes);
+                        ordinal,
+                        rejectedParameters,
+                        rejectedBytes);
                 }
 
                 break;
@@ -325,24 +404,40 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     /// <summary>
     /// Deduplicates native type alternatives under their requested method/opclass and qualifier contract.
     /// </summary>
-    private static IndexInputRequest IndexInputIdentity(long type, ExpectedIndexDefinition definition,
-        ExpectedIndexKeyDefinition? key, PostgreSqlIndexPhysicalMember? member)
+    private static IndexInputRequest IndexInputIdentity(
+        long type,
+        ExpectedIndexDefinition definition,
+        ExpectedIndexKeyDefinition? key,
+        PostgreSqlIndexPhysicalMember? member
+    )
     {
-        var path = key?.OperatorClass?.Split('.', StringSplitOptions.None);
-        if (path is { Length: < 1 or > 2 } || path?.Any(string.IsNullOrWhiteSpace) == true)
+        var path = key?.OperatorClass?.Split('.');
+        if (path is { Length: < 1 or > 2 }
+            || path?.Any(string.IsNullOrWhiteSpace) == true)
         {
             throw new NotSupportedException("An operator class must be an unqualified or schema-qualified name.");
         }
 
-        return new IndexInputRequest(type, definition.Method ?? "btree", path?[^1],
-            path is { Length: 2 } ? path[0] : null,
+        return new IndexInputRequest(
+            type,
+            definition.Method ?? "btree",
+            path?[^1],
+            path is { Length: 2 }
+                ? path[0]
+                : null,
             PostgreSqlSafeMigrationCatalogSqlBuilder.IndexRequiredFlags(definition),
-            member?.PartCount == 3 ? definition.Schema : null,
-            member?.PartCount == 3 ? member.Value.Schema : null);
+            member?.PartCount == 3
+                ? definition.Schema
+                : null,
+            member?.PartCount == 3
+                ? member.Value.Schema
+                : null);
     }
 
     /// <summary>Keys a native schema-relation-name absence proof inside the existing input protocol.</summary>
-    private IndexInputRequest GeneratedIndexAbsenceIdentity(ExpectedIndexDefinition definition)
+    private IndexInputRequest GeneratedIndexAbsenceIdentity(
+        ExpectedIndexDefinition definition
+    )
         => IndexInputIdentity(0, definition, null, null) with
         {
             OwnerSchema = PostgreSqlSafeMigrationSchemaIdentity.Normalize(definition.Schema, _currentSchema),
@@ -350,21 +445,31 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         };
 
     /// <summary>Rejects another table's syntactic qualifier without inferring a same-named local member.</summary>
-    private static bool IndexMemberTableMatches(ExpectedIndexDefinition definition,
-        PostgreSqlIndexPhysicalMember member)
-        => member.PartCount == 1 || member.PartCount is 2 or 3 && member.Table == definition.Table;
+    private static bool IndexMemberTableMatches(
+        ExpectedIndexDefinition definition,
+        PostgreSqlIndexPhysicalMember member
+    )
+        => member.PartCount == 1 || (member.PartCount is 2 or 3 && member.Table == definition.Table);
 
     /// <summary>
     /// Preserves independent Matching and stronger blockers while retaining accepted ordered replacements.
     /// </summary>
-    private bool NeedsIndexInputCapture(SafeMigrationProviderAnalysis result, int ordinal)
-        => result.ObservedState is SafeMigrationObservedState.Missing or SafeMigrationObservedState.PrerequisiteMissing
-            or SafeMigrationObservedState.Different || result.Code == "index_input_operator_class"
+    private bool NeedsIndexInputCapture(
+        SafeMigrationProviderAnalysis result,
+        int ordinal
+    )
+        => result.ObservedState is SafeMigrationObservedState.Missing
+                or SafeMigrationObservedState.PrerequisiteMissing
+                or SafeMigrationObservedState.Different
+            || result.Code == "index_input_operator_class"
             || _indexInputOrderedReplacementOrdinals?.Contains(ordinal) == true;
 
     /// <summary>Captures Matching inputs only after an earlier relevant typed drop.</summary>
-    private void SelectOrderedIndexInputRequests(IReadOnlyList<SafeMigrationOperation> operations,
-        IReadOnlyList<SafeMigrationProviderAnalysis> results, CancellationToken cancellationToken)
+    private void SelectOrderedIndexInputRequests(
+        IReadOnlyList<SafeMigrationOperation> operations,
+        IReadOnlyList<SafeMigrationProviderAnalysis> results,
+        CancellationToken cancellationToken
+    )
     {
         HashSet<LiveColumnIdentity>? droppedOwners = null;
         HashSet<string>? droppedSchemas = null;
@@ -375,7 +480,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             cancellationToken.ThrowIfCancellationRequested();
             if (operation is DropSchemaOperation nativeSchema)
             {
-                (droppedSchemas ??= new(StringComparer.Ordinal)).Add(nativeSchema.Name);
+                (droppedSchemas ??= new HashSet<string>(StringComparer.Ordinal)).Add(nativeSchema.Name);
 
                 continue;
             }
@@ -393,7 +498,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
             if (safe?.Intent is DropSchemaIntent schema)
             {
-                (droppedSchemas ??= new(StringComparer.Ordinal)).Add(schema.Name);
+                (droppedSchemas ??= new HashSet<string>(StringComparer.Ordinal)).Add(schema.Name);
                 ordinal++;
 
                 continue;
@@ -420,10 +525,15 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             }
             else if (safe?.Intent is EnsureIndexIntent index
                 && results[ordinal].ObservedState == SafeMigrationObservedState.Matching
-                && (droppedOwners?.Contains(LiveColumnKey(
-                        index.Definition.Table, index.Definition.Schema, string.Empty)) == true
-                    || PostgreSqlSafeMigrationSchemaIdentity.Normalize(index.Definition.Schema, _currentSchema)
-                        is { } currentSchema && droppedSchemas?.Contains(currentSchema) == true))
+                && (droppedOwners?.Contains(
+                        LiveColumnKey(
+                            index.Definition.Table,
+                            index.Definition.Schema,
+                            string.Empty))
+                    == true
+                    || (PostgreSqlSafeMigrationSchemaIdentity.Normalize(index.Definition.Schema, _currentSchema)
+                            is { } currentSchema
+                        && droppedSchemas?.Contains(currentSchema) == true)))
             {
                 // WHY: This is a capture request, not acceptance of the DROP.
                 // Only Core's current ordered lifetime can later consume it.
@@ -444,8 +554,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     }
 
     /// <summary>Captures only earlier declarations through the existing EF column factory.</summary>
-    private void CaptureProviderIndexColumnProposals(IReadOnlyList<SafeMigrationOperation> operations,
-        IReadOnlyList<SafeMigrationProviderAnalysis> results, CancellationToken cancellationToken)
+    private void CaptureProviderIndexColumnProposals(
+        IReadOnlyList<SafeMigrationOperation> operations,
+        IReadOnlyList<SafeMigrationProviderAnalysis> results,
+        CancellationToken cancellationToken
+    )
     {
         if (_analysisOperationStream is null)
         {
@@ -453,6 +566,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         }
 
         HashSet<LiveColumnIdentity>? relevant = null;
+
         // WHY: Keep provider proposals bound to their requested operation ordinal.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -469,8 +583,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             {
                 if (PostgreSqlSafeMigrationCatalogSqlBuilder.IndexPhysicalMember(key) is { } member)
                 {
-                    (relevant ??= []).Add(LiveColumnKey(
-                        index.Definition.Table, index.Definition.Schema, member.Name));
+                    (relevant ??= []).Add(
+                        LiveColumnKey(
+                            index.Definition.Table,
+                            index.Definition.Schema,
+                            member.Name));
                 }
             }
         }
@@ -498,7 +615,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
             if (operation is SafeMigrationOperation safe)
             {
-                if (ordinal >= operations.Count || !ReferenceEquals(safe, operations[ordinal]))
+                if (ordinal >= operations.Count
+                    || !ReferenceEquals(safe, operations[ordinal]))
                 {
                     return;
                 }
@@ -532,7 +650,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             _providerIndexColumnProposals = captured;
         }
 
-        void Record(ColumnOperation operation)
+        void Record(
+            ColumnOperation operation
+        )
         {
             if (!relevant.Contains(LiveColumnKey(operation.Table, operation.Schema, operation.Name)))
             {
@@ -546,8 +666,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 // definition; SQL, target models and future proposals cannot
                 // create one. Reuse the same factory as that existing projection.
                 var definition = SafeMigrationExpectedDefinitionFactory.From(operation);
-                (pending ??= []).Add(new ProviderIndexColumnProposal(
-                    operation.Table, operation.Schema, definition));
+                (pending ??= []).Add(
+                    new ProviderIndexColumnProposal(
+                        operation.Table,
+                        operation.Schema,
+                        definition));
             }
             catch (Exception exception) when (exception is NotSupportedException or ArgumentException)
             {
@@ -557,20 +680,38 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         }
     }
 
+    /// <summary>Distinguishes a disproved native input from incomplete binding evidence.</summary>
+    private static SafeMigrationProviderAnalysis IndexInputRejected(
+        bool unsupported
+    )
+        => new(
+            unsupported
+                ? SafeMigrationObservedState.Unsupported
+                : SafeMigrationObservedState.PrerequisiteMissing,
+            SafeMigrationRepairCapability.None,
+            false,
+            unsupported
+                ? "index_input_operator_class"
+                : "index_input_binding_unproven");
+
     /// <summary>An earlier typed declaration, never permission to apply or infer a physical column.</summary>
     private readonly record struct ProviderIndexColumnProposal(
-        string Table, string? Schema, ExpectedColumnDefinition Definition);
-
-    /// <summary>Distinguishes a disproved native input from incomplete binding evidence.</summary>
-    private static SafeMigrationProviderAnalysis IndexInputRejected(bool unsupported)
-        => new(unsupported ? SafeMigrationObservedState.Unsupported : SafeMigrationObservedState.PrerequisiteMissing,
-            SafeMigrationRepairCapability.None, false, unsupported ? "index_input_operator_class"
-                : "index_input_binding_unproven");
+        string Table,
+        string? Schema,
+        ExpectedColumnDefinition Definition
+    );
 
     /// <summary>
     /// One immutable requested native binding; authored type or model presence is no physical certificate.
     /// </summary>
-    private readonly record struct IndexInputRequest(long TypeOid, string Method, string? OperatorClassName,
-        string? OperatorClassSchema, PostgreSqlIndexRequiredFlags RequiredFlags,
-        string? OwnerSchema, string? MemberSchema, string? AbsentRelationName = null);
+    private readonly record struct IndexInputRequest(
+        long TypeOid,
+        string Method,
+        string? OperatorClassName,
+        string? OperatorClassSchema,
+        PostgreSqlIndexRequiredFlags RequiredFlags,
+        string? OwnerSchema,
+        string? MemberSchema,
+        string? AbsentRelationName = null
+    );
 }

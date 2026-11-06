@@ -8,9 +8,11 @@ public sealed class MySqlPreparedSetupFusionTests
     private const string DeallocateSql = "DEALLOCATE PREPARE doka_sm_statement;";
     private const string ProviderCleanup = "DO 0; /* provider cleanup */\n";
     private const string NativeModeSnapshot = "/*! SET @__doka_previous_sql_mode = @@SESSION.sql_mode */;\n";
+
     private const string NativeModeMutation = "/*! SET SESSION sql_mode = IF("
         + "FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode), @@SESSION.sql_mode, "
         + "CONCAT_WS(',', NULLIF(@@SESSION.sql_mode, ''), 'NO_BACKSLASH_ESCAPES')) */;\n";
+
     private const string NativeModeRestore = "/*! SET SESSION sql_mode = @__doka_previous_sql_mode */;\n";
 
     /// <summary>Unreached setup cannot restore a stale snapshot; acquisition records a fresh one atomically.</summary>
@@ -20,11 +22,17 @@ public sealed class MySqlPreparedSetupFusionTests
         // Arrange
         using var context = CreateContext();
         var handler = CreateHandler(context);
-        var operationContext = CreateOperationContext(context, handler, CreateOperation("catalog"), _ =>
-        [
-            MySqlMigrationCommandSpec.CreateScoped([NativeModeSnapshot, NativeModeMutation], "DO 7;",
-                [NativeModeRestore]),
-        ]);
+        var operationContext = CreateOperationContext(
+            context,
+            handler,
+            CreateOperation("catalog"),
+            _ =>
+            [
+                MySqlMigrationCommandSpec.CreateScoped(
+                    [NativeModeSnapshot, NativeModeMutation],
+                    "DO 7;",
+                    [NativeModeRestore]),
+            ]);
 
         // Act
         var result = handler.Generate(operationContext);
@@ -42,20 +50,33 @@ public sealed class MySqlPreparedSetupFusionTests
         var capture = scopedSetup.IndexOf("/*! SET @__doka_previous_sql_mode", StringComparison.Ordinal);
 
         Assert.Equal(0, reset);
-        Assert.True(scopedSetup.StartsWith("SET @doka_sm_provider_setup_entered = 0;"
-            + "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`;", StringComparison.Ordinal));
+        Assert.True(
+            scopedSetup.StartsWith(
+                "SET @doka_sm_provider_setup_entered = 0;"
+                + "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`;",
+                StringComparison.Ordinal));
+
         Assert.True(decision > reset);
         Assert.True(capture > decision);
-        Assert.Contains("/*! SET @__doka_previous_sql_mode = @@SESSION.sql_mode, "
-            + "@doka_sm_provider_setup_entered = 1 */;\n", setup);
+        Assert.Contains(
+            "/*! SET @__doka_previous_sql_mode = @@SESSION.sql_mode, "
+            + "@doka_sm_provider_setup_entered = 1 */;\n",
+            setup);
+
         Assert.Contains(NativeModeMutation, setup);
         Assert.Equal(1, Count(setupText, "@doka_sm_provider_setup_entered = 1"));
         Assert.Equal(3, cleanup.Length);
-        Assert.Equal("/*! SET SESSION sql_mode = IF(COALESCE(@doka_sm_provider_setup_entered = 1, FALSE), "
-            + "@__doka_previous_sql_mode, @@SESSION.sql_mode) */;\n", cleanup[1]);
+        Assert.Equal(
+            "/*! SET SESSION sql_mode = IF(COALESCE(@doka_sm_provider_setup_entered = 1, FALSE), "
+            + "@__doka_previous_sql_mode, @@SESSION.sql_mode) */;\n",
+            cleanup[1]);
+
         Assert.Contains("SET @doka_sm_provider_setup_entered = NULL;", cleanup[2], StringComparison.Ordinal);
-        Assert.True(cleanup[2].IndexOf("@doka_sm_provider_setup_entered = NULL", StringComparison.Ordinal)
-            < cleanup[2].IndexOf("DROP TEMPORARY TABLE", StringComparison.Ordinal));
+        Assert.True(
+            cleanup[2]
+                .IndexOf("@doka_sm_provider_setup_entered = NULL", StringComparison.Ordinal)
+            < cleanup[2]
+                .IndexOf("DROP TEMPORARY TABLE", StringComparison.Ordinal));
     }
 
     /// <summary>Unknown acquisition, mutation or restoration cannot inherit the native cleanup certificate.</summary>
@@ -70,15 +91,23 @@ public sealed class MySqlPreparedSetupFusionTests
     [InlineData("different_restore")]
     [InlineData("restore_statement")]
     [InlineData("nonmutating_cleanup_stateful_setup")]
-    public void UncertifiedStatefulNativeCleanupIsRejected(string invalidShape)
+    public void UncertifiedStatefulNativeCleanupIsRejected(
+        string invalidShape
+    )
     {
         // Arrange
         using var context = CreateContext();
         var handler = CreateHandler(context);
         string[] setup = invalidShape switch
         {
-            "stale_snapshot" => [NativeModeSnapshot.Replace("@@SESSION.sql_mode", "@stale_mode",
-                StringComparison.Ordinal), NativeModeMutation],
+            "stale_snapshot" =>
+            [
+                NativeModeSnapshot.Replace(
+                    "@@SESSION.sql_mode",
+                    "@stale_mode",
+                    StringComparison.Ordinal),
+                NativeModeMutation,
+            ],
             "snapshot_statement" => [NativeModeSnapshot + "DO 0;", NativeModeMutation],
             "missing_snapshot" => [NativeModeMutation],
             "duplicate_snapshot" => [NativeModeSnapshot, NativeModeSnapshot, NativeModeMutation],
@@ -89,17 +118,23 @@ public sealed class MySqlPreparedSetupFusionTests
 
         var cleanup = invalidShape switch
         {
-            "different_restore" => NativeModeRestore.Replace("@__doka_previous_sql_mode", "@stale_mode",
+            "different_restore" => NativeModeRestore.Replace(
+                "@__doka_previous_sql_mode",
+                "@stale_mode",
                 StringComparison.Ordinal),
             "restore_statement" => NativeModeRestore + "SET SESSION sql_mode = '';",
             "nonmutating_cleanup_stateful_setup" => "DO 0;",
             _ => NativeModeRestore,
         };
 
-        var operationContext = CreateOperationContext(context, handler, CreateOperation("catalog"), _ =>
-        [
-            MySqlMigrationCommandSpec.CreateScoped(setup, "DO 7;", [cleanup]),
-        ]);
+        var operationContext = CreateOperationContext(
+            context,
+            handler,
+            CreateOperation("catalog"),
+            _ =>
+            [
+                MySqlMigrationCommandSpec.CreateScoped(setup, "DO 7;", [cleanup]),
+            ]);
 
         // Act
         var exception = Record.Exception(() => handler.Generate(operationContext));
@@ -148,22 +183,32 @@ public sealed class MySqlPreparedSetupFusionTests
     [InlineData("DO @value := 1;", false)]
     [InlineData("DO 0; /* unfinished", false)]
     [InlineData("DO 0; --not-a-comment\nSET SESSION sql_mode = '';", false)]
-    public void NonMutatingCleanupCertificateRejectsExecutableSuffixes(string cleanupSql, bool admitted)
+    public void NonMutatingCleanupCertificateRejectsExecutableSuffixes(
+        string cleanupSql,
+        bool admitted
+    )
     {
         // Arrange
         using var context = CreateContext();
         var handler = CreateHandler(context);
-        var operationContext = CreateOperationContext(context, handler, CreateOperation("catalog"), _ =>
-        [
-            MySqlMigrationCommandSpec.CreateScoped(["DO 11;"], "DO 7;", [cleanupSql]),
-        ]);
+        var operationContext = CreateOperationContext(
+            context,
+            handler,
+            CreateOperation("catalog"),
+            _ =>
+            [
+                MySqlMigrationCommandSpec.CreateScoped(["DO 11;"], "DO 7;", [cleanupSql]),
+            ]);
+
         string[]? generatedCleanup = null;
         string[]? generatedSetup = null;
 
         // Act
         var exception = Record.Exception(() =>
         {
-            var command = Assert.Single(handler.Generate(operationContext).Commands);
+            var command = Assert.Single(handler.Generate(operationContext)
+                .Commands);
+
             generatedCleanup = Fragments(command, MySqlMigrationCommandFragmentKind.Cleanup);
             generatedSetup = Fragments(command, MySqlMigrationCommandFragmentKind.Setup);
         });
@@ -173,13 +218,17 @@ public sealed class MySqlPreparedSetupFusionTests
         {
             Assert.Null(exception);
             Assert.Contains(cleanupSql, Assert.IsType<string[]>(generatedCleanup));
-            Assert.DoesNotContain("@doka_sm_provider_setup_entered",
+            Assert.DoesNotContain(
+                "@doka_sm_provider_setup_entered",
                 string.Concat(Assert.IsType<string[]>(generatedSetup)),
                 StringComparison.Ordinal);
         }
         else
         {
-            Assert.Contains("cleanup acquisition", Assert.IsType<InvalidOperationException>(exception).Message,
+            Assert.Contains(
+                "cleanup acquisition",
+                Assert.IsType<InvalidOperationException>(exception)
+                    .Message,
                 StringComparison.Ordinal);
         }
     }
@@ -215,17 +264,28 @@ public sealed class MySqlPreparedSetupFusionTests
         MySqlMigrationCommandSpec[] apply =
         [
             MySqlMigrationCommandSpec.CreateScoped(
-                providerSetup, "DO 7;\n", [ProviderCleanup], transactionSuppressed),
+                providerSetup,
+                "DO 7;\n",
+                [ProviderCleanup],
+                transactionSuppressed),
         ];
 
         MySqlMigrationCommandSpec[] repair =
         [
             MySqlMigrationCommandSpec.CreateScoped(
-                providerSetup, "DO 9;\n", [ProviderCleanup], transactionSuppressed),
+                providerSetup,
+                "DO 9;\n",
+                [ProviderCleanup],
+                transactionSuppressed),
         ];
 
         var operationContext = CreateOperationContext(
-            context, handler, operation, standard => standard is AlterColumnOperation ? repair : apply);
+            context,
+            handler,
+            operation,
+            standard => standard is AlterColumnOperation
+                ? repair
+                : apply);
 
         // Act
         var result = handler.Generate(operationContext);
@@ -240,8 +300,12 @@ public sealed class MySqlPreparedSetupFusionTests
         Assert.True(command.Fragments.Count + 1 <= 128);
         Assert.Equal("safe_guarded_operation", result.OutcomeCode);
         Assert.Equal(transactionSuppressed, command.TransactionSuppressed);
-        Assert.Equal(providerSetup, setup.Where(text => text.StartsWith("DO 0; /* provider setup ",
-            StringComparison.Ordinal)));
+        Assert.Equal(
+            providerSetup,
+            setup.Where(text => text.StartsWith(
+                "DO 0; /* provider setup ",
+                StringComparison.Ordinal)));
+
         Assert.Equal(3, cleanup.Length);
         Assert.Equal(ProviderCleanup, cleanup[1]);
         Assert.StartsWith("PREPARE doka_sm_statement FROM 'DO 0';", cleanup[0], StringComparison.Ordinal);
@@ -250,12 +314,16 @@ public sealed class MySqlPreparedSetupFusionTests
         Assert.DoesNotContain(PrepareSql, body, StringComparison.Ordinal);
         Assert.Contains("@doka_sm_post_ok", body, StringComparison.Ordinal);
         AssertPreparedSetup(setup, evaluations, baselinePreparedInSetup: true, hasDataProbe: scenario == "data");
-        Assert.Contains("CONVERT(0x" + Hex("DO 7") + " USING utf8mb4)", string.Concat(setup),
+        Assert.Contains(
+            "CONVERT(0x" + Hex("DO 7") + " USING utf8mb4)",
+            string.Concat(setup),
             StringComparison.Ordinal);
 
         if (operation.Policy == SafeMigrationPolicy.RepairIfSafe)
         {
-            Assert.Contains("CONVERT(0x" + Hex("DO 9") + " USING utf8mb4)", string.Concat(setup),
+            Assert.Contains(
+                "CONVERT(0x" + Hex("DO 9") + " USING utf8mb4)",
+                string.Concat(setup),
                 StringComparison.Ordinal);
         }
     }
@@ -331,7 +399,12 @@ public sealed class MySqlPreparedSetupFusionTests
         ];
 
         var operationContext = CreateOperationContext(
-            context, handler, operation, standard => standard is AlterColumnOperation ? repair : apply);
+            context,
+            handler,
+            operation,
+            standard => standard is AlterColumnOperation
+                ? repair
+                : apply);
 
         // Act
         var result = handler.Generate(operationContext);
@@ -342,9 +415,12 @@ public sealed class MySqlPreparedSetupFusionTests
         var setupSql = string.Concat(setup);
         var body = Assert.Single(Fragments(command, MySqlMigrationCommandFragmentKind.Body));
         Assert.True(command.TransactionSuppressed);
-        Assert.Equal(2, Fragments(command, MySqlMigrationCommandFragmentKind.Cleanup).Length);
+        Assert.Equal(2,
+            Fragments(command, MySqlMigrationCommandFragmentKind.Cleanup)
+                .Length);
+
         Assert.Equal(originalFragments, OriginalSingleBaselineOverhead(scenario) - 3);
-        Assert.True(command.Fragments.Count <= originalFragments - (evaluations * 3));
+        Assert.True(command.Fragments.Count <= originalFragments - evaluations * 3);
         AssertPreparedSetup(setup, evaluations, baselinePreparedInSetup: false, hasDataProbe: scenario == "data");
         Assert.DoesNotContain("WHEN @doka_sm_action = 'apply'", setupSql, StringComparison.Ordinal);
         Assert.Equal(2, Count(body, PrepareSql));
@@ -352,9 +428,12 @@ public sealed class MySqlPreparedSetupFusionTests
         Assert.Equal(2, Count(body, DeallocateSql));
         Assert.Contains("CONVERT(0x" + Hex("DO 7") + " USING utf8mb4)", body, StringComparison.Ordinal);
         Assert.Contains("CONVERT(0x" + Hex("DO 8") + " USING utf8mb4)", body, StringComparison.Ordinal);
-        Assert.True(body.IndexOf(Hex("DO 7"), StringComparison.Ordinal)
+        Assert.True(
+            body.IndexOf(Hex("DO 7"), StringComparison.Ordinal)
             < body.IndexOf(Hex("DO 8"), StringComparison.Ordinal));
-        Assert.True(body.LastIndexOf(DeallocateSql, StringComparison.Ordinal)
+
+        Assert.True(
+            body.LastIndexOf(DeallocateSql, StringComparison.Ordinal)
             < body.IndexOf("SET @doka_sm_post_ok", StringComparison.Ordinal));
 
         if (operation.Policy == SafeMigrationPolicy.RepairIfSafe)
@@ -384,17 +463,28 @@ public sealed class MySqlPreparedSetupFusionTests
         var setupSql = string.Concat(setup);
         const string matchingPrefix = "SET @doka_sm_state = CASE WHEN @doka_sm_state IS NULL THEN CASE";
         var evaluation = Assert.Single(setup, text => text.Contains(matchingPrefix, StringComparison.Ordinal));
-        Assert.Contains("SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x",
-            evaluation, StringComparison.Ordinal);
-        Assert.Contains("SET @doka_sm_repair_ok = CASE WHEN @doka_sm_state = 'different'",
-            evaluation, StringComparison.Ordinal);
+        Assert.Contains(
+            "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x",
+            evaluation,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "SET @doka_sm_repair_ok = CASE WHEN @doka_sm_state = 'different'",
+            evaluation,
+            StringComparison.Ordinal);
+
         Assert.DoesNotContain("SET @doka_sm_data_probe_required", setupSql, StringComparison.Ordinal);
         Assert.DoesNotContain("SET @doka_sm_column_repair_eligible", setupSql, StringComparison.Ordinal);
-        Assert.True(setupSql.IndexOf("ELSE 'unsupported' END;", StringComparison.Ordinal)
+        Assert.True(
+            setupSql.IndexOf("ELSE 'unsupported' END;", StringComparison.Ordinal)
             < setupSql.IndexOf(matchingPrefix, StringComparison.Ordinal));
-        Assert.True(setupSql.IndexOf("WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing'",
+
+        Assert.True(
+            setupSql.IndexOf(
+                "WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing'",
                 StringComparison.Ordinal)
             < setupSql.IndexOf(matchingPrefix, StringComparison.Ordinal));
+
         AssertPreparedSetup(setup, evaluations: 1, baselinePreparedInSetup: true, hasDataProbe: false);
     }
 
@@ -410,7 +500,7 @@ public sealed class MySqlPreparedSetupFusionTests
             AssertPreparedSetup(setup, evaluations: 1, baselinePreparedInSetup: false, hasDataProbe: false));
 
         // Assert
-        Assert.IsAssignableFrom<Xunit.Sdk.XunitException>(exception);
+        Assert.IsAssignableFrom<XunitException>(exception);
     }
 
     /// <summary>Provider snapshots cannot mutate shared cleanup templates or leak proof-specific cleanup.</summary>
@@ -437,12 +527,17 @@ public sealed class MySqlPreparedSetupFusionTests
         Assert.Equal(2, firstCleanup.Length);
         Assert.Equal(2, requiredCleanup.Length);
         Assert.StartsWith("PREPARE doka_sm_statement FROM 'DO 0';", firstCleanup[0], StringComparison.Ordinal);
-        Assert.EndsWith("DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`;",
-            firstCleanup[1], StringComparison.Ordinal);
+        Assert.EndsWith(
+            "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`;",
+            firstCleanup[1],
+            StringComparison.Ordinal);
+
         Assert.DoesNotContain("@doka_sm_nullability_blocked", firstCleanup[1], StringComparison.Ordinal);
         Assert.Contains("@doka_sm_nullability_blocked = NULL", requiredCleanup[1], StringComparison.Ordinal);
         Assert.DoesNotContain("@doka_sm_provider_setup_entered", string.Concat(firstCleanup), StringComparison.Ordinal);
-        Assert.DoesNotContain("@doka_sm_provider_setup_entered", string.Concat(requiredCleanup),
+        Assert.DoesNotContain(
+            "@doka_sm_provider_setup_entered",
+            string.Concat(requiredCleanup),
             StringComparison.Ordinal);
     }
 
@@ -465,7 +560,8 @@ public sealed class MySqlPreparedSetupFusionTests
     /// <summary>Creates distinct opaque setup text so any grouping, reordering or dropping is observable.</summary>
     private static string[] CreateProviderSetup(
         int count
-    ) => Enumerable.Range(0, count)
+    ) => Enumerable
+        .Range(0, count)
         .Select(index => "DO 0; /* provider setup " + index.ToString(CultureInfo.InvariantCulture) + " */\n")
         .ToArray();
 
@@ -481,10 +577,17 @@ public sealed class MySqlPreparedSetupFusionTests
         var definition = scenario switch
         {
             "catalog" or "qualified" => new ExpectedColumnDefinition(
-                "value", typeof(int), isNullable: true, storeType: "int"),
+                "value",
+                typeof(int),
+                isNullable: true,
+                storeType: "int"),
             "state" or "guard" => CreateServerGeneratedRequiredColumn(),
             "data" => new ExpectedColumnDefinition(
-                "value", typeof(string), isNullable: true, storeType: "varchar(80)", maxLength: 80),
+                "value",
+                typeof(string),
+                isNullable: true,
+                storeType: "varchar(80)",
+                maxLength: 80),
             _ => throw new ArgumentOutOfRangeException(nameof(scenario)),
         };
 
@@ -495,7 +598,12 @@ public sealed class MySqlPreparedSetupFusionTests
         Assert.False(MySqlSafeMigrationCatalogSqlBuilder.CanUseRequiredColumnAddProtocol(definition));
 
         return new SafeMigrationOperation(
-            new EnsureColumnIntent("items", definition, schema: scenario == "qualified" ? "application" : null),
+            new EnsureColumnIntent(
+                "items",
+                definition,
+                schema: scenario == "qualified"
+                    ? "application"
+                    : null),
             policy);
     }
 
@@ -527,31 +635,35 @@ public sealed class MySqlPreparedSetupFusionTests
         // WHY: Doka 10.4.2 has no public context or feature-set constructor. Reflection invokes its real
         // constructors and canonical version profile; an uninitialized feature stub would bypass capability guards.
         var serverVersion = MySqlServerVersion.MySql(new Version(8, 4, 11));
-        var profileProperty = typeof(MySqlServerVersion).GetProperty("Profile",
-            BindingFlags.Instance | BindingFlags.NonPublic)
+        var profileProperty = typeof(MySqlServerVersion).GetProperty(
+                "Profile",
+                BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("The pinned provider no longer exposes its canonical profile.");
 
         var profile = profileProperty.GetValue(serverVersion)
             ?? throw new InvalidOperationException("The configured provider profile is missing.");
 
-        var featureConstructor = Assert.Single(typeof(MySqlMigrationFeatureSet)
-            .GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic));
+        var featureConstructor = Assert.Single(
+            typeof(MySqlMigrationFeatureSet)
+                .GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic));
 
         var features = Assert.IsType<MySqlMigrationFeatureSet>(featureConstructor.Invoke([profile]));
-        var contextConstructor = Assert.Single(typeof(MySqlMigrationOperationContext)
-            .GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic));
+        var contextConstructor = Assert.Single(
+            typeof(MySqlMigrationOperationContext)
+                .GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic));
 
-        return Assert.IsType<MySqlMigrationOperationContext>(contextConstructor.Invoke(
-        [
-            operation,
-            context.Model,
-            MigrationsSqlGenerationOptions.Default,
-            serverVersion,
-            features,
-            0,
-            handler.HandlerId,
-            standardRenderer,
-        ]));
+        return Assert.IsType<MySqlMigrationOperationContext>(
+            contextConstructor.Invoke(
+            [
+                operation,
+                context.Model,
+                MigrationsSqlGenerationOptions.Default,
+                serverVersion,
+                features,
+                0,
+                handler.HandlerId,
+                standardRenderer,
+            ]));
     }
 
     /// <summary>Creates the production handler with real provider service dependencies.</summary>
@@ -580,7 +692,9 @@ public sealed class MySqlPreparedSetupFusionTests
     private static string[] Fragments(
         MySqlMigrationCommandSpec command,
         MySqlMigrationCommandFragmentKind kind
-    ) => command.Fragments.Where(fragment => fragment.Kind == kind)
+    ) => command
+        .Fragments
+        .Where(fragment => fragment.Kind == kind)
         .Select(fragment => fragment.CommandText.ToString())
         .ToArray();
 
@@ -593,9 +707,16 @@ public sealed class MySqlPreparedSetupFusionTests
     )
     {
         var setupSql = string.Concat(setup);
-        Assert.Equal(evaluations + (baselinePreparedInSetup ? 1 : 0), Count(setupSql, PrepareSql));
+        Assert.Equal(
+            evaluations
+            + (baselinePreparedInSetup
+                ? 1
+                : 0),
+            Count(setupSql, PrepareSql));
+
         Assert.Equal(evaluations, Count(setupSql, ExecuteSql));
         Assert.Equal(evaluations, Count(setupSql, DeallocateSql));
+
         // WHY: A fused fragment may contain later assignments or multiple evaluation triples.
         // Count only complete triples within one fragment; concatenating first would hide a split dispatch.
         Assert.Equal(evaluations, setup.Sum(text => Count(text, PrepareSql + ExecuteSql + DeallocateSql)));

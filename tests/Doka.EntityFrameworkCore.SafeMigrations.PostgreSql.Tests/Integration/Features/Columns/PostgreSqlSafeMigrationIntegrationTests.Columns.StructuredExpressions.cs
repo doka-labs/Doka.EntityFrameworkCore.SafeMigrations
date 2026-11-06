@@ -44,8 +44,8 @@ public sealed class PostgreSqlColumnsStructuredExpressionsIntegrationTests : Pos
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var postflight = await runner.VerifyAsync(
             context,
@@ -103,8 +103,7 @@ public sealed class PostgreSqlColumnsStructuredExpressionsIntegrationTests : Pos
         {
             var expression = renderer.Render(SafeMigrationSql.Literal(null, storeType));
 
-            await ExecuteSqlAsync(connectionString, $"SELECT {expression};");
+            await ExecuteSqlAsync(connectionString, $"SELECT {expression};", cancellationToken: CancellationToken.None);
         }
     }
-
 }

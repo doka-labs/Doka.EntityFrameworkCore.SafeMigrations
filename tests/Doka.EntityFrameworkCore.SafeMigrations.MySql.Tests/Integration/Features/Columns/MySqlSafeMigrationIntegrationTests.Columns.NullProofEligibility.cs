@@ -5,7 +5,9 @@ public sealed partial class MySqlColumnsNullProofEligibilityIntegrationTests : M
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlColumnsNullProofEligibilityIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlColumnsNullProofEligibilityIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>Proves required physical columns exclude inline row SQL for matching and facet-only drift.</summary>
     /// <param name="varchar">Whether the target uses varchar rather than datetime(6).</param>
@@ -22,41 +24,90 @@ public sealed partial class MySqlColumnsNullProofEligibilityIntegrationTests : M
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var storeType = varchar ? "varchar(800)" : "datetime(6)";
-        var value = varchar ? "'preserved'" : "'2026-01-02 03:04:05.123456'";
-        var comment = drift ? "legacy" : "canonical";
-        var defaultClause = drift ? $" DEFAULT {value}" : string.Empty;
-        await ExecuteSqlAsync(connectionString,
+        var storeType = varchar
+            ? "varchar(800)"
+            : "datetime(6)";
+
+        var value = varchar
+            ? "'preserved'"
+            : "'2026-01-02 03:04:05.123456'";
+
+        var comment = drift
+            ? "legacy"
+            : "canonical";
+
+        var defaultClause = drift
+            ? $" DEFAULT {value}"
+            : string.Empty;
+
+        await ExecuteSqlAsync(
+            connectionString,
             $"CREATE TABLE `eligibility_rows` (`id` int PRIMARY KEY, `value` {storeType} NOT NULL{defaultClause} "
             + $"COMMENT '{comment}') ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + $"INSERT INTO `eligibility_rows` VALUES (1, {value});");
+            + $"INSERT INTO `eligibility_rows` VALUES (1, {value});",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operation = BuildMySqlNullEligibilityOperation(varchar);
         var plan = CaptureMySqlNullEligibilityPlan(context, operation);
 
         // Act
-        var providerAnalysis = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
-            context, [operation], CancellationToken.None);
-        var inlineState = await ExecuteMySqlInlineNullEligibilitySentinelAsync(context, plan);
-        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var replay = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
-            context, [operation], CancellationToken.None);
-        var preservedRows = await ScalarIntAsync(connectionString,
-            $"SELECT COUNT(*) FROM `eligibility_rows` WHERE `id` = 1 AND `value` = {value};");
-        var canonicalColumns = await ScalarIntAsync(connectionString,
+        var providerAnalysis = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                CancellationToken.None);
+
+        var inlineState = await ExecuteMySqlInlineNullEligibilitySentinelAsync(
+            context,
+            plan,
+            cancellationToken: CancellationToken.None);
+
+        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [operation],
+            CancellationToken.None));
+
+        var replay = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                CancellationToken.None);
+
+        var preservedRows = await ScalarIntAsync(
+            connectionString,
+            $"SELECT COUNT(*) FROM `eligibility_rows` WHERE `id` = 1 AND `value` = {value};",
+            cancellationToken: CancellationToken.None);
+
+        var canonicalColumns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'eligibility_rows' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO' "
-            + "AND COLUMN_COMMENT = 'canonical';");
+            + "AND COLUMN_COMMENT = 'canonical';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(providerAnalysis);
-        Assert.Equal(drift ? SafeMigrationObservedState.Different : SafeMigrationObservedState.Matching,
+        Assert.Equal(
+            drift
+                ? SafeMigrationObservedState.Different
+                : SafeMigrationObservedState.Matching,
             analysis.ObservedState);
+
         Assert.False(analysis.RequiresLiveDataProof);
-        Assert.Equal(drift ? "different" : "matching", inlineState);
+        Assert.Equal(
+            drift
+                ? "different"
+                : "matching",
+            inlineState);
+
         Assert.Null(runtimeException);
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(replay).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(replay)
+                .ObservedState);
+
         Assert.Equal(1, preservedRows);
         Assert.Equal(1, canonicalColumns);
     }
@@ -76,38 +127,77 @@ public sealed partial class MySqlColumnsNullProofEligibilityIntegrationTests : M
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var storeType = varchar ? "varchar(800)" : "datetime(6)";
-        var value = containsNull ? "NULL" : varchar ? "'preserved'" : "'2026-01-02 03:04:05.123456'";
-        await ExecuteSqlAsync(connectionString,
+        var storeType = varchar
+            ? "varchar(800)"
+            : "datetime(6)";
+
+        var value = containsNull
+            ? "NULL"
+            : varchar
+                ? "'preserved'"
+                : "'2026-01-02 03:04:05.123456'";
+
+        await ExecuteSqlAsync(
+            connectionString,
             $"CREATE TABLE `eligibility_rows` (`id` int PRIMARY KEY, `value` {storeType} NULL COMMENT 'canonical') "
             + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + $"INSERT INTO `eligibility_rows` VALUES (1, {value});");
+            + $"INSERT INTO `eligibility_rows` VALUES (1, {value});",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operation = BuildMySqlNullEligibilityOperation(varchar);
         var plan = CaptureMySqlNullEligibilityPlan(context, operation);
 
         // Act
-        var providerAnalysis = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
-            context, [operation], CancellationToken.None);
+        var providerAnalysis = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                CancellationToken.None);
+
         var sentinelException = await Record.ExceptionAsync(() =>
-            ExecuteMySqlInlineNullEligibilitySentinelAsync(context, plan));
-        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var replay = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
-            context, [operation], CancellationToken.None);
-        var preservedRows = await ScalarIntAsync(connectionString,
+            ExecuteMySqlInlineNullEligibilitySentinelAsync(context, plan, cancellationToken: CancellationToken.None));
+
+        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [operation],
+            CancellationToken.None));
+
+        var replay = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                CancellationToken.None);
+
+        var preservedRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `eligibility_rows` WHERE `id` = 1 AND `value` "
-            + (containsNull ? "IS NULL;" : $"= {value};"));
+            + (containsNull
+                ? "IS NULL;"
+                : $"= {value};"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(providerAnalysis);
-        Assert.Equal(containsNull ? SafeMigrationObservedState.DataBlocked : SafeMigrationObservedState.Different,
+        Assert.Equal(
+            containsNull
+                ? SafeMigrationObservedState.DataBlocked
+                : SafeMigrationObservedState.Different,
             analysis.ObservedState);
+
         Assert.True(analysis.RequiresLiveDataProof);
-        Assert.Equal(1242, Assert.IsType<MySqlException>(sentinelException).Number);
+        Assert.Equal(1242,
+            Assert.IsType<MySqlException>(sentinelException)
+                .Number);
+
         if (containsNull)
         {
-            Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(runtimeException).Message,
+            Assert.Contains(
+                "doka_sm_data_blocked",
+                AssertOwnedGuardFailure(runtimeException)
+                    .Message,
                 StringComparison.Ordinal);
         }
         else
@@ -115,8 +205,13 @@ public sealed partial class MySqlColumnsNullProofEligibilityIntegrationTests : M
             Assert.Null(runtimeException);
         }
 
-        Assert.Equal(containsNull ? SafeMigrationObservedState.DataBlocked : SafeMigrationObservedState.Matching,
-            Assert.Single(replay).ObservedState);
+        Assert.Equal(
+            containsNull
+                ? SafeMigrationObservedState.DataBlocked
+                : SafeMigrationObservedState.Matching,
+            Assert.Single(replay)
+                .ObservedState);
+
         Assert.Equal(1, preservedRows);
     }
 
@@ -126,35 +221,66 @@ public sealed partial class MySqlColumnsNullProofEligibilityIntegrationTests : M
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `eligibility_rows` (`id` int PRIMARY KEY, `value` datetime(6) NULL COMMENT 'canonical'); "
-            + "INSERT INTO `eligibility_rows` VALUES (1, '2026-01-02 03:04:05.123456');");
+            + "INSERT INTO `eligibility_rows` VALUES (1, '2026-01-02 03:04:05.123456');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operation = BuildMySqlNullEligibilityOperation(varchar: false);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
-            context, [operation], CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "INSERT INTO `eligibility_rows` VALUES (2, NULL);");
-        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var repeatedAnalysis = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
-            context, [operation], CancellationToken.None);
-        var insertedNullRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `eligibility_rows` WHERE `id` = 2 AND `value` IS NULL;");
+        var preflight = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                CancellationToken.None);
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "INSERT INTO `eligibility_rows` VALUES (2, NULL);",
+            cancellationToken: CancellationToken.None);
+
+        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [operation],
+            CancellationToken.None));
+
+        var repeatedAnalysis = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                CancellationToken.None);
+
+        var insertedNullRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `eligibility_rows` WHERE `id` = 2 AND `value` IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(preflight).ObservedState);
-        Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(runtimeException).Message,
+        Assert.Equal(SafeMigrationObservedState.Different,
+            Assert.Single(preflight)
+                .ObservedState);
+
+        Assert.Contains(
+            "doka_sm_data_blocked",
+            AssertOwnedGuardFailure(runtimeException)
+                .Message,
             StringComparison.Ordinal);
-        Assert.Equal(SafeMigrationObservedState.DataBlocked, Assert.Single(repeatedAnalysis).ObservedState);
+
+        Assert.Equal(SafeMigrationObservedState.DataBlocked,
+            Assert.Single(repeatedAnalysis)
+                .ObservedState);
+
         Assert.Equal(1, insertedNullRows);
     }
 }
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-
     /// <summary>Captures exactly the provider-generated physical proof predicates for one bounded operation.</summary>
     private protected static MySqlSafeMigrationRuntimePlan CaptureMySqlNullEligibilityPlan(
         DbContext context,
@@ -163,7 +289,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     {
         var capture = context.GetService<MySqlSafeMigrationPlanCapture>();
         using var lease = capture.Begin([operation]);
-        _ = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        _ = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
 
         return Assert.Single(lease.Complete());
     }
@@ -171,21 +299,37 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
 public sealed partial class MySqlColumnsNullProofEligibilityIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
-
     /// <summary>Creates a generic required varchar(800) or datetime(6) contract.</summary>
     private static SafeMigrationOperation BuildMySqlNullEligibilityOperation(
         bool varchar
-    ) => new(new EnsureColumnIntent("eligibility_rows", new ExpectedColumnDefinition(
-        "value", varchar ? typeof(string) : typeof(DateTime), false,
-        storeType: varchar ? "varchar(800)" : "datetime(6)", maxLength: varchar ? 800 : null,
-        comment: "canonical")), SafeMigrationPolicy.RepairIfSafe);
+    ) => new(
+        new EnsureColumnIntent(
+            "eligibility_rows",
+            new ExpectedColumnDefinition(
+                "value",
+                varchar
+                    ? typeof(string)
+                    : typeof(DateTime),
+                false,
+                storeType: varchar
+                    ? "varchar(800)"
+                    : "datetime(6)",
+                maxLength: varchar
+                    ? 800
+                    : null,
+                comment: "canonical")),
+        SafeMigrationPolicy.RepairIfSafe);
 
     /// <summary>Uses a cardinality-error sentinel to prove the CASE branch is not evaluated.</summary>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<string> ExecuteMySqlInlineNullEligibilitySentinelAsync(
         DbContext context,
-        MySqlSafeMigrationRuntimePlan plan
+        MySqlSafeMigrationRuntimePlan plan,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         // WHY: The volatile data error replaces only the row proof. Unlike
         // WHERE value IS NULL on a NOT NULL column, this cannot be optimized
         // away by the engine's knowledge of the column's declared nullability.
@@ -200,16 +344,21 @@ public sealed partial class MySqlColumnsNullProofEligibilityIntegrationTests : M
         var connection = context.Database.GetDbConnection();
         if (connection.State != ConnectionState.Open)
         {
-            await connection.OpenAsync(CancellationToken.None);
+            await connection.OpenAsync(cancellationToken);
         }
 
         await using var command = connection.CreateCommand();
         var parameterizer = new MySqlCatalogQueryParameterizer(
-            command, context.GetService<IRelationalTypeMappingSource>());
-        command.CommandText = "SELECT (" + sentinelPlan.RenderStateExpression(parameterizer.Add, false, false)
-            + "), (" + sentinelPlan.RenderRepairPrecondition(parameterizer.Add, false, false) + ");";
+            command,
+            context.GetService<IRelationalTypeMappingSource>());
 
-        return Convert.ToString(await command.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture)
+        command.CommandText = "SELECT ("
+            + sentinelPlan.RenderStateExpression(parameterizer.Add, false, false)
+            + "), ("
+            + sentinelPlan.RenderRepairPrecondition(parameterizer.Add, false, false)
+            + ");";
+
+        return Convert.ToString(await command.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture)
             ?? throw new InvalidOperationException("The inline classifier returned no state.");
     }
 }

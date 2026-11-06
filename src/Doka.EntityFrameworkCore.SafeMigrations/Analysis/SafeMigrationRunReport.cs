@@ -108,9 +108,7 @@ public sealed class SafeMigrationAssessment
         code,
         code,
         SafeMigrationOperationalImpact.NotApplicable,
-        differences: null)
-    {
-    }
+        differences: null) { }
 
     /// <summary>Initializes an assessment with separate analysis, decision, and facet evidence.</summary>
     /// <param name="ordinal">The zero-based operation ordinal.</param>
@@ -154,9 +152,7 @@ public sealed class SafeMigrationAssessment
         decisionCode,
         operationalImpact,
         differences,
-        deferredOrigin: null)
-    {
-    }
+        deferredOrigin: null) { }
 
     /// <summary>Initializes an assessment with an optional deferred-validation origin.</summary>
     /// <param name="ordinal">The zero-based operation ordinal.</param>
@@ -232,13 +228,15 @@ public sealed class SafeMigrationAssessment
             ArgumentException.ThrowIfNullOrWhiteSpace(migrationId);
         }
 
-        if (policy is not (null or SafeMigrationPolicy.ExistenceOnly
-            or SafeMigrationPolicy.ThrowIfDifferent or SafeMigrationPolicy.RepairIfSafe))
+        if (policy is not (null
+            or SafeMigrationPolicy.ExistenceOnly
+            or SafeMigrationPolicy.ThrowIfDifferent
+            or SafeMigrationPolicy.RepairIfSafe))
         {
             throw new ArgumentOutOfRangeException(nameof(policy));
         }
 
-        if ((action == SafeMigrationAction.ValidateAtRuntime) != (deferredOrigin is not null))
+        if (action == SafeMigrationAction.ValidateAtRuntime != deferredOrigin is not null)
         {
             throw new ArgumentException(
                 "A runtime-validation action requires exactly one deferred origin.",
@@ -280,8 +278,12 @@ public sealed class SafeMigrationAssessment
         // WHY: Existing public constructors do not contain an owner or the
         // full intent. Preserve that honest unknown state instead of deriving
         // an owner or a precise cause from an unqualified object name.
-        Explanation = explanation ?? SafeMigrationDiagnosticMessages.GetExplanation(
-            operationKind, observedState, analysisCode, decisionCode);
+        Explanation = explanation
+            ?? SafeMigrationDiagnosticMessages.GetExplanation(
+                operationKind,
+                observedState,
+                analysisCode,
+                decisionCode);
     }
 
     /// <summary>Gets the zero-based operation ordinal.</summary>

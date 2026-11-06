@@ -20,10 +20,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 new ExpectedTableDefinition("parents", [parentId]),
                 SafeMigrationTableMode.ConvergenceContainer),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new EnsureColumnIntent("parents", parentId),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new EnsurePrimaryKeyIntent(
@@ -36,10 +38,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 new ExpectedTableDefinition("children", [childId, parentReference]),
                 SafeMigrationTableMode.ConvergenceContainer),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new EnsureColumnIntent("children", childId),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new EnsureColumnIntent("children", parentReference),
@@ -75,6 +79,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 new ExpectedTableDefinition("items", [id]),
                 SafeMigrationTableMode.ConvergenceContainer),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new EnsureColumnIntent("items", id),
@@ -120,6 +125,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 new ExpectedTableDefinition("items", [id]),
                 SafeMigrationTableMode.ConvergenceContainer),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new EnsureColumnIntent("items", id),
@@ -222,10 +228,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 new ExpectedTableDefinition("children", [childId, parentReference]),
                 SafeMigrationTableMode.ConvergenceContainer),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new EnsureColumnIntent("children", childId),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new EnsureColumnIntent("children", parentReference),
@@ -434,6 +442,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             new EnsureUniqueConstraintIntent(
                 new ExpectedUniqueConstraintDefinition("uq_parents_code_alias", "parents", ["code"])),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new DropUniqueConstraintIntent("uq_parents_code", "parents"),
@@ -460,6 +469,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 new ExpectedUniqueConstraintDefinition("uq_parents_code_alias", "parents", ["code"])),
             SafeMigrationObservedState.Matching,
             "uq_parents_code");
+
         ObserveAccepted(
             projection,
             new DropUniqueConstraintIntent("uq_parents_code", "parents"),
@@ -489,6 +499,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             alias,
             SafeMigrationObservedState.Matching,
             "uq_parents_code");
+
         ObserveAccepted(
             projection,
             new DropUniqueConstraintIntent("uq_parents_code", "parents"),
@@ -589,6 +600,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             new EnsurePrimaryKeyIntent(
                 new ExpectedPrimaryKeyDefinition("pk_parents", "parents", ["id"])),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(projection, definition, SafeMigrationObservedState.Matching);
         ObserveAccepted(
             projection,
@@ -641,6 +653,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             projection,
             new DropUniqueConstraintIntent("uq_parents_code", "parents"),
             SafeMigrationObservedState.Matching);
+
         projection.ObserveProviderPostcondition(
             new InsertDataOperation
             {
@@ -731,6 +744,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             projection,
             new DropPrimaryKeyIntent("pk_parents", "parents"),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new DropForeignKeyIntent("fk_children_parents", "children"),
@@ -758,6 +772,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             projection,
             new DropPrimaryKeyIntent("pk_parents", "parents"),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(projection, primaryKey, SafeMigrationObservedState.Matching);
         ObserveAccepted(
             projection,
@@ -786,6 +801,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             projection,
             new DropIndexIntent("ix_items_code", "items"),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(projection, alias, SafeMigrationObservedState.Missing);
 
         var analysis = Project(
@@ -828,6 +844,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 new ExpectedUniqueConstraintDefinition("uq_parents_code_alias", "parents", ["code"])),
             SafeMigrationObservedState.Matching,
             matchedObjectName: null);
+
         ObserveColumnsOnExistingTable(projection, "children", Column("id"), NullableColumn("parent_id"));
 
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
@@ -856,6 +873,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             projection,
             new EnsureCheckConstraintIntent(physical),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new EnsureCheckConstraintIntent(
@@ -865,6 +883,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     Positive("id"))),
             SafeMigrationObservedState.Matching,
             "ck_items_id");
+
         ObserveAccepted(
             projection,
             new DropCheckConstraintIntent("ck_items_id", "items"),
@@ -895,15 +914,18 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             new EnsurePrimaryKeyIntent(
                 new ExpectedPrimaryKeyDefinition("pk_parents", "parents", ["id"])),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
-            ForeignKey("fk_children_parents"),
+            ForeignKey(),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             ForeignKey("fk_children_parents_alias"),
             SafeMigrationObservedState.Matching,
             "fk_children_parents");
+
         ObserveAccepted(
             projection,
             new DropForeignKeyIntent("fk_children_parents", "children"),
@@ -938,6 +960,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     [new ExpectedIndexKeyDefinition(column: "external_id")])),
             SafeMigrationObservedState.Matching,
             "ix_items_external_id");
+
         ObserveAccepted(
             projection,
             new DropIndexIntent("ix_items_external_id", "items"),
@@ -969,6 +992,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             projection,
             new EnsureIndexIntent(definition),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new EnsureIndexIntent(
@@ -978,6 +1002,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     definition.Keys)),
             SafeMigrationObservedState.Matching,
             "ix_items_external_id");
+
         ObserveAccepted(
             projection,
             new RenameIndexIntent(
@@ -985,6 +1010,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 "items",
                 "ix_items_external_id_renamed"),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new DropIndexIntent("ix_items_external_id_renamed", "items"),
@@ -1074,6 +1100,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             new EnsureUniqueConstraintIntent(
                 new ExpectedUniqueConstraintDefinition("uq_parents_id", "parents", ["id"])),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new EnsureUniqueConstraintIntent(

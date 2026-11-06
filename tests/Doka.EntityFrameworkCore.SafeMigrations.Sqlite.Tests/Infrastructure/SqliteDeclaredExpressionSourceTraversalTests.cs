@@ -16,21 +16,45 @@ public sealed class SqliteDeclaredExpressionSourceTraversalTests
     [InlineData(128, true, false)]
     [InlineData(1, true, true)]
     [InlineData(128, true, true)]
-    public void BothSourceRolesUseTheCompleteOwnedSnapshot(int width, bool checkRole, bool missing)
+    public void BothSourceRolesUseTheCompleteOwnedSnapshot(
+        int width,
+        bool checkRole,
+        bool missing
+    )
     {
         // Arrange
         var sourceName = "c" + (width - 1).ToString(CultureInfo.InvariantCulture);
-        var expression = SafeMigrationSql.Identifier(missing ? "absent" : sourceName);
-        var columns = Enumerable.Range(0, width)
-            .Select(index => new ExpectedColumnDefinition("c" + index.ToString(CultureInfo.InvariantCulture),
-                typeof(int), false, "INTEGER"))
-            .Append(new ExpectedColumnDefinition("derived", typeof(int), true, "INTEGER",
-                computedExpression: checkRole ? null : expression))
+        var expression = SafeMigrationSql.Identifier(
+            missing
+                ? "absent"
+                : sourceName);
+
+        var columns = Enumerable
+            .Range(0, width)
+            .Select(index => new ExpectedColumnDefinition(
+                "c" + index.ToString(CultureInfo.InvariantCulture),
+                typeof(int),
+                false,
+                "INTEGER"))
+            .Append(
+                new ExpectedColumnDefinition(
+                    "derived",
+                    typeof(int),
+                    true,
+                    "INTEGER",
+                    computedExpression: checkRole
+                        ? null
+                        : expression))
             .ToArray();
 
         var checks = checkRole
-            ? new[] { ExpectedCheckConstraintDefinition.FromExpression("ck_items", "items",
-                SafeMigrationSql.IsNotNull(expression)), }
+            ? new[]
+            {
+                ExpectedCheckConstraintDefinition.FromExpression(
+                    "ck_items",
+                    "items",
+                    SafeMigrationSql.IsNotNull(expression)),
+            }
             : Array.Empty<ExpectedCheckConstraintDefinition>();
 
         var table = new ExpectedTableDefinition("items", columns, checkConstraints: checks);

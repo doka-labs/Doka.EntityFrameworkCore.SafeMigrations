@@ -221,7 +221,8 @@ public sealed class SafeMigrationSqlCaseExpression : SafeMigrationSqlExpression
         ArgumentNullException.ThrowIfNull(whenClauses);
 
         var clauses = whenClauses.ToArray();
-        if (clauses.Length == 0 || clauses.Any(static clause => clause is null))
+        if (clauses.Length == 0
+            || clauses.Any(static clause => clause is null))
         {
             throw new ArgumentException("A CASE expression requires non-null WHEN/THEN clauses.", nameof(whenClauses));
         }

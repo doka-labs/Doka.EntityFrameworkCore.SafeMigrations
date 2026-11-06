@@ -1,7 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
 /// <summary>Runs the ConstraintsProjectedCallableArity PostgreSQL feature cases independently.</summary>
-public sealed class PostgreSqlConstraintsProjectedCallableArityIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
+public sealed class
+    PostgreSqlConstraintsProjectedCallableArityIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned container for this feature.</summary>
     /// <param name="fixture">The shared PostgreSQL container fixture.</param>
@@ -16,36 +17,64 @@ public sealed class PostgreSqlConstraintsProjectedCallableArityIntegrationTests 
     [InlineData(true, false)]
     [InlineData(true, true)]
     [InlineData(false, false)]
-    public async Task EmptyMixedCheckHonorsNativeFunctionArgumentLimit(bool variadic, bool overLimit)
+    public async Task EmptyMixedCheckHonorsNativeFunctionArgumentLimit(
+        bool variadic,
+        bool overLimit
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var limit = await ScalarIntAsync(connectionString, "SELECT current_setting('max_function_args')::integer;");
-        var count = limit + (overLimit ? 1 : 0);
-        var signature = variadic ? "VARIADIC integer[]" : string.Join(", ", Enumerable.Repeat("integer", limit));
-        await ExecuteSqlAsync(connectionString,
+        var limit = await ScalarIntAsync(
+            connectionString,
+            "SELECT current_setting('max_function_args')::integer;",
+            cancellationToken: CancellationToken.None);
+
+        var count = limit
+            + (overLimit
+                ? 1
+                : 0);
+
+        var signature = variadic
+            ? "VARIADIC integer[]"
+            : string.Join(", ", Enumerable.Repeat("integer", limit));
+
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE mixed_columns (id integer NOT NULL); CREATE TABLE callback_audit (id integer); "
             + $"CREATE FUNCTION metadata_many({signature}) RETURNS boolean LANGUAGE plpgsql AS "
-            + "'BEGIN INSERT INTO callback_audit VALUES (1); RETURN TRUE; END';");
+            + "'BEGIN INSERT INTO callback_audit VALUES (1); RETURN TRUE; END';",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("added", "mixed_columns", type: "integer", nullable: false);
-        var arguments = Enumerable.Range(0, count)
-            .Select(ordinal => SafeMigrationSql.Identifier(ordinal == 0 ? "id" : "added")).ToArray();
+        var arguments = Enumerable
+            .Range(0, count)
+            .Select(ordinal => SafeMigrationSql.Identifier(
+                ordinal == 0
+                    ? "id"
+                    : "added"))
+            .ToArray();
 
-        builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression("ck_callable_limit",
-            "mixed_columns", SqlBinary(SafeMigrationSql.Function("metadata_many", arguments),
-                SafeMigrationSqlBinaryOperator.And,
-                SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0))),
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_callable_limit",
+                "mixed_columns",
+                SqlBinary(
+                    SafeMigrationSql.Function("metadata_many", arguments),
+                    SafeMigrationSqlBinaryOperator.And,
+                    SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var runner = context.GetService<ISafeMigrationRunner>();
         var approved = !variadic && !overLimit;
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-check-callable-limit"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sparse-check-callable-limit"),
+            CancellationToken.None);
 
         SafeMigrationRunReport? postflight = null;
         SafeMigrationRunReport? replay = null;
@@ -53,31 +82,49 @@ public sealed class PostgreSqlConstraintsProjectedCallableArityIntegrationTests 
         if (approved)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
-            postflight = await runner.VerifyAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("sparse-check-callable-limit-final"), CancellationToken.None);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            postflight = await runner.VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-check-callable-limit-final"),
+                CancellationToken.None);
 
-            replay = await runner.AnalyzeAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("sparse-check-callable-limit-replay"), CancellationToken.None);
+            replay = await runner.AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-check-callable-limit-replay"),
+                CancellationToken.None);
         }
         else if (overLimit)
         {
             var nativeArguments = string.Join(", ", Enumerable.Repeat("id", count));
-            nativeError = await Assert.ThrowsAsync<PostgresException>(() => ExecuteSqlAsync(connectionString,
-                $"ALTER TABLE mixed_columns ADD CONSTRAINT native_probe CHECK (metadata_many({nativeArguments}));"));
+            nativeError = await Assert.ThrowsAsync<PostgresException>(() => ExecuteSqlAsync(
+                connectionString,
+                $"ALTER TABLE mixed_columns ADD CONSTRAINT native_probe CHECK (metadata_many({nativeArguments}));",
+                cancellationToken: CancellationToken.None));
         }
         else
         {
             var nativeArguments = string.Join(", ", Enumerable.Repeat("id", count));
-            await ExecuteSqlAsync(connectionString,
-                $"ALTER TABLE mixed_columns ADD CONSTRAINT native_probe CHECK (metadata_many({nativeArguments}));");
+            await ExecuteSqlAsync(
+                connectionString,
+                $"ALTER TABLE mixed_columns ADD CONSTRAINT native_probe CHECK (metadata_many({nativeArguments}));",
+                cancellationToken: CancellationToken.None);
         }
 
-        var callbacks = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM callback_audit;");
+        var callbacks = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM callback_audit;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(0, callbacks);
-        Assert.Equal(approved ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(
+            approved
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
+            report.Status);
+
         if (approved)
         {
             Assert.Equal(SafeMigrationReportStatus.Ready, postflight!.Status);
@@ -99,5 +146,4 @@ public sealed class PostgreSqlConstraintsProjectedCallableArityIntegrationTests 
             Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[1].Action);
         }
     }
-
 }

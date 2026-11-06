@@ -23,7 +23,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return "present";
         }
 
-        return isNullable ? "none_or_null" : "none";
+        return isNullable
+            ? "none_or_null"
+            : "none";
     }
 
     private string DefaultDiagnosticPayload(
@@ -49,7 +51,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         var literal = value.GetLiteralValue();
 
-        return literal is null ? "NULL" : mapping.GenerateSqlLiteral(literal);
+        return literal is null
+            ? "NULL"
+            : mapping.GenerateSqlLiteral(literal);
     }
 
     private string BuildDefaultMatches(
@@ -77,7 +81,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 return $"{catalogExpression} IN ({string.Join(", ", providerDefaultCandidates)})";
             }
 
-            return isNullable ? NullDefaultMatches() : $"{catalogExpression} IS NULL";
+            return isNullable
+                ? NullDefaultMatches()
+                : $"{catalogExpression} IS NULL";
         }
 
         var structuredString = (mapping.ClrType == typeof(string) || mapping.ClrType == typeof(char))
@@ -88,7 +94,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         if (mapping.ClrType == typeof(byte[])
             && expected.StructuredExpression is SafeMigrationSqlLiteralExpression
             {
-                Value: byte[] binary, StoreType: null
+                Value: byte[] binary, StoreType: null,
             })
         {
             // WHY: Native X'...' and 0x... expressions retain the same exact
@@ -106,7 +112,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             IEnumerable<string> sqlCandidateValues = BuildDefaultSqlCandidates(expression);
             if (expected.StructuredExpression is SafeMigrationSqlLiteralExpression
                 {
-                    Value: string temporal, StoreType: null
+                    Value: string temporal, StoreType: null,
                 }
                 && BuildTemporalSqlLiteralCatalogValue(mapping.StoreType, temporal) is { } temporalDisplay)
             {
@@ -169,7 +175,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         if (value is bool boolean)
         {
-            candidates.Add(boolean ? "1" : "0");
+            candidates.Add(
+                boolean
+                    ? "1"
+                    : "0");
         }
 
         AddTemporalDefaultCandidates(candidates, value);
@@ -362,6 +371,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     )
     {
         var hex = Convert.ToHexString(value);
+
         // WHY: Both candidate sets always have exactly two values. Direct
         // rendering preserves parameter order without arrays or iterators.
         var prefixedLiteral = Literal($"0X{hex}");
@@ -526,6 +536,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     candidates,
                     "DATE",
                     date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+
                 break;
             case TimeOnly time:
                 AddTemporalTypedCandidate(candidates, "TIME", time.ToString("HH:mm:ss", CultureInfo.InvariantCulture));
@@ -533,22 +544,26 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     candidates,
                     "TIME",
                     time.ToString("HH:mm:ss.ffffff", CultureInfo.InvariantCulture));
+
                 break;
             case DateTime dateTime:
                 AddQuotedCandidate(candidates, dateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
                 AddQuotedCandidate(
                     candidates,
                     dateTime.ToString("yyyy-MM-dd HH:mm:ss.ffffff", CultureInfo.InvariantCulture));
+
                 break;
             case TimeSpan timeSpan:
                 AddTemporalTypedCandidate(
                     candidates,
                     "TIME",
                     timeSpan.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture));
+
                 AddTemporalTypedCandidate(
                     candidates,
                     "TIME",
                     timeSpan.ToString(@"hh\:mm\:ss\.ffffff", CultureInfo.InvariantCulture));
+
                 break;
         }
     }
@@ -568,6 +583,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var type = storeType
             .AsSpan()
             .Trim();
+
         var open = type.IndexOf('(');
         var kind = open < 0
             ? type
@@ -605,7 +621,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return null;
         }
 
-        var fractionLength = value.Length > 19 ? value.Length - 20 : 0;
+        var fractionLength = value.Length > 19
+            ? value.Length - 20
+            : 0;
+
         if ((value.Length > 19 && (value[19] != '.' || fractionLength == 0))
             || fractionLength > precision)
         {
@@ -622,7 +641,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         return precision == 0
             ? value[..19]
-            : value[..19] + "." + (value.Length > 19 ? value[20..] : string.Empty).PadRight(precision, '0');
+            : value[..19]
+            + "."
+            + (value.Length > 19
+                ? value[20..]
+                : string.Empty).PadRight(precision, '0');
     }
 
     private static void AddTemporalTypedCandidate(

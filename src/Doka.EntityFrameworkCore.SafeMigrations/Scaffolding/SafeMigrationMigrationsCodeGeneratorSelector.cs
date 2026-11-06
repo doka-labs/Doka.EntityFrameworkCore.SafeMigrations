@@ -12,8 +12,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// </remarks>
 internal sealed class SafeMigrationMigrationsCodeGeneratorSelector : IMigrationsCodeGeneratorSelector
 {
-    private readonly IMigrationsCodeGenerator[] _decoratedGenerators;
     private readonly SafeMigrationScaffoldingConfiguration _configuration;
+    private readonly IMigrationsCodeGenerator[] _decoratedGenerators;
     private readonly IMigrationsCodeGenerator[] _providerGenerators;
 
     /// <summary>Initializes the deferred provider-generator selector.</summary>
@@ -82,9 +82,9 @@ internal sealed class SafeMigrationMigrationsCodeGeneratorSelector : IMigrations
         for (var index = _providerGenerators.Length - 1; index >= 0; index--)
         {
             if (string.Equals(
-                    _providerGenerators[index].Language,
-                    requestedLanguage,
-                    StringComparison.OrdinalIgnoreCase))
+                _providerGenerators[index].Language,
+                requestedLanguage,
+                StringComparison.OrdinalIgnoreCase))
             {
                 return _decoratedGenerators[index];
             }

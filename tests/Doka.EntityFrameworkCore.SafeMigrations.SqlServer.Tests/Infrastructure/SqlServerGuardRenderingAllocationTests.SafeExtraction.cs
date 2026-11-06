@@ -29,7 +29,10 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
             operations.Add(CreateOperation(SafeMigrationPolicy.ThrowIfDifferent, true));
         }
 
-        var expected = operations.OfType<SafeMigrationOperation>().ToArray();
+        var expected = operations
+            .OfType<SafeMigrationOperation>()
+            .ToArray();
+
         var original = operations.ToArray();
 
         // Act
@@ -87,14 +90,21 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
         // Arrange
         var safe = CreateOperation(SafeMigrationPolicy.ThrowIfDifferent, false);
         var ordinary = new SqlOperation { Sql = "SELECT 7;" };
-        var operations = new List<MigrationOperation> { ordinary, safe };
+        var operations = new List<MigrationOperation>
+        {
+            ordinary,
+            safe,
+        };
 
         // Act
         var failure = Record.Exception(() =>
             SqlServerSafeMigrationsSqlGenerator.ExtractSafeOperations(operations, count));
 
         // Assert
-        Assert.Contains("preflight count", Assert.IsType<InvalidOperationException>(failure).Message,
+        Assert.Contains(
+            "preflight count",
+            Assert.IsType<InvalidOperationException>(failure)
+                .Message,
             StringComparison.Ordinal);
 
         Assert.Same(ordinary, operations[0]);
@@ -118,7 +128,9 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
             SqlServerSafeMigrationsSqlGenerator.ExtractSafeOperations(operations, count));
 
         // Assert
-        Assert.Equal("safeOperationCount", Assert.IsType<ArgumentOutOfRangeException>(failure).ParamName);
+        Assert.Equal("safeOperationCount",
+            Assert.IsType<ArgumentOutOfRangeException>(failure)
+                .ParamName);
     }
 
     /// <summary>
@@ -130,8 +142,10 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
         // Arrange
         const int operationCount = 1000;
         const int renderCount = 32;
-        var operations = Enumerable.Range(0, operationCount)
-            .Select(_ => (MigrationOperation)CreateOperation(SafeMigrationPolicy.ThrowIfDifferent, false)).ToList();
+        var operations = Enumerable
+            .Range(0, operationCount)
+            .Select(_ => (MigrationOperation)CreateOperation(SafeMigrationPolicy.ThrowIfDifferent, false))
+            .ToList();
 
         var snapshot = operations.ToArray();
         var currentResult = Array.Empty<SafeMigrationOperation>();
@@ -141,7 +155,9 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
         // before measuring. Only extraction is counted, and both code paths are
         // warmed so first-use initialization cannot masquerade as a saving.
         currentResult = SqlServerSafeMigrationsSqlGenerator.ExtractSafeOperations(operations, operationCount);
-        originalResult = operations.OfType<SafeMigrationOperation>().ToArray();
+        originalResult = operations
+            .OfType<SafeMigrationOperation>()
+            .ToArray();
 
         // Act
         var before = GC.GetAllocatedBytesForCurrentThread();
@@ -154,7 +170,9 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
         before = GC.GetAllocatedBytesForCurrentThread();
         for (var iteration = 0; iteration < renderCount; iteration++)
         {
-            originalResult = operations.OfType<SafeMigrationOperation>().ToArray();
+            originalResult = operations
+                .OfType<SafeMigrationOperation>()
+                .ToArray();
         }
 
         var originalBytes = GC.GetAllocatedBytesForCurrentThread() - before;
@@ -189,7 +207,9 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
         var snapshot = operations.ToArray();
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(operations, context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(operations, context.Model);
 
         // Assert
         Assert.Equal(4, commands.Count);
@@ -215,17 +235,27 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.Operations.Add(new SafeMigrationDesignTimeServicesRequiredOperation());
         builder.Sql("SELECT 7;");
-        builder.EnsureIndex(new ExpectedIndexDefinition("IX_unsupported", "items",
-            [new ExpectedIndexKeyDefinition("Id")], method: "hash"), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "IX_unsupported",
+                "items",
+                [new ExpectedIndexKeyDefinition("Id")],
+                method: "hash"),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         var snapshot = builder.Operations.ToArray();
 
         // Act
-        var failure = Record.Exception(() => context.GetService<IMigrationsSqlGenerator>()
+        var failure = Record.Exception(() => context
+            .GetService<IMigrationsSqlGenerator>()
             .Generate(builder.Operations, context.Model));
 
         // Assert
-        Assert.Contains("unsupported", Assert.IsType<NotSupportedException>(failure).Message, StringComparison.Ordinal);
+        Assert.Contains("unsupported",
+            Assert.IsType<NotSupportedException>(failure)
+                .Message,
+            StringComparison.Ordinal);
+
         Assert.Equal(snapshot.Length, builder.Operations.Count);
         for (var index = 0; index < snapshot.Length; index++)
         {
@@ -248,11 +278,15 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
         var snapshot = operations.ToArray();
 
         // Act
-        var failure = Record.Exception(() => context.GetService<IMigrationsSqlGenerator>()
+        var failure = Record.Exception(() => context
+            .GetService<IMigrationsSqlGenerator>()
             .Generate(operations, context.Model));
 
         // Assert
-        Assert.Contains("first migration operation", Assert.IsType<InvalidOperationException>(failure).Message,
+        Assert.Contains(
+            "first migration operation",
+            Assert.IsType<InvalidOperationException>(failure)
+                .Message,
             StringComparison.Ordinal);
 
         Assert.Same(snapshot[0], operations[0]);

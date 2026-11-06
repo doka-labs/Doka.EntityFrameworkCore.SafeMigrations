@@ -2,7 +2,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 {
-    private SqlServerSafeMigrationRuntimePlan BuildEnsureSchema(EnsureSchemaIntent intent)
+    private SqlServerSafeMigrationRuntimePlan BuildEnsureSchema(
+        EnsureSchemaIntent intent
+    )
     {
         var exists = SchemaExists(intent.Name);
 
@@ -11,7 +13,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             Bit(exists));
     }
 
-    private SqlServerSafeMigrationRuntimePlan BuildDropSchema(DropSchemaIntent intent)
+    private SqlServerSafeMigrationRuntimePlan BuildDropSchema(
+        DropSchemaIntent intent
+    )
     {
         var exists = SchemaExists(intent.Name);
         var schemaId = $"SCHEMA_ID({Literal(intent.Name)})";
@@ -21,17 +25,23 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + $"AND NOT EXISTS (SELECT 1 FROM sys.xml_schema_collections x WHERE x.schema_id = {schemaId})";
 
         return Plan(
-            $"CASE WHEN {reserved} THEN N'unsupported' WHEN NOT {exists} THEN N'missing' "
-            + $"WHEN {empty} THEN N'matching' ELSE N'different' END",
-            Bit($"NOT {exists}")) with
-        {
-            ClassificationCodeExpression = $"CASE WHEN {reserved} THEN N'reserved_schema' ELSE NULL END",
-        };
+                $"CASE WHEN {reserved} THEN N'unsupported' WHEN NOT {exists} THEN N'missing' "
+                + $"WHEN {empty} THEN N'matching' ELSE N'different' END",
+                Bit($"NOT {exists}")) with
+            {
+                ClassificationCodeExpression = $"CASE WHEN {reserved} THEN N'reserved_schema' ELSE NULL END",
+            };
     }
 
-    private string SchemaExists(string schema)
+    private string SchemaExists(
+        string schema
+    )
         => $"EXISTS (SELECT 1 FROM sys.schemas s WHERE s.name = {Literal(schema)})";
 
-    private static bool IsReservedSchema(string schema)
-        => schema.TrimEnd(' ').ToUpperInvariant() is "DBO" or "GUEST" or "SYS" or "INFORMATION_SCHEMA";
+    private static bool IsReservedSchema(
+        string schema
+    )
+        => schema
+            .TrimEnd(' ')
+            .ToUpperInvariant() is "DBO" or "GUEST" or "SYS" or "INFORMATION_SCHEMA";
 }

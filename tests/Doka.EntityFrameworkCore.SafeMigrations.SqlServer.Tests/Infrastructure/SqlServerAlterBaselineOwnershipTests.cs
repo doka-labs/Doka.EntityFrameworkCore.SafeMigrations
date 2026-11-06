@@ -9,14 +9,20 @@ public sealed class SqlServerAlterBaselineOwnershipTests
     {
         // Arrange
         using var context = new IndexedContext();
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("items",
-            new ExpectedColumnDefinition("Value", typeof(long), false, "bigint"),
-            new ExpectedColumnDefinition("Value", typeof(int), false, "int"), "dbo"),
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "items",
+                new ExpectedColumnDefinition("Value", typeof(long), false, "bigint"),
+                new ExpectedColumnDefinition("Value", typeof(int), false, "int"),
+                "dbo"),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>()
-            .Generate([operation], context.GetService<IDesignTimeModel>().Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation],
+                context.GetService<IDesignTimeModel>()
+                    .Model);
 
         var sql = string.Join("\n", commands.Select(static command => command.CommandText));
 
@@ -33,19 +39,33 @@ public sealed class SqlServerAlterBaselineOwnershipTests
     {
         // Arrange
         using var context = new IndexedContext();
-        var source = new ExpectedColumnDefinition("Value", typeof(int), true, "int",
+        var source = new ExpectedColumnDefinition(
+            "Value",
+            typeof(int),
+            true,
+            "int",
             defaultValue: SafeMigrationDefaultValue.Literal(0));
 
-        var target = new ExpectedColumnDefinition("Value", typeof(long), false, "bigint",
+        var target = new ExpectedColumnDefinition(
+            "Value",
+            typeof(long),
+            false,
+            "bigint",
             defaultValue: SafeMigrationDefaultValue.Literal(0L));
 
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("items", target, source, "dbo"),
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent("items", target, source, "dbo"),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var sql = string.Join("\n", context.GetService<IMigrationsSqlGenerator>()
-            .Generate([operation], context.GetService<IDesignTimeModel>().Model)
-            .Select(static command => command.CommandText));
+        var sql = string.Join(
+            "\n",
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation],
+                    context.GetService<IDesignTimeModel>()
+                        .Model)
+                .Select(static command => command.CommandText));
 
         // Assert
         Assert.Contains("[Value] IS NULL", sql, StringComparison.Ordinal);
@@ -60,23 +80,34 @@ public sealed class SqlServerAlterBaselineOwnershipTests
     private sealed class IndexedContext : DbContext
     {
         /// <inheritdoc />
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        protected override void OnConfiguring(
+            DbContextOptionsBuilder optionsBuilder
+        )
         {
-            optionsBuilder.UseSqlServer("Server=127.0.0.1,1;Database=baseline_ownership;"
+            optionsBuilder.UseSqlServer(
+                "Server=127.0.0.1,1;Database=baseline_ownership;"
                 + "User ID=sa;Password=unused;TrustServerCertificate=True");
 
             optionsBuilder.UseSqlServerSafeMigrations<IndexedContext>();
         }
 
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        )
         {
             var entity = modelBuilder.Entity("BaselineItem");
             entity.ToTable("items", "dbo");
             entity.Property<int>("Id");
-            entity.Property<long>("Value").HasColumnType("bigint");
+            entity
+                .Property<long>("Value")
+                .HasColumnType("bigint");
+
             entity.HasKey("Id");
-            entity.HasIndex("Value").HasDatabaseName("IX_model_value").IncludeProperties("Id");
+            entity
+                .HasIndex("Value")
+                .HasDatabaseName("IX_model_value")
+                .IncludeProperties("Id");
         }
     }
 }

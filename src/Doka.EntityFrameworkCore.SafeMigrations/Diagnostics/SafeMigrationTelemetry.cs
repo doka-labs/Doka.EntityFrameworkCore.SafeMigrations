@@ -36,8 +36,12 @@ internal static class SafeMigrationTelemetry
     {
         // WHY: A fixed vocabulary keeps tracing low-cardinality and prevents
         // callers from accidentally emitting object names, SQL, or data values.
-        if (stage is not ("provider-classification" or "ordered-projection" or "unexpected-inventory"
-            or "provider-baseline" or "catalog-classification" or "catalog-batch"))
+        if (stage is not ("provider-classification"
+            or "ordered-projection"
+            or "unexpected-inventory"
+            or "provider-baseline"
+            or "catalog-classification"
+            or "catalog-batch"))
         {
             throw new ArgumentException("The analysis stage is not a recognized fixed identifier.", nameof(stage));
         }
@@ -57,8 +61,11 @@ internal static class SafeMigrationTelemetry
 
         // WHY: Start callbacks run before StartActivity returns. Supplying tags
         // during creation makes a stalled phase identifiable before it completes.
-        return ActivitySource.StartActivity(AnalysisStageActivityName, ActivityKind.Internal,
-            parentContext: default, tags: tags);
+        return ActivitySource.StartActivity(
+            AnalysisStageActivityName,
+            ActivityKind.Internal,
+            parentContext: default,
+            tags: tags);
     }
 
     public static void Record(

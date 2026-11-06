@@ -9,10 +9,13 @@ public sealed class PostgreSqlIntegerWideningTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext("Host=localhost;Database=unused;Username=unused");
-        var operation = new SafeMigrationOperation(new DropIndexIntent("ix_rows", "rows"),
+        var operation = new SafeMigrationOperation(
+            new DropIndexIntent("ix_rows", "rows"),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         // Act
         var runtime = builder.Build(operation);
@@ -20,8 +23,11 @@ public sealed class PostgreSqlIntegerWideningTests
 
         // Assert
         Assert.Null(runtime.ClassificationCodeExpression);
-        Assert.Contains(PostgreSqlSafeMigrationCatalogSqlBuilder.OrdinaryIndexDropProofCode,
-            analysis.ClassificationCodeExpression, StringComparison.Ordinal);
+        Assert.Contains(
+            PostgreSqlSafeMigrationCatalogSqlBuilder.OrdinaryIndexDropProofCode,
+            analysis.ClassificationCodeExpression,
+            StringComparison.Ordinal);
+
         Assert.Contains("pg_catalog.pg_opclass", analysis.ClassificationCodeExpression, StringComparison.Ordinal);
         Assert.Equal(runtime.StateExpression, analysis.StateExpression);
         Assert.Equal(runtime.Postcondition, analysis.Postcondition);
@@ -38,16 +44,24 @@ public sealed class PostgreSqlIntegerWideningTests
     [InlineData("smallint", "integer", true)]
     [InlineData("smallint", "bigint", true)]
     [InlineData("integer", "bigint", true)]
-    public void BuiltInWideningUsesExactSourceWithoutDataScan(string sourceType, string targetType, bool nullable)
+    public void BuiltInWideningUsesExactSourceWithoutDataScan(
+        string sourceType,
+        string targetType,
+        bool nullable
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext("Host=localhost;Database=unused;Username=unused");
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("integer_rows",
-            new ExpectedColumnDefinition("value", ClrType(targetType), nullable, targetType),
-            new ExpectedColumnDefinition("value", ClrType(sourceType), nullable, sourceType)),
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "integer_rows",
+                new ExpectedColumnDefinition("value", ClrType(targetType), nullable, targetType),
+                new ExpectedColumnDefinition("value", ClrType(sourceType), nullable, sourceType)),
             SafeMigrationPolicy.RepairIfSafe);
+
         var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         // Act
         var plan = builder.Build(operation, includeTransitionEvidence: true);
@@ -79,7 +93,9 @@ public sealed class PostgreSqlIntegerWideningTests
     [InlineData("identity")]
     [InlineData("unknown-source-annotation")]
     [InlineData("strict")]
-    public void UnsupportedTransitionsDoNotAcquireRepair(string caseId)
+    public void UnsupportedTransitionsDoNotAcquireRepair(
+        string caseId
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext("Host=localhost;Database=unused;Username=unused");
@@ -100,8 +116,13 @@ public sealed class PostgreSqlIntegerWideningTests
                 target = new ExpectedColumnDefinition("value", typeof(long), true, "bigint");
                 break;
             case "default":
-                target = new ExpectedColumnDefinition("value", typeof(long), false, "bigint",
+                target = new ExpectedColumnDefinition(
+                    "value",
+                    typeof(long),
+                    false,
+                    "bigint",
                     defaultValue: SafeMigrationDefaultValue.Literal(0L));
+
                 break;
             case "comment":
                 target = new ExpectedColumnDefinition("value", typeof(long), false, "bigint", comment: "next");
@@ -117,7 +138,8 @@ public sealed class PostgreSqlIntegerWideningTests
                 var identityOperation = new AddColumnOperation();
                 if (caseId == "identity")
                 {
-                    identityOperation.AddAnnotation("Npgsql:ValueGenerationStrategy",
+                    identityOperation.AddAnnotation(
+                        "Npgsql:ValueGenerationStrategy",
                         NpgsqlValueGenerationStrategy.IdentityByDefaultColumn);
                 }
                 else
@@ -129,13 +151,19 @@ public sealed class PostgreSqlIntegerWideningTests
                 {
                     ProviderAnnotations = SafeMigrationProviderAnnotation.Capture(identityOperation),
                 };
+
                 break;
         }
 
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("integer_rows", target, source),
-            caseId == "strict" ? SafeMigrationPolicy.ThrowIfDifferent : SafeMigrationPolicy.RepairIfSafe);
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent("integer_rows", target, source),
+            caseId == "strict"
+                ? SafeMigrationPolicy.ThrowIfDifferent
+                : SafeMigrationPolicy.RepairIfSafe);
+
         var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         // Act
         var plan = builder.Build(operation, includeTransitionEvidence: true);
@@ -146,7 +174,9 @@ public sealed class PostgreSqlIntegerWideningTests
     }
 
     /// <summary>Maps only the three explicitly tested native signed integer representations.</summary>
-    private static Type ClrType(string storeType) => storeType switch
+    private static Type ClrType(
+        string storeType
+    ) => storeType switch
     {
         "smallint" => typeof(short),
         "integer" => typeof(int),

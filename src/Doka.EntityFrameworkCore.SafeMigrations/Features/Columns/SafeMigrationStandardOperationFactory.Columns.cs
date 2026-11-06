@@ -73,10 +73,18 @@ internal static partial class SafeMigrationStandardOperationFactory
         // WHY: Provider SQL generators compare target and old metadata to decide
         // which ALTER clauses to emit. Make every permitted mutable facet
         // observably different while preserving all invariant facets.
-        oldColumn.IsNullable = declareNullabilityDifference ? !target.IsNullable : target.IsNullable;
-        oldColumn.Comment = target.Comment is null ? "doka_sm_previous_comment" : null;
+        oldColumn.IsNullable = declareNullabilityDifference
+            ? !target.IsNullable
+            : target.IsNullable;
+
+        oldColumn.Comment = target.Comment is null
+            ? "doka_sm_previous_comment"
+            : null;
+
         oldColumn.DefaultValue = null;
-        oldColumn.DefaultValueSql = target.DefaultValue.Kind == SafeMigrationDefaultValueKind.None ? "NULL" : null;
+        oldColumn.DefaultValueSql = target.DefaultValue.Kind == SafeMigrationDefaultValueKind.None
+            ? "NULL"
+            : null;
 
         if (previousStoreType is not null)
         {
@@ -122,8 +130,11 @@ internal static partial class SafeMigrationStandardOperationFactory
             Collation = Render(target.Collation, renderCollation),
             Comment = target.Comment,
             ComputedColumnSql =
-                target.CapturedComputedSql ?? target.ComputedColumnSql
-                ?? (target.ComputedExpression is null ? null : Render(target.ComputedExpression, renderExpression)),
+                target.CapturedComputedSql
+                ?? target.ComputedColumnSql
+                ?? (target.ComputedExpression is null
+                    ? null
+                    : Render(target.ComputedExpression, renderExpression)),
             IsStored = target.IsStored,
             OldColumn = oldColumn,
         };
@@ -158,7 +169,8 @@ internal static partial class SafeMigrationStandardOperationFactory
             Scale = definition.Scale,
             Collation = Render(definition.Collation, renderCollation),
             Comment = definition.Comment,
-            ComputedColumnSql = definition.CapturedComputedSql ?? definition.ComputedColumnSql
+            ComputedColumnSql = definition.CapturedComputedSql
+                ?? definition.ComputedColumnSql
                 ?? (definition.ComputedExpression is null
                     ? null
                     : Render(definition.ComputedExpression, renderExpression)),
@@ -206,6 +218,7 @@ internal static partial class SafeMigrationStandardOperationFactory
             case SafeMigrationDefaultValueKind.Sql:
                 operation.DefaultValueSql = defaultValue.SqlExpression
                     ?? Render(defaultValue.StructuredExpression!, renderExpression);
+
                 return;
             default:
                 throw new ArgumentOutOfRangeException(nameof(defaultValue));

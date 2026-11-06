@@ -16,11 +16,13 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
     public async Task ProjectedForeignKey_PreventsLaterPrincipalTableDrop()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.parents (Id int NOT NULL CONSTRAINT PK_parents PRIMARY KEY); "
-            + "CREATE TABLE dbo.children (Id int NOT NULL, ParentId int NOT NULL);");
+            + "CREATE TABLE dbo.children (Id int NOT NULL, ParentId int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddForeignKeyIfNotExists(
@@ -29,17 +31,22 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
             ["ParentId"],
             "parents",
             ["Id"]);
+
         builder.DropTableIfExists("parents");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-projected-fk"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-projected-fk"),
+                cancellationToken: CancellationToken.None);
 
         var parentCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.parents', N'U');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.parents', N'U');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -53,28 +60,34 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
     public async Task DropThenEnsureIndex_DoesNotReuseStaleCatalogMatch()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.index_orders (Id int NOT NULL, Caption nvarchar(80) NULL); "
-            + "CREATE INDEX IX_index_orders_Caption ON dbo.index_orders (Caption);");
+            + "CREATE INDEX IX_index_orders_Caption ON dbo.index_orders (Caption);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropIndexIfExists("IX_index_orders_Caption", "index_orders");
         builder.CreateIndexIfNotExists("IX_index_orders_Caption", "index_orders", ["Caption"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-drop-ensure-index"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-drop-ensure-index"),
+                cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var indexCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.index_orders', N'U') "
-            + "AND name = N'IX_index_orders_Caption';");
+            + "AND name = N'IX_index_orders_Caption';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -89,14 +102,16 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
     public async Task DisabledForeignKey_IsNotAcceptedAsMatching()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.fk_parents (Id int NOT NULL CONSTRAINT PK_fk_parents PRIMARY KEY); "
             + "CREATE TABLE dbo.fk_children (Id int NOT NULL, ParentId int NOT NULL); "
             + "ALTER TABLE dbo.fk_children ADD CONSTRAINT FK_fk_children_parents "
             + "FOREIGN KEY (ParentId) REFERENCES dbo.fk_parents (Id); "
-            + "ALTER TABLE dbo.fk_children NOCHECK CONSTRAINT FK_fk_children_parents;");
+            + "ALTER TABLE dbo.fk_children NOCHECK CONSTRAINT FK_fk_children_parents;",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddForeignKeyIfNotExists(
@@ -107,14 +122,19 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
             ["Id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-disabled-fk"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-disabled-fk"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.NotEqual(SafeMigrationObservedState.Matching, Assert.Single(report.Assessments).ObservedState);
+        Assert.NotEqual(SafeMigrationObservedState.Matching,
+            Assert.Single(report.Assessments)
+                .ObservedState);
     }
 
     /// <summary>
@@ -124,25 +144,32 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
     public async Task FilteredIndex_IsDifferentFromUnfilteredIndex()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.filtered_orders (Id int NOT NULL, Caption nvarchar(80) NULL); "
             + "CREATE INDEX IX_filtered_orders_Caption ON dbo.filtered_orders (Caption) "
-            + "WHERE Caption IS NOT NULL;");
+            + "WHERE Caption IS NOT NULL;",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexIfNotExists("IX_filtered_orders_Caption", "filtered_orders", ["Caption"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-filtered-index"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-filtered-index"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Different,
+            Assert.Single(report.Assessments)
+                .ObservedState);
     }
 
     /// <summary>
@@ -152,11 +179,13 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
     public async Task AddConstraints_AppliesAndReplaysEachConstraintFamily()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.add_parents (Id int NOT NULL); "
-            + "CREATE TABLE dbo.add_children (Id int NOT NULL, ParentId int NOT NULL, Amount int NOT NULL);");
+            + "CREATE TABLE dbo.add_children (Id int NOT NULL, ParentId int NOT NULL, Amount int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddPrimaryKeyIfNotExists("PK_add_parents", "add_parents", ["Id"]);
@@ -170,8 +199,8 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
             ["Id"]);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var constraintCount = await ScalarIntAsync(
             connectionString,
@@ -180,7 +209,8 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
             + "+ (SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_add_children_Amount' "
             + "AND is_disabled = 0 AND is_not_trusted = 0) "
             + "+ (SELECT COUNT(*) FROM sys.foreign_keys WHERE name = N'FK_add_children_parents' "
-            + "AND is_disabled = 0 AND is_not_trusted = 0);");
+            + "AND is_disabled = 0 AND is_not_trusted = 0);",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(4, constraintCount);
@@ -193,7 +223,7 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
     public async Task DropConstraints_AppliesAndReplaysEachConstraintFamily()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.drop_pk (Id int NOT NULL CONSTRAINT PK_drop_pk PRIMARY KEY); "
@@ -202,7 +232,9 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
             + "CREATE TABLE dbo.drop_fk_parent (Id int NOT NULL CONSTRAINT PK_drop_fk_parent PRIMARY KEY); "
             + "CREATE TABLE dbo.drop_fk_child (ParentId int NOT NULL); "
             + "ALTER TABLE dbo.drop_fk_child ADD CONSTRAINT FK_drop_fk_child_parent "
-            + "FOREIGN KEY (ParentId) REFERENCES dbo.drop_fk_parent (Id);");
+            + "FOREIGN KEY (ParentId) REFERENCES dbo.drop_fk_parent (Id);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropPrimaryKeyIfExists("PK_drop_pk", "drop_pk");
@@ -211,14 +243,15 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
         builder.DropForeignKeyIfExists("FK_drop_fk_child_parent", "drop_fk_child");
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var remainingCount = await ScalarIntAsync(
             connectionString,
             "SELECT (SELECT COUNT(*) FROM sys.key_constraints WHERE name IN (N'PK_drop_pk', N'UQ_drop_uq')) "
             + "+ (SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_drop_ck') "
-            + "+ (SELECT COUNT(*) FROM sys.foreign_keys WHERE name = N'FK_drop_fk_child_parent');");
+            + "+ (SELECT COUNT(*) FROM sys.foreign_keys WHERE name = N'FK_drop_fk_child_parent');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(0, remainingCount);

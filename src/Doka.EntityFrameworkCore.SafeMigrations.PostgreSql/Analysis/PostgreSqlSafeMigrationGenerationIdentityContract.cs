@@ -5,15 +5,23 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
 {
     private readonly Segment?[] _segments;
 
-    private PostgreSqlSafeMigrationGenerationIdentityContract(Segment?[] segments) => _segments = segments;
+    private PostgreSqlSafeMigrationGenerationIdentityContract(
+        Segment?[] segments
+    )
+    {
+        _segments = segments;
+    }
 
     /// <summary>Partitions transition evidence at ordinary provider operations which can change its identity.</summary>
     /// <param name="operations">The complete ordered generation stream.</param>
     /// <returns>Invocation-local, indexed contracts without retaining generated SQL plans.</returns>
-    public static PostgreSqlSafeMigrationGenerationIdentityContract Create(IReadOnlyList<MigrationOperation> operations)
+    public static PostgreSqlSafeMigrationGenerationIdentityContract Create(
+        IReadOnlyList<MigrationOperation> operations
+    )
     {
         var segments = new Segment?[operations.Count];
         var pending = new List<(int Ordinal, SafeMigrationOperation Operation)>();
+
         // WHY: Retain original operation ordinals when forming identity segments.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -65,11 +73,16 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
             ?? throw new InvalidOperationException("The PostgreSQL generation contract has no safe operation owner.");
 
         var owner = PostgreSqlSafeMigrationSchemaIdentity.GetOwner(operation.Intent);
-        var family = owner.Table is null ? null : segment.FindFamily(owner.Table);
-        var exact = operation.Intent is EnsureTableIntent table
-            ? segment.Exact.GetValueOrDefault((table.Definition.Schema, table.Definition.Table)) : null;
+        var family = owner.Table is null
+            ? null
+            : segment.FindFamily(owner.Table);
 
-        if (family is not { HasUnqualifiedOwner: true } || family.QualifiedSchemas.Count == 0)
+        var exact = operation.Intent is EnsureTableIntent table
+            ? segment.Exact.GetValueOrDefault((table.Definition.Schema, table.Definition.Table))
+            : null;
+
+        if (family is not { HasUnqualifiedOwner: true }
+            || family.QualifiedSchemas.Count == 0)
         {
             return builder.Build(operation, exact, includeAnalysisEvidence: false, includeTransitionEvidence: true);
         }
@@ -82,7 +95,8 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
         {
             foreach (var schema in family.QualifiedSchemas.Order(StringComparer.Ordinal))
             {
-                if (owner.Schema is not null && !StringComparer.Ordinal.Equals(owner.Schema, schema))
+                if (owner.Schema is not null
+                    && !StringComparer.Ordinal.Equals(owner.Schema, schema))
                 {
                     continue;
                 }
@@ -97,8 +111,9 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
 
                 if (operation.Intent is EnsureTableIntent ensure)
                 {
-                    alternatives.Add((schema,
-                        candidate.GetValueOrDefault((ensure.Definition.Schema, ensure.Definition.Table))));
+                    alternatives.Add(
+                        (schema,
+                            candidate.GetValueOrDefault((ensure.Definition.Schema, ensure.Definition.Table))));
                 }
 
                 var familyGuard = family.BuildIdentityGuard(builder, operation.Intent, schema);
@@ -145,11 +160,14 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
         {
             ObjectIdentityGuardExpression = "(" + string.Join(" AND ", guards) + ")",
             PostExecutionObjectIdentityGuardExpression = postExecutionGuards.Count == 0
-                ? "TRUE" : "(" + string.Join(" AND ", postExecutionGuards) + ")",
+                ? "TRUE"
+                : "(" + string.Join(" AND ", postExecutionGuards) + ")",
             ObjectIdentityGuardFailureCodeExpression = rejected.Count == 0
                 ? plan.ObjectIdentityGuardFailureCodeExpression
-                : "CASE WHEN NOT COALESCE((" + rejectedGuard + "), FALSE) "
-                    + "THEN 'schema_alias_transition_invalid' ELSE 'schema_search_path_mismatch' END",
+                : "CASE WHEN NOT COALESCE(("
+                + rejectedGuard
+                + "), FALSE) "
+                + "THEN 'schema_alias_transition_invalid' ELSE 'schema_search_path_mismatch' END",
         };
     }
 
@@ -164,7 +182,10 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
             return;
         }
 
-        var segment = new Segment(pending.Select(static entry => entry.Operation).ToArray());
+        var segment = new Segment(pending
+            .Select(static entry => entry.Operation)
+            .ToArray());
+
         foreach (var entry in pending)
         {
             segments[entry.Ordinal] = segment;
@@ -178,11 +199,18 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
     {
         private readonly Dictionary<string, Family> _families = new(StringComparer.Ordinal);
 
-        public Segment(SafeMigrationOperation[] operations)
+        public Segment(
+            SafeMigrationOperation[] operations
+        )
         {
             SafeMigrationExpectedIndexTransitions.Validate(operations);
-            Exact = SafeMigrationExpectedTableConstraints.FromOperations(operations, static schema => schema,
-                StringComparer.Ordinal, '"', foldUnquotedCapturedSqlIdentifiers: true);
+            Exact = SafeMigrationExpectedTableConstraints.FromOperations(
+                operations,
+                static schema => schema,
+                StringComparer.Ordinal,
+                '"',
+                foldUnquotedCapturedSqlIdentifiers: true);
+
             foreach (var operation in operations)
             {
                 var owner = PostgreSqlSafeMigrationSchemaIdentity.GetOwner(operation.Intent);
@@ -232,8 +260,10 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
 
                 var family = GetFamily(owner.Table);
                 family.Operations.Add(operation);
-                PostgreSqlSafeMigrationSchemaIdentity.CollectUnqualifiedTables(operation.Intent,
+                PostgreSqlSafeMigrationSchemaIdentity.CollectUnqualifiedTables(
+                    operation.Intent,
                     family.UnqualifiedTables);
+
                 family.HasUnqualifiedOwner |= owner.Schema is null;
                 if (owner.Schema is not null)
                 {
@@ -252,9 +282,13 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
             get;
         }
 
-        public Family FindFamily(string table) => _families[table];
+        public Family FindFamily(
+            string table
+        ) => _families[table];
 
-        private Family GetFamily(string table)
+        private Family GetFamily(
+            string table
+        )
         {
             if (_families.TryGetValue(table, out var family))
             {
@@ -268,7 +302,10 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
             return family;
         }
 
-        private void Join(string source, string target)
+        private void Join(
+            string source,
+            string target
+        )
         {
             var left = GetFamily(source);
             var right = GetFamily(target);
@@ -309,20 +346,28 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
         public bool HasUnqualifiedOwner { get; set; }
 
         public IReadOnlyDictionary<(string? Schema, string Table), SafeMigrationExpectedTableConstraints>?
-            Resolve(string schema)
+            Resolve(
+                string schema
+            )
         {
             if (_resolved.TryGetValue(schema, out var result))
             {
                 return result;
             }
 
-            string? Normalize(string? value) => PostgreSqlSafeMigrationSchemaIdentity.Normalize(value, schema);
+            string? Normalize(
+                string? value
+            ) => PostgreSqlSafeMigrationSchemaIdentity.Normalize(value, schema);
 
             try
             {
                 SafeMigrationExpectedIndexTransitions.Validate(Operations, Normalize);
-                result = SafeMigrationExpectedTableConstraints.FromOperations(Operations, Normalize,
-                    StringComparer.Ordinal, '"', foldUnquotedCapturedSqlIdentifiers: true);
+                result = SafeMigrationExpectedTableConstraints.FromOperations(
+                    Operations,
+                    Normalize,
+                    StringComparer.Ordinal,
+                    '"',
+                    foldUnquotedCapturedSqlIdentifiers: true);
             }
             catch (InvalidOperationException)
             {
@@ -344,7 +389,8 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
         )
         {
             var optionalAbsentBinding = PostgreSqlSafeMigrationSchemaIdentity.GetOptionalAbsentNativeBinding(
-                intent, schema);
+                intent,
+                schema);
 
             if (optionalAbsentBinding is not null)
             {

@@ -40,6 +40,7 @@ internal static class SafeMigrationCapturedExpressionNormalization
         }
 
         ExpectedColumnDefinition[]? columns = null;
+
         // WHY: Replace normalized columns at their original table ordinals without reordering the snapshot.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -55,6 +56,7 @@ internal static class SafeMigrationCapturedExpressionNormalization
         }
 
         ExpectedCheckConstraintDefinition[]? checks = null;
+
         // WHY: Replace normalized checks at their original positions while retaining unchanged entries.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -98,7 +100,9 @@ internal static class SafeMigrationCapturedExpressionNormalization
     )
     {
         var target = NormalizeColumn(intent.Definition, true);
-        var previous = intent.OldDefinition is null ? null : NormalizeColumn(intent.OldDefinition, true);
+        var previous = intent.OldDefinition is null
+            ? null
+            : NormalizeColumn(intent.OldDefinition, true);
 
         return ReferenceEquals(target, intent.Definition) && ReferenceEquals(previous, intent.OldDefinition)
             ? intent
@@ -111,7 +115,9 @@ internal static class SafeMigrationCapturedExpressionNormalization
     {
         var table = NormalizeTable(intent.Definition, true);
 
-        return ReferenceEquals(table, intent.Definition) ? intent : new EnsureTableIntent(table, intent.Mode);
+        return ReferenceEquals(table, intent.Definition)
+            ? intent
+            : new EnsureTableIntent(table, intent.Mode);
     }
 
     private static EnsureCheckConstraintIntent Normalize(
@@ -120,7 +126,9 @@ internal static class SafeMigrationCapturedExpressionNormalization
     {
         var check = NormalizeCheck(intent.Definition, true);
 
-        return ReferenceEquals(check, intent.Definition) ? intent : new EnsureCheckConstraintIntent(check);
+        return ReferenceEquals(check, intent.Definition)
+            ? intent
+            : new EnsureCheckConstraintIntent(check);
     }
 
     /// <summary>
@@ -134,7 +142,10 @@ internal static class SafeMigrationCapturedExpressionNormalization
         ArgumentNullException.ThrowIfNull(definition);
         if (!foldUnquotedIdentifiers
             || definition.CapturedComputedSql is not { } source
-            || source.AsSpan().IndexOfAnyInRange('A', 'Z') < 0)
+            || source
+                .AsSpan()
+                .IndexOfAnyInRange('A', 'Z')
+            < 0)
         {
             return definition;
         }

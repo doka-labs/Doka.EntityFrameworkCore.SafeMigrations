@@ -61,6 +61,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
             "new ExpectedModelManagedDataUniqueKeyDefinition([\"code\"])",
             source,
             StringComparison.Ordinal);
+
         Assert.Contains("foreignKeys:", source, StringComparison.Ordinal);
         Assert.Contains("new ExpectedModelManagedDataForeignKeyDefinition(", source, StringComparison.Ordinal);
         Assert.Contains("table: \"user_roles\"", source, StringComparison.Ordinal);
@@ -129,7 +130,11 @@ public sealed partial class SafeMigrationModelManagedDataTests
                 generator.Generate("migrationBuilder", [operation], builder));
 
             Assert.Contains("unpaired", exception.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains(operation.GetType().Name, exception.Message, StringComparison.Ordinal);
+            Assert.Contains(operation.GetType()
+                    .Name,
+                exception.Message,
+                StringComparison.Ordinal);
+
             Assert.Empty(builder.ToString());
         }
     }
@@ -143,19 +148,20 @@ public sealed partial class SafeMigrationModelManagedDataTests
     )
     {
         var registration = (ModelDifferRegistration)registrationValue;
-        var operations = new MigrationOperation[] { new SqlOperation { Sql = "SELECT 1;" }, };
+        var operations = new MigrationOperation[] { new SqlOperation { Sql = "SELECT 1;" } };
         var differ = new StubMigrationsModelDiffer(operations, hasDifferences: true);
         var services = new ServiceCollection();
 
-        services.Add(registration switch
-        {
-            ModelDifferRegistration.Instance => ServiceDescriptor.Singleton<IMigrationsModelDiffer>(differ),
-            ModelDifferRegistration.Factory => ServiceDescriptor.Singleton<IMigrationsModelDiffer>(_ => differ),
-            ModelDifferRegistration.ImplementationType => ServiceDescriptor.Singleton<
-                IMigrationsModelDiffer,
-                StubMigrationsModelDiffer>(),
-            _ => throw new UnreachableException(),
-        });
+        services.Add(
+            registration switch
+            {
+                ModelDifferRegistration.Instance => ServiceDescriptor.Singleton<IMigrationsModelDiffer>(differ),
+                ModelDifferRegistration.Factory => ServiceDescriptor.Singleton<IMigrationsModelDiffer>(_ => differ),
+                ModelDifferRegistration.ImplementationType => ServiceDescriptor.Singleton<
+                    IMigrationsModelDiffer,
+                    StubMigrationsModelDiffer>(),
+                _ => throw new UnreachableException(),
+            });
 
         SafeMigrationServiceCollectionDecorator.DecorateMigrationsModelDiffer(services);
 
@@ -164,8 +170,10 @@ public sealed partial class SafeMigrationModelManagedDataTests
         var decorated = Assert.IsType<SafeMigrationMigrationsModelDiffer>(
             provider.GetRequiredService<IMigrationsModelDiffer>());
 
-        Assert.Equal(registration != ModelDifferRegistration.ImplementationType,
+        Assert.Equal(
+            registration != ModelDifferRegistration.ImplementationType,
             decorated.HasDifferences(source: null, target: null));
+
         Assert.Same(
             registration == ModelDifferRegistration.ImplementationType
                 ? StubMigrationsModelDiffer.EmptyOperations
@@ -288,13 +296,11 @@ public sealed partial class SafeMigrationModelManagedDataTests
     private sealed class StubMigrationsModelDiffer : IMigrationsModelDiffer
     {
         internal static readonly IReadOnlyList<MigrationOperation> EmptyOperations = [];
-
-        private readonly IReadOnlyList<MigrationOperation> _operations;
         private readonly bool _hasDifferences;
 
-        public StubMigrationsModelDiffer() : this(EmptyOperations, hasDifferences: false)
-        {
-        }
+        private readonly IReadOnlyList<MigrationOperation> _operations;
+
+        public StubMigrationsModelDiffer() : this(EmptyOperations, hasDifferences: false) { }
 
         public StubMigrationsModelDiffer(
             IReadOnlyList<MigrationOperation> operations,
@@ -327,11 +333,11 @@ public sealed partial class SafeMigrationModelManagedDataTests
         ) => null;
 
         public CoreTypeMapping? FindMapping(
-            System.Reflection.MemberInfo member
+            MemberInfo member
         ) => null;
 
         public CoreTypeMapping? FindMapping(
-            System.Reflection.MemberInfo member,
+            MemberInfo member,
             IModel model,
             bool useAttributes
         ) => null;

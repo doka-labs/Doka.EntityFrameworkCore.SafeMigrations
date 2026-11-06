@@ -2,6 +2,126 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerProjectedDependencyGraph
 {
+    /// <inheritdoc />
+    public bool HasLiveColumn(
+        string table,
+        string? schema,
+        string column
+    )
+    {
+        var identity = GetTable(table, schema);
+        var columnId = _columnIds.GetValueOrDefault(new ColumnKey(identity, column));
+
+        return !_unknown
+            && identity > 0
+            && !_missingTables.Contains(identity)
+            && columnId > 0
+            && !_invalidatedStorage.Contains(new ColumnIdentity(identity, columnId));
+    }
+
+    /// <inheritdoc />
+    public bool RequiresLiveForeignKeyQualification(
+        EnsureForeignKeyIntent intent
+    )
+    {
+        var definition = intent.Definition;
+
+        // WHY: Retain failed captures too. Identical authored CLR/null
+        // collation facets cannot override a native endpoint mismatch; wholly
+        // authored new owners keep their separate projection contract.
+        return _sparseCaptured.Contains(definition)
+            && GetTable(definition.Table, definition.Schema) > 0
+            && GetTable(definition.PrincipalTable, definition.PrincipalSchema) > 0;
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<SafeMigrationLiveCandidateKey>? GetLiveForeignKeyCandidateKeys(
+        EnsureForeignKeyIntent intent,
+        ISafeMigrationProjectedColumnSource columns
+    )
+    {
+        var foreign = intent.Definition;
+        var dependent = GetTable(foreign.Table, foreign.Schema);
+        var principal = GetTable(foreign.PrincipalTable, foreign.PrincipalSchema);
+        var createdOwner = dependent < 0
+            && _createdTables.ContainsKey(dependent)
+            && columns is ISafeMigrationProjectedTableSource tables
+            && tables.TryGetProjectedTableState(foreign.Table, foreign.Schema, out var state)
+            && state.IsNewlyCreated
+            && state is { HasDataMutation: false, HasUnknownStructure: false };
+
+        // WHY: An accepted ordinary new owner can acquire columns after its
+        // CREATE. Its current empty lifetime is certified by Core, not by a
+        // future authoring proposal or the initially missing catalog name.
+        if (_unknown
+            || (dependent <= 0 && !createdOwner)
+            || principal <= 0
+            || _missingTables.Contains(dependent)
+            || _missingTables.Contains(principal)
+            || !_sparseLiveReady.TryGetValue(foreign, out var proofs))
+        {
+            return null;
+        }
+
+        if (foreign.Columns.Count > 32)
+        {
+            return null;
+        }
+
+        Span<int> principalIds = stackalloc int[foreign.Columns.Count];
+
+        // WHY: Match each FK endpoint and storage proof at the same composite-key position.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var ordinal = 0; ordinal < foreign.Columns.Count; ordinal++)
+        {
+            var id = _columnIds.GetValueOrDefault(new ColumnKey(principal, foreign.PrincipalColumns[ordinal]));
+            if (id <= 0
+                || _invalidatedStorage.Contains(new ColumnIdentity(principal, id)))
+            {
+                return null;
+            }
+
+            var authored = columns.TryGetProjectedColumn(
+                foreign.Table,
+                foreign.Schema,
+                foreign.Columns[ordinal],
+                out var current);
+
+            var compatible = false;
+            foreach (var proof in proofs)
+            {
+                if (proof.Principal == principal
+                    && proof.PrincipalColumn == id
+                    && proof.OperandOrdinal == ordinal
+                    && (authored
+                        ? proof.DependentColumn is not null
+                        && current is not null
+                        && SafeMigrationDefinitionEquivalence.Column(proof.DependentColumn, current)
+                        : proof.DependentColumn is null
+                        && HasLiveColumn(foreign.Table, foreign.Schema, foreign.Columns[ordinal])))
+                {
+                    compatible = true;
+                    break;
+                }
+            }
+
+            if (!compatible)
+            {
+                return null;
+            }
+
+            principalIds[ordinal] = id;
+        }
+
+        // WHY: Existence-only NoOp and rejected proposals retain the earlier
+        // accepted definition. Independent operand certificates match that
+        // exact shape without a composite Cartesian product; Core separately
+        // proves row safety and each surviving owner, column, and key lifetime.
+
+        return _candidateKeys.GetLiveCandidates(principal, foreign.PrincipalColumns, principalIds);
+    }
+
     /// <summary>Copies independently captured rename destination occupancy before ordered graph mutations.</summary>
     /// <param name="operations">The operation stream used to bind the immutable catalog names.</param>
     /// <param name="analyses">The corresponding immutable classifications to enrich.</param>
@@ -73,7 +193,7 @@ internal sealed partial class SqlServerProjectedDependencyGraph
     {
         var graph = new SqlServerProjectedDependencyGraph(inlinePhysicalWidthSupported)
         {
-            _storageEquals = storageEquals
+            _storageEquals = storageEquals,
         };
 
         await using var command = connection.CreateCommand();
@@ -119,6 +239,7 @@ internal sealed partial class SqlServerProjectedDependencyGraph
             {
                 graph._standaloneNames.Add(
                     new SchemaObjectKey(request.ForeignKey.Schema ?? "dbo", request.ForeignKey.Name));
+
                 graph._standaloneObjectNames.Add(request.ForeignKey.Name);
             }
 
@@ -207,7 +328,9 @@ internal sealed partial class SqlServerProjectedDependencyGraph
             {
                 var schema = reader.GetString(0);
                 var table = reader.GetString(1);
-                var tableId = reader.IsDBNull(5) ? graph.GetTable(table, schema) : reader.GetInt32(5);
+                var tableId = reader.IsDBNull(5)
+                    ? graph.GetTable(table, schema)
+                    : reader.GetInt32(5);
 
                 graph._tables[new TableKey(schema, table)] = tableId;
                 if (reader.IsDBNull(5))
@@ -219,7 +342,10 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                     }
                 }
 
-                graph._schemas[schema] = reader.IsDBNull(4) ? graph.GetSchema(schema) : reader.GetInt32(4);
+                graph._schemas[schema] = reader.IsDBNull(4)
+                    ? graph.GetSchema(schema)
+                    : reader.GetInt32(4);
+
                 graph._tableSchemas[tableId] = graph._schemas[schema];
                 if (reader.IsDBNull(4))
                 {
@@ -234,6 +360,7 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                         reader.GetByte(6) == 189,
                         reader.GetBoolean(7),
                         reader.GetInt32(8) != 0);
+
                     graph._columnIds[new ColumnKey(tableId, reader.GetString(2))] = reader.GetInt32(14);
                 }
 
@@ -249,7 +376,9 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                     graph._candidateKeys.BindName(
                         tableId,
                         reader.GetString(3),
-                        reader.IsDBNull(12) ? reader.GetInt32(13) : reader.GetInt32(12));
+                        reader.IsDBNull(12)
+                            ? reader.GetInt32(13)
+                            : reader.GetInt32(12));
                 }
 
                 if (!reader.IsDBNull(3)
@@ -303,7 +432,7 @@ internal sealed partial class SqlServerProjectedDependencyGraph
             var count = 0;
             var bytes = 0;
             while (start + count < inline.Length
-                   && count < 32)
+                && count < 32)
             {
                 var request = inline[start + count];
                 var selection = "SELECT "
@@ -316,7 +445,10 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                             : inlinePrerequisite(request.Table, request.InitialForeignKey))
                     + " THEN 1 ELSE 0 END)";
 
-                var addedBytes = Encoding.UTF8.GetByteCount(selection) + (count == 0 ? 0 : 11);
+                var addedBytes = Encoding.UTF8.GetByteCount(selection)
+                    + (count == 0
+                        ? 0
+                        : 11);
 
                 if (addedBytes > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes)
                 {
@@ -403,23 +535,6 @@ internal sealed partial class SqlServerProjectedDependencyGraph
         return graph;
     }
 
-    /// <inheritdoc />
-    public bool HasLiveColumn(
-        string table,
-        string? schema,
-        string column
-    )
-    {
-        var identity = GetTable(table, schema);
-        var columnId = _columnIds.GetValueOrDefault(new ColumnKey(identity, column));
-
-        return !_unknown
-            && identity > 0
-            && !_missingTables.Contains(identity)
-            && columnId > 0
-            && !_invalidatedStorage.Contains(new ColumnIdentity(identity, columnId));
-    }
-
     /// <summary>Reuses captured physical endpoints to exclude unrelated native FK-removal candidates.</summary>
     /// <param name="drop">The exact authored native FK removal.</param>
     /// <param name="source">The column owner whose dependency predicate is being qualified.</param>
@@ -446,7 +561,9 @@ internal sealed partial class SqlServerProjectedDependencyGraph
     internal int? GetNativeTableIdentity(
         string table,
         string? schema
-    ) => _tables.TryGetValue(new TableKey(schema ?? "dbo", table), out var identity) && identity > 0 ? identity : null;
+    ) => _tables.TryGetValue(new TableKey(schema ?? "dbo", table), out var identity) && identity > 0
+        ? identity
+        : null;
 
     /// <summary>Resolves exact native FK endpoint ids for invocation-local predecessor routing.</summary>
     internal (int Dependent, int Principal)? GetNativeForeignKeyDropEndpoints(
@@ -500,108 +617,6 @@ internal sealed partial class SqlServerProjectedDependencyGraph
         return false;
     }
 
-    /// <inheritdoc />
-    public bool RequiresLiveForeignKeyQualification(
-        EnsureForeignKeyIntent intent
-    )
-    {
-        var definition = intent.Definition;
-
-        // WHY: Retain failed captures too. Identical authored CLR/null
-        // collation facets cannot override a native endpoint mismatch; wholly
-        // authored new owners keep their separate projection contract.
-        return _sparseCaptured.Contains(definition)
-            && GetTable(definition.Table, definition.Schema) > 0
-            && GetTable(definition.PrincipalTable, definition.PrincipalSchema) > 0;
-    }
-
-    /// <inheritdoc />
-    public IReadOnlyList<SafeMigrationLiveCandidateKey>? GetLiveForeignKeyCandidateKeys(
-        EnsureForeignKeyIntent intent,
-        ISafeMigrationProjectedColumnSource columns
-    )
-    {
-        var foreign = intent.Definition;
-        var dependent = GetTable(foreign.Table, foreign.Schema);
-        var principal = GetTable(foreign.PrincipalTable, foreign.PrincipalSchema);
-        var createdOwner = dependent < 0
-            && _createdTables.ContainsKey(dependent)
-            && columns is ISafeMigrationProjectedTableSource tables
-            && tables.TryGetProjectedTableState(foreign.Table, foreign.Schema, out var state)
-            && state.IsNewlyCreated
-            && state is { HasDataMutation: false, HasUnknownStructure: false };
-
-        // WHY: An accepted ordinary new owner can acquire columns after its
-        // CREATE. Its current empty lifetime is certified by Core, not by a
-        // future authoring proposal or the initially missing catalog name.
-        if (_unknown
-            || (dependent <= 0 && !createdOwner)
-            || principal <= 0
-            || _missingTables.Contains(dependent)
-            || _missingTables.Contains(principal)
-            || !_sparseLiveReady.TryGetValue(foreign, out var proofs))
-        {
-            return null;
-        }
-
-        if (foreign.Columns.Count > 32)
-        {
-            return null;
-        }
-
-        Span<int> principalIds = stackalloc int[foreign.Columns.Count];
-        // WHY: Match each FK endpoint and storage proof at the same composite-key position.
-        // ReSharper disable once ForCanBeConvertedToForeach
-        // ReSharper disable once LoopCanBeConvertedToQuery
-        for (var ordinal = 0; ordinal < foreign.Columns.Count; ordinal++)
-        {
-            var id = _columnIds.GetValueOrDefault(new ColumnKey(principal, foreign.PrincipalColumns[ordinal]));
-            if (id <= 0
-                || _invalidatedStorage.Contains(new ColumnIdentity(principal, id)))
-            {
-                return null;
-            }
-
-            var authored = columns.TryGetProjectedColumn(
-                foreign.Table,
-                foreign.Schema,
-                foreign.Columns[ordinal],
-                out var current);
-
-            var compatible = false;
-            foreach (var proof in proofs)
-            {
-                if (proof.Principal == principal
-                    && proof.PrincipalColumn == id
-                    && proof.OperandOrdinal == ordinal
-                    && (authored
-                        ? proof.DependentColumn is not null
-                        && current is not null
-                        && SafeMigrationDefinitionEquivalence.Column(proof.DependentColumn, current)
-                        : proof.DependentColumn is null
-                        && HasLiveColumn(foreign.Table, foreign.Schema, foreign.Columns[ordinal])))
-                {
-                    compatible = true;
-                    break;
-                }
-            }
-
-            if (!compatible)
-            {
-                return null;
-            }
-
-            principalIds[ordinal] = id;
-        }
-
-        // WHY: Existence-only NoOp and rejected proposals retain the earlier
-        // accepted definition. Independent operand certificates match that
-        // exact shape without a composite Cartesian product; Core separately
-        // proves row safety and each surviving owner, column, and key lifetime.
-
-        return _candidateKeys.GetLiveCandidates(principal, foreign.PrincipalColumns, principalIds);
-    }
-
     private async Task ReadSchemaObjectsAsync(
         DbCommand command,
         IReadOnlyList<SafeMigrationOperation> operations,
@@ -630,6 +645,7 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                 + "THEN 1 ELSE 0 END) FROM sys.schemas s "
                 + $"WHERE s.schema_id IN ({ids}); "
                 + $"SELECT object_id, schema_id FROM sys.tables WHERE schema_id IN ({ids});";
+
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
             while (await reader.ReadAsync(cancellationToken))

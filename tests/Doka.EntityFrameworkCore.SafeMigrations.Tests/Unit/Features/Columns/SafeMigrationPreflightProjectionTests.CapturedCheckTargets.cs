@@ -12,39 +12,65 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     /// <param name="targetSql">The complete authored CHECK source after the rename.</param>
     /// <param name="expected">The independently required structural state.</param>
     [Theory]
-    [InlineData(true, "score >= 0 AND COALESCE(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
+    [InlineData(
+        true,
+        "score >= 0 AND COALESCE(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
         SafeMigrationObservedState.Matching)]
-    [InlineData(false, "score >= 0 AND COALESCE(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
+    [InlineData(
+        false,
+        "score >= 0 AND COALESCE(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
         SafeMigrationObservedState.Matching)]
-    [InlineData(true, "SCORE >= 0 AND COALESCE(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
+    [InlineData(
+        true,
+        "SCORE >= 0 AND COALESCE(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
         SafeMigrationObservedState.Matching)]
-    [InlineData(false, "SCORE >= 0 AND COALESCE(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
+    [InlineData(
+        false,
+        "SCORE >= 0 AND COALESCE(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
         SafeMigrationObservedState.Matching)]
-    [InlineData(true, "score >= 0 AND COALESCE(1e0, 2) = 1e0 AND 'keepcase' = 'KeepCase'",
+    [InlineData(
+        true,
+        "score >= 0 AND COALESCE(1e0, 2) = 1e0 AND 'keepcase' = 'KeepCase'",
         SafeMigrationObservedState.Different)]
-    [InlineData(false, "score >= 0 AND COALESCE(1e0, 2) = 1e0 AND 'keepcase' = 'KeepCase'",
+    [InlineData(
+        false,
+        "score >= 0 AND COALESCE(1e0, 2) = 1e0 AND 'keepcase' = 'KeepCase'",
         SafeMigrationObservedState.PrerequisiteMissing)]
-    [InlineData(true, "score >= 0 AND COALESCE(1.0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
+    [InlineData(
+        true,
+        "score >= 0 AND COALESCE(1.0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
         SafeMigrationObservedState.Different)]
-    [InlineData(false, "score >= 0 AND COALESCE(1.0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
+    [InlineData(
+        false,
+        "score >= 0 AND COALESCE(1.0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
         SafeMigrationObservedState.PrerequisiteMissing)]
-    [InlineData(true, "score >= 0 AND coalesce(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
+    [InlineData(
+        true,
+        "score >= 0 AND coalesce(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
         SafeMigrationObservedState.Different)]
-    [InlineData(false, "score >= 0 AND coalesce(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
+    [InlineData(
+        false,
+        "score >= 0 AND coalesce(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
         SafeMigrationObservedState.PrerequisiteMissing)]
-    [InlineData(true, "score > 0 AND COALESCE(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
+    [InlineData(
+        true,
+        "score > 0 AND COALESCE(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
         SafeMigrationObservedState.Different)]
-    [InlineData(false, "score > 0 AND COALESCE(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
+    [InlineData(
+        false,
+        "score > 0 AND COALESCE(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
         SafeMigrationObservedState.PrerequisiteMissing)]
     public void CapturedCheckReassertionPreservesEveryOtherSourceRole(
         bool newlyCreated,
         string targetSql,
-        SafeMigrationObservedState expected)
+        SafeMigrationObservedState expected
+    )
     {
         // Arrange
         var projection = CapturedCheckTargetProjection(newlyCreated, new CapturedCheckTargetIdentity());
         var target = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_items", "items", targetSql, null);
-        var operation = new SafeMigrationOperation(new EnsureCheckConstraintIntent(target),
+        var operation = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(target),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -60,10 +86,13 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         // Arrange
         var projection = CapturedCheckTargetProjection(true, new CapturedCheckTargetIdentity());
-        var target = new ExpectedCheckConstraintDefinition("ck_items", "items",
+        var target = new ExpectedCheckConstraintDefinition(
+            "ck_items",
+            "items",
             "score >= 0 AND COALESCE(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'");
 
-        var operation = new SafeMigrationOperation(new EnsureCheckConstraintIntent(target),
+        var operation = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(target),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -80,15 +109,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     public void CapturedCheckReassertionKeepsCaseSensitiveColumnIdentity()
     {
         // Arrange
-        var projection = CapturedCheckTargetProjection(true, new CapturedCheckTargetIdentity
-        {
-            ColumnIdentifierComparer = StringComparer.Ordinal,
-        });
+        var projection = CapturedCheckTargetProjection(
+            true,
+            new CapturedCheckTargetIdentity
+            {
+                ColumnIdentifierComparer = StringComparer.Ordinal,
+            });
 
-        var target = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_items", "items",
-            "SCORE >= 0 AND COALESCE(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'", null);
+        var target = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
+            "ck_items",
+            "items",
+            "SCORE >= 0 AND COALESCE(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
+            null);
 
-        var operation = new SafeMigrationOperation(new EnsureCheckConstraintIntent(target),
+        var operation = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(target),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -103,26 +138,39 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void CapturedCheckReassertionKeepsNativeDoubleQuoteColumnPolicy(bool caseInsensitive)
+    public void CapturedCheckReassertionKeepsNativeDoubleQuoteColumnPolicy(
+        bool caseInsensitive
+    )
     {
         // Arrange
-        var projection = CapturedCheckTargetProjection(true, new CapturedCheckTargetIdentity
-        {
-            CapturedSqlIdentifierDelimiter = '"',
-            ColumnIdentifierComparer = caseInsensitive ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal,
-        });
+        var projection = CapturedCheckTargetProjection(
+            true,
+            new CapturedCheckTargetIdentity
+            {
+                CapturedSqlIdentifierDelimiter = '"',
+                ColumnIdentifierComparer = caseInsensitive
+                    ? StringComparer.OrdinalIgnoreCase
+                    : StringComparer.Ordinal,
+            });
 
-        var target = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_items", "items",
-            "SCORE >= 0 AND COALESCE(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'", null);
+        var target = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
+            "ck_items",
+            "items",
+            "SCORE >= 0 AND COALESCE(1e0, 2) = 1e0 AND 'KeepCase' = 'KeepCase'",
+            null);
 
-        var operation = new SafeMigrationOperation(new EnsureCheckConstraintIntent(target),
+        var operation = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(target),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var analysis = projection.Project(operation, Live(SafeMigrationObservedState.Missing));
 
         // Assert
-        Assert.Equal(caseInsensitive ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
+        Assert.Equal(
+            caseInsensitive
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different,
             analysis.ObservedState);
     }
 
@@ -145,13 +193,18 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
     private static SafeMigrationPreflightProjection CapturedCheckTargetProjection(
         bool newlyCreated,
-        CapturedCheckTargetIdentity normalizer)
+        CapturedCheckTargetIdentity normalizer
+    )
     {
-        var projection = new SafeMigrationPreflightProjection(new RenameAbsenceProjection(),
+        var projection = new SafeMigrationPreflightProjection(
+            new RenameAbsenceProjection(),
             objectIdentityNormalizer: normalizer);
 
         var check = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
-            "ck_items", "items", CapturedCheckSource, null);
+            "ck_items",
+            "items",
+            CapturedCheckSource,
+            null);
 
         var table = new ExpectedTableDefinition("items", [Column("leftbound")], checkConstraints: [check]);
         if (newlyCreated)
@@ -160,7 +213,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         }
         else
         {
-            ObserveAccepted(projection, new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition),
+            ObserveAccepted(
+                projection,
+                new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition),
                 SafeMigrationObservedState.Matching);
         }
 
@@ -177,10 +232,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         public char? CapturedSqlIdentifierDelimiter { get; init; } = '`';
 
-        public string NormalizeIdentifier(string identifier) => identifier;
+        public string NormalizeIdentifier(
+            string identifier
+        ) => identifier;
 
-        public string? NormalizeSchema(string? schema) => schema;
+        public string? NormalizeSchema(
+            string? schema
+        ) => schema;
 
-        public bool IsObjectIdentityMismatch(SafeMigrationProviderAnalysis analysis) => false;
+        public bool IsObjectIdentityMismatch(
+            SafeMigrationProviderAnalysis analysis
+        ) => false;
     }
 }

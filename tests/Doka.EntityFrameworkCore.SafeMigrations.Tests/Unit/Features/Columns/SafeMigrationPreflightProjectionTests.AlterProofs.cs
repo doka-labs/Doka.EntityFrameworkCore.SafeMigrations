@@ -9,12 +9,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Arrange
         var oldColumn = new ExpectedColumnDefinition("value", typeof(int), isNullable: true, storeType: "int");
         var projection = new SafeMigrationPreflightProjection();
-        ObserveAccepted(projection,
-            new EnsureTableIntent(new ExpectedTableDefinition("items", [oldColumn]),
+        ObserveAccepted(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("items", [oldColumn]),
                 SafeMigrationTableMode.StrictDefinition),
             SafeMigrationObservedState.Matching);
+
         var operation = new SafeMigrationOperation(
-            new AlterColumnIntent("items", Column("value"), oldColumn), SafeMigrationPolicy.RepairIfSafe);
+            new AlterColumnIntent("items", Column("value"), oldColumn),
+            SafeMigrationPolicy.RepairIfSafe);
 
         // Act
         var result = projection.Project(operation, Live(SafeMigrationObservedState.DataBlocked));
@@ -29,34 +33,48 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ProjectedAlterUsesVersionedEmptyProof(bool mutate)
+    public void ProjectedAlterUsesVersionedEmptyProof(
+        bool mutate
+    )
     {
         // Arrange
         var oldColumn = new ExpectedColumnDefinition("value", typeof(int), isNullable: true, storeType: "int");
         var projection = new SafeMigrationPreflightProjection();
-        Apply(projection,
-            new EnsureTableIntent(new ExpectedTableDefinition("items", [oldColumn]),
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("items", [oldColumn]),
                 SafeMigrationTableMode.StrictDefinition));
+
         var operation = new SafeMigrationOperation(
-            new AlterColumnIntent("items", Column("value"), oldColumn), SafeMigrationPolicy.RepairIfSafe);
+            new AlterColumnIntent("items", Column("value"), oldColumn),
+            SafeMigrationPolicy.RepairIfSafe);
 
         if (mutate)
         {
-            projection.ObserveProviderPostcondition(new InsertDataOperation
-            {
-                Table = "unrelated",
-                Columns = ["value"],
-                Values = new object?[,] { { 1 } },
-            });
+            projection.ObserveProviderPostcondition(
+                new InsertDataOperation
+                {
+                    Table = "unrelated",
+                    Columns = ["value"],
+                    Values = new object?[,] { { 1 } },
+                });
         }
 
         // Act
         var result = projection.Project(operation, Live(SafeMigrationObservedState.PrerequisiteMissing));
 
         // Assert
-        Assert.Equal(mutate ? SafeMigrationRepairCapability.None : SafeMigrationRepairCapability.Safe,
+        Assert.Equal(
+            mutate
+                ? SafeMigrationRepairCapability.None
+                : SafeMigrationRepairCapability.Safe,
             result.RepairCapability);
-        Assert.Equal(mutate ? SafeMigrationObservedState.PrerequisiteMissing : SafeMigrationObservedState.Different,
+
+        Assert.Equal(
+            mutate
+                ? SafeMigrationObservedState.PrerequisiteMissing
+                : SafeMigrationObservedState.Different,
             result.ObservedState);
     }
 
@@ -66,11 +84,15 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        Apply(projection,
-            new EnsureTableIntent(new ExpectedTableDefinition("items", [VarcharColumn(30)]),
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("items", [VarcharColumn(30)]),
                 SafeMigrationTableMode.StrictDefinition));
+
         var operation = new SafeMigrationOperation(
-            new AlterColumnIntent("items", VarcharColumn(100), VarcharColumn(20)), SafeMigrationPolicy.RepairIfSafe);
+            new AlterColumnIntent("items", VarcharColumn(100), VarcharColumn(20)),
+            SafeMigrationPolicy.RepairIfSafe);
 
         // Act
         var result = projection.Project(operation, AlterProof());
@@ -85,18 +107,27 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void AcceptedAlterInvalidatesRowsOnlyForProviderProvenMutation(bool mutatesData)
+    public void AcceptedAlterInvalidatesRowsOnlyForProviderProvenMutation(
+        bool mutatesData
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var backfill = new SafeMigrationOperation(
-            new AlterColumnIntent("other", VarcharColumn(50), VarcharColumn(20)), SafeMigrationPolicy.RepairIfSafe);
+            new AlterColumnIntent("other", VarcharColumn(50), VarcharColumn(20)),
+            SafeMigrationPolicy.RepairIfSafe);
+
         var live = AlterProof(mutatesData: mutatesData);
         var result = projection.Project(backfill, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(backfill.Intent.Kind, result.ObservedState,
-            backfill.Policy, result.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            backfill.Intent.Kind,
+            result.ObservedState,
+            backfill.Policy,
+            result.RepairCapability);
+
         var later = new SafeMigrationOperation(
-            new AlterColumnIntent("items", VarcharColumn(10), VarcharColumn(200)), SafeMigrationPolicy.RepairIfSafe);
+            new AlterColumnIntent("items", VarcharColumn(10), VarcharColumn(200)),
+            SafeMigrationPolicy.RepairIfSafe);
 
         // Act
         projection.Observe(backfill, live, result, decision);
@@ -105,9 +136,15 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Assert
         Assert.Equal(SafeMigrationAction.Repair, decision.Action);
         Assert.Equal(
-            mutatesData ? SafeMigrationObservedState.PrerequisiteMissing : SafeMigrationObservedState.Different,
+            mutatesData
+                ? SafeMigrationObservedState.PrerequisiteMissing
+                : SafeMigrationObservedState.Different,
             laterResult.ObservedState);
-        Assert.Equal(mutatesData ? SafeMigrationRepairCapability.None : SafeMigrationRepairCapability.Safe,
+
+        Assert.Equal(
+            mutatesData
+                ? SafeMigrationRepairCapability.None
+                : SafeMigrationRepairCapability.Safe,
             laterResult.RepairCapability);
     }
 
@@ -116,26 +153,36 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void MatchingConvergenceCannotOverrideRenameDestinationConflict(bool dropTarget)
+    public void MatchingConvergenceCannotOverrideRenameDestinationConflict(
+        bool dropTarget
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        ObserveAccepted(projection,
-            new EnsureTableIntent(new ExpectedTableDefinition("items", [Column("id")]),
-                SafeMigrationTableMode.ConvergenceContainer), SafeMigrationObservedState.Matching);
+        ObserveAccepted(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("items", [Column("id")]),
+                SafeMigrationTableMode.ConvergenceContainer),
+            SafeMigrationObservedState.Matching);
+
         if (dropTarget)
         {
             ObserveAccepted(projection, new DropTableIntent("renamed"), SafeMigrationObservedState.Matching);
         }
 
-        var rename = new SafeMigrationOperation(new RenameTableIntent("items", "renamed"),
+        var rename = new SafeMigrationOperation(
+            new RenameTableIntent("items", "renamed"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var result = projection.Project(rename, Live(SafeMigrationObservedState.Different));
 
         // Assert
-        Assert.Equal(dropTarget ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
+        Assert.Equal(
+            dropTarget
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different,
             result.ObservedState);
     }
 
@@ -146,18 +193,25 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
         var operation = new SafeMigrationOperation(
-            new AlterColumnIntent("items", VarcharColumn(10), VarcharColumn(200)), SafeMigrationPolicy.RepairIfSafe);
+            new AlterColumnIntent("items", VarcharColumn(10), VarcharColumn(200)),
+            SafeMigrationPolicy.RepairIfSafe);
+
         var live = AlterProof(requiresRows: true);
         var result = projection.Project(operation, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, result.ObservedState,
-            operation.Policy, result.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            result.ObservedState,
+            operation.Policy,
+            result.RepairCapability);
+
         projection.Observe(operation, live, result, decision);
-        projection.ObserveProviderPostcondition(new DeleteDataOperation
-        {
-            Table = "other",
-            KeyColumns = ["id"],
-            KeyValues = new object[,] { { 1 } },
-        });
+        projection.ObserveProviderPostcondition(
+            new DeleteDataOperation
+            {
+                Table = "other",
+                KeyColumns = ["id"],
+                KeyValues = new object[,] { { 1 } },
+            });
 
         // Act
         var replay = projection.Project(operation, live);
@@ -183,16 +237,27 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(null)]
     [InlineData(false)]
     [InlineData(true)]
-    public void NewTableRenameRequiresIndependentDestinationAbsence(bool? destinationExists)
+    public void NewTableRenameRequiresIndependentDestinationAbsence(
+        bool? destinationExists
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items", [Column("id")]),
-            SafeMigrationTableMode.ConvergenceContainer));
-        var operation = new SafeMigrationOperation(new RenameTableIntent("items", "renamed"),
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("items", [Column("id")]),
+                SafeMigrationTableMode.ConvergenceContainer));
+
+        var operation = new SafeMigrationOperation(
+            new RenameTableIntent("items", "renamed"),
             SafeMigrationPolicy.ThrowIfDifferent);
-        var live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-            SafeMigrationRepairCapability.None, false, "missing")
+
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Missing,
+            SafeMigrationRepairCapability.None,
+            false,
+            "missing")
         {
             RenameTargetExists = destinationExists,
         };
@@ -201,9 +266,13 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var result = projection.Project(operation, live);
 
         // Assert
-        Assert.Equal(destinationExists == false ? SafeMigrationObservedState.Matching
-            : destinationExists == true ? SafeMigrationObservedState.Different
-            : SafeMigrationObservedState.PrerequisiteMissing, result.ObservedState);
+        Assert.Equal(
+            destinationExists == false
+                ? SafeMigrationObservedState.Matching
+                : destinationExists == true
+                    ? SafeMigrationObservedState.Different
+                    : SafeMigrationObservedState.PrerequisiteMissing,
+            result.ObservedState);
     }
 
     /// <summary>Ordinary EF backfills can fire triggers, but pure width changes cannot.</summary>
@@ -211,7 +280,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void OrdinaryAlterInvalidatesRowProofOnlyWhenItMayBackfill(bool backfill)
+    public void OrdinaryAlterInvalidatesRowProofOnlyWhenItMayBackfill(
+        bool backfill
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
@@ -222,7 +293,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             ClrType = typeof(int),
             ColumnType = "int",
             IsNullable = false,
-            DefaultValue = backfill ? 1 : null,
+            DefaultValue = backfill
+                ? 1
+                : null,
             OldColumn = new AddColumnOperation
             {
                 ClrType = typeof(int),
@@ -232,14 +305,18 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         };
 
         var later = new SafeMigrationOperation(
-            new AlterColumnIntent("items", VarcharColumn(10), VarcharColumn(200)), SafeMigrationPolicy.RepairIfSafe);
+            new AlterColumnIntent("items", VarcharColumn(10), VarcharColumn(200)),
+            SafeMigrationPolicy.RepairIfSafe);
 
         // Act
         projection.ObserveProviderPostcondition(operation);
         var result = projection.Project(later, AlterProof(requiresRows: true));
 
         // Assert
-        Assert.Equal(backfill ? SafeMigrationObservedState.PrerequisiteMissing : SafeMigrationObservedState.Different,
+        Assert.Equal(
+            backfill
+                ? SafeMigrationObservedState.PrerequisiteMissing
+                : SafeMigrationObservedState.Different,
             result.ObservedState);
     }
 
@@ -264,39 +341,51 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var source = new ExpectedColumnDefinition("value", typeof(string), false, "longtext");
         if (unknownPriorChange)
         {
-            projection.ObserveProviderPostcondition(new AlterColumnOperation
-            {
-                Table = "items",
-                Name = "value",
-                ClrType = typeof(string),
-                ColumnType = "varchar(200)",
-                MaxLength = 200,
-            });
+            projection.ObserveProviderPostcondition(
+                new AlterColumnOperation
+                {
+                    Table = "items",
+                    Name = "value",
+                    ClrType = typeof(string),
+                    ColumnType = "varchar(200)",
+                    MaxLength = 200,
+                });
         }
 
-        var ensure = new SafeMigrationOperation(new EnsureColumnIntent("items", source),
+        var ensure = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", source),
             SafeMigrationPolicy.RepairIfSafe);
-        var repair = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.Safe, false, "lossless_repair")
+
+        var repair = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            false,
+            "lossless_repair")
         {
             RepairPreservesLiveValueDomain = certified,
         };
 
-        var decision = SafeMigrationDecisionPlanner.Plan(ensure.Intent.Kind, repair.ObservedState,
-            ensure.Policy, repair.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            ensure.Intent.Kind,
+            repair.ObservedState,
+            ensure.Policy,
+            repair.RepairCapability);
+
         projection.Observe(ensure, repair, repair, decision);
         ObserveAccepted(projection, ensure.Intent, SafeMigrationObservedState.Matching);
         if (mutateRows)
         {
-            projection.ObserveProviderPostcondition(new InsertDataOperation
-            {
-                Table = "other",
-                Columns = ["id"],
-                Values = new object?[,] { { 1 } },
-            });
+            projection.ObserveProviderPostcondition(
+                new InsertDataOperation
+                {
+                    Table = "other",
+                    Columns = ["id"],
+                    Values = new object?[,] { { 1 } },
+                });
         }
 
-        var alter = new SafeMigrationOperation(new AlterColumnIntent("items", VarcharColumn(500), source),
+        var alter = new SafeMigrationOperation(
+            new AlterColumnIntent("items", VarcharColumn(500), source),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
@@ -304,7 +393,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         // Assert
         Assert.NotNull(provider.Context);
-        Assert.Equal(certified && !unknownPriorChange && !mutateRows,
+        Assert.Equal(
+            certified && !unknownPriorChange && !mutateRows,
             provider.Context.Value.PreservesLiveValueDomain);
     }
 
@@ -327,21 +417,51 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var projection = new SafeMigrationPreflightProjection();
         ModelManagedDataIntent intent = kind switch
         {
-            "insert" => new EnsureModelManagedDataIntent("other", ["id"], ["int"], ["id"], ["int"],
-                new object?[,] { { 1 } }, null, null),
-            "update" => new UpdateModelManagedDataIntent("other", ["id"], ["int"], new object?[,] { { 1 } },
-                ["value"], ["int"], new object?[,] { { 1 } }, new object?[,] { { 2 } }, null, null),
-            _ => new DeleteModelManagedDataIntent("other", ["id"], ["int"], new object?[,] { { 1 } },
-                ["id"], ["int"], new object?[,] { { 1 } }, null, null),
+            "insert" => new EnsureModelManagedDataIntent(
+                "other",
+                ["id"],
+                ["int"],
+                ["id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                null,
+                null),
+            "update" => new UpdateModelManagedDataIntent(
+                "other",
+                ["id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                ["value"],
+                ["int"],
+                new object?[,] { { 1 } },
+                new object?[,] { { 2 } },
+                null,
+                null),
+            _ => new DeleteModelManagedDataIntent(
+                "other",
+                ["id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                ["id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                null,
+                null),
         };
 
         var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
         var state = apply
-            ? kind == "insert" ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.TransitionReady
-            : kind == "delete" ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Matching;
+            ? kind == "insert"
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.TransitionReady
+            : kind == "delete"
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.Matching;
+
         var live = Live(state);
         var decision = SafeMigrationDecisionPlanner.Plan(intent.Kind, state, operation.Policy, live.RepairCapability);
-        var later = new SafeMigrationOperation(new AlterColumnIntent("items", VarcharColumn(10), VarcharColumn(200)),
+        var later = new SafeMigrationOperation(
+            new AlterColumnIntent("items", VarcharColumn(10), VarcharColumn(200)),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
@@ -349,8 +469,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var result = projection.Project(later, AlterProof(requiresRows: true));
 
         // Assert
-        Assert.Equal(apply ? SafeMigrationAction.Apply : SafeMigrationAction.NoOp, decision.Action);
-        Assert.Equal(apply ? SafeMigrationObservedState.PrerequisiteMissing : SafeMigrationObservedState.Different,
+        Assert.Equal(
+            apply
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.NoOp,
+            decision.Action);
+
+        Assert.Equal(
+            apply
+                ? SafeMigrationObservedState.PrerequisiteMissing
+                : SafeMigrationObservedState.Different,
             result.ObservedState);
     }
 
@@ -359,36 +487,72 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ModelManagedCompletenessCannotReviveAfterPriorOtherMutation(bool priorMutation)
+    public void ModelManagedCompletenessCannotReviveAfterPriorOtherMutation(
+        bool priorMutation
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items", [Column("id")]),
-            SafeMigrationTableMode.StrictDefinition));
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("items", [Column("id")]),
+                SafeMigrationTableMode.StrictDefinition));
+
         if (priorMutation)
         {
-            projection.ObserveProviderPostcondition(new InsertDataOperation
-            {
-                Table = "other",
-                Columns = ["id"],
-                Values = new object?[,] { { 1 } },
-            });
+            projection.ObserveProviderPostcondition(
+                new InsertDataOperation
+                {
+                    Table = "other",
+                    Columns = ["id"],
+                    Values = new object?[,] { { 1 } },
+                });
         }
 
-        var first = new SafeMigrationOperation(new EnsureModelManagedDataIntent("items", ["id"], ["int"],
-            ["id"], ["int"], new object?[,] { { 1 } }, null, null), SafeMigrationPolicy.ThrowIfDifferent);
+        var first = new SafeMigrationOperation(
+            new EnsureModelManagedDataIntent(
+                "items",
+                ["id"],
+                ["int"],
+                ["id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                null,
+                null),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         var firstLive = Live(SafeMigrationObservedState.Missing);
-        projection.Observe(first, firstLive, firstLive, SafeMigrationDecisionPlanner.Plan(first.Intent.Kind,
-            firstLive.ObservedState, first.Policy, firstLive.RepairCapability));
-        var second = new SafeMigrationOperation(new EnsureModelManagedDataIntent("items", ["id"], ["int"],
-            ["id"], ["int"], new object?[,] { { 2 } }, null, null), SafeMigrationPolicy.ThrowIfDifferent);
+        projection.Observe(
+            first,
+            firstLive,
+            firstLive,
+            SafeMigrationDecisionPlanner.Plan(
+                first.Intent.Kind,
+                firstLive.ObservedState,
+                first.Policy,
+                firstLive.RepairCapability));
+
+        var second = new SafeMigrationOperation(
+            new EnsureModelManagedDataIntent(
+                "items",
+                ["id"],
+                ["int"],
+                ["id"],
+                ["int"],
+                new object?[,] { { 2 } },
+                null,
+                null),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var result = projection.Project(second, Live(SafeMigrationObservedState.PrerequisiteMissing));
 
         // Assert
         Assert.Equal(
-            priorMutation ? SafeMigrationObservedState.PrerequisiteMissing : SafeMigrationObservedState.Missing,
+            priorMutation
+                ? SafeMigrationObservedState.PrerequisiteMissing
+                : SafeMigrationObservedState.Missing,
             result.ObservedState);
     }
 
@@ -397,7 +561,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ProjectedAlterViewIsStableWithinEachSynchronousCallback(bool complete)
+    public void ProjectedAlterViewIsStableWithinEachSynchronousCallback(
+        bool complete
+    )
     {
         // Arrange
         var provider = new CapturingProjectedColumnAnalyzer();
@@ -408,35 +574,57 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var unique = new ExpectedUniqueConstraintDefinition("uq_items", "items", ["id"]);
         if (complete)
         {
-            Apply(projection, new EnsureTableIntent(
-                new ExpectedTableDefinition("items", [Column("id"), source],
-                    primaryKey: primaryKey, uniqueConstraints: [unique]),
-                SafeMigrationTableMode.StrictDefinition));
+            Apply(
+                projection,
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition(
+                        "items",
+                        [Column("id"), source],
+                        primaryKey: primaryKey,
+                        uniqueConstraints: [unique]),
+                    SafeMigrationTableMode.StrictDefinition));
         }
         else
         {
-            ObserveAccepted(projection, new EnsureColumnIntent("items", Column("id")),
+            ObserveAccepted(
+                projection,
+                new EnsureColumnIntent("items", Column("id")),
                 SafeMigrationObservedState.Matching);
+
             ObserveAccepted(projection, new EnsureColumnIntent("items", source), SafeMigrationObservedState.Matching);
             ObserveAccepted(projection, new EnsurePrimaryKeyIntent(primaryKey), SafeMigrationObservedState.Matching);
             ObserveAccepted(projection, new EnsureUniqueConstraintIntent(unique), SafeMigrationObservedState.Matching);
         }
 
-        ObserveAccepted(projection, new EnsureIndexIntent(new ExpectedIndexDefinition(
-            "ix_items", "items", [new ExpectedIndexKeyDefinition("id")])), SafeMigrationObservedState.Matching);
-        var first = new SafeMigrationOperation(new AlterColumnIntent("items", target, source),
+        ObserveAccepted(
+            projection,
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ix_items",
+                    "items",
+                    [new ExpectedIndexKeyDefinition("id")])),
+            SafeMigrationObservedState.Matching);
+
+        var first = new SafeMigrationOperation(
+            new AlterColumnIntent("items", target, source),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var later = new SafeMigrationOperation(new AlterColumnIntent("items",
-            new ExpectedColumnDefinition("value", typeof(int), false, "int", comment: "changed"), target),
+        var later = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "items",
+                new ExpectedColumnDefinition("value", typeof(int), false, "int", comment: "changed"),
+                target),
             SafeMigrationPolicy.RepairIfSafe);
 
         var live = AlterProof();
 
         // Act
         var firstResult = projection.Project(first, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(first.Intent.Kind, firstResult.ObservedState,
-            first.Policy, firstResult.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            first.Intent.Kind,
+            firstResult.ObservedState,
+            first.Policy,
+            firstResult.RepairCapability);
 
         var firstFacts = provider.Context;
         projection.Observe(first, live, firstResult, decision);
@@ -492,10 +680,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 context.HasCompleteTable,
                 context.HasForeignKeyDependency,
                 columns.SequenceEqual(context.Table.Columns)
-                    && uniqueConstraints.SequenceEqual(context.Table.UniqueConstraints)
-                    && indexes.SequenceEqual(context.Table.Indexes)
-                    && ReferenceEquals(primaryKey, context.Table.PrimaryKey),
-                columns.FirstOrDefault(static column => column.Name == "value")?.IsNullable,
+                && uniqueConstraints.SequenceEqual(context.Table.UniqueConstraints)
+                && indexes.SequenceEqual(context.Table.Indexes)
+                && ReferenceEquals(primaryKey, context.Table.PrimaryKey),
+                columns.FirstOrDefault(static column => column.Name == "value")
+                    ?.IsNullable,
                 columns.Length,
                 uniqueConstraints.Length,
                 indexes.Length,

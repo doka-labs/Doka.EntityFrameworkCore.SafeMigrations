@@ -1,3 +1,5 @@
+using MySqlGuidFormat = MySqlConnector.MySqlGuidFormat;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Owns one configured native engine and retains database/login cleanup ownership until release succeeds.</summary>
@@ -8,12 +10,12 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
     private const string RootUser = "root";
 
     private static readonly TimeSpan s_startupTimeout = TimeSpan.FromMinutes(3);
+    private readonly MySqlContainer _container;
 
     private readonly Dictionary<string, string> _createdDatabases = new(StringComparer.Ordinal);
     private readonly Dictionary<string, HashSet<string>> _createdUsers = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _databaseLifecycleLock = new(1, 1);
     private readonly string _engine;
-    private readonly MySqlContainer _container;
     private readonly string _version;
     private bool _disposed;
 
@@ -22,7 +24,9 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
 
     /// <summary>Creates a dedicated engine with an optional initialization-only table-name mode.</summary>
     /// <param name="lowerCaseTableNames">The native owner-name mode, or null to preserve the image default.</param>
-    internal MySqlEngineContainerFixture(int? lowerCaseTableNames)
+    internal MySqlEngineContainerFixture(
+        int? lowerCaseTableNames
+    )
     {
         if (lowerCaseTableNames is < 0 or > 2)
         {
@@ -36,7 +40,9 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
             .GetEnvironmentVariable("SAFE_MIGRATIONS_MYSQL_IMAGE")
             ?.Trim();
 
-        var image = string.IsNullOrWhiteSpace(configuredImage) ? $"{_engine}:{_version}" : configuredImage;
+        var image = string.IsNullOrWhiteSpace(configuredImage)
+            ? $"{_engine}:{_version}"
+            : configuredImage;
 
         var builder = new MySqlBuilder(image)
             .WithDatabase(BootstrapDatabase)
@@ -47,14 +53,16 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         {
             // WHY: MySQL fixes this mode when its data directory is initialized.
             // A dedicated container avoids mutating or reusing the shared fixture.
-            builder = builder.WithCommand("--lower-case-table-names="
+            builder = builder.WithCommand(
+                "--lower-case-table-names="
                 + ownerMode.ToString(CultureInfo.InvariantCulture));
         }
 
         if (_engine == "mariadb")
         {
             builder = builder.WithWaitStrategy(
-                Wait.ForUnixContainer()
+                Wait
+                    .ForUnixContainer()
                     .UntilCommandIsCompleted(
                         "mariadb",
                         BootstrapDatabase,
@@ -94,6 +102,18 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         async () => await _container.DisposeAsync(),
         Dispose);
 
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _databaseLifecycleLock.Dispose();
+        _disposed = true;
+    }
+
     private async Task DropOwnedDatabasesAsync()
     {
         await _databaseLifecycleLock.WaitAsync(CancellationToken.None);
@@ -106,18 +126,6 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         {
             _databaseLifecycleLock.Release();
         }
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _databaseLifecycleLock.Dispose();
-        _disposed = true;
     }
 
     /// <summary>Creates a unique database while retaining provisional ownership across native failures.</summary>
@@ -182,11 +190,15 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
             await connection.OpenAsync(cancellationToken);
 
             await using var command = connection.CreateCommand();
+
             // WHY: Even a partial CREATE USER / GRANT failure must retain ownership for safe final cleanup.
-            _createdUsers[database].Add(user);
+            _createdUsers[database]
+                .Add(user);
+
             command.CommandText = $"CREATE USER `{user}`@'%' IDENTIFIED BY '{password}'; "
                 + "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES, "
                 + $"DROP, CREATE TEMPORARY TABLES ON `{database}`.* TO `{user}`@'%';";
+
             await command.ExecuteNonQueryAsync(cancellationToken);
 
             return BuildConnectionString(database, user, password);
@@ -200,7 +212,10 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
     /// <summary>Releases only an exact database lease issued by this fixture, retaining failed cleanup for disposal.</summary>
     /// <param name="connectionString">The original root connection string returned during database creation.</param>
     /// <param name="cancellationToken">Cancels resource cleanup.</param>
-    public async Task ReleaseDatabaseAsync(string connectionString, CancellationToken cancellationToken)
+    public async Task ReleaseDatabaseAsync(
+        string connectionString,
+        CancellationToken cancellationToken
+    )
     {
         await _databaseLifecycleLock.WaitAsync(cancellationToken);
 
@@ -217,14 +232,17 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         }
     }
 
-    private string RequireOwnedDatabase(string connectionString)
+    private string RequireOwnedDatabase(
+        string connectionString
+    )
     {
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
 
         if (!_createdDatabases.TryGetValue(database, out var ownedConnectionString)
             || !string.Equals(connectionString, ownedConnectionString, StringComparison.Ordinal))
         {
-            throw new ArgumentException("The database lease was not issued by this MySQL fixture.",
+            throw new ArgumentException(
+                "The database lease was not issued by this MySQL fixture.",
                 nameof(connectionString));
         }
 
@@ -256,7 +274,7 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         Password = password,
         Database = database,
         AllowUserVariables = true,
-        GuidFormat = MySqlConnector.MySqlGuidFormat.Binary16,
+        GuidFormat = MySqlGuidFormat.Binary16,
         Pooling = false,
     }.ConnectionString;
 
@@ -302,12 +320,14 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
         dropDatabase.CommandText = $"DROP DATABASE IF EXISTS `{database}`;";
         await dropDatabase.ExecuteNonQueryAsync(cancellationToken);
 
-        foreach (var user in _createdUsers[database].ToArray())
+        foreach (var user in _createdUsers[database]
+            .ToArray())
         {
             await using var command = connection.CreateCommand();
             command.CommandText = $"DROP USER IF EXISTS `{user}`@'%';";
             await command.ExecuteNonQueryAsync(cancellationToken);
-            _createdUsers[database].Remove(user);
+            _createdUsers[database]
+                .Remove(user);
         }
 
         // WHY: Ownership is forgotten only after both database and login cleanup succeed, allowing a final retry.

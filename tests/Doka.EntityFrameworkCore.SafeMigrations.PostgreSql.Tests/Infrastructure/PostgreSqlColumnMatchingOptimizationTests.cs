@@ -14,20 +14,31 @@ public sealed class PostgreSqlColumnMatchingOptimizationTests
     {
         // Arrange
         using var context = CreateContext();
-        var definition = new ExpectedColumnDefinition("value", typeof(string), true, "text",
+        var definition = new ExpectedColumnDefinition(
+            "value",
+            typeof(string),
+            true,
+            "text",
             collation: new SafeMigrationCollationIdentifier("C", schema));
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("proof_rows", definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("proof_rows", definition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateBuilder(context).Build(operation, includeAnalysisEvidence: true);
+        var plan = CreateBuilder(context)
+            .Build(operation, includeAnalysisEvidence: true);
 
         // Assert
         Assert.Equal(1, Occurrences(plan.Postcondition, "SELECT coll.oid FROM pg_catalog.pg_collation coll"));
         Assert.Contains("COALESCE(a.attcollation = (SELECT coll.oid", plan.Postcondition, StringComparison.Ordinal);
-        Assert.Contains(schema is null ? "pg_catalog.pg_collation_is_visible(coll.oid) LIMIT 1"
-                : "ns.nspname = 'pg_catalog'", plan.Postcondition, StringComparison.Ordinal);
+        Assert.Contains(
+            schema is null
+                ? "pg_catalog.pg_collation_is_visible(coll.oid) LIMIT 1"
+                : "ns.nspname = 'pg_catalog'",
+            plan.Postcondition,
+            StringComparison.Ordinal);
+
         Assert.Contains("NOT (COALESCE(a.attcollation =", plan.DiagnosticEvidenceExpression!, StringComparison.Ordinal);
     }
 
@@ -37,12 +48,15 @@ public sealed class PostgreSqlColumnMatchingOptimizationTests
     {
         // Arrange
         using var context = CreateContext();
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("proof_rows",
-            new ExpectedColumnDefinition("value", typeof(string), true, "text")),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "proof_rows",
+                new ExpectedColumnDefinition("value", typeof(string), true, "text")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateBuilder(context).Build(operation);
+        var plan = CreateBuilder(context)
+            .Build(operation);
 
         // Assert
         Assert.Contains("a.attcollation = t.typcollation", plan.Postcondition, StringComparison.Ordinal);
@@ -62,18 +76,29 @@ public sealed class PostgreSqlColumnMatchingOptimizationTests
     {
         // Arrange
         using var context = CreateContext();
-        var columns = Enumerable.Range(0, count)
+        var columns = Enumerable
+            .Range(0, count)
             .Select(index => new ExpectedColumnDefinition(
-                $"value_{index}", typeof(string), true, "text",
-                collation: new SafeMigrationCollationIdentifier("C", index % 2 == 0 ? null : "pg_catalog")))
+                $"value_{index}",
+                typeof(string),
+                true,
+                "text",
+                collation: new SafeMigrationCollationIdentifier(
+                    "C",
+                    index % 2 == 0
+                        ? null
+                        : "pg_catalog")))
             .ToArray();
 
-        var operation = new SafeMigrationOperation(new EnsureTableIntent(
-            new ExpectedTableDefinition("proof_rows", columns), SafeMigrationTableMode.StrictDefinition),
+        var operation = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("proof_rows", columns),
+                SafeMigrationTableMode.StrictDefinition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateBuilder(context).Build(operation);
+        var plan = CreateBuilder(context)
+            .Build(operation);
 
         // Assert
         Assert.Equal(count, Occurrences(plan.Postcondition, "SELECT coll.oid FROM pg_catalog.pg_collation coll"));
@@ -91,20 +116,33 @@ public sealed class PostgreSqlColumnMatchingOptimizationTests
     {
         // Arrange
         using var context = CreateContext();
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("proof_rows",
-            new ExpectedColumnDefinition("value", varchar ? typeof(string) : typeof(DateTime), false,
-                varchar ? "character varying(32)" : "timestamp without time zone")),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "proof_rows",
+                new ExpectedColumnDefinition(
+                    "value",
+                    varchar
+                        ? typeof(string)
+                        : typeof(DateTime),
+                    false,
+                    varchar
+                        ? "character varying(32)"
+                        : "timestamp without time zone")),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var plan = CreateBuilder(context).Build(operation, includeTransitionEvidence: true);
+        var plan = CreateBuilder(context)
+            .Build(operation, includeTransitionEvidence: true);
 
         // Act
-        var sql = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model))
+        var sql = Assert.Single(context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model))
             .CommandText;
 
         var targetEvaluation = "doka_target_matches := COALESCE((" + plan.Postcondition + "), FALSE);";
         var completeProof = "doka_complete_not_null := COALESCE(("
-            + plan.NullabilityDataProbe!.NotNullContractExpression + "), FALSE);";
+            + plan.NullabilityDataProbe!.NotNullContractExpression
+            + "), FALSE);";
 
         const string shortcut = "IF doka_target_matches AND doka_complete_not_null THEN";
 
@@ -114,12 +152,18 @@ public sealed class PostgreSqlColumnMatchingOptimizationTests
         Assert.Contains(completeProof, sql, StringComparison.Ordinal);
         Assert.False(plan.NullabilityDataProbe.MatchingRequiresSourceContractProof);
         Assert.Equal(1, Occurrences(sql, plan.NullabilityDataProbe.NotNullContractExpression));
-        Assert.True(sql.IndexOf(plan.PrerequisiteExpression, StringComparison.Ordinal)
+        Assert.True(
+            sql.IndexOf(plan.PrerequisiteExpression, StringComparison.Ordinal)
             < sql.IndexOf(shortcut, StringComparison.Ordinal));
-        Assert.True(sql.IndexOf(plan.StateEvaluationGuardExpression, StringComparison.Ordinal)
+
+        Assert.True(
+            sql.IndexOf(plan.StateEvaluationGuardExpression, StringComparison.Ordinal)
             < sql.IndexOf(shortcut, StringComparison.Ordinal));
-        Assert.True(sql.IndexOf(shortcut, StringComparison.Ordinal)
+
+        Assert.True(
+            sql.IndexOf(shortcut, StringComparison.Ordinal)
             < sql.IndexOf("doka_nullability_repair_eligible := COALESCE((", StringComparison.Ordinal));
+
         Assert.Contains("doka_state := 'matching';", sql, StringComparison.Ordinal);
         Assert.Contains("AND NOT c.relhassubclass", completeProof, StringComparison.Ordinal);
         Assert.Contains("FOR doka_evaluation_pass IN 1..2 LOOP", sql, StringComparison.Ordinal);
@@ -133,23 +177,36 @@ public sealed class PostgreSqlColumnMatchingOptimizationTests
         // Arrange
         using var context = CreateContext();
         var target = new ExpectedColumnDefinition("value", typeof(DateTime), false, "timestamp without time zone");
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("proof_rows", target,
-            new ExpectedColumnDefinition("value", typeof(DateTime), true, "timestamp without time zone")),
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "proof_rows",
+                target,
+                new ExpectedColumnDefinition("value", typeof(DateTime), true, "timestamp without time zone")),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var plan = CreateBuilder(context).Build(operation, includeTransitionEvidence: true);
+        var plan = CreateBuilder(context)
+            .Build(operation, includeTransitionEvidence: true);
 
         // Act
         var inline = plan.RenderStateExpression();
-        var sql = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model))
+        var sql = Assert.Single(context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model))
             .CommandText;
 
         // Assert
         Assert.True(plan.NullabilityDataProbe!.MatchingRequiresSourceContractProof);
-        Assert.Contains($"WHEN ({plan.Postcondition}) AND (({plan.NullabilityDataProbe.NotNullContractExpression})",
-            inline, StringComparison.Ordinal);
-        Assert.Contains("WHEN (doka_target_matches AND (doka_complete_not_null "
-            + "OR doka_nullability_repair_eligible)) THEN 'matching'", sql, StringComparison.Ordinal);
+        Assert.Contains(
+            $"WHEN ({plan.Postcondition}) AND (({plan.NullabilityDataProbe.NotNullContractExpression})",
+            inline,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "WHEN (doka_target_matches AND (doka_complete_not_null "
+            + "OR doka_nullability_repair_eligible)) THEN 'matching'",
+            sql,
+            StringComparison.Ordinal);
+
         Assert.Equal(1, Occurrences(sql, plan.NullabilityDataProbe.NotNullContractExpression));
     }
 
@@ -159,12 +216,16 @@ public sealed class PostgreSqlColumnMatchingOptimizationTests
     {
         // Arrange
         using var context = CreateContext();
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("proof_rows",
-            new ExpectedColumnDefinition("value", typeof(string), true, "text")),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "proof_rows",
+                new ExpectedColumnDefinition("value", typeof(string), true, "text")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var sql = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model))
+        var sql = Assert.Single(context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model))
             .CommandText;
 
         // Assert
@@ -184,11 +245,17 @@ public sealed class PostgreSqlColumnMatchingOptimizationTests
         // Arrange
         var token = PostgreSqlSafeMigrationRuntimePlan.MatchingPlaceholder;
         var quoted = "'a doubled ''" + token + " /* comment */' || \"a doubled\"\"" + token + "\" || ";
-        var plan = new PostgreSqlSafeMigrationRuntimePlan(quoted + token, "fresh_target",
-            SafeMigrationRepairCapability.Safe, "TRUE")
+        var plan = new PostgreSqlSafeMigrationRuntimePlan(
+            quoted + token,
+            "fresh_target",
+            SafeMigrationRepairCapability.Safe,
+            "TRUE")
         {
             NullabilityDataProbe = new PostgreSqlSafeMigrationNullabilityDataProbe(
-                "complete_contract", "eligible", "row_probe", "proof_rows")
+                "complete_contract",
+                "eligible",
+                "row_probe",
+                "proof_rows")
             {
                 MatchingRequiresSourceContractProof = sourceAuthority,
             },
@@ -200,8 +267,13 @@ public sealed class PostgreSqlColumnMatchingOptimizationTests
         plan.AppendStateExpression(runtime, "blocked", "transition", "fresh_matching");
 
         // Assert
-        Assert.Equal(quoted + (sourceAuthority
-            ? "(fresh_target) AND ((complete_contract) OR (eligible))" : "fresh_target"), inline);
+        Assert.Equal(
+            quoted
+            + (sourceAuthority
+                ? "(fresh_target) AND ((complete_contract) OR (eligible))"
+                : "fresh_target"),
+            inline);
+
         Assert.Equal(quoted + "fresh_matching", runtime.ToString());
     }
 
@@ -210,26 +282,36 @@ public sealed class PostgreSqlColumnMatchingOptimizationTests
     public void MatchingMarker_TargetOnlyDollarTagCollisionUsesFreshDelimiter()
     {
         // Arrange
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("proof_rows",
-            new ExpectedColumnDefinition("value", typeof(DateTime), false, "timestamp without time zone")),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "proof_rows",
+                new ExpectedColumnDefinition("value", typeof(DateTime), false, "timestamp without time zone")),
             SafeMigrationPolicy.RepairIfSafe);
 
         var plan = new PostgreSqlSafeMigrationRuntimePlan(
-            "CASE WHEN " + PostgreSqlSafeMigrationRuntimePlan.MatchingPlaceholder
-                + " THEN 'matching' ELSE 'different' END",
-            "'$doka_safe_migration$' IS NOT NULL", SafeMigrationRepairCapability.Safe, "FALSE")
+            "CASE WHEN "
+            + PostgreSqlSafeMigrationRuntimePlan.MatchingPlaceholder
+            + " THEN 'matching' ELSE 'different' END",
+            "'$doka_safe_migration$' IS NOT NULL",
+            SafeMigrationRepairCapability.Safe,
+            "FALSE")
         {
             ExecutionPostcondition = "TRUE",
             NullabilityDataProbe = new PostgreSqlSafeMigrationNullabilityDataProbe(
-                "TRUE", "FALSE", "FALSE", "proof_rows"),
+                "TRUE",
+                "FALSE",
+                "FALSE",
+                "proof_rows"),
         };
 
-        var method = typeof(PostgreSqlSafeMigrationsSqlGenerator).GetMethod("BuildGuardedSql",
-            BindingFlags.Static | BindingFlags.NonPublic)
+        var method = typeof(PostgreSqlSafeMigrationsSqlGenerator).GetMethod(
+                "BuildGuardedSql",
+                BindingFlags.Static | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("The PostgreSQL guard renderer was not found.");
 
         // Act
-        var sql = (string)method.Invoke(null,
+        var sql = (string)method.Invoke(
+            null,
             [operation, plan, Array.Empty<MigrationCommand>(), Array.Empty<MigrationCommand>()])!;
 
         // Assert

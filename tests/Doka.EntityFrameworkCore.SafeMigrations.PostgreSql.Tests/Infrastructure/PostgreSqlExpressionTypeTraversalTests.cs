@@ -12,7 +12,9 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
     [InlineData("left")]
     [InlineData("right")]
     [InlineData("unary")]
-    public void DeepCheckResolutionRetainsNativeBooleanType(string shape)
+    public void DeepCheckResolutionRetainsNativeBooleanType(
+        string shape
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -44,7 +46,9 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
     [Theory]
     [InlineData("case")]
     [InlineData("function")]
-    public void DeepCommonTypeResolutionKeepsUnknownLiteralRules(string shape)
+    public void DeepCommonTypeResolutionKeepsUnknownLiteralRules(
+        string shape
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -55,7 +59,8 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
         for (var index = 0; index < DeepExpressionLength; index++)
         {
             expression = shape == "case"
-                ? SafeMigrationSql.Case([new SafeMigrationSqlCaseWhenClause(condition, expression)],
+                ? SafeMigrationSql.Case(
+                    [new SafeMigrationSqlCaseWhenClause(condition, expression)],
                     SafeMigrationSql.Literal(null))
                 : SafeMigrationSql.Function("COALESCE", expression, SafeMigrationSql.Literal(null));
         }
@@ -76,12 +81,18 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
         using var context = CreateContext();
         var analyzer = CreateAnalyzer(context);
         SeedNativeFacts(analyzer);
-        var source = new RecordingColumns(("fallback", typeof(long), "bigint"),
-            ("condition", typeof(bool), "boolean"), ("result", typeof(int), "integer"));
+        var source = new RecordingColumns(
+            ("fallback", typeof(long), "bigint"),
+            ("condition", typeof(bool), "boolean"),
+            ("result", typeof(int), "integer"));
 
         var expression = SafeMigrationSql.Case(
-            [new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.Identifier("condition"),
-                SafeMigrationSql.Identifier("result"))], SafeMigrationSql.Identifier("fallback"));
+            [
+                new SafeMigrationSqlCaseWhenClause(
+                    SafeMigrationSql.Identifier("condition"),
+                    SafeMigrationSql.Identifier("result")),
+            ],
+            SafeMigrationSql.Identifier("fallback"));
 
         // Act
         var result = Resolve(analyzer, expression, source);
@@ -97,20 +108,31 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void CaseResolutionRetainsConditionShortCircuit(bool unknown)
+    public void CaseResolutionRetainsConditionShortCircuit(
+        bool unknown
+    )
     {
         // Arrange
         using var context = CreateContext();
         var analyzer = CreateAnalyzer(context);
         SeedNativeFacts(analyzer);
-        var source = new RecordingColumns(("fallback", typeof(long), "bigint"),
-            ("bad_condition", typeof(long), "bigint"), ("unvisited", typeof(int), "integer"));
+        var source = new RecordingColumns(
+            ("fallback", typeof(long), "bigint"),
+            ("bad_condition", typeof(long), "bigint"),
+            ("unvisited", typeof(int), "integer"));
 
-        var condition = unknown ? SafeMigrationSql.Opaque("unresolved") : SafeMigrationSql.Identifier("bad_condition");
+        var condition = unknown
+            ? SafeMigrationSql.Opaque("unresolved")
+            : SafeMigrationSql.Identifier("bad_condition");
+
         var expression = SafeMigrationSql.Case(
-            [new SafeMigrationSqlCaseWhenClause(condition, SafeMigrationSql.Identifier("unvisited")),
-                new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.Identifier("unvisited"),
-                    SafeMigrationSql.Identifier("unvisited"))], SafeMigrationSql.Identifier("fallback"));
+            [
+                new SafeMigrationSqlCaseWhenClause(condition, SafeMigrationSql.Identifier("unvisited")),
+                new SafeMigrationSqlCaseWhenClause(
+                    SafeMigrationSql.Identifier("unvisited"),
+                    SafeMigrationSql.Identifier("unvisited")),
+            ],
+            SafeMigrationSql.Identifier("fallback"));
 
         // Act
         var result = Resolve(analyzer, expression, source);
@@ -118,7 +140,12 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
         // Assert
         Assert.Null(result.TypeOid);
         Assert.Equal(!unknown, result.Incompatible);
-        Assert.Equal(unknown ? 1 : 2, source.Reads.Count);
+        Assert.Equal(
+            unknown
+                ? 1
+                : 2,
+            source.Reads.Count);
+
         Assert.Equal("fallback", source.Reads[0]);
         if (!unknown)
         {
@@ -134,10 +161,12 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
         using var context = CreateContext();
         var analyzer = CreateAnalyzer(context);
         SeedNativeFacts(analyzer);
-        var source = new RecordingColumns(("subject", typeof(int), "integer"),
+        var source = new RecordingColumns(
+            ("subject", typeof(int), "integer"),
             ("unvisited", typeof(int), "integer"));
 
-        var expression = SafeMigrationSql.In(SafeMigrationSql.Identifier("subject"),
+        var expression = SafeMigrationSql.In(
+            SafeMigrationSql.Identifier("subject"),
             [SafeMigrationSql.Opaque("unresolved"), SafeMigrationSql.Identifier("unvisited")]);
 
         // Act
@@ -169,7 +198,11 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
     [InlineData("unresolved-null-test", null, false)]
     [InlineData("opaque", null, false)]
     [InlineData("provider", null, false)]
-    public void ShallowNativeInferenceRetainsGoldenContracts(string shape, long? expectedOid, bool incompatible)
+    public void ShallowNativeInferenceRetainsGoldenContracts(
+        string shape,
+        long? expectedOid,
+        bool incompatible
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -208,7 +241,9 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
     [InlineData("left")]
     [InlineData("right")]
     [InlineData("unary")]
-    public void DeepGeneratedCaseBindingKeepsPhysicalSourceProof(string shape)
+    public void DeepGeneratedCaseBindingKeepsPhysicalSourceProof(
+        string shape
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -232,8 +267,13 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
         var reads = new List<string>();
 
         // Act
-        var result = catalog.ValidateProjectedGeneratedCaseBinding(new EnsureCheckConstraintIntent(definition),
-            (_, _, name) => { reads.Add(name); return (23, 0); });
+        var result = catalog.ValidateProjectedGeneratedCaseBinding(
+            new EnsureCheckConstraintIntent(definition),
+            (_, _, name) =>
+            {
+                reads.Add(name);
+                return (23, 0);
+            });
 
         // Assert
         Assert.True(result);
@@ -247,13 +287,18 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
     [InlineData(null, null)]
     [InlineData(2950L, false)]
     [InlineData(23L, true)]
-    public void DeepGeneratedCaseBindingRetainsNegativeTypeEvidence(long? sourceOid, bool? expected)
+    public void DeepGeneratedCaseBindingRetainsNegativeTypeEvidence(
+        long? sourceOid,
+        bool? expected
+    )
     {
         // Arrange
         using var context = CreateContext();
         var catalog = CreateCatalog(context);
-        var condition = SafeMigrationSql.Binary(SafeMigrationSql.Identifier("source"),
-            SafeMigrationSqlBinaryOperator.GreaterThan, SafeMigrationSql.Literal(0));
+        var condition = SafeMigrationSql.Binary(
+            SafeMigrationSql.Identifier("source"),
+            SafeMigrationSqlBinaryOperator.GreaterThan,
+            SafeMigrationSql.Literal(0));
 
         var expression = SafeMigrationSql.Case(
             [new SafeMigrationSqlCaseWhenClause(condition, SafeMigrationSql.Literal(true))],
@@ -267,8 +312,11 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
         var definition = ExpectedCheckConstraintDefinition.FromExpression("ck_deep", "nodes", expression);
 
         // Act
-        var result = catalog.ValidateProjectedGeneratedCaseBinding(new EnsureCheckConstraintIntent(definition),
-            (_, _, _) => sourceOid is { } oid ? (oid, 0) : null);
+        var result = catalog.ValidateProjectedGeneratedCaseBinding(
+            new EnsureCheckConstraintIntent(definition),
+            (_, _, _) => sourceOid is { } oid
+                ? (oid, 0)
+                : null);
 
         // Assert
         Assert.Equal(expected, result);
@@ -285,8 +333,11 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
             expression = SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Not, expression);
         }
 
-        var intent = new EnsureCheckConstraintIntent(ExpectedCheckConstraintDefinition.FromExpression(
-            "ck_ordinary", "nodes", expression));
+        var intent = new EnsureCheckConstraintIntent(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_ordinary",
+                "nodes",
+                expression));
 
         // Act
         var result = PostgreSqlSafeMigrationCatalogSqlBuilder.RequiresGeneratedCaseInputCapture(intent);
@@ -302,7 +353,9 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
     [InlineData("left")]
     [InlineData("unary")]
     [InlineData("case")]
-    public void DeepGeneratedIntrinsicInferencePreservesIntegerCategory(string shape)
+    public void DeepGeneratedIntrinsicInferencePreservesIntegerCategory(
+        string shape
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -312,9 +365,13 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
         {
             expression = shape switch
             {
-                "right" => SafeMigrationSql.Binary(SafeMigrationSql.Opaque("unknown"),
-                    SafeMigrationSqlBinaryOperator.Add, expression),
-                "left" => SafeMigrationSql.Binary(expression, SafeMigrationSqlBinaryOperator.Add,
+                "right" => SafeMigrationSql.Binary(
+                    SafeMigrationSql.Opaque("unknown"),
+                    SafeMigrationSqlBinaryOperator.Add,
+                    expression),
+                "left" => SafeMigrationSql.Binary(
+                    expression,
+                    SafeMigrationSqlBinaryOperator.Add,
                     SafeMigrationSql.Opaque("unknown")),
                 "unary" => SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Negate, expression),
                 _ => SafeMigrationSql.Case(
@@ -337,8 +394,10 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
         // Arrange
         using var context = CreateContext();
         var catalog = CreateCatalog(context);
-        var arithmetic = SafeMigrationSql.Binary(SafeMigrationSql.Literal(true),
-            SafeMigrationSqlBinaryOperator.Add, SafeMigrationSql.Literal(1));
+        var arithmetic = SafeMigrationSql.Binary(
+            SafeMigrationSql.Literal(true),
+            SafeMigrationSqlBinaryOperator.Add,
+            SafeMigrationSql.Literal(1));
 
         var conditional = SafeMigrationSql.Case(
             [new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.Literal(true), SafeMigrationSql.Literal(1))],
@@ -367,9 +426,11 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
 
         var shared = expression;
         expression = SafeMigrationSql.Case(
-            [new SafeMigrationSqlCaseWhenClause(shared, SafeMigrationSql.Literal(1))], shared);
+            [new SafeMigrationSqlCaseWhenClause(shared, SafeMigrationSql.Literal(1))],
+            shared);
 
-        var method = typeof(PostgreSqlSafeMigrationProviderAnalyzer).GetMethod("CheckExpressionNodes",
+        var method = typeof(PostgreSqlSafeMigrationProviderAnalyzer).GetMethod(
+            "CheckExpressionNodes",
             BindingFlags.Static | BindingFlags.NonPublic)!;
 
         // Act
@@ -385,25 +446,35 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
 
     /// <summary>Provides only provider services; none of these probes opens a database connection.</summary>
     private static SafeMigrationDbContext CreateContext() => new(
-        "Host=127.0.0.1;Port=1;Database=type_traversal;Username=test;Password=test", registerSafeMigrations: false);
+        "Host=127.0.0.1;Port=1;Database=type_traversal;Username=test;Password=test",
+        registerSafeMigrations: false);
 
     /// <summary>Uses the production catalog inference boundary without exposing it as public API.</summary>
-    private static PostgreSqlSafeMigrationCatalogSqlBuilder CreateCatalog(DbContext context) => new(
-        context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    private static PostgreSqlSafeMigrationCatalogSqlBuilder CreateCatalog(
+        DbContext context
+    ) => new(
+        context.GetService<IRelationalTypeMappingSource>(),
+        context.GetService<ISqlGenerationHelper>());
 
     /// <summary>Creates the real native binding implementation without a live environment.</summary>
-    private static PostgreSqlSafeMigrationProviderAnalyzer CreateAnalyzer(DbContext context) => new(
-        context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    private static PostgreSqlSafeMigrationProviderAnalyzer CreateAnalyzer(
+        DbContext context
+    ) => new(
+        context.GetService<IRelationalTypeMappingSource>(),
+        context.GetService<ISqlGenerationHelper>());
 
     /// <summary>Reads the private result contract while retaining the production entry point.</summary>
     private static (long? TypeOid, bool Incompatible) Resolve(
         PostgreSqlSafeMigrationProviderAnalyzer analyzer,
         SafeMigrationSqlExpression expression,
-        RecordingColumns source)
+        RecordingColumns source
+    )
     {
         var owner = ExpectedCheckConstraintDefinition.FromExpression("ck", "nodes", expression);
         var method = typeof(PostgreSqlSafeMigrationProviderAnalyzer).GetMethod(
-            "ResolveCheckExpression", PrivateInstance)!;
+            "ResolveCheckExpression",
+            PrivateInstance)!;
+
         var result = method.Invoke(analyzer, [expression, owner, source])!;
         var type = result.GetType();
 
@@ -414,12 +485,17 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
     /// <summary>Checks intrinsic inference independently of SQL rendering or expression parser limits.</summary>
     private static string InferGeneratedCategory(
         PostgreSqlSafeMigrationCatalogSqlBuilder catalog,
-        SafeMigrationSqlExpression expression)
-        => catalog.GetType().GetMethod("InferGeneratedCaseCategory", PrivateInstance)!
+        SafeMigrationSqlExpression expression
+    )
+        => catalog
+            .GetType()
+            .GetMethod("InferGeneratedCaseCategory", PrivateInstance)!
             .Invoke(catalog, [expression, null])!.ToString()!;
 
     /// <summary>Publishes only builtin OIDs and the native integer-widening edge used by these tests.</summary>
-    private static void SeedNativeFacts(PostgreSqlSafeMigrationProviderAnalyzer analyzer)
+    private static void SeedNativeFacts(
+        PostgreSqlSafeMigrationProviderAnalyzer analyzer
+    )
     {
         var analyzerType = analyzer.GetType();
         var typesField = analyzerType.GetField("_livePrerequisiteTypes", PrivateInstance)!;
@@ -427,20 +503,31 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
         var arguments = typesField.FieldType.GetGenericArguments();
         foreach (var (name, oid) in new[] { ("integer", 23L), ("bigint", 20L), ("boolean", 16L), ("text", 25L) })
         {
-            dictionary.Add(Activator.CreateInstance(arguments[0], [name, null, null])!,
-                Activator.CreateInstance(arguments[1], [oid, 0L, true]));
+            dictionary.Add(
+                Activator.CreateInstance(arguments[0], name, null, null)!,
+                Activator.CreateInstance(arguments[1], oid, 0L, true));
         }
 
         typesField.SetValue(analyzer, dictionary);
         var factsField = analyzerType.GetField("_sparseCheckTypeFacts", PrivateInstance)!;
-        var constructor = factsField.FieldType.GetConstructors().Single();
+        var constructor = factsField
+            .FieldType
+            .GetConstructors()
+            .Single();
+
         var parameters = constructor.GetParameters();
         var checks = Activator.CreateInstance(parameters[0].ParameterType)!;
         var signatures = Activator.CreateInstance(parameters[1].ParameterType)!;
         var casts = Activator.CreateInstance(parameters[2].ParameterType)!;
-        var edgeType = parameters[2].ParameterType.GetGenericArguments()[0];
-        parameters[2].ParameterType.GetMethod("Add")!.Invoke(casts,
-            [Activator.CreateInstance(edgeType, [23L, 20L])]);
+        var edgeType = parameters[2]
+            .ParameterType
+            .GetGenericArguments()[0];
+
+        parameters[2]
+            .ParameterType
+            .GetMethod("Add")!.Invoke(
+                casts,
+                [Activator.CreateInstance(edgeType, 23L, 20L)]);
 
         factsField.SetValue(analyzer, constructor.Invoke([checks, signatures, casts]));
     }
@@ -456,12 +543,18 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
             string table,
             string? schema,
             string column,
-            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ExpectedColumnDefinition? definition)
+            [NotNullWhen(true)] out ExpectedColumnDefinition? definition
+        )
         {
             Reads.Add(column);
             var found = Array.FindIndex(columns, item => item.Name == column);
-            definition = found < 0 ? null : new ExpectedColumnDefinition(column,
-                columns[found].ClrType, true, columns[found].StoreType);
+            definition = found < 0
+                ? null
+                : new ExpectedColumnDefinition(
+                    column,
+                    columns[found].ClrType,
+                    true,
+                    columns[found].StoreType);
 
             return definition is not null;
         }

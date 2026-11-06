@@ -10,15 +10,22 @@ public sealed class SafeMigrationPostflightIdentityProofTests
     [InlineData(null, true)]
     [InlineData(0, false)]
     [InlineData(2, false)]
-    public void ScopedIdentityFactoryControlsBothSidesOfFinalWriterReduction(int? unprovenOrdinal, bool superseded)
+    public void ScopedIdentityFactoryControlsBothSidesOfFinalWriterReduction(
+        int? unprovenOrdinal,
+        bool superseded
+    )
     {
         // Arrange
         MigrationOperation[] operations =
         [
-            new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition("items",
-                [new ExpectedColumnDefinition("Id", typeof(int), false, "int")]),
-                SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent),
-            new SqlOperation { Sql = "SELECT 1;", },
+            new SafeMigrationOperation(
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition(
+                        "items",
+                        [new ExpectedColumnDefinition("Id", typeof(int), false, "int")]),
+                    SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            new SqlOperation { Sql = "SELECT 1;" },
             new SafeMigrationOperation(new DropTableIntent("items"), SafeMigrationPolicy.ThrowIfDifferent),
         ];
 
@@ -55,13 +62,19 @@ public sealed class SafeMigrationPostflightIdentityProofTests
         public StringComparer IdentifierComparer => StringComparer.Ordinal;
 
         /// <inheritdoc />
-        public string NormalizeIdentifier(string identifier) => identifier;
+        public string NormalizeIdentifier(
+            string identifier
+        ) => identifier;
 
         /// <inheritdoc />
-        public string? NormalizeSchema(string? schema) => schema;
+        public string? NormalizeSchema(
+            string? schema
+        ) => schema;
 
         /// <inheritdoc />
-        public bool IsObjectIdentityMismatch(SafeMigrationProviderAnalysis analysis) => false;
+        public bool IsObjectIdentityMismatch(
+            SafeMigrationProviderAnalysis analysis
+        ) => false;
 
         /// <inheritdoc />
         public ISafeMigrationProviderObjectIdentityNormalizer GetPostflightIdentityNormalizer(
@@ -84,15 +97,24 @@ public sealed class SafeMigrationPostflightIdentityProofTests
         public StringComparer IdentifierComparer => StringComparer.Ordinal;
 
         /// <inheritdoc />
-        public string NormalizeIdentifier(string identifier) => identifier;
+        public string NormalizeIdentifier(
+            string identifier
+        ) => identifier;
 
         /// <inheritdoc />
-        public string? NormalizeSchema(string? schema) => schema;
+        public string? NormalizeSchema(
+            string? schema
+        ) => schema;
 
         /// <inheritdoc />
-        public bool IsObjectIdentityMismatch(SafeMigrationProviderAnalysis analysis) => false;
+        public bool IsObjectIdentityMismatch(
+            SafeMigrationProviderAnalysis analysis
+        ) => false;
 
         /// <inheritdoc />
-        public bool IsPostflightIdentityProven(SafeMigrationIntent intent, int ordinal) => ordinal != unprovenOrdinal;
+        public bool IsPostflightIdentityProven(
+            SafeMigrationIntent intent,
+            int ordinal
+        ) => ordinal != unprovenOrdinal;
     }
 }

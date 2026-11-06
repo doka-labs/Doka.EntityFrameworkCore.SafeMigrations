@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ProviderProjection migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlProviderProjectionIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlProviderProjectionIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     [Fact]
     public async Task ExistingTablesProjectAcceptedColumnsAndKeysIntoForeignKeyPreflight()
@@ -16,7 +18,9 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
             "CREATE TABLE `projection_parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
             + "CREATE TABLE `projection_children` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
             + "INSERT INTO `projection_parents` (`id`) VALUES (1); "
-            + "INSERT INTO `projection_children` (`id`) VALUES (1);");
+            + "INSERT INTO `projection_children` (`id`) VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = ExistingTableForeignKeyConvergence(context, defaultValue: null);
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -58,12 +62,15 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
                 + "WHERE CONSTRAINT_SCHEMA = DATABASE() "
-                + "AND CONSTRAINT_NAME = 'fk_projection_children_parents';"));
+                + "AND CONSTRAINT_NAME = 'fk_projection_children_parents';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM `projection_children` WHERE `id` = 1 AND `parent_id` IS NULL;"));
+                "SELECT COUNT(*) FROM `projection_children` WHERE `id` = 1 AND `parent_id` IS NULL;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -75,7 +82,9 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
             "CREATE TABLE `projection_parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
             + "CREATE TABLE `projection_children` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
             + "INSERT INTO `projection_parents` (`id`) VALUES (1); "
-            + "INSERT INTO `projection_children` (`id`) VALUES (1);");
+            + "INSERT INTO `projection_children` (`id`) VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = ExistingTableForeignKeyConvergence(context, defaultValue: 999);
 
@@ -100,7 +109,8 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'projection_children' "
-                + "AND COLUMN_NAME = 'parent_id';"));
+                + "AND COLUMN_NAME = 'parent_id';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -112,7 +122,9 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
             "CREATE TABLE `alias_projection_parents` ("
             + "`id` int NOT NULL, `code` int NOT NULL, "
             + "PRIMARY KEY (`id`), "
-            + "CONSTRAINT `uq_alias_projection_parents_code` UNIQUE (`code`));");
+            + "CONSTRAINT `uq_alias_projection_parents_code` UNIQUE (`code`));",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = SemanticUniqueDropProjection(context);
 
@@ -160,10 +172,15 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
             + "CREATE TABLE `identity_children` ("
             + "`id` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`), "
             + "CONSTRAINT `fk_identity_parent` FOREIGN KEY (`parent_id`) "
-            + "REFERENCES `identity_parents` (`id`) ON DELETE CASCADE);");
+            + "REFERENCES `identity_parents` (`id`) ON DELETE CASCADE);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = SemanticAliasOperations(context, "identity");
-        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        var operations = builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
 
         var analyses = await context
             .GetService<ISafeMigrationProviderAnalyzer>()
@@ -205,10 +222,15 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
             + "CONSTRAINT `fk_ambiguous_parent_a` FOREIGN KEY (`parent_id`) "
             + "REFERENCES `ambiguous_parents` (`id`) ON DELETE CASCADE, "
             + "CONSTRAINT `fk_ambiguous_parent_b` FOREIGN KEY (`parent_id`) "
-            + "REFERENCES `ambiguous_parents` (`id`) ON DELETE CASCADE);");
+            + "REFERENCES `ambiguous_parents` (`id`) ON DELETE CASCADE);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = SemanticAliasOperations(context, "ambiguous");
-        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        var operations = builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
 
         var analyses = await context
             .GetService<ISafeMigrationProviderAnalyzer>()
@@ -230,7 +252,9 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `projection_constraints` (`legacy_marker` int NULL);");
+            "CREATE TABLE `projection_constraints` (`legacy_marker` int NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = EmptyExistingTableConstraintConvergence(context);
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -255,11 +279,12 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
             new SafeMigrationRunOptions("existing-table-constraints-replay"),
             CancellationToken.None);
 
-        var constraints = preflight.Assessments
+        var constraints = preflight
+            .Assessments
             .Where(static assessment => assessment.OperationKind is
-                SafeMigrationOperationKind.EnsurePrimaryKey or
-                SafeMigrationOperationKind.EnsureUniqueConstraint or
-                SafeMigrationOperationKind.EnsureCheckConstraint)
+                SafeMigrationOperationKind.EnsurePrimaryKey
+                or SafeMigrationOperationKind.EnsureUniqueConstraint
+                or SafeMigrationOperationKind.EnsureCheckConstraint)
             .ToArray();
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -269,6 +294,7 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
             static assessment => Assert.Equal(
                 SafeMigrationObservedState.Missing,
                 assessment.ObservedState));
+
         Assert.All(constraints, static assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
@@ -300,6 +326,7 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
                 public_id = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: false),
             },
             table => table.PrimaryKey("pk_provider_artifacts", value => value.id));
+
         _ = builder.CreateIndexIfNotExistsFromModel(
             "ix_provider_artifacts_public_id",
             "provider_artifacts",
@@ -349,17 +376,20 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
         Assert.All(
             postflight.Assessments.Where(static assessment => assessment.IsSafeOperation),
             static assessment => Assert.True(assessment.PostconditionSatisfied));
+
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, replay.Status);
         Assert.All(
             replay.Assessments.Where(static assessment => assessment.IsSafeOperation),
             static assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'provider_artifacts' "
-                + "AND INDEX_NAME = 'ix_provider_artifacts_public_id';"));
+                + "AND INDEX_NAME = 'ix_provider_artifacts_public_id';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -369,7 +399,10 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
         bool useSemanticAliases
     )
     {
-        var suffix = useSemanticAliases ? "alias" : "exact";
+        var suffix = useSemanticAliases
+            ? "alias"
+            : "exact";
+
         var parentTable = $"ordered_{suffix}_parents";
         var childTable = $"ordered_{suffix}_children";
         var primaryKey = $"pk_{parentTable}";
@@ -394,7 +427,9 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
             + $"CREATE TABLE `{childTable}` ("
             + "`id` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`), "
             + $"CONSTRAINT `{foreignKey}` FOREIGN KEY (`parent_id`) "
-            + $"REFERENCES `{parentTable}` (`id`) ON DELETE CASCADE);");
+            + $"REFERENCES `{parentTable}` (`id`) ON DELETE CASCADE);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = DropThenEnsureOperations(
             context,
@@ -421,36 +456,40 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
             SafeMigrationOperationKind.EnsurePrimaryKey,
             expectedPrimaryKey,
             useSemanticAliases);
+
         AssertProjectedReplacement(
             preflight,
             SafeMigrationOperationKind.EnsureUniqueConstraint,
             expectedUniqueConstraint,
             useSemanticAliases);
+
         AssertProjectedReplacement(
             preflight,
             SafeMigrationOperationKind.EnsureCheckConstraint,
             expectedCheckConstraint,
             useSemanticAliases);
+
         AssertProjectedReplacement(
             preflight,
             SafeMigrationOperationKind.EnsureForeignKey,
             expectedForeignKey,
             useSemanticAliases);
+
         AssertProjectedReplacement(
             preflight,
             SafeMigrationOperationKind.EnsureIndex,
             expectedIndex,
             useSemanticAliases);
+
         Assert.Equal(
             5,
-            preflight.Assessments.Count(
-                static assessment => (assessment.OperationKind is
-                        SafeMigrationOperationKind.DropPrimaryKey or
-                        SafeMigrationOperationKind.DropUniqueConstraint or
-                        SafeMigrationOperationKind.DropCheckConstraint or
-                        SafeMigrationOperationKind.DropForeignKey or
-                        SafeMigrationOperationKind.DropIndex)
-                    && assessment.Action == SafeMigrationAction.Apply));
+            preflight.Assessments.Count(static assessment => assessment.OperationKind is
+                    SafeMigrationOperationKind.DropPrimaryKey
+                    or SafeMigrationOperationKind.DropUniqueConstraint
+                    or SafeMigrationOperationKind.DropCheckConstraint
+                    or SafeMigrationOperationKind.DropForeignKey
+                    or SafeMigrationOperationKind.DropIndex
+                && assessment.Action == SafeMigrationAction.Apply));
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -475,14 +514,17 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
             connectionString,
             $"CREATE TABLE `{table}` ("
             + "`id` int NOT NULL, `code` int NOT NULL, PRIMARY KEY (`id`), "
-            + $"CONSTRAINT `{constraint}` UNIQUE (`code`));");
+            + $"CONSTRAINT `{constraint}` UNIQUE (`code`));",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropUniqueConstraintIfExists(constraint, table);
         builder.InsertData(
             table,
             ["id", "code"],
-            new object[,] { { 1, 7 }, { 2, 7 }, });
+            new object[,] { { 1, 7 }, { 2, 7 } });
+
         builder.AddUniqueConstraintIfNotExists(constraint, table, ["code"]);
         var runner = context.GetService<ISafeMigrationRunner>();
 
@@ -500,7 +542,12 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, replacement.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, replacement.Action);
         Assert.Equal("projected_data_state_unknown", replacement.AnalysisCode);
-        Assert.Equal(0, await ScalarIntAsync(connectionString, $"SELECT COUNT(*) FROM `{table}`;"));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                $"SELECT COUNT(*) FROM `{table}`;",
+                cancellationToken: CancellationToken.None));
     }
 
     private static MigrationBuilder ExistingTableForeignKeyConvergence(
@@ -549,12 +596,18 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
         bool hasInitialSemanticMatch
     )
     {
-        var assessments = report.Assessments
+        var assessments = report
+            .Assessments
             .Where(assessment => assessment.OperationKind == kind
                 && StringComparer.Ordinal.Equals(assessment.ObjectName, objectName))
             .ToArray();
 
-        Assert.Equal(hasInitialSemanticMatch ? 2 : 1, assessments.Length);
+        Assert.Equal(
+            hasInitialSemanticMatch
+                ? 2
+                : 1,
+            assessments.Length);
+
         if (hasInitialSemanticMatch)
         {
             Assert.Equal(SafeMigrationAction.NoOp, assessments[0].Action);
@@ -613,6 +666,7 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
                         SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
                         0)),
                 SafeMigrationPolicy.ThrowIfDifferent);
+
             builder.CreateIndexIfNotExists(expectedIndex, parentTable, ["quantity"]);
             builder.AddForeignKeyIfNotExists(
                 expectedForeignKey,
@@ -640,6 +694,7 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
                     SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
                     0)),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.CreateIndexIfNotExists(expectedIndex, parentTable, ["quantity"]);
         builder.AddForeignKeyIfNotExists(
             expectedForeignKey,
@@ -655,7 +710,9 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
     private static string TargetName(
         string physicalName,
         bool useSemanticAlias
-    ) => useSemanticAlias ? $"{physicalName}_alias" : physicalName;
+    ) => useSemanticAlias
+        ? $"{physicalName}_alias"
+        : physicalName;
 
     private static MigrationBuilder SemanticUniqueDropProjection(
         DbContext context
@@ -671,6 +728,7 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
                 code = table.Column<int>(type: "int", nullable: false),
             },
             constraints: table => table.PrimaryKey("pk_alias_projection_parents", value => value.id));
+
         _ = builder.ConvergeTableFromModel(
             "alias_projection_children",
             table => new
@@ -679,13 +737,16 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
                 parent_code = table.Column<int>(type: "int", nullable: true),
             },
             constraints: table => table.PrimaryKey("pk_alias_projection_children", value => value.id));
+
         builder.AddUniqueConstraintIfNotExists(
             "uq_alias_projection_parents_code_alias",
             "alias_projection_parents",
             ["code"]);
+
         builder.DropUniqueConstraintIfExists(
             "uq_alias_projection_parents_code",
             "alias_projection_parents");
+
         builder.AddForeignKeyIfNotExists(
             "fk_alias_projection_children_parents",
             "alias_projection_children",
@@ -707,6 +768,7 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
             $"uq_{prefix}_code_alias",
             $"{prefix}_parents",
             ["code"]);
+
         builder.EnsureCheckConstraint(
             ExpectedCheckConstraintDefinition.FromExpression(
                 $"ck_{prefix}_quantity_alias",
@@ -716,6 +778,7 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
                     SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
                     0)),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.AddForeignKeyIfNotExists(
             $"fk_{prefix}_parent_alias",
             $"{prefix}_children",
@@ -723,6 +786,7 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
             $"{prefix}_parents",
             ["id"],
             onDelete: ReferentialAction.Cascade);
+
         _ = builder.CreateIndexIfNotExistsFromModel(
             $"ix_{prefix}_quantity_alias",
             $"{prefix}_parents",

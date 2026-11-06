@@ -34,35 +34,53 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             // Fold case only: catalog collation must not also discard an
             // accent-distinct surviving identifier as though it were removed.
             generated += " AND CAST(LOWER(c.COLUMN_NAME) AS BINARY) <> CAST(LOWER("
-                + Literal(source) + ") AS BINARY)";
+                + Literal(source)
+                + ") AS BINARY)";
         }
 
         var count = $"(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c WHERE {owner} AND ({generated}))";
         var ordinaryCertificate = BuildCertificate(contract);
         var ordinaryModelCertificate = BuildCertificate(modelCandidate);
         var ordinaryPermit = Combine(
-            contract?.ReferencesSource == false ? ordinaryCertificate : "FALSE",
-            modelCandidate?.ReferencesSource == false ? ordinaryModelCertificate : "FALSE");
+            contract?.ReferencesSource == false
+                ? ordinaryCertificate
+                : "FALSE",
+            modelCandidate?.ReferencesSource == false
+                ? ordinaryModelCertificate
+                : "FALSE");
 
         var permit = Combine($"{count} = 0", ordinaryPermit);
         var dependent = Combine(
-            contract?.ReferencesSource == true ? ordinaryCertificate : "FALSE",
-            modelCandidate?.ReferencesSource == true ? ordinaryModelCertificate : "FALSE");
+            contract?.ReferencesSource == true
+                ? ordinaryCertificate
+                : "FALSE",
+            modelCandidate?.ReferencesSource == true
+                ? ordinaryModelCertificate
+                : "FALSE");
 
         if (bindFoldedContract)
         {
             var foldedCertificate = BuildCertificate(foldedContract);
             var foldedModelCertificate = BuildCertificate(foldedModelCandidate);
             var foldedPermit = Combine(
-                foldedContract?.ReferencesSource == false ? foldedCertificate : "FALSE",
-                foldedModelCandidate?.ReferencesSource == false ? foldedModelCertificate : "FALSE");
+                foldedContract?.ReferencesSource == false
+                    ? foldedCertificate
+                    : "FALSE",
+                foldedModelCandidate?.ReferencesSource == false
+                    ? foldedModelCertificate
+                    : "FALSE");
 
             var foldedDependent = Combine(
-                foldedContract?.ReferencesSource == true ? foldedCertificate : "FALSE",
-                foldedModelCandidate?.ReferencesSource == true ? foldedModelCertificate : "FALSE");
+                foldedContract?.ReferencesSource == true
+                    ? foldedCertificate
+                    : "FALSE",
+                foldedModelCandidate?.ReferencesSource == true
+                    ? foldedModelCertificate
+                    : "FALSE");
 
             permit = $"{count} = 0 OR CASE WHEN @@lower_case_table_names <> 0 THEN ({foldedPermit}) "
                 + $"ELSE ({ordinaryPermit}) END";
+
             dependent = $"CASE WHEN @@lower_case_table_names <> 0 THEN "
                 + $"({foldedDependent})"
                 + $" ELSE ({dependent}) END";
@@ -77,7 +95,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // prefix, never dilute a proven positive dependency or union members
         // from two incomplete shapes into a fabricated complete native set.
         var guard = $"(NOT ({sourceExists})) OR (({permit}) AND NOT ({dependent}))";
-        var codePrefix = isDrop ? "generated_column_drop_" : "generated_column_rename_";
+        var codePrefix = isDrop
+            ? "generated_column_drop_"
+            : "generated_column_rename_";
 
         // WHY: Whole-model certificates require exact membership and facets;
         // the MariaDB fallback certifies only this source's absence, never a
@@ -90,7 +110,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             StateExpression = $"CASE WHEN NOT ({guard}) THEN 'unsupported' ELSE ({plan.StateExpression}) END",
             ClassificationCodeExpression = $"CASE WHEN NOT ({guard}) THEN CASE WHEN ({dependent}) "
             + $"THEN '{codePrefix}dependency' ELSE '{codePrefix}unproven' END ELSE NULL END",
-            DropLeavesNoGeneratedColumnsExpression = isDrop ? $"{count} = 0" : null,
+            DropLeavesNoGeneratedColumnsExpression = isDrop
+                ? $"{count} = 0"
+                : null,
         };
 
         string BuildCertificate(
@@ -111,6 +133,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
             var conditions = new string[members.Count + 1];
             conditions[0] = $"{count} = {members.Count.ToString(CultureInfo.InvariantCulture)}";
+
             // WHY: Store dependency predicates in their reserved slots without changing source-member order.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
@@ -145,13 +168,16 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var sourceOwner = "native_source.TABLE_SCHEMA = DATABASE() "
             + $"AND native_source.TABLE_NAME = {Literal(table)} AND "
             + BuildRequiredColumnAddOwnerMatches("native_source.TABLE_SCHEMA", "DATABASE()")
-            + " AND " + BuildRequiredColumnAddOwnerMatches("native_source.TABLE_NAME", Literal(table));
+            + " AND "
+            + BuildRequiredColumnAddOwnerMatches("native_source.TABLE_NAME", Literal(table));
 
         var generatedOwner = "c.TABLE_SCHEMA = DATABASE() "
             + $"AND c.TABLE_NAME = {Literal(table)} "
             + "AND c.TABLE_SCHEMA = native_source.TABLE_SCHEMA AND c.TABLE_NAME = native_source.TABLE_NAME "
-            + "AND " + BuildRequiredColumnAddOwnerMatches("c.TABLE_SCHEMA", "native_source.TABLE_SCHEMA")
-            + " AND " + BuildRequiredColumnAddOwnerMatches("c.TABLE_NAME", "native_source.TABLE_NAME");
+            + "AND "
+            + BuildRequiredColumnAddOwnerMatches("c.TABLE_SCHEMA", "native_source.TABLE_SCHEMA")
+            + " AND "
+            + BuildRequiredColumnAddOwnerMatches("c.TABLE_NAME", "native_source.TABLE_NAME");
 
         const string name = "CAST(native_source.COLUMN_NAME AS BINARY)";
         const string expression = "CAST(c.GENERATION_EXPRESSION AS BINARY)";

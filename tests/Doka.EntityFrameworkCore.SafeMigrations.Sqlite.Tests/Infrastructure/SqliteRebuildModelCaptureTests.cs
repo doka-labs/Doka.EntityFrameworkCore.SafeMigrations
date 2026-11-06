@@ -10,7 +10,9 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = CreateContext(connection);
-        var capture = SqliteRebuildArtifactContract.FromModel(context.GetService<IDesignTimeModel>().Model);
+        var capture = SqliteRebuildArtifactContract.FromModel(context.GetService<IDesignTimeModel>()
+            .Model);
+
         var builder = CandidateHistory();
 
         // Act
@@ -21,10 +23,14 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         Assert.Same(Field(capture, "_tables"), Field(first, "_tables"));
         Assert.Same(Field(first, "_tables"), Field(second, "_tables"));
         foreach (var state in new[]
-                 {
-                     "_operations", "_addedArtifacts", "_removedArtifacts", "_removedTables",
-                     "_tableConstraintTransitions", "_potentialColumnRebuilds",
-                 })
+            {
+                "_operations",
+                "_addedArtifacts",
+                "_removedArtifacts",
+                "_removedTables",
+                "_tableConstraintTransitions",
+                "_potentialColumnRebuilds",
+            })
         {
             Assert.NotNull(Field(first, state));
             Assert.NotSame(Field(first, state), Field(second, state));
@@ -39,12 +45,20 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var firstContext = new WindowModelContext<BasicModel>(connection);
         using var secondContext = new WindowModelContext<AdditionalColumnModel>(connection);
-        var firstModel = firstContext.GetService<IDesignTimeModel>().Model;
-        var secondModel = secondContext.GetService<IDesignTimeModel>().Model;
+        var firstModel = firstContext.GetService<IDesignTimeModel>()
+            .Model;
+
+        var secondModel = secondContext.GetService<IDesignTimeModel>()
+            .Model;
 
         // Act
-        var first = SqliteRebuildArtifactContract.FromModel(firstModel).WithOperationHistory([]);
-        var second = SqliteRebuildArtifactContract.FromModel(secondModel).WithOperationHistory([]);
+        var first = SqliteRebuildArtifactContract
+            .FromModel(firstModel)
+            .WithOperationHistory([]);
+
+        var second = SqliteRebuildArtifactContract
+            .FromModel(secondModel)
+            .WithOperationHistory([]);
 
         // Assert
         Assert.NotSame(firstModel, secondModel);
@@ -58,7 +72,8 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = CreateContext(connection);
-        var model = context.GetService<IDesignTimeModel>().Model;
+        var model = context.GetService<IDesignTimeModel>()
+            .Model;
 
         // Act
         var first = SqliteRebuildArtifactContract.FromModel(model);
@@ -76,12 +91,17 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
     [InlineData("insert", true)]
     [InlineData("update", true)]
     [InlineData("delete", true)]
-    public void OperationHistoryRetainsBoundarySemantics(string boundary, bool expected)
+    public void OperationHistoryRetainsBoundarySemantics(
+        string boundary,
+        bool expected
+    )
     {
         // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = CreateContext(connection);
-        var model = context.GetService<IDesignTimeModel>().Model;
+        var model = context.GetService<IDesignTimeModel>()
+            .Model;
+
         var builder = CandidateHistory(CreateBoundary(boundary));
         var drop = (SafeMigrationOperation)builder.Operations[^1];
         var capture = SqliteRebuildArtifactContract.FromModel(model);
@@ -103,7 +123,9 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = CreateContext(connection);
-        var capture = SqliteRebuildArtifactContract.FromModel(context.GetService<IDesignTimeModel>().Model);
+        var capture = SqliteRebuildArtifactContract.FromModel(context.GetService<IDesignTimeModel>()
+            .Model);
+
         var builder = CandidateHistory();
         var drop = (SafeMigrationOperation)builder.Operations[^1];
         var history = new List<MigrationOperation> { builder.Operations[0] };
@@ -120,8 +142,11 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         Assert.True(withDrop.MayRebuildMissingColumn(drop));
         Assert.False(afterClear.MayRebuildMissingColumn(drop));
         Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<MigrationOperation>>(Field(beforeDrop, "_operations")));
-        Assert.Equal(2,
-            Assert.IsAssignableFrom<IReadOnlyList<MigrationOperation>>(Field(withDrop, "_operations")).Count);
+        Assert.Equal(
+            2,
+            Assert.IsAssignableFrom<IReadOnlyList<MigrationOperation>>(Field(withDrop, "_operations"))
+                .Count);
+
         Assert.Empty(Assert.IsAssignableFrom<IReadOnlyList<MigrationOperation>>(Field(afterClear, "_operations")));
         Assert.Same(Field(beforeDrop, "_tables"), Field(afterClear, "_tables"));
     }
@@ -133,7 +158,9 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = CreateContext(connection);
-        var capture = SqliteRebuildArtifactContract.FromModel(context.GetService<IDesignTimeModel>().Model);
+        var capture = SqliteRebuildArtifactContract.FromModel(context.GetService<IDesignTimeModel>()
+            .Model);
+
         var builder = CandidateHistory();
         var source = builder.Operations[0];
         var drop = (SafeMigrationOperation)builder.Operations[^1];
@@ -157,12 +184,17 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = CreateContext(connection);
-        var capture = SqliteRebuildArtifactContract.FromModel(context.GetService<IDesignTimeModel>().Model);
+        var capture = SqliteRebuildArtifactContract.FromModel(context.GetService<IDesignTimeModel>()
+            .Model);
+
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.Sqlite");
-        builder.CreateTableIfNotExists("window_constraints", table => new
-        {
-            id = table.Column<int>(type: "INTEGER", nullable: false),
-        });
+        builder.CreateTableIfNotExists(
+            "window_constraints",
+            table => new
+            {
+                id = table.Column<int>(type: "INTEGER", nullable: false),
+            });
+
         builder.AddPrimaryKeyIfNotExists("pk_window_constraints", "window_constraints", ["id"]);
         var creator = (SafeMigrationOperation)builder.Operations[0];
         var copy = new SafeMigrationOperation(creator.Intent, creator.Policy);
@@ -179,7 +211,10 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
             withKey.GetTableConstraintTransitions(creator));
 
         Assert.Empty(first.AllowedPrimaryKeys);
-        Assert.Equal("pk_window_constraints", Assert.Single(second.AllowedPrimaryKeys).Name);
+        Assert.Equal("pk_window_constraints",
+            Assert.Single(second.AllowedPrimaryKeys)
+                .Name);
+
         Assert.Null(withKey.GetTableConstraintTransitions(copy));
     }
 
@@ -190,13 +225,16 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = CreateContext(connection);
-        var capture = SqliteRebuildArtifactContract.FromModel(context.GetService<IDesignTimeModel>().Model);
+        var capture = SqliteRebuildArtifactContract.FromModel(context.GetService<IDesignTimeModel>()
+            .Model);
 
         // Act
         var exception = Record.Exception(() => capture.WithOperationHistory(null!));
 
         // Assert
-        Assert.Equal("operations", Assert.IsType<ArgumentNullException>(exception).ParamName);
+        Assert.Equal("operations",
+            Assert.IsType<ArgumentNullException>(exception)
+                .ParamName);
     }
 
     /// <summary>Alternating target models cannot lend missing-column ownership to a neighboring window.</summary>
@@ -204,31 +242,51 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task AnalyzerKeepsDistinctInitializedModelsIndependent(bool additionalFirst)
+    public async Task AnalyzerKeepsDistinctInitializedModelsIndependent(
+        bool additionalFirst
+    )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateWindowTableAsync(connection);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateWindowTableAsync(connection, cancellationToken: CancellationToken.None);
         await using var basic = new WindowModelContext<BasicModel>(connection);
         await using var additional = new WindowModelContext<AdditionalColumnModel>(connection);
-        var basicModel = basic.GetService<IDesignTimeModel>().Model;
-        var additionalModel = additional.GetService<IDesignTimeModel>().Model;
+        var basicModel = basic.GetService<IDesignTimeModel>()
+            .Model;
+
+        var additionalModel = additional.GetService<IDesignTimeModel>()
+            .Model;
+
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.Sqlite");
         builder.DropColumnIfExists("Legacy", "window_entities");
         _ = builder.Sql("SELECT 1;");
         builder.DropColumnIfExists("Legacy", "window_entities");
         var analyzer = CreateAnalyzer(basic);
-        var firstModel = additionalFirst ? additionalModel : basicModel;
-        var secondModel = additionalFirst ? basicModel : additionalModel;
+        var firstModel = additionalFirst
+            ? additionalModel
+            : basicModel;
+
+        var secondModel = additionalFirst
+            ? basicModel
+            : additionalModel;
 
         // Act
         var analyses = await analyzer.AnalyzeAsync(
-            basic, builder.Operations, [firstModel, firstModel, secondModel]);
+            basic,
+            builder.Operations,
+            [firstModel, firstModel, secondModel],
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(2, analyses.Count);
-        var supported = analyses[additionalFirst ? 1 : 0];
-        var unsupported = analyses[additionalFirst ? 0 : 1];
+        var supported = analyses[additionalFirst
+            ? 1
+            : 0];
+
+        var unsupported = analyses[additionalFirst
+            ? 0
+            : 1];
+
         Assert.Equal(SafeMigrationObservedState.Matching, supported.ObservedState);
         Assert.Equal(SafeMigrationObservedState.Unsupported, unsupported.ObservedState);
         Assert.Equal("table_rebuild_unmodeled_target_column", unsupported.Code);
@@ -239,23 +297,35 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
     public async Task AnalyzerRefreshesItsCatalogBetweenModelSharingInvocations()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateWindowTableAsync(connection);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateWindowTableAsync(connection, cancellationToken: CancellationToken.None);
         await using var context = new WindowModelContext<BasicModel>(connection);
-        var model = context.GetService<IDesignTimeModel>().Model;
+        var model = context.GetService<IDesignTimeModel>()
+            .Model;
+
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.Sqlite");
         builder.DropColumnIfExists("Legacy", "window_entities");
         var analyzer = CreateAnalyzer(context);
-        var captures = await ObserveCatalogCapturesAsync(connection);
+        var captures = await ObserveCatalogCapturesAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var before = await analyzer.AnalyzeAsync(context, builder.Operations, [model]);
-        await ExecuteSqlAsync(connection, "ALTER TABLE window_entities ADD COLUMN Independent TEXT NULL;");
-        var after = await analyzer.AnalyzeAsync(context, builder.Operations, [model]);
+        var before = await analyzer.AnalyzeAsync(context, builder.Operations, [model], CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "ALTER TABLE window_entities ADD COLUMN Independent TEXT NULL;",
+            cancellationToken: CancellationToken.None);
+
+        var after = await analyzer.AnalyzeAsync(context, builder.Operations, [model], CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(before).ObservedState);
-        Assert.Equal("table_rebuild_unmanaged_column", Assert.Single(after).Code);
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(before)
+                .ObservedState);
+
+        Assert.Equal("table_rebuild_unmanaged_column",
+            Assert.Single(after)
+                .Code);
+
         Assert.Equal(2, captures());
     }
 
@@ -268,13 +338,17 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
     [InlineData("update")]
     [InlineData("delete")]
     [InlineData("mixed")]
-    public async Task SingleStructuralWindowPreservesTrailingBoundaryBehavior(string trailing)
+    public async Task SingleStructuralWindowPreservesTrailingBoundaryBehavior(
+        string trailing
+    )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateWindowTableAsync(connection);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateWindowTableAsync(connection, cancellationToken: CancellationToken.None);
         await using var context = new WindowModelContext<BasicModel>(connection);
-        var model = context.GetService<IDesignTimeModel>().Model;
+        var model = context.GetService<IDesignTimeModel>()
+            .Model;
+
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.Sqlite");
         builder.DropColumnIfExists("Legacy", "window_entities");
         if (trailing == "mixed")
@@ -290,47 +364,66 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         }
 
         var analyzer = CreateAnalyzer(context);
-        var captures = await ObserveCatalogCapturesAsync(connection);
-        var models = builder.Operations.Select(_ => (IModel?)model).ToArray();
+        var captures = await ObserveCatalogCapturesAsync(connection, cancellationToken: CancellationToken.None);
+        var models = builder
+            .Operations
+            .Select(_ => (IModel?)model)
+            .ToArray();
 
         // Act
-        var analyses = await analyzer.AnalyzeAsync(context, builder.Operations, models);
+        var analyses = await analyzer.AnalyzeAsync(context, builder.Operations, models, CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
         Assert.Equal(SafeMigrationObservedState.Matching, analysis.ObservedState);
         Assert.Equal("classified_matching", analysis.Code);
         Assert.Equal(1, captures());
-        Assert.Equal(1, await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('window_entities') WHERE name = 'Legacy';"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM pragma_table_xinfo('window_entities') WHERE name = 'Legacy';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Observes the catalog boundary on this connection without changing production instrumentation.</summary>
-    private static async Task<Func<int>> ObserveCatalogCapturesAsync(SqliteConnection connection)
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
+    private static async Task<Func<int>> ObserveCatalogCapturesAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         string version;
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = "SELECT sqlite_version();";
-            version = Assert.IsType<string>(await command.ExecuteScalarAsync(CancellationToken.None));
+            version = Assert.IsType<string>(await command.ExecuteScalarAsync(cancellationToken));
         }
 
         var count = 0;
-        connection.CreateFunction("sqlite_version", () =>
-        {
-            count++;
+        connection.CreateFunction(
+            "sqlite_version",
+            () =>
+            {
+                count++;
 
-            return version;
-        });
+                return version;
+            });
 
         return () => count;
     }
 
     /// <summary>Reads ownership identities without adding production diagnostics or mutable accessors.</summary>
-    private static object? Field(SqliteRebuildArtifactContract contract, string name)
+    private static object? Field(
+        SqliteRebuildArtifactContract contract,
+        string name
+    )
     {
         var field = typeof(SqliteRebuildArtifactContract).GetField(
-            name, BindingFlags.Instance | BindingFlags.NonPublic);
+            name,
+            BindingFlags.Instance | BindingFlags.NonPublic);
 
         Assert.NotNull(field);
 
@@ -338,7 +431,9 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
     }
 
     /// <summary>Creates the smallest authored ADD-to-DROP history with an optional known or opaque boundary.</summary>
-    private static MigrationBuilder CandidateHistory(MigrationOperation? boundary = null)
+    private static MigrationBuilder CandidateHistory(
+        MigrationOperation? boundary = null
+    )
     {
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.Sqlite");
         builder.AddColumnIfNotExists<int>("source", "nodes", type: "INTEGER", nullable: true);
@@ -353,35 +448,52 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
     }
 
     /// <summary>Retains the distinct row-evidence boundaries without requiring extra database fixtures.</summary>
-    private static MigrationOperation CreateBoundary(string boundary)
+    private static MigrationOperation CreateBoundary(
+        string boundary
+    )
         => boundary switch
         {
             "opaque" => new SqlOperation { Sql = "SELECT 1;" },
             "insert" => new InsertDataOperation
             {
-                Table = "nodes", Columns = ["id"], Values = new object[,] { { 1 } },
+                Table = "nodes",
+                Columns = ["id"],
+                Values = new object[,] { { 1 } },
             },
             "update" => new UpdateDataOperation
             {
-                Table = "nodes", KeyColumns = ["id"], KeyValues = new object[,] { { 1 } },
-                Columns = ["value"], Values = new object[,] { { 2 } },
+                Table = "nodes",
+                KeyColumns = ["id"],
+                KeyValues = new object[,] { { 1 } },
+                Columns = ["value"],
+                Values = new object[,] { { 2 } },
             },
             "delete" => new DeleteDataOperation
             {
-                Table = "nodes", KeyColumns = ["id"], KeyValues = new object[,] { { 1 } },
+                Table = "nodes",
+                KeyColumns = ["id"],
+                KeyValues = new object[,] { { 1 } },
             },
             _ => throw new ArgumentOutOfRangeException(nameof(boundary)),
         };
 
     /// <summary>Creates the active provider analyzer without registering a test-only execution hook.</summary>
-    private static SqliteSafeMigrationProviderAnalyzer CreateAnalyzer(DbContext context)
+    private static SqliteSafeMigrationProviderAnalyzer CreateAnalyzer(
+        DbContext context
+    )
         => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     /// <summary>Creates one small table whose legacy column is deliberately absent from the target model.</summary>
-    private static Task CreateWindowTableAsync(SqliteConnection connection)
-        => ExecuteSqlAsync(connection,
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
+    private static Task CreateWindowTableAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken
+    )
+        => ExecuteSqlAsync(
+            connection,
             "CREATE TABLE window_entities (Id INTEGER NOT NULL, Legacy TEXT NULL, "
-            + "CONSTRAINT pk_window_entities PRIMARY KEY (Id));");
+            + "CONSTRAINT pk_window_entities PRIMARY KEY (Id));",
+            cancellationToken: cancellationToken);
 
     /// <summary>Owns a distinct immutable EF model identity without changing physical test setup.</summary>
     /// <typeparam name="TModel">The marker selecting a distinct target-model identity.</typeparam>
@@ -389,22 +501,36 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
     private sealed class WindowModelContext<TModel>(DbConnection connection) : DbContext
     {
         /// <inheritdoc />
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        protected override void OnConfiguring(
+            DbContextOptionsBuilder optionsBuilder
+        )
             => optionsBuilder.UseSqlite(connection);
 
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        )
         {
-            modelBuilder.Entity("WindowEntity", entity =>
-            {
-                entity.ToTable("window_entities");
-                entity.Property<int>("Id").ValueGeneratedNever();
-                entity.HasKey("Id").HasName("pk_window_entities");
-                if (typeof(TModel) == typeof(AdditionalColumnModel))
+            modelBuilder.Entity(
+                "WindowEntity",
+                entity =>
                 {
-                    entity.Property<string>("Missing").IsRequired(false);
-                }
-            });
+                    entity.ToTable("window_entities");
+                    entity
+                        .Property<int>("Id")
+                        .ValueGeneratedNever();
+
+                    entity
+                        .HasKey("Id")
+                        .HasName("pk_window_entities");
+
+                    if (typeof(TModel) == typeof(AdditionalColumnModel))
+                    {
+                        entity
+                            .Property<string>("Missing")
+                            .IsRequired(false);
+                    }
+                });
         }
     }
 

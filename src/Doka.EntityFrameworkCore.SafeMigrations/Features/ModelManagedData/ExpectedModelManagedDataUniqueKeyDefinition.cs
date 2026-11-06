@@ -10,7 +10,10 @@ public sealed class ExpectedModelManagedDataUniqueKeyDefinition
     /// <param name="columns">The ordered candidate-key columns.</param>
     public ExpectedModelManagedDataUniqueKeyDefinition(
         IEnumerable<string> columns
-    ) => Columns = SafeMigrationDefinitionValidator.Identifiers(columns, nameof(columns));
+    )
+    {
+        Columns = SafeMigrationDefinitionValidator.Identifiers(columns, nameof(columns));
+    }
 
     /// <summary>Gets the ordered candidate-key columns.</summary>
     public IReadOnlyList<string> Columns { get; }

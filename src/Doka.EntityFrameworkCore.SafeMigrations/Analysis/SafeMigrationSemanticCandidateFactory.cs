@@ -161,18 +161,22 @@ internal static class SafeMigrationSemanticCandidateFactory
             case EnsurePrimaryKeyIntent value:
                 yield return (SafeMigrationDatabaseObjectKind.PrimaryKey, value.Definition.Schema ?? defaultSchema,
                     value.Definition.Table);
+
                 yield break;
             case EnsureUniqueConstraintIntent value:
                 yield return (SafeMigrationDatabaseObjectKind.UniqueConstraint,
                     value.Definition.Schema ?? defaultSchema, value.Definition.Table);
+
                 yield break;
             case EnsureCheckConstraintIntent value:
                 yield return (SafeMigrationDatabaseObjectKind.CheckConstraint, value.Definition.Schema ?? defaultSchema,
                     value.Definition.Table);
+
                 yield break;
             case EnsureForeignKeyIntent value:
                 yield return (SafeMigrationDatabaseObjectKind.ForeignKey, value.Definition.Schema ?? defaultSchema,
                     value.Definition.Table);
+
                 yield break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(intent));

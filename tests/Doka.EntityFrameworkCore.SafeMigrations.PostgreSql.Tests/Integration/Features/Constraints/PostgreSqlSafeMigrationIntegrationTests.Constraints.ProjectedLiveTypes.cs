@@ -24,21 +24,31 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
     [InlineData("not")]
     [InlineData("case")]
     [InlineData("case-null")]
-    public async Task EmptyMixedCheckRetainsValidNativeExpressionBinding(string shape)
+    public async Task EmptyMixedCheckRetainsValidNativeExpressionBinding(
+        string shape
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var existingType = shape is "lower-varchar" or "lower-irrelevant-variadic" ? "varchar(32)" : "text";
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE mixed_columns (id {existingType} NOT NULL);");
+        var existingType = shape is "lower-varchar" or "lower-irrelevant-variadic"
+            ? "varchar(32)"
+            : "text";
+
+        await ExecuteSqlAsync(
+            connectionString,
+            $"CREATE TABLE mixed_columns (id {existingType} NOT NULL);",
+            cancellationToken: CancellationToken.None);
 
         if (shape == "lower-irrelevant-variadic")
         {
             // WHY: Scalar variadic calls require at least one variadic value.
             // This two-input overload cannot replace builtin LOWER(varchar)
             // merely because its variadic array could be empty when explicit.
-            await ExecuteSqlAsync(connectionString,
+            await ExecuteSqlAsync(
+                connectionString,
                 "CREATE FUNCTION public.lower(varchar, VARIADIC integer[]) RETURNS text "
-                + "LANGUAGE sql IMMUTABLE AS 'SELECT upper($1::text)';");
+                + "LANGUAGE sql IMMUTABLE AS 'SELECT upper($1::text)';",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -48,25 +58,48 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
         {
             "lower" or "lower-varchar" or "lower-irrelevant-variadic"
                 => SafeMigrationSql.Function("LOWER", SafeMigrationSql.Identifier("id")),
-            "literal-cast" => SqlBinary(SafeMigrationSql.Identifier("added"), SafeMigrationSqlBinaryOperator.Add,
+            "literal-cast" => SqlBinary(
+                SafeMigrationSql.Identifier("added"),
+                SafeMigrationSqlBinaryOperator.Add,
                 SafeMigrationSql.Cast(SafeMigrationSql.Literal("1"), "integer")),
             "integer-cast" => SafeMigrationSql.Cast(SafeMigrationSql.Identifier("added"), "bigint"),
-            "coalesce" => SafeMigrationSql.Function("COALESCE", SafeMigrationSql.Identifier("added"),
+            "coalesce" => SafeMigrationSql.Function(
+                "COALESCE",
+                SafeMigrationSql.Identifier("added"),
                 SafeMigrationSql.Literal(0)),
-            "nullif" => SafeMigrationSql.Function("NULLIF", SafeMigrationSql.Identifier("added"),
+            "nullif" => SafeMigrationSql.Function(
+                "NULLIF",
+                SafeMigrationSql.Identifier("added"),
                 SafeMigrationSql.Literal(0)),
-            "between" => SafeMigrationSql.Between(SafeMigrationSql.Identifier("added"),
-                SafeMigrationSql.Literal(0), SafeMigrationSql.Literal(10)),
-            "negate" => SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Negate,
+            "between" => SafeMigrationSql.Between(
+                SafeMigrationSql.Identifier("added"),
+                SafeMigrationSql.Literal(0),
+                SafeMigrationSql.Literal(10)),
+            "negate" => SafeMigrationSql.Unary(
+                SafeMigrationSqlUnaryOperator.Negate,
                 SafeMigrationSql.Identifier("added")),
-            "not" => SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Not, SqlColumnAndInt("added",
-                SafeMigrationSqlBinaryOperator.GreaterThan, 0)),
+            "not" => SafeMigrationSql.Unary(
+                SafeMigrationSqlUnaryOperator.Not,
+                SqlColumnAndInt(
+                    "added",
+                    SafeMigrationSqlBinaryOperator.GreaterThan,
+                    0)),
             "case" => SafeMigrationSql.Case(
-                [new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.IsNull(SafeMigrationSql.Identifier("id")),
-                    SafeMigrationSql.Literal(0))], SafeMigrationSql.Identifier("added")),
+                [
+                    new SafeMigrationSqlCaseWhenClause(
+                        SafeMigrationSql.IsNull(SafeMigrationSql.Identifier("id")),
+                        SafeMigrationSql.Literal(0)),
+                ],
+                SafeMigrationSql.Identifier("added")),
             "case-null" => SafeMigrationSql.Case(
-                [new SafeMigrationSqlCaseWhenClause(SqlColumnAndInt("added",
-                    SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0), SafeMigrationSql.Identifier("added"))]),
+            [
+                new SafeMigrationSqlCaseWhenClause(
+                    SqlColumnAndInt(
+                        "added",
+                        SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+                        0),
+                    SafeMigrationSql.Identifier("added")),
+            ]),
             _ => throw new ArgumentOutOfRangeException(nameof(shape)),
         };
 
@@ -75,28 +108,46 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
             ? SafeMigrationSql.Literal(string.Empty)
             : SafeMigrationSql.Literal(0);
 
-        var condition = shape is "between" or "not" ? operand
+        var condition = shape is "between" or "not"
+            ? operand
             : SqlBinary(operand, SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, comparison);
 
-        var expression = SqlBinary(condition, SafeMigrationSqlBinaryOperator.And,
-            usesLower ? SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)
+        var expression = SqlBinary(
+            condition,
+            SafeMigrationSqlBinaryOperator.And,
+            usesLower
+                ? SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)
                 : SafeMigrationSql.IsNotNull(SafeMigrationSql.Identifier("id")));
 
-        builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression(
-            "ck_mixed_valid", "mixed_columns", expression), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_mixed_valid",
+                "mixed_columns",
+                expression),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-check-valid-binding"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sparse-check-valid-binding"),
+            CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-check-valid-binding-final"), CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sparse-check-valid-binding-final"),
+            CancellationToken.None);
 
-        var replay = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-check-valid-binding-replay"), CancellationToken.None);
+        var replay = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sparse-check-valid-binding-replay"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -112,38 +163,65 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
     [Theory]
     [InlineData(SafeMigrationPolicy.ExistenceOnly)]
     [InlineData(SafeMigrationPolicy.ThrowIfDifferent)]
-    public async Task ForeignKeyNewNullableColumnUsesAcceptedTypeInsteadOfLaterProposal(SafeMigrationPolicy policy)
+    public async Task ForeignKeyNewNullableColumnUsesAcceptedTypeInsteadOfLaterProposal(
+        SafeMigrationPolicy policy
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE live_parent (id integer NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);");
+            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("parent_id", "live_child", type: "integer", nullable: true);
-        builder.EnsureColumn("live_child", new ExpectedColumnDefinition("parent_id", typeof(string),
-            isNullable: true, storeType: "text"), policy);
+        builder.EnsureColumn(
+            "live_child",
+            new ExpectedColumnDefinition(
+                "parent_id",
+                typeof(string),
+                isNullable: true,
+                storeType: "text"),
+            policy);
 
-        builder.AddForeignKeyIfNotExists("fk_live_child_parent", "live_child", ["parent_id"],
-            "live_parent", ["id"]);
+        builder.AddForeignKeyIfNotExists(
+            "fk_live_child_parent",
+            "live_child",
+            ["parent_id"],
+            "live_parent",
+            ["id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-fk-accepted-type"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-live-fk-accepted-type"),
+                CancellationToken.None);
 
         if (policy == SafeMigrationPolicy.ExistenceOnly)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
-        Assert.Equal(policy == SafeMigrationPolicy.ExistenceOnly
-            ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(policy == SafeMigrationPolicy.ExistenceOnly
-            ? SafeMigrationAction.NoOp : SafeMigrationAction.RejectDifferent, report.Assessments[1].Action);
+        Assert.Equal(
+            policy == SafeMigrationPolicy.ExistenceOnly
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
+            report.Status);
+
+        Assert.Equal(
+            policy == SafeMigrationPolicy.ExistenceOnly
+                ? SafeMigrationAction.NoOp
+                : SafeMigrationAction.RejectDifferent,
+            report.Assessments[1].Action);
+
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[2].Action);
     }
 
@@ -152,48 +230,73 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ForeignKeyNewNullableColumnDoesNotReuseReoccupiedConstraintName(bool dropReplacement)
+    public async Task ForeignKeyNewNullableColumnDoesNotReuseReoccupiedConstraintName(
+        bool dropReplacement
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE live_parent (id integer NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY, old_parent_id integer NULL, "
-            + "CONSTRAINT fk_live_child_parent FOREIGN KEY (old_parent_id) REFERENCES live_parent (id));");
+            + "CONSTRAINT fk_live_child_parent FOREIGN KEY (old_parent_id) REFERENCES live_parent (id));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_live_child_parent", "live_child");
         builder.AddColumnIfNotExists<int>("parent_id", "live_child", type: "integer", nullable: true);
-        builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression(
-            "fk_live_child_parent", "live_child", SqlColumnAndInt("id",
-                SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "fk_live_child_parent",
+                "live_child",
+                SqlColumnAndInt(
+                    "id",
+                    SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+                    0)),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         if (dropReplacement)
         {
             builder.DropCheckConstraintIfExists("fk_live_child_parent", "live_child");
         }
 
-        builder.AddForeignKeyIfNotExists("fk_live_child_parent", "live_child", ["parent_id"],
-            "live_parent", ["id"]);
+        builder.AddForeignKeyIfNotExists(
+            "fk_live_child_parent",
+            "live_child",
+            ["parent_id"],
+            "live_parent",
+            ["id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-fk-symbol-reoccupied"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-live-fk-symbol-reoccupied"),
+                CancellationToken.None);
 
         if (dropReplacement)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
-        Assert.Equal(dropReplacement ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+        Assert.Equal(
+            dropReplacement
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
             report.Status);
 
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[2].Action);
-        Assert.Equal(dropReplacement ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
+        Assert.Equal(
+            dropReplacement
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectPrerequisiteMissing,
             report.Assessments[^1].Action);
     }
 
@@ -203,33 +306,50 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE live_parent (id integer NOT NULL PRIMARY KEY);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE live_parent (id integer NOT NULL PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.ConvergeTable(new ExpectedTableDefinition("new_child",
-            [new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "integer")],
-            primaryKey: new ExpectedPrimaryKeyDefinition("pk_new_child", "new_child", ["id"])));
+        builder.ConvergeTable(
+            new ExpectedTableDefinition(
+                "new_child",
+                [new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "integer")],
+                primaryKey: new ExpectedPrimaryKeyDefinition("pk_new_child", "new_child", ["id"])));
 
         builder.AddColumnIfNotExists<int>("parent_id", "new_child", type: "integer", nullable: true);
         builder.CreateIndexIfNotExistsFromModel("ix_new_child_parent", "new_child", "parent_id");
-        builder.AddForeignKeyIfNotExists("fk_new_child_parent", "new_child", ["parent_id"],
-            "live_parent", ["id"]);
+        builder.AddForeignKeyIfNotExists(
+            "fk_new_child_parent",
+            "new_child",
+            ["parent_id"],
+            "live_parent",
+            ["id"]);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-created-child-separate-column"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sparse-created-child-separate-column"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-created-child-separate-column-final"), CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sparse-created-child-separate-column-final"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[0].Action);
-        Assert.All(preflight.Assessments.TakeLast(3),
+        Assert.All(
+            preflight.Assessments.TakeLast(3),
             static item => Assert.Equal(SafeMigrationAction.Apply, item.Action));
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
@@ -243,11 +363,16 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
     [InlineData("coalesce")]
     [InlineData("case-condition")]
     [InlineData("case-result")]
-    public async Task EmptyMixedCheckRejectsInvalidNativeExpressionBinding(string shape)
+    public async Task EmptyMixedCheckRejectsInvalidNativeExpressionBinding(
+        string shape
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (id uuid NOT NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE mixed_columns (id uuid NOT NULL);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -256,31 +381,53 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
         {
             "function" => SafeMigrationSql.Function("LENGTH", SafeMigrationSql.Identifier("added")),
             "cast" => SafeMigrationSql.Cast(SafeMigrationSql.Identifier("id"), "integer"),
-            "coalesce" => SafeMigrationSql.Function("COALESCE", SafeMigrationSql.Identifier("id"),
+            "coalesce" => SafeMigrationSql.Function(
+                "COALESCE",
+                SafeMigrationSql.Identifier("id"),
                 SafeMigrationSql.Identifier("added")),
             "case-condition" => SafeMigrationSql.Case(
-                [new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.Identifier("added"),
-                    SafeMigrationSql.Literal(0))], SafeMigrationSql.Literal(1)),
+                [
+                    new SafeMigrationSqlCaseWhenClause(
+                        SafeMigrationSql.Identifier("added"),
+                        SafeMigrationSql.Literal(0)),
+                ],
+                SafeMigrationSql.Literal(1)),
             "case-result" => SafeMigrationSql.Case(
-                [new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.IsNotNull(SafeMigrationSql.Identifier("id")),
-                    SafeMigrationSql.Identifier("id"))], SafeMigrationSql.Identifier("added")),
+                [
+                    new SafeMigrationSqlCaseWhenClause(
+                        SafeMigrationSql.IsNotNull(SafeMigrationSql.Identifier("id")),
+                        SafeMigrationSql.Identifier("id")),
+                ],
+                SafeMigrationSql.Identifier("added")),
             _ => throw new ArgumentOutOfRangeException(nameof(shape)),
         };
 
-        var expression = SqlBinary(SqlBinary(operand,
-                SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, SafeMigrationSql.Literal(0)),
+        var expression = SqlBinary(
+            SqlBinary(
+                operand,
+                SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+                SafeMigrationSql.Literal(0)),
             SafeMigrationSqlBinaryOperator.And,
-            SqlBinary(SafeMigrationSql.IsNotNull(SafeMigrationSql.Identifier("id")),
+            SqlBinary(
+                SafeMigrationSql.IsNotNull(SafeMigrationSql.Identifier("id")),
                 SafeMigrationSqlBinaryOperator.And,
                 SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)));
 
-        builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression(
-            "ck_mixed_invalid", "mixed_columns", expression),
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_mixed_invalid",
+                "mixed_columns",
+                expression),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-check-invalid-binding"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-check-invalid-binding"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -297,7 +444,9 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
     [InlineData("integer-cast")]
     [InlineData("coalesce")]
     [InlineData("case")]
-    public async Task CheckNativeDeparseDoesNotApproveDifferentPredicate(string shape)
+    public async Task CheckNativeDeparseDoesNotApproveDifferentPredicate(
+        string shape
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -311,9 +460,13 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
             _ => throw new ArgumentOutOfRangeException(nameof(shape)),
         };
 
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE mixed_columns (id text NOT NULL, added integer NOT NULL, "
-            + "CONSTRAINT ck_mixed CHECK ((" + current + ") AND (added >= 0)));");
+            + "CONSTRAINT ck_mixed CHECK (("
+            + current
+            + ") AND (added >= 0)));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operand = shape switch
@@ -321,34 +474,61 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
             "lower" => SafeMigrationSql.Function("UPPER", SafeMigrationSql.Identifier("id")),
             "literal-cast" => SafeMigrationSql.Cast(SafeMigrationSql.Literal("2"), "integer"),
             "integer-cast" => SafeMigrationSql.Cast(SafeMigrationSql.Identifier("added"), "integer"),
-            "coalesce" => SafeMigrationSql.Function("COALESCE", SafeMigrationSql.Identifier("added"),
+            "coalesce" => SafeMigrationSql.Function(
+                "COALESCE",
+                SafeMigrationSql.Identifier("added"),
                 SafeMigrationSql.Literal(1)),
             "case" => SafeMigrationSql.Case(
-                [new SafeMigrationSqlCaseWhenClause(SqlColumnAndInt("added",
-                    SafeMigrationSqlBinaryOperator.GreaterThan, 0), SafeMigrationSql.Identifier("added"))],
+                [
+                    new SafeMigrationSqlCaseWhenClause(
+                        SqlColumnAndInt(
+                            "added",
+                            SafeMigrationSqlBinaryOperator.GreaterThan,
+                            0),
+                        SafeMigrationSql.Identifier("added")),
+                ],
                 SafeMigrationSql.Literal(1)),
             _ => throw new ArgumentOutOfRangeException(nameof(shape)),
         };
 
-        var expression = SqlBinary(SqlBinary(operand, SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
-            shape == "lower" ? SafeMigrationSql.Literal(string.Empty) : SafeMigrationSql.Literal(0)),
+        var expression = SqlBinary(
+            SqlBinary(
+                operand,
+                SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+                shape == "lower"
+                    ? SafeMigrationSql.Literal(string.Empty)
+                    : SafeMigrationSql.Literal(0)),
             SafeMigrationSqlBinaryOperator.And,
             SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0));
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression("ck_mixed",
-            "mixed_columns", expression), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_mixed",
+                "mixed_columns",
+                expression),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("check-native-deparse-different"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("check-native-deparse-different"),
+                CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context,
-            builder.Operations));
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.RejectDifferent,
+            Assert.Single(report.Assessments)
+                .Action);
+
         Assert.Equal("P1001", exception.SqlState);
     }
 
@@ -360,7 +540,9 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
     [InlineData("variadic")]
     [InlineData("opaque")]
     [InlineData("polymorphic-cast")]
-    public async Task EmptyMixedCheckDoesNotApproveUnresolvedNativeBinding(string shape)
+    public async Task EmptyMixedCheckDoesNotApproveUnresolvedNativeBinding(
+        string shape
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -375,44 +557,78 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
             _ => throw new ArgumentOutOfRangeException(nameof(shape)),
         };
 
-        await ExecuteSqlAsync(connectionString, setup);
+        await ExecuteSqlAsync(connectionString, setup, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("added", "mixed_columns", type: "integer", nullable: false);
         var existing = shape switch
         {
             "domain" => SqlColumnAndInt("id", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0),
-            "polymorphic" => SqlBinary(SafeMigrationSql.Function("ARRAY_LENGTH",
-                    SafeMigrationSql.Identifier("id"), SafeMigrationSql.Literal(1)),
-                SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, SafeMigrationSql.Literal(0)),
-            "polymorphic-cast" => SqlBinary(SafeMigrationSql.Cast(SafeMigrationSql.Function("ARRAY_LENGTH",
-                    SafeMigrationSql.Identifier("id"), SafeMigrationSql.Literal(1)), "integer"),
-                SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, SafeMigrationSql.Literal(0)),
-            "variadic" => SqlBinary(SafeMigrationSql.Function("NUM_NONNULLS",
-                    SafeMigrationSql.Identifier("id"), SafeMigrationSql.Identifier("added")),
-                SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, SafeMigrationSql.Literal(0)),
+            "polymorphic" => SqlBinary(
+                SafeMigrationSql.Function(
+                    "ARRAY_LENGTH",
+                    SafeMigrationSql.Identifier("id"),
+                    SafeMigrationSql.Literal(1)),
+                SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+                SafeMigrationSql.Literal(0)),
+            "polymorphic-cast" => SqlBinary(
+                SafeMigrationSql.Cast(
+                    SafeMigrationSql.Function(
+                        "ARRAY_LENGTH",
+                        SafeMigrationSql.Identifier("id"),
+                        SafeMigrationSql.Literal(1)),
+                    "integer"),
+                SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+                SafeMigrationSql.Literal(0)),
+            "variadic" => SqlBinary(
+                SafeMigrationSql.Function(
+                    "NUM_NONNULLS",
+                    SafeMigrationSql.Identifier("id"),
+                    SafeMigrationSql.Identifier("added")),
+                SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+                SafeMigrationSql.Literal(0)),
             "opaque" => SafeMigrationSql.ProviderFragment("npgsql_postgresql", "metadata_callback(id)"),
             _ => throw new ArgumentOutOfRangeException(nameof(shape)),
         };
 
-        builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression("ck_unresolved",
-            "mixed_columns", SqlBinary(existing, SafeMigrationSqlBinaryOperator.And,
-                SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0))),
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_unresolved",
+                "mixed_columns",
+                SqlBinary(
+                    existing,
+                    SafeMigrationSqlBinaryOperator.And,
+                    SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-check-unresolved-binding"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-check-unresolved-binding"),
+                CancellationToken.None);
 
         var callbackCount = shape == "opaque"
-            ? await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM callback_audit;") : 0;
+            ? await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM callback_audit;",
+                cancellationToken: CancellationToken.None)
+            : 0;
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(shape == "opaque" ? SafeMigrationAction.RejectUnsupported
-            : SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[1].Action);
+        Assert.Equal(
+            shape == "opaque"
+                ? SafeMigrationAction.RejectUnsupported
+                : SafeMigrationAction.RejectPrerequisiteMissing,
+            report.Assessments[1].Action);
 
-        Assert.Equal(shape == "opaque" ? "opaque_sql_expression" : "projected_check_binding_unproven",
+        Assert.Equal(
+            shape == "opaque"
+                ? "opaque_sql_expression"
+                : "projected_check_binding_unproven",
             report.Assessments[1].AnalysisCode);
 
         Assert.Equal(0, callbackCount);
@@ -424,27 +640,43 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE mixed_columns (id integer); CREATE TABLE callback_audit (id integer); "
             + "CREATE FUNCTION metadata_callback(integer) RETURNS boolean LANGUAGE plpgsql AS $$ "
-            + "BEGIN INSERT INTO callback_audit VALUES (1); RETURN true; END $$;");
+            + "BEGIN INSERT INTO callback_audit VALUES (1); RETURN true; END $$;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("added", "mixed_columns", type: "integer", nullable: false);
-        builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression("ck_callback",
-            "mixed_columns", SqlBinary(SafeMigrationSql.Function("METADATA_CALLBACK",
-                SafeMigrationSql.Identifier("id")), SafeMigrationSqlBinaryOperator.And,
-                SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0))),
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_callback",
+                "mixed_columns",
+                SqlBinary(
+                    SafeMigrationSql.Function(
+                        "METADATA_CALLBACK",
+                        SafeMigrationSql.Identifier("id")),
+                    SafeMigrationSqlBinaryOperator.And,
+                    SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-check-catalog-function"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-check-catalog-function"),
+                CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var callbackCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM callback_audit;");
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var callbackCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM callback_audit;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -458,20 +690,32 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (id text);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE mixed_columns (id text);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("added", "mixed_columns", type: "integer", nullable: false);
-        builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression("ck_not_boolean",
-            "mixed_columns", SafeMigrationSql.Function("COALESCE",
-                SafeMigrationSql.Function("LOWER", SafeMigrationSql.Identifier("id")),
-                SafeMigrationSql.Cast(SafeMigrationSql.Identifier("added"), "text"))),
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_not_boolean",
+                "mixed_columns",
+                SafeMigrationSql.Function(
+                    "COALESCE",
+                    SafeMigrationSql.Function("LOWER", SafeMigrationSql.Identifier("id")),
+                    SafeMigrationSql.Cast(SafeMigrationSql.Identifier("added"), "text"))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-check-nonboolean"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-check-nonboolean"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -489,7 +733,10 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
     [InlineData("unique", true)]
     [InlineData("check", false)]
     [InlineData("check", true)]
-    public async Task ForeignKeyNewNullableColumnHonorsExactDroppedConstraintFamily(string kind, bool correctFamily)
+    public async Task ForeignKeyNewNullableColumnHonorsExactDroppedConstraintFamily(
+        string kind,
+        bool correctFamily
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -501,10 +748,13 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
 
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL, CONSTRAINT fk_live_child_parent "
-            + constraint + "); INSERT INTO live_child VALUES (1);");
+            + constraint
+            + "); INSERT INTO live_child VALUES (1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -527,23 +777,37 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
         builder.AddForeignKeyIfNotExists("fk_live_child_parent", "live_child", ["parent_id"], "live_parent", ["id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-fk-owned-family-drop"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-live-fk-owned-family-drop"),
+                CancellationToken.None);
 
         if (correctFamily)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
-        Assert.Equal(correctFamily ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+        Assert.Equal(
+            correctFamily
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
             report.Status);
 
-        Assert.Equal(correctFamily ? SafeMigrationAction.Apply : SafeMigrationAction.NoOp,
+        Assert.Equal(
+            correctFamily
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.NoOp,
             report.Assessments[0].Action);
-        Assert.Equal(correctFamily ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
+
+        Assert.Equal(
+            correctFamily
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectPrerequisiteMissing,
             report.Assessments[2].Action);
     }
-
 }

@@ -3,16 +3,19 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 {
     /// <summary>Identifies finite generated additions that require accepted current source-type evidence.</summary>
-    internal static bool RequiresGeneratedCaseInputCapture(SafeMigrationIntent intent)
-        => intent is EnsureColumnIntent { Definition.ComputedExpression: { } expression } column
-                && (ContainsGeneratedCase(expression) || RequiresCapturedOperandBinding(column.Definition))
-            || intent is EnsureCheckConstraintIntent { Definition.Expression: { } check }
-                && ContainsGeneratedCase(check);
+    internal static bool RequiresGeneratedCaseInputCapture(
+        SafeMigrationIntent intent
+    )
+        => (intent is EnsureColumnIntent { Definition.ComputedExpression: { } expression } column
+                && (ContainsGeneratedCase(expression) || RequiresCapturedOperandBinding(column.Definition)))
+            || (intent is EnsureCheckConstraintIntent { Definition.Expression: { } check }
+                && ContainsGeneratedCase(check));
 
     /// <summary>Rechecks accepted prefix types instead of retaining an earlier live source certificate.</summary>
     internal bool? ValidateProjectedGeneratedCaseBinding(
         SafeMigrationIntent intent,
-        Func<string, string?, string, (long TypeOid, long CollationOid)?> sourceType)
+        Func<string, string?, string, (long TypeOid, long CollationOid)?> sourceType
+    )
     {
         intent = SafeMigrationCapturedExpressionNormalization.NormalizeIntent(intent, true);
         var expression = intent switch
@@ -22,16 +25,25 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             _ => null,
         };
 
-        if (expression is null || !RequiresGeneratedCaseInputCapture(intent))
+        if (expression is null
+            || !RequiresGeneratedCaseInputCapture(intent))
         {
             return true;
         }
 
         var owner = PostgreSqlSafeMigrationSchemaIdentity.GetOwner(intent);
-        var target = intent is EnsureColumnIntent added ? GeneratedCaseColumnCategory(added.Definition)
+        var target = intent is EnsureColumnIntent added
+            ? GeneratedCaseColumnCategory(added.Definition)
             : GeneratedCaseCategory.Boolean;
+
         var inputs = new GeneratedCaseInputs();
-        if (!ValidateGeneratedCaseOperand(expression, target, owner.Table!, owner.Schema, null, inputs,
+        if (!ValidateGeneratedCaseOperand(
+            expression,
+            target,
+            owner.Table!,
+            owner.Schema,
+            null,
+            inputs,
             capturedSource: HasCapturedSource(intent)))
         {
             return false;
@@ -54,7 +66,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 return false;
             }
 
-            if (intent is EnsureColumnIntent captured && RequiresCapturedOperandBinding(captured.Definition)
+            if (intent is EnsureColumnIntent captured
+                && RequiresCapturedOperandBinding(captured.Definition)
                 && !CapturedOperandInputMatchesAssignment(captured.Definition, type.Value.TypeOid))
             {
                 return false;
@@ -62,7 +75,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
             if (category == GeneratedCaseCategory.Text)
             {
-                if (textCollation is not null && textCollation != type.Value.CollationOid)
+                if (textCollation is not null
+                    && textCollation != type.Value.CollationOid)
                 {
                     return false;
                 }
@@ -77,7 +91,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             {
                 var first = sourceType(owner.Table!, owner.Schema, left);
                 var second = sourceType(owner.Table!, owner.Schema, right);
-                if (first is null || second is null)
+                if (first is null
+                    || second is null)
                 {
                     unproven = true;
 
@@ -91,37 +106,51 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             }
         }
 
-        return unproven ? null : true;
+        return unproven
+            ? null
+            : true;
     }
 
     /// <summary>Preserves prerequisite-only and full-plan agreement for statically invalid CASE contracts.</summary>
     private string? GetUnsupportedGeneratedCaseFeature(
         SafeMigrationIntent intent,
-        IReadOnlyList<ExpectedColumnDefinition> definitions)
+        IReadOnlyList<ExpectedColumnDefinition> definitions
+    )
     {
         foreach (var definition in definitions)
         {
             if (definition.ComputedExpression is not { } expression
-                || !ContainsGeneratedCase(expression) && !RequiresCapturedOperandBinding(definition))
+                || (!ContainsGeneratedCase(expression) && !RequiresCapturedOperandBinding(definition)))
             {
                 continue;
             }
 
             var owner = PostgreSqlSafeMigrationSchemaIdentity.GetOwner(intent);
-            var declared = intent is EnsureTableIntent table ? table.Definition.Columns : null;
+            var declared = intent is EnsureTableIntent table
+                ? table.Definition.Columns
+                : null;
+
             var inputs = new GeneratedCaseInputs();
-            if (!ValidateGeneratedCaseOperand(expression, GeneratedCaseColumnCategory(definition),
-                owner.Table!, owner.Schema, declared, inputs,
-                capturedSource: definition.CapturedComputedSql is not null)
-                || declared is not null && !HaveCompatibleGeneratedCaseCollations(declared, inputs))
+            if (!ValidateGeneratedCaseOperand(
+                    expression,
+                    GeneratedCaseColumnCategory(definition),
+                    owner.Table!,
+                    owner.Schema,
+                    declared,
+                    inputs,
+                    capturedSource: definition.CapturedComputedSql is not null)
+                || (declared is not null && !HaveCompatibleGeneratedCaseCollations(declared, inputs)))
             {
                 return "generated_case_operand_type";
             }
 
-            if (declared is not null && RequiresCapturedOperandBinding(definition)
+            if (declared is not null
+                && RequiresCapturedOperandBinding(definition)
                 && CapturedOperandAssignmentType(definition) != 16
                 && declared.Any(source => SafeMigrationSqlExpressionInspector.ReferencesColumnIdentifier(
-                    expression, source.Name, StringComparer.Ordinal)
+                        expression,
+                        source.Name,
+                        StringComparer.Ordinal)
                     && (CapturedOperandAssignmentType(source) is not { } sourceType
                         || !CapturedOperandInputMatchesAssignment(definition, sourceType))))
             {
@@ -135,17 +164,20 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <summary>Fences newly supported CASE bindings without preparing SQL or invoking application functions.</summary>
     private PostgreSqlSafeMigrationRuntimePlan QualifyGeneratedCaseBinding(
         PostgreSqlSafeMigrationRuntimePlan plan,
-        SafeMigrationIntent intent)
+        SafeMigrationIntent intent
+    )
     {
-        if (intent is EnsureColumnIntent added
+        if ((intent is EnsureColumnIntent added
                 && (added.Definition.ComputedExpression is not { } addedExpression
-                    || !ContainsGeneratedCase(addedExpression) && !RequiresCapturedOperandBinding(added.Definition))
-            || intent is AlterColumnIntent altered
+                    || (!ContainsGeneratedCase(addedExpression) && !RequiresCapturedOperandBinding(added.Definition))))
+            || (intent is AlterColumnIntent altered
                 && (altered.Definition.ComputedExpression is not { } alteredExpression
-                    || !ContainsGeneratedCase(alteredExpression))
-            || intent is EnsureCheckConstraintIntent check
-                && (check.Definition.Expression is not { } checkExpression || !ContainsGeneratedCase(checkExpression))
-            || intent is not (EnsureTableIntent or EnsureColumnIntent or AlterColumnIntent
+                    || !ContainsGeneratedCase(alteredExpression)))
+            || (intent is EnsureCheckConstraintIntent check
+                && (check.Definition.Expression is not { } checkExpression || !ContainsGeneratedCase(checkExpression)))
+            || intent is not (EnsureTableIntent
+                or EnsureColumnIntent
+                or AlterColumnIntent
                 or EnsureCheckConstraintIntent))
         {
             // WHY: Ordinary column and unrelated plans do not allocate a
@@ -157,13 +189,24 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         foreach (var (expression, target, captured) in GeneratedCaseBindings(intent))
         {
             var owner = PostgreSqlSafeMigrationSchemaIdentity.GetOwner(intent);
-            var declared = intent is EnsureTableIntent table ? table.Definition.Columns : null;
+            var declared = intent is EnsureTableIntent table
+                ? table.Definition.Columns
+                : null;
+
             var inputs = new GeneratedCaseInputs();
-            if (!ValidateGeneratedCaseOperand(expression, target, owner.Table!, owner.Schema,
-                declared, inputs, captured))
+            if (!ValidateGeneratedCaseOperand(
+                expression,
+                target,
+                owner.Table!,
+                owner.Schema,
+                declared,
+                inputs,
+                captured))
             {
-                return Unsupported(intent is EnsureCheckConstraintIntent ? "structured_check_operand_type"
-                    : "generated_case_operand_type");
+                return Unsupported(
+                    intent is EnsureCheckConstraintIntent
+                        ? "structured_check_operand_type"
+                        : "generated_case_operand_type");
             }
 
             if (inputs.Columns.Count == 0)
@@ -184,24 +227,34 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 // WHY: A standalone ADD cannot borrow the target model's
                 // proposed source types. Capture the actual builtin OID while
                 // the existing prerequisite fence proves those members exist.
-                predicates.Add("EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a WHERE a.attrelid "
-                    + "OPERATOR(pg_catalog.=) " + QualifiedRegclass(owner.Table!, owner.Schema)
+                predicates.Add(
+                    "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a WHERE a.attrelid "
+                    + "OPERATOR(pg_catalog.=) "
+                    + QualifiedRegclass(owner.Table!, owner.Schema)
                     + " AND a.attnum OPERATOR(pg_catalog.>) 0 AND NOT a.attisdropped "
-                    + "AND a.attname OPERATOR(pg_catalog.=) " + Literal(name)
+                    + "AND a.attname OPERATOR(pg_catalog.=) "
+                    + Literal(name)
                     + " AND a.atttypid OPERATOR(pg_catalog.=) ANY(ARRAY["
-                    + GeneratedCaseTypeOids(category) + "]::pg_catalog.oid[]))");
+                    + GeneratedCaseTypeOids(category)
+                    + "]::pg_catalog.oid[]))");
 
-                if (intent is EnsureColumnIntent addedColumn && RequiresCapturedOperandBinding(addedColumn.Definition)
-                    && CapturedOperandAssignmentType(addedColumn.Definition) is { } assignment && assignment != 16)
+                if (intent is EnsureColumnIntent addedColumn
+                    && RequiresCapturedOperandBinding(addedColumn.Definition)
+                    && CapturedOperandAssignmentType(addedColumn.Definition) is { } assignment
+                    && assignment != 16)
                 {
                     // WHY: A numeric family alone does not prove a generated
                     // assignment preserves width. Reuse the same exact builtin
                     // OID for live classification and accepted sparse bindings.
-                    predicates.Add("EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a WHERE a.attrelid "
-                        + "OPERATOR(pg_catalog.=) " + QualifiedRegclass(owner.Table!, owner.Schema)
-                        + " AND a.attname OPERATOR(pg_catalog.=) " + Literal(name)
+                    predicates.Add(
+                        "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a WHERE a.attrelid "
+                        + "OPERATOR(pg_catalog.=) "
+                        + QualifiedRegclass(owner.Table!, owner.Schema)
+                        + " AND a.attname OPERATOR(pg_catalog.=) "
+                        + Literal(name)
                         + " AND a.atttypid OPERATOR(pg_catalog.=) "
-                        + assignment.ToString(CultureInfo.InvariantCulture) + ")");
+                        + assignment.ToString(CultureInfo.InvariantCulture)
+                        + ")");
                 }
             }
 
@@ -212,14 +265,17 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     // WHY: Two unresolved identifiers have no literal which
                     // chooses an operator family. Prove the actual pair instead
                     // of independently accepting two unrelated builtin types.
-                    predicates.Add("EXISTS (SELECT 1 FROM pg_catalog.pg_attribute l "
+                    predicates.Add(
+                        "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute l "
                         + "JOIN pg_catalog.pg_attribute r ON r.attrelid OPERATOR(pg_catalog.=) l.attrelid "
                         + "WHERE l.attrelid OPERATOR(pg_catalog.=) "
                         + QualifiedRegclass(owner.Table!, owner.Schema)
                         + " AND l.attnum OPERATOR(pg_catalog.>) 0 AND NOT l.attisdropped "
                         + "AND r.attnum OPERATOR(pg_catalog.>) 0 AND NOT r.attisdropped "
-                        + "AND l.attname OPERATOR(pg_catalog.=) " + Literal(left)
-                        + " AND r.attname OPERATOR(pg_catalog.=) " + Literal(right)
+                        + "AND l.attname OPERATOR(pg_catalog.=) "
+                        + Literal(left)
+                        + " AND r.attname OPERATOR(pg_catalog.=) "
+                        + Literal(right)
                         + " AND ((l.atttypid OPERATOR(pg_catalog.=) "
                         + "ANY(ARRAY[20,21,23,700,701,1700]::pg_catalog.oid[]) "
                         + "AND r.atttypid OPERATOR(pg_catalog.=) ANY(ARRAY[20,21,23,700,701,1700]::pg_catalog.oid[])) "
@@ -231,15 +287,21 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 }
             }
 
-            var textInputs = inputs.Columns.Where(static item => item.Category == GeneratedCaseCategory.Text)
-                .Select(static item => item.Name).Distinct(StringComparer.Ordinal).ToArray();
+            var textInputs = inputs
+                .Columns
+                .Where(static item => item.Category == GeneratedCaseCategory.Text)
+                .Select(static item => item.Name)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
 
             if (textInputs.Length > 1)
             {
                 // WHY: Equal TEXT OIDs do not resolve incompatible implicit
                 // collations of CASE result branches used by a comparison.
-                predicates.Add("(SELECT pg_catalog.count(DISTINCT a.attcollation) FROM pg_catalog.pg_attribute a "
-                    + "WHERE a.attrelid OPERATOR(pg_catalog.=) " + QualifiedRegclass(owner.Table!, owner.Schema)
+                predicates.Add(
+                    "(SELECT pg_catalog.count(DISTINCT a.attcollation) FROM pg_catalog.pg_attribute a "
+                    + "WHERE a.attrelid OPERATOR(pg_catalog.=) "
+                    + QualifiedRegclass(owner.Table!, owner.Schema)
                     + " AND a.attnum OPERATOR(pg_catalog.>) 0 AND NOT a.attisdropped "
                     + "AND a.attname OPERATOR(pg_catalog.=) ANY(ARRAY["
                     + string.Join(", ", textInputs.Select(Literal))
@@ -259,21 +321,28 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             // its physical binding before parsing the data-bearing statement.
             return plan with
             {
-                StateEvaluationGuardExpression = "(" + plan.StateEvaluationGuardExpression + ") AND ("
-                    + string.Join(" AND ", predicates) + ")",
+                StateEvaluationGuardExpression = "("
+                + plan.StateEvaluationGuardExpression
+                + ") AND ("
+                + string.Join(" AND ", predicates)
+                + ")",
                 StateEvaluationGuardFailureExpression = "CASE WHEN EXISTS (SELECT 1 "
-                    + "FROM pg_catalog.pg_constraint co WHERE co.conrelid OPERATOR(pg_catalog.=) "
-                    + QualifiedRegclass(checkIntent.Definition.Table, checkIntent.Definition.Schema)
-                    + " AND co.conname OPERATOR(pg_catalog.=) " + Literal(checkIntent.Definition.Name)
-                    + ") THEN 'different' ELSE 'unsupported' END",
+                + "FROM pg_catalog.pg_constraint co WHERE co.conrelid OPERATOR(pg_catalog.=) "
+                + QualifiedRegclass(checkIntent.Definition.Table, checkIntent.Definition.Schema)
+                + " AND co.conname OPERATOR(pg_catalog.=) "
+                + Literal(checkIntent.Definition.Name)
+                + ") THEN 'different' ELSE 'unsupported' END",
                 UnsupportedCode = "structured_check_operand_type",
             };
         }
 
         return plan with
         {
-            StateExpression = "CASE WHEN NOT (" + string.Join(" AND ", predicates)
-                + ") THEN 'unsupported' ELSE (" + plan.StateExpression + ") END",
+            StateExpression = "CASE WHEN NOT ("
+            + string.Join(" AND ", predicates)
+            + ") THEN 'unsupported' ELSE ("
+            + plan.StateExpression
+            + ") END",
             UnsupportedCode = "generated_case_operand_type",
         };
     }
@@ -281,7 +350,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <summary>Includes CASE CHECKs in the same finite binder without materializing ordinary-column arrays.</summary>
     private IEnumerable<(SafeMigrationSqlExpression Expression, GeneratedCaseCategory Target, bool Captured)>
         GeneratedCaseBindings(
-        SafeMigrationIntent intent)
+            SafeMigrationIntent intent
+        )
     {
         var columns = intent switch
         {
@@ -309,7 +379,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         foreach (var check in checks)
         {
-            if (check.Expression is { } expression && ContainsGeneratedCase(expression))
+            if (check.Expression is { } expression
+                && ContainsGeneratedCase(expression))
             {
                 yield return (expression, GeneratedCaseCategory.Boolean, check.CapturedSql is not null);
             }
@@ -317,14 +388,17 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     }
 
     /// <summary>Rejects known invalid CHECK CASE types in prerequisite and complete plans.</summary>
-    private string? GetUnsupportedGeneratedCaseCheckFeature(SafeMigrationIntent intent)
+    private string? GetUnsupportedGeneratedCaseCheckFeature(
+        SafeMigrationIntent intent
+    )
     {
         if (intent is not (EnsureTableIntent or EnsureCheckConstraintIntent))
         {
             return null;
         }
 
-        var checks = intent is EnsureTableIntent ownerTable ? ownerTable.Definition.CheckConstraints
+        var checks = intent is EnsureTableIntent ownerTable
+            ? ownerTable.Definition.CheckConstraints
             : [((EnsureCheckConstraintIntent)intent).Definition];
 
         foreach (var check in checks)
@@ -337,13 +411,22 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         }
 
         var owner = PostgreSqlSafeMigrationSchemaIdentity.GetOwner(intent);
-        var declared = intent is EnsureTableIntent table ? table.Definition.Columns : null;
+        var declared = intent is EnsureTableIntent table
+            ? table.Definition.Columns
+            : null;
+
         foreach (var (expression, target, captured) in GeneratedCaseBindings(intent))
         {
             var inputs = new GeneratedCaseInputs();
-            if (!ValidateGeneratedCaseOperand(expression, target, owner.Table!, owner.Schema,
-                declared, inputs, captured)
-                || declared is not null && !HaveCompatibleGeneratedCaseCollations(declared, inputs))
+            if (!ValidateGeneratedCaseOperand(
+                    expression,
+                    target,
+                    owner.Table!,
+                    owner.Schema,
+                    declared,
+                    inputs,
+                    captured)
+                || (declared is not null && !HaveCompatibleGeneratedCaseCollations(declared, inputs)))
             {
                 return "structured_check_operand_type";
             }
@@ -360,15 +443,23 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string? schema,
         IReadOnlyList<ExpectedColumnDefinition>? declared,
         GeneratedCaseInputs inputs,
-        bool capturedSource = false)
+        bool capturedSource = false
+    )
     {
         var pending = new SafeMigrationWorkStack<GeneratedCaseOperandFrame>();
         try
         {
             while (true)
             {
-                if (!TryCreateGeneratedCaseOperandFrame(expression, expected, table, schema, declared,
-                    inputs, capturedSource, out var frame))
+                if (!TryCreateGeneratedCaseOperandFrame(
+                    expression,
+                    expected,
+                    table,
+                    schema,
+                    declared,
+                    inputs,
+                    capturedSource,
+                    out var frame))
                 {
                     return false;
                 }
@@ -379,8 +470,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     {
                         // WHY: One cursor represents siblings regardless of their
                         // count; only the active expression depth consumes storage.
-                        if (frame.CompareIdentifiers || PostgreSqlSafeMigrationExpressionWalker.TryGetChild(
-                            frame.Expression, frame.NextChild, out _))
+                        if (frame.CompareIdentifiers
+                            || PostgreSqlSafeMigrationExpressionWalker.TryGetChild(
+                                frame.Expression,
+                                frame.NextChild,
+                                out _))
                         {
                             pending.Push(frame);
                         }
@@ -422,7 +516,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         IReadOnlyList<ExpectedColumnDefinition>? declared,
         GeneratedCaseInputs inputs,
         bool capturedSource,
-        out GeneratedCaseOperandFrame frame)
+        out GeneratedCaseOperandFrame frame
+    )
     {
         frame = new GeneratedCaseOperandFrame(expression, expected);
         if (expected == GeneratedCaseCategory.Unknown)
@@ -434,9 +529,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         {
             case SafeMigrationSqlIdentifierExpression identifier:
                 if (identifier.Parts.Count > 3
-                    || identifier.Parts.Count >= 2 && identifier.Parts[^2] != table
-                    || identifier.Parts.Count == 3 && identifier.Parts[0] != schema
-                        && !(capturedSource && schema is null))
+                    || (identifier.Parts.Count >= 2 && identifier.Parts[^2] != table)
+                    || (identifier.Parts.Count == 3
+                        && identifier.Parts[0] != schema
+                        && !(capturedSource && schema is null)))
                 {
                     return false;
                 }
@@ -454,8 +550,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                         inputs.Columns.Add((name, expected));
                     }
 
-                    return column is not null && GeneratedCaseCategoryMatches(
-                        GeneratedCaseColumnCategory(column), expected);
+                    return column is not null
+                        && GeneratedCaseCategoryMatches(
+                            GeneratedCaseColumnCategory(column),
+                            expected);
                 }
 
                 inputs.Columns.Add((name, expected));
@@ -469,15 +567,20 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 return true;
             case SafeMigrationSqlNullTestExpression nullTest:
                 var nullOperand = InferGeneratedCaseCategory(nullTest.Operand, declared);
-                frame = new GeneratedCaseOperandFrame(expression,
-                    nullOperand == GeneratedCaseCategory.Unknown ? GeneratedCaseCategory.Any : nullOperand);
+                frame = new GeneratedCaseOperandFrame(
+                    expression,
+                    nullOperand == GeneratedCaseCategory.Unknown
+                        ? GeneratedCaseCategory.Any
+                        : nullOperand);
 
                 // WHY: IS NULL accepts every supported scalar family. Keep
                 // the live OID proof without inventing a particular source type.
                 return expected == GeneratedCaseCategory.Boolean;
             case SafeMigrationSqlUnaryExpression unary:
                 var unaryCategory = unary.Operator == SafeMigrationSqlUnaryOperator.Not
-                    ? GeneratedCaseCategory.Boolean : InferGeneratedCaseCategory(unary.Operand, declared);
+                    ? GeneratedCaseCategory.Boolean
+                    : InferGeneratedCaseCategory(unary.Operand, declared);
+
                 frame = new GeneratedCaseOperandFrame(expression, unaryCategory);
 
                 return (unary.Operator == SafeMigrationSqlUnaryOperator.Not
@@ -491,13 +594,18 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
                 var left = InferGeneratedCaseCategory(binary.Left, declared);
                 var right = InferGeneratedCaseCategory(binary.Right, declared);
-                var common = left == GeneratedCaseCategory.Unknown ? right
-                    : right == GeneratedCaseCategory.Unknown ? left
-                    : left is GeneratedCaseCategory.Integer or GeneratedCaseCategory.Number
+                var common = left == GeneratedCaseCategory.Unknown
+                    ? right
+                    : right == GeneratedCaseCategory.Unknown
+                        ? left
+                        : left is GeneratedCaseCategory.Integer or GeneratedCaseCategory.Number
                         && right is GeneratedCaseCategory.Integer or GeneratedCaseCategory.Number
-                        ? left == GeneratedCaseCategory.Number || right == GeneratedCaseCategory.Number
-                            ? GeneratedCaseCategory.Number : GeneratedCaseCategory.Integer
-                        : left == right ? left : GeneratedCaseCategory.Unknown;
+                            ? left == GeneratedCaseCategory.Number || right == GeneratedCaseCategory.Number
+                                ? GeneratedCaseCategory.Number
+                                : GeneratedCaseCategory.Integer
+                            : left == right
+                                ? left
+                                : GeneratedCaseCategory.Unknown;
 
                 if (binary.Operator is >= SafeMigrationSqlBinaryOperator.Equal
                     and <= SafeMigrationSqlBinaryOperator.GreaterThanOrEqual)
@@ -511,11 +619,14 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                         common = GeneratedCaseCategory.Number;
                     }
 
-                    if (common == GeneratedCaseCategory.Unknown && declared is null
+                    if (common == GeneratedCaseCategory.Unknown
+                        && declared is null
                         && binary.Left is SafeMigrationSqlIdentifierExpression first
                         && binary.Right is SafeMigrationSqlIdentifierExpression second)
                     {
-                        frame = new GeneratedCaseOperandFrame(expression, GeneratedCaseCategory.Any,
+                        frame = new GeneratedCaseOperandFrame(
+                            expression,
+                            GeneratedCaseCategory.Any,
                             compareIdentifiers: true);
 
                         return expected == GeneratedCaseCategory.Boolean;
@@ -588,7 +699,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     private static bool TryTakeGeneratedCaseOperand(
         ref GeneratedCaseOperandFrame frame,
         out SafeMigrationSqlExpression? operand,
-        out GeneratedCaseCategory category)
+        out GeneratedCaseCategory category
+    )
     {
         category = frame.Category;
         if (!PostgreSqlSafeMigrationExpressionWalker.TryGetChild(frame.Expression, frame.NextChild, out operand))
@@ -597,7 +709,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         }
 
         if (frame.Expression is SafeMigrationSqlCaseExpression conditional
-            && frame.NextChild < conditional.WhenClauses.Count * 2 && (frame.NextChild & 1) == 0)
+            && frame.NextChild < conditional.WhenClauses.Count * 2
+            && (frame.NextChild & 1) == 0)
         {
             category = GeneratedCaseCategory.Boolean;
         }
@@ -607,22 +720,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         return true;
     }
 
-    /// <summary>Keeps sibling position and contextual type without modifying immutable public expressions.</summary>
-    private struct GeneratedCaseOperandFrame(
-        SafeMigrationSqlExpression expression,
-        GeneratedCaseCategory category,
-        bool compareIdentifiers = false)
-    {
-        internal readonly SafeMigrationSqlExpression Expression = expression;
-        internal readonly GeneratedCaseCategory Category = category;
-        internal readonly bool CompareIdentifiers = compareIdentifiers;
-        internal int NextChild;
-    }
-
     /// <summary>Infers only intrinsic builtin families, never provider overloads or arbitrary SQL text.</summary>
     private GeneratedCaseCategory InferGeneratedCaseCategory(
         SafeMigrationSqlExpression expression,
-        IReadOnlyList<ExpectedColumnDefinition>? declared)
+        IReadOnlyList<ExpectedColumnDefinition>? declared
+    )
     {
         var pending = new SafeMigrationWorkStack<GeneratedCaseCategoryFrame>();
         try
@@ -633,11 +735,14 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 {
                     SafeMigrationSqlIdentifierExpression identifier when declared is not null
                         => declared.FirstOrDefault(item => item.Name == identifier.Parts[^1]) is { } column
-                            ? GeneratedCaseColumnCategory(column) : GeneratedCaseCategory.Unknown,
+                            ? GeneratedCaseColumnCategory(column)
+                            : GeneratedCaseCategory.Unknown,
                     SafeMigrationSqlLiteralExpression { StoreType: { } type } => GeneratedCaseStoreCategory(type),
                     SafeMigrationSqlLiteralExpression { Value: bool } => GeneratedCaseCategory.Boolean,
                     SafeMigrationSqlLiteralExpression
-                        { Value: byte or sbyte or short or ushort or int or uint or long or ulong }
+                        {
+                            Value: byte or sbyte or short or ushort or int or uint or long or ulong,
+                        }
                         => GeneratedCaseCategory.Integer,
                     SafeMigrationSqlLiteralExpression { Value: decimal or float or double }
                         => GeneratedCaseCategory.Number,
@@ -714,14 +819,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         }
     }
 
-    /// <summary>Retains first-known CASE result selection without allocating one frame per result branch.</summary>
-    private readonly record struct GeneratedCaseCategoryFrame(
-        SafeMigrationSqlExpression Expression, int NextResult = -1);
-
     /// <summary>Rejects unresolved competing declared collation identities without querying a missing table.</summary>
     private static bool HaveCompatibleGeneratedCaseCollations(
         IReadOnlyList<ExpectedColumnDefinition> declared,
-        GeneratedCaseInputs inputs)
+        GeneratedCaseInputs inputs
+    )
     {
         (string? Name, string? Schema)? first = null;
         foreach (var (name, category) in inputs.Columns)
@@ -733,7 +835,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
             var definition = declared.First(item => item.Name == name);
             var identity = (definition.Collation?.Name, definition.Collation?.Schema);
-            if (first is not null && first != identity)
+            if (first is not null
+                && first != identity)
             {
                 return false;
             }
@@ -745,31 +848,44 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     }
 
     /// <summary>Respects inferred CLR mappings when public authoring omits an explicit store type.</summary>
-    private GeneratedCaseCategory GeneratedCaseColumnCategory(ExpectedColumnDefinition definition)
-        => GeneratedCaseStoreCategory(definition.StoreType
-            ?? _typeMappingSource.FindMapping(definition.ClrType)?.StoreType);
+    private GeneratedCaseCategory GeneratedCaseColumnCategory(
+        ExpectedColumnDefinition definition
+    )
+        => GeneratedCaseStoreCategory(
+            definition.StoreType
+            ?? _typeMappingSource.FindMapping(definition.ClrType)
+                ?.StoreType);
 
     /// <summary>Maps only the native scalar families used by the newly certified CASE grammar.</summary>
-    private GeneratedCaseCategory GeneratedCaseStoreCategory(string? storeType)
-        => storeType is null ? GeneratedCaseCategory.Unknown
-            : _typeMappingSource.FindMapping(storeType)?.StoreTypeNameBase switch
-            {
-                "bool" or "boolean" => GeneratedCaseCategory.Boolean,
-                "int2" or "smallint" or "int4" or "integer" or "int8" or "bigint" => GeneratedCaseCategory.Integer,
-                "numeric" or "decimal" or "real" or "double precision" => GeneratedCaseCategory.Number,
-                "text" or "character varying" or "character" or "varchar" or "char" => GeneratedCaseCategory.Text,
-                "uuid" => GeneratedCaseCategory.Uuid,
-                _ => GeneratedCaseCategory.Unknown,
-            };
+    private GeneratedCaseCategory GeneratedCaseStoreCategory(
+        string? storeType
+    )
+        => storeType is null
+            ? GeneratedCaseCategory.Unknown
+            : _typeMappingSource.FindMapping(storeType)
+                    ?.StoreTypeNameBase switch
+                {
+                    "bool" or "boolean" => GeneratedCaseCategory.Boolean,
+                    "int2" or "smallint" or "int4" or "integer" or "int8" or "bigint" => GeneratedCaseCategory.Integer,
+                    "numeric" or "decimal" or "real" or "double precision" => GeneratedCaseCategory.Number,
+                    "text" or "character varying" or "character" or "varchar" or "char" => GeneratedCaseCategory.Text,
+                    "uuid" => GeneratedCaseCategory.Uuid,
+                    _ => GeneratedCaseCategory.Unknown,
+                };
 
     /// <summary>Allows integer promotion without certifying a narrowing numeric-to-integer result.</summary>
-    private static bool GeneratedCaseCategoryMatches(GeneratedCaseCategory actual, GeneratedCaseCategory expected)
-        => actual != GeneratedCaseCategory.Unknown && expected == GeneratedCaseCategory.Any
+    private static bool GeneratedCaseCategoryMatches(
+        GeneratedCaseCategory actual,
+        GeneratedCaseCategory expected
+    )
+        => (actual != GeneratedCaseCategory.Unknown && expected == GeneratedCaseCategory.Any)
             || actual == expected
-            || actual == GeneratedCaseCategory.Integer && expected == GeneratedCaseCategory.Number;
+            || (actual == GeneratedCaseCategory.Integer && expected == GeneratedCaseCategory.Number);
 
     /// <summary>Returns exact builtin identities; domains and extension types stay unsupported.</summary>
-    private static string GeneratedCaseTypeOids(GeneratedCaseCategory category) => category switch
+    private static string GeneratedCaseTypeOids(
+        GeneratedCaseCategory category
+    ) => category switch
     {
         GeneratedCaseCategory.Boolean => "16",
         GeneratedCaseCategory.Integer => "20, 21, 23",
@@ -781,7 +897,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     };
 
     /// <summary>Uses the same finite builtin identities for accepted projections and runtime guards.</summary>
-    private static bool GeneratedCaseTypeMatches(long type, GeneratedCaseCategory category) => category switch
+    private static bool GeneratedCaseTypeMatches(
+        long type,
+        GeneratedCaseCategory category
+    ) => category switch
     {
         GeneratedCaseCategory.Boolean => type == 16,
         GeneratedCaseCategory.Integer => type is 20 or 21 or 23,
@@ -793,7 +912,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     };
 
     /// <summary>Leaves preexisting non-CASE expression behavior outside this newly enabled capability.</summary>
-    private static bool ContainsGeneratedCase(SafeMigrationSqlExpression expression)
+    private static bool ContainsGeneratedCase(
+        SafeMigrationSqlExpression expression
+    )
     {
         var walker = new PostgreSqlSafeMigrationExpressionWalker(expression);
         try
@@ -814,6 +935,37 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         }
     }
 
+    /// <summary>Uses identical finite type and collation rules for live and accepted-prefix pairs.</summary>
+    private static bool CompatibleGeneratedCasePair(
+        (long TypeOid, long CollationOid) first,
+        (long TypeOid, long CollationOid) second
+    )
+        => (GeneratedCaseTypeMatches(first.TypeOid, GeneratedCaseCategory.Number)
+                && GeneratedCaseTypeMatches(second.TypeOid, GeneratedCaseCategory.Number))
+            || (GeneratedCaseTypeMatches(first.TypeOid, GeneratedCaseCategory.Text)
+                && GeneratedCaseTypeMatches(second.TypeOid, GeneratedCaseCategory.Text)
+                && first.CollationOid == second.CollationOid)
+            || (first.TypeOid == second.TypeOid && first.TypeOid is 16 or 2950);
+
+    /// <summary>Keeps sibling position and contextual type without modifying immutable public expressions.</summary>
+    private struct GeneratedCaseOperandFrame(
+        SafeMigrationSqlExpression expression,
+        GeneratedCaseCategory category,
+        bool compareIdentifiers = false
+    )
+    {
+        internal readonly SafeMigrationSqlExpression Expression = expression;
+        internal readonly GeneratedCaseCategory Category = category;
+        internal readonly bool CompareIdentifiers = compareIdentifiers;
+        internal int NextChild;
+    }
+
+    /// <summary>Retains first-known CASE result selection without allocating one frame per result branch.</summary>
+    private readonly record struct GeneratedCaseCategoryFrame(
+        SafeMigrationSqlExpression Expression,
+        int NextResult = -1
+    );
+
     private enum GeneratedCaseCategory { Unknown, Boolean, Integer, Number, Text, Uuid, Any }
 
     /// <summary>Allocates pairwise requirements only when no intrinsic operand supplies a native family.</summary>
@@ -822,15 +974,4 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         internal HashSet<(string Name, GeneratedCaseCategory Category)> Columns { get; } = [];
         internal List<(string Left, string Right)>? Comparisons { get; set; }
     }
-
-    /// <summary>Uses identical finite type and collation rules for live and accepted-prefix pairs.</summary>
-    private static bool CompatibleGeneratedCasePair(
-        (long TypeOid, long CollationOid) first,
-        (long TypeOid, long CollationOid) second)
-        => GeneratedCaseTypeMatches(first.TypeOid, GeneratedCaseCategory.Number)
-                && GeneratedCaseTypeMatches(second.TypeOid, GeneratedCaseCategory.Number)
-            || GeneratedCaseTypeMatches(first.TypeOid, GeneratedCaseCategory.Text)
-                && GeneratedCaseTypeMatches(second.TypeOid, GeneratedCaseCategory.Text)
-                && first.CollationOid == second.CollationOid
-            || first.TypeOid == second.TypeOid && first.TypeOid is 16 or 2950;
 }

@@ -25,25 +25,49 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Arrange
         var projection = new SafeMigrationPreflightProjection(
             objectIdentityNormalizer: new ForeignKeyMemberIdentityNormalizer(ignoreColumnCase));
-        var foreignKey = new ExpectedForeignKeyDefinition("fk_children_parents", "children",
-            ["parent_id", "parent_tenant"], "parents", ["id", "tenant"]);
+
+        var foreignKey = new ExpectedForeignKeyDefinition(
+            "fk_children_parents",
+            "children",
+            ["parent_id", "parent_tenant"],
+            "parents",
+            ["id", "tenant"]);
 
         ObserveAccepted(projection, new EnsureForeignKeyIntent(foreignKey), SafeMigrationObservedState.Missing);
 
-        var modeled = new ExpectedModelManagedDataForeignKeyDefinition(modeledOwner,
-            reverseOrder ? ["PARENT_TENANT", "PARENT_ID"] : ["PARENT_ID", "PARENT_TENANT"],
-            reverseOrder ? ["TENANT", "ID"] : ["ID", "TENANT"], modeledSchema);
-        var deletion = new SafeMigrationOperation(new DeleteModelManagedDataIntent("parents", ["ID"], ["int"],
-                new object?[,] { { 1 } }, ["ID", "TENANT"], ["int", "int"], new object?[,] { { 1, 2 } },
-                schema: null, foreignKeys: [modeled]),
+        var modeled = new ExpectedModelManagedDataForeignKeyDefinition(
+            modeledOwner,
+            reverseOrder
+                ? ["PARENT_TENANT", "PARENT_ID"]
+                : ["PARENT_ID", "PARENT_TENANT"],
+            reverseOrder
+                ? ["TENANT", "ID"]
+                : ["ID", "TENANT"],
+            modeledSchema);
+
+        var deletion = new SafeMigrationOperation(
+            new DeleteModelManagedDataIntent(
+                "parents",
+                ["ID"],
+                ["int"],
+                new object?[,] { { 1 } },
+                ["ID", "TENANT"],
+                ["int", "int"],
+                new object?[,] { { 1, 2 } },
+                schema: null,
+                foreignKeys: [modeled]),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var live = Live(SafeMigrationObservedState.TransitionReady);
 
         // Act
         var analysis = projection.Project(deletion, live);
 
         // Assert
-        Assert.Equal(isModeled ? SafeMigrationObservedState.TransitionReady : SafeMigrationObservedState.Unsupported,
+        Assert.Equal(
+            isModeled
+                ? SafeMigrationObservedState.TransitionReady
+                : SafeMigrationObservedState.Unsupported,
             analysis.ObservedState);
 
         if (isModeled)

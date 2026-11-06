@@ -7,7 +7,8 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
     {
         // Arrange
         using var context = new ConstraintContractDbContext();
-        var model = context.GetService<IDesignTimeModel>().Model;
+        var model = context.GetService<IDesignTimeModel>()
+            .Model;
 
         // Act
         var constraints = SafeMigrationExpectedTableConstraints.FromModel(
@@ -29,9 +30,15 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         Assert.Equal("`TenantId` >= 0", check.CapturedSql);
         var predicate = Assert.IsType<SafeMigrationSqlBinaryExpression>(check.Expression);
         Assert.Equal(SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, predicate.Operator);
-        Assert.Equal("TenantId", Assert.Single(
-            Assert.IsType<SafeMigrationSqlIdentifierExpression>(predicate.Left).Parts));
-        Assert.Equal(0, Assert.IsType<int>(Assert.IsType<SafeMigrationSqlLiteralExpression>(predicate.Right).Value));
+        Assert.Equal(
+            "TenantId",
+            Assert.Single(
+                Assert.IsType<SafeMigrationSqlIdentifierExpression>(predicate.Left)
+                    .Parts));
+
+        Assert.Equal(0,
+            Assert.IsType<int>(Assert.IsType<SafeMigrationSqlLiteralExpression>(predicate.Right)
+                .Value));
 
         var foreignKey = Assert.Single(constraints.ForeignKeys);
         Assert.Equal("FK_constraint_contract_rows_constraint_contract_rows_ParentId", foreignKey.Name);
@@ -47,7 +54,8 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
     {
         // Arrange
         using var context = new ConstraintContractDbContext();
-        var model = context.GetService<IDesignTimeModel>().Model;
+        var model = context.GetService<IDesignTimeModel>()
+            .Model;
 
         // Act
         var constraints = SafeMigrationExpectedTableConstraints.FromModel(
@@ -80,11 +88,18 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         // Assert
         Assert.NotNull(constraints);
         Assert.Equal("PK_constraint_contract_rows", constraints.PrimaryKey?.Name);
-        Assert.Equal("AK_constraint_contract_rows_TenantId_Code", Assert.Single(constraints.UniqueConstraints).Name);
-        Assert.Equal("CK_constraint_contract_rows_TenantId", Assert.Single(constraints.CheckConstraints).Name);
+        Assert.Equal("AK_constraint_contract_rows_TenantId_Code",
+            Assert.Single(constraints.UniqueConstraints)
+                .Name);
+
+        Assert.Equal("CK_constraint_contract_rows_TenantId",
+            Assert.Single(constraints.CheckConstraints)
+                .Name);
+
         Assert.Equal(
             "FK_constraint_contract_rows_constraint_contract_rows_ParentId",
-            Assert.Single(constraints.ForeignKeys).Name);
+            Assert.Single(constraints.ForeignKeys)
+                .Name);
     }
 
     [Fact]

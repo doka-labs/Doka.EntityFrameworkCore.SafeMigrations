@@ -40,6 +40,7 @@ internal readonly record struct MySqlSafeMigrationColumnMetadata(
         };
 
         var explicitBackfillAnnotationCount = 0;
+
         // WHY: Captured annotations are an array; indexed replay showed no whole-method allocation benefit.
         // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var annotation in definition.ProviderAnnotations)
@@ -50,7 +51,8 @@ internal readonly record struct MySqlSafeMigrationColumnMetadata(
                 // WHY: Doka emits this safety marker but its public typed
                 // metadata omits it. Validate the exact boolean contract without
                 // treating this review marker as projected physical metadata.
-                if (value is not bool || explicitBackfillAnnotationCount != 0)
+                if (value is not bool
+                    || explicitBackfillAnnotationCount != 0)
                 {
                     metadata = default;
 
@@ -75,8 +77,12 @@ internal readonly record struct MySqlSafeMigrationColumnMetadata(
             return false;
         }
 
-        var recognizedAnnotationCount = (providerMetadata.GuidFormat is null ? 0 : 1)
-            + (providerMetadata.ValueGenerationStrategy is null ? 0 : 1)
+        var recognizedAnnotationCount = (providerMetadata.GuidFormat is null
+                ? 0
+                : 1)
+            + (providerMetadata.ValueGenerationStrategy is null
+                ? 0
+                : 1)
             + explicitBackfillAnnotationCount;
 
         if (recognizedAnnotationCount != definition.ProviderAnnotations.Count

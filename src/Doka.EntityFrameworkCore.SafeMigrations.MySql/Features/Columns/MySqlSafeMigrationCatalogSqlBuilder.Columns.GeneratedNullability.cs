@@ -17,7 +17,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         if (!RequiresMariaDbGeneratedNonNullProof(definition, isMariaDb))
         {
-            return definition.IsNullable ? "c.IS_NULLABLE = 'YES'" : "c.IS_NULLABLE = 'NO'";
+            return definition.IsNullable
+                ? "c.IS_NULLABLE = 'YES'"
+                : "c.IS_NULLABLE = 'NO'";
         }
 
         return "(c.IS_NULLABLE = 'NO' OR (c.IS_NULLABLE = 'YES' AND ("
@@ -105,6 +107,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         }
 
         var predicates = new string[sources.Count];
+
         // WHY: Store dependency predicates in their reserved slots without changing source-member order.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery

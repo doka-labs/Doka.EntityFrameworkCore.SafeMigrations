@@ -16,26 +16,30 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
     public async Task RenameTable_PreservesRowsAndReplays()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.old_orders (Id int NOT NULL); "
-            + "INSERT INTO dbo.old_orders (Id) VALUES (19);");
+            + "INSERT INTO dbo.old_orders (Id) VALUES (19);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("old_orders", "renamed_orders");
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var rowCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM dbo.renamed_orders WHERE Id = 19;");
+            "SELECT COUNT(*) FROM dbo.renamed_orders WHERE Id = 19;",
+            cancellationToken: CancellationToken.None);
 
         var oldTableCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.old_orders', N'U');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.old_orders', N'U');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, rowCount);
@@ -49,24 +53,30 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
     public async Task RenameTable_TargetCollisionLeavesBothTablesUnchanged()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.rename_source (Id int NOT NULL); "
-            + "CREATE TABLE dbo.rename_target (Id int NOT NULL);");
+            + "CREATE TABLE dbo.rename_target (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("rename_source", "rename_target");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-rename-table-collision"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-rename-table-collision"),
+                cancellationToken: CancellationToken.None);
 
         var tableCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE name IN (N'rename_source', N'rename_target');");
+            "SELECT COUNT(*) FROM sys.tables WHERE name IN (N'rename_source', N'rename_target');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -80,19 +90,24 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
     public async Task DropTable_DropsOnceAndReplays()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.obsolete_orders (Id int NOT NULL);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.obsolete_orders (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTableIfExists("obsolete_orders");
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var tableCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.obsolete_orders', N'U');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.obsolete_orders', N'U');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(0, tableCount);
@@ -105,27 +120,31 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
     public async Task RenameColumn_PreservesValueAndReplays()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.column_orders (Id int NOT NULL, Caption nvarchar(80) NULL); "
-            + "INSERT INTO dbo.column_orders (Id, Caption) VALUES (1, N'kept');");
+            + "INSERT INTO dbo.column_orders (Id, Caption) VALUES (1, N'kept');",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameColumnIfExists("Caption", "column_orders", "Title");
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var rowCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM dbo.column_orders WHERE Id = 1 AND Title = N'kept';");
+            "SELECT COUNT(*) FROM dbo.column_orders WHERE Id = 1 AND Title = N'kept';",
+            cancellationToken: CancellationToken.None);
 
         var oldColumnCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.columns "
-            + "WHERE object_id = OBJECT_ID(N'dbo.column_orders', N'U') AND name = N'Caption';");
+            + "WHERE object_id = OBJECT_ID(N'dbo.column_orders', N'U') AND name = N'Caption';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, rowCount);
@@ -139,24 +158,30 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
     public async Task RenameColumn_TargetCollisionLeavesBothColumnsUnchanged()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.rename_column_collision (Id int NOT NULL, OldValue int NULL, NewValue int NULL);");
+            "CREATE TABLE dbo.rename_column_collision (Id int NOT NULL, OldValue int NULL, NewValue int NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameColumnIfExists("OldValue", "rename_column_collision", "NewValue");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-rename-column-collision"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-rename-column-collision"),
+                cancellationToken: CancellationToken.None);
 
         var columnCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.rename_column_collision', N'U') "
-            + "AND name IN (N'OldValue', N'NewValue');");
+            + "AND name IN (N'OldValue', N'NewValue');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -170,26 +195,31 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
     public async Task DropColumn_PreservesRemainingRowsAndReplays()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.drop_column_orders (Id int NOT NULL, Obsolete nvarchar(80) NULL); "
-            + "INSERT INTO dbo.drop_column_orders (Id, Obsolete) VALUES (1, N'old');");
+            + "INSERT INTO dbo.drop_column_orders (Id, Obsolete) VALUES (1, N'old');",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("Obsolete", "drop_column_orders");
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
-        var rowCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.drop_column_orders WHERE Id = 1;");
+        var rowCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.drop_column_orders WHERE Id = 1;",
+            cancellationToken: CancellationToken.None);
 
         var droppedColumnCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.columns "
-            + "WHERE object_id = OBJECT_ID(N'dbo.drop_column_orders', N'U') AND name = N'Obsolete';");
+            + "WHERE object_id = OBJECT_ID(N'dbo.drop_column_orders', N'U') AND name = N'Obsolete';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, rowCount);
@@ -203,28 +233,32 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
     public async Task RenameIndex_PreservesPhysicalIndexAndReplays()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.rename_index_orders (Id int NOT NULL); "
-            + "CREATE INDEX IX_old_orders_Id ON dbo.rename_index_orders (Id);");
+            + "CREATE INDEX IX_old_orders_Id ON dbo.rename_index_orders (Id);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameIndexIfExists("IX_old_orders_Id", "rename_index_orders", "IX_new_orders_Id");
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var newIndexCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.indexes "
-            + "WHERE object_id = OBJECT_ID(N'dbo.rename_index_orders', N'U') AND name = N'IX_new_orders_Id';");
+            + "WHERE object_id = OBJECT_ID(N'dbo.rename_index_orders', N'U') AND name = N'IX_new_orders_Id';",
+            cancellationToken: CancellationToken.None);
 
         var oldIndexCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.indexes "
-            + "WHERE object_id = OBJECT_ID(N'dbo.rename_index_orders', N'U') AND name = N'IX_old_orders_Id';");
+            + "WHERE object_id = OBJECT_ID(N'dbo.rename_index_orders', N'U') AND name = N'IX_old_orders_Id';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, newIndexCount);
@@ -238,26 +272,32 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
     public async Task RenameIndex_TargetCollisionLeavesBothIndexesUnchanged()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.rename_index_collision (Id int NOT NULL); "
             + "CREATE INDEX IX_old_collision ON dbo.rename_index_collision (Id); "
-            + "CREATE INDEX IX_new_collision ON dbo.rename_index_collision (Id);");
+            + "CREATE INDEX IX_new_collision ON dbo.rename_index_collision (Id);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameIndexIfExists("IX_old_collision", "rename_index_collision", "IX_new_collision");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-rename-index-collision"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-rename-index-collision"),
+                cancellationToken: CancellationToken.None);
 
         var indexCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.rename_index_collision', N'U') "
-            + "AND name IN (N'IX_old_collision', N'IX_new_collision');");
+            + "AND name IN (N'IX_old_collision', N'IX_new_collision');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -271,23 +311,26 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
     public async Task DropIndex_DropsOnceAndReplays()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.drop_index_orders (Id int NOT NULL); "
-            + "CREATE INDEX IX_drop_index_orders_Id ON dbo.drop_index_orders (Id);");
+            + "CREATE INDEX IX_drop_index_orders_Id ON dbo.drop_index_orders (Id);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropIndexIfExists("IX_drop_index_orders_Id", "drop_index_orders");
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var indexCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.drop_index_orders', N'U') "
-            + "AND name = N'IX_drop_index_orders_Id';");
+            + "AND name = N'IX_drop_index_orders_Id';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(0, indexCount);
@@ -300,11 +343,13 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
     public async Task AlterColumn_RejectsDataLossBeforeMutation()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.alter_orders (Id int NOT NULL, Caption nvarchar(80) NOT NULL); "
-            + "INSERT INTO dbo.alter_orders (Id, Caption) VALUES (1, N'longer-than-ten-characters');");
+            + "INSERT INTO dbo.alter_orders (Id, Caption) VALUES (1, N'longer-than-ten-characters');",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AlterColumnIfDifferentFromModel(
@@ -320,15 +365,19 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-alter-data-loss"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-alter-data-loss"),
+                cancellationToken: CancellationToken.None);
 
         var actualLength = await ScalarIntAsync(
             connectionString,
             "SELECT max_length / 2 FROM sys.columns "
-            + "WHERE object_id = OBJECT_ID(N'dbo.alter_orders', N'U') AND name = N'Caption';");
+            + "WHERE object_id = OBJECT_ID(N'dbo.alter_orders', N'U') AND name = N'Caption';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -342,8 +391,12 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
     public async Task AddRequiredColumn_EmptyTableAppliesAndReplays()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.empty_add_orders (Id int NOT NULL);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.empty_add_orders (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>(
@@ -354,13 +407,14 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
             policy: SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var requiredColumnCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.empty_add_orders', N'U') "
-            + "AND name = N'RequiredValue' AND is_nullable = 0;");
+            + "AND name = N'RequiredValue' AND is_nullable = 0;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, requiredColumnCount);
@@ -373,11 +427,13 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
     public async Task AddRequiredColumn_PopulatedTableIsDataBlocked()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.populated_add_orders (Id int NOT NULL); "
-            + "INSERT INTO dbo.populated_add_orders (Id) VALUES (1);");
+            + "INSERT INTO dbo.populated_add_orders (Id) VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>(
@@ -388,15 +444,19 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
             policy: SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-populated-required"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-populated-required"),
+                cancellationToken: CancellationToken.None);
 
         var requiredColumnCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.populated_add_orders', N'U') "
-            + "AND name = N'RequiredValue';");
+            + "AND name = N'RequiredValue';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -410,19 +470,20 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
     public async Task DropSchema_DropsOnceAndReplays()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA obsolete;");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA obsolete;", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropSchemaIfExists("obsolete");
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var schemaCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.schemas WHERE name = N'obsolete';");
+            "SELECT COUNT(*) FROM sys.schemas WHERE name = N'obsolete';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(0, schemaCount);

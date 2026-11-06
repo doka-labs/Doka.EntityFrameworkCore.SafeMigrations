@@ -12,6 +12,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var matching = ForeignKeyMatches(definition, requireExpectedName: true);
         var semanticAlias = ForeignKeyMatches(definition, requireExpectedName: false);
         var nativeIndexRisk = ForeignKeyMultiValuedIndexRisk(definition, serverVersion.IsMariaDb);
+
         // MySQL and MariaDB before 12.1 allocate FK symbols in the database
         // namespace. MariaDB 12.1 deliberately changed that boundary to the
         // owning table, so a same-name FK on another table is then harmless.
@@ -29,27 +30,28 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             $"rc.CONSTRAINT_NAME <> {Literal(definition.Name)}");
 
         return Plan(
-            $"CASE WHEN NOT {BaseTableExists(definition.Table)} "
-            + $"OR NOT {BaseTableExists(definition.PrincipalTable)} THEN 'prerequisite_missing' "
-            + $"WHEN {nativeIndexRisk} THEN 'unsupported' "
-            // An exact-name collision remains authoritative. A second object
-            // must never hide drift on the identity owned by this operation.
-            + $"WHEN {exists} AND {matching} THEN 'matching' "
-            + $"WHEN {exists} THEN 'different' "
-            + $"WHEN {semanticAlias} THEN 'matching' "
-            + $"WHEN {nameCollision} THEN 'different' "
-            + $"WHEN {ForeignKeyAutoIndexNameCollision(definition, serverVersion.IsMariaDb)} THEN 'different' "
-            + $"WHEN NOT ({ForeignKeySetNullIsRepresentable(definition)}) THEN 'different' "
-            + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
-            satisfied) with
-        {
-            UnsupportedCode = "foreign_key_multi_valued_supporting_index",
-            DiagnosticEvidenceExpression = BuildForeignKeyDiagnosticEvidence(definition),
-            MatchedObjectNameExpression = ResolveMatchingObjectName(
-                matching,
-                Literal(definition.Name),
-                semanticCandidates),
-        };
+                $"CASE WHEN NOT {BaseTableExists(definition.Table)} "
+                + $"OR NOT {BaseTableExists(definition.PrincipalTable)} THEN 'prerequisite_missing' "
+                + $"WHEN {nativeIndexRisk} THEN 'unsupported' "
+
+                // An exact-name collision remains authoritative. A second object
+                // must never hide drift on the identity owned by this operation.
+                + $"WHEN {exists} AND {matching} THEN 'matching' "
+                + $"WHEN {exists} THEN 'different' "
+                + $"WHEN {semanticAlias} THEN 'matching' "
+                + $"WHEN {nameCollision} THEN 'different' "
+                + $"WHEN {ForeignKeyAutoIndexNameCollision(definition, serverVersion.IsMariaDb)} THEN 'different' "
+                + $"WHEN NOT ({ForeignKeySetNullIsRepresentable(definition)}) THEN 'different' "
+                + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
+                satisfied) with
+            {
+                UnsupportedCode = "foreign_key_multi_valued_supporting_index",
+                DiagnosticEvidenceExpression = BuildForeignKeyDiagnosticEvidence(definition),
+                MatchedObjectNameExpression = ResolveMatchingObjectName(
+                    matching,
+                    Literal(definition.Name),
+                    semanticCandidates),
+            };
     }
 
     private MySqlSafeMigrationRuntimePlan BuildDropForeignKey(
@@ -97,14 +99,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + "AND kcu.TABLE_NAME = rc.TABLE_NAME AND kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME "
             + $"WHERE rc.CONSTRAINT_SCHEMA = DATABASE() AND rc.TABLE_NAME = {Literal(definition.Table)} "
             + $"AND {namePredicate} "
+
             // Group every physical constraint independently. Without its
             // identity in the group, two equivalent legacy constraints merge
             // their key rows and can evade the semantic-candidate predicate.
-            + $"GROUP BY rc.CONSTRAINT_NAME, rc.UPDATE_RULE, rc.DELETE_RULE, "
+            + "GROUP BY rc.CONSTRAINT_NAME, rc.UPDATE_RULE, rc.DELETE_RULE, "
             + "kcu.REFERENCED_TABLE_SCHEMA, kcu.REFERENCED_TABLE_NAME "
             + $"HAVING {localColumnsMatch} "
             + $"AND {principalColumnsMatch} "
-            + $"AND kcu.REFERENCED_TABLE_SCHEMA = DATABASE() "
+            + "AND kcu.REFERENCED_TABLE_SCHEMA = DATABASE() "
             + $"AND kcu.REFERENCED_TABLE_NAME = {Literal(definition.PrincipalTable)} "
             + $"AND rc.UPDATE_RULE IN ({string.Join(", ", updateRules.Select(Literal))}) "
             + $"AND rc.DELETE_RULE IN ({string.Join(", ", deleteRules.Select(Literal))})";
@@ -133,10 +136,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             " AND ",
             definition.Columns.Zip(
                 definition.PrincipalColumns,
-                (
-                        local,
-                        principal
-                    ) => $"d.{Delimited(local)} = p.{Delimited(principal)}"));
+                (local,
+                        principal) => $"d.{Delimited(local)} = p.{Delimited(principal)}"));
 
         return $"EXISTS (SELECT 1 FROM {Delimited(definition.Table, definition.Schema)} d "
             + $"LEFT JOIN {Delimited(definition.PrincipalTable, definition.PrincipalSchema)} p ON {join} "
@@ -281,7 +282,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         ReferentialAction.SetNull => ["SET NULL"],
         ReferentialAction.SetDefault => ["SET DEFAULT"],
         ReferentialAction.Restrict => ["RESTRICT"],
-        ReferentialAction.NoAction => ["NO ACTION", "RESTRICT",],
+        ReferentialAction.NoAction => ["NO ACTION", "RESTRICT"],
         _ => throw new ArgumentOutOfRangeException(nameof(action)),
     };
 }

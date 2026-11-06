@@ -1,3 +1,5 @@
+using IColumnMapping = Microsoft.EntityFrameworkCore.Metadata.IColumnMapping;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 public static partial class SafeMigrationModelFingerprint
@@ -38,6 +40,7 @@ public static partial class SafeMigrationModelFingerprint
             table.CheckConstraints,
             static check => check.Name ?? string.Empty,
             WriteCheckConstraint);
+
         WriteCollection(writer, table.Triggers, static trigger => trigger.ModelName, WriteTrigger);
     }
 
@@ -119,7 +122,7 @@ public static partial class SafeMigrationModelFingerprint
 
     private static void WriteColumnDefaultValue(
         CanonicalHashWriter writer,
-        Microsoft.EntityFrameworkCore.Metadata.IColumnMapping mapping
+        IColumnMapping mapping
     )
     {
         var annotation = mapping.Property.FindAnnotation(RelationalAnnotationNames.DefaultValue);
@@ -133,7 +136,9 @@ public static partial class SafeMigrationModelFingerprint
         writer.Add(true);
         WriteValue(
             writer,
-            converter is null ? annotation.Value : converter.ConvertToProvider(annotation.Value),
+            converter is null
+                ? annotation.Value
+                : converter.ConvertToProvider(annotation.Value),
             "column default value");
     }
 

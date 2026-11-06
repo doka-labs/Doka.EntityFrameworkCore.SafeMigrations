@@ -18,7 +18,9 @@ public sealed class SqliteMigrationFixtureTests
         var idGenerator = context.GetService<IMigrationsIdGenerator>();
 
         // Act
-        var ids = typeof(SqliteMigrationFixtureTests).Assembly.GetTypes()
+        var ids = typeof(SqliteMigrationFixtureTests)
+            .Assembly
+            .GetTypes()
             .Where(static type => typeof(Migration).IsAssignableFrom(type))
             .SelectMany(static type => type.GetCustomAttributes(typeof(MigrationAttribute), inherit: false))
             .Cast<MigrationAttribute>()

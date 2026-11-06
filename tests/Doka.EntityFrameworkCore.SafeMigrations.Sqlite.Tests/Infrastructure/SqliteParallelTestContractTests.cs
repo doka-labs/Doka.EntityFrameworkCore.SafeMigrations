@@ -10,26 +10,43 @@ public sealed class SqliteParallelTestContractTests : SqliteIntegrationTestBase
         // Arrange
         var assembly = typeof(SqliteSafeMigrationCatalogIntegrationTests).Assembly;
         var behavior = assembly.GetCustomAttribute<CollectionBehaviorAttribute>();
-        var registration = Assert.Single(assembly.GetCustomAttributesData(),
+        var registration = Assert.Single(
+            assembly.GetCustomAttributesData(),
             attribute => attribute.AttributeType == typeof(CollectionBehaviorAttribute));
+
         var features = CatalogFeatureClasses();
         var exclusive = typeof(SqliteSafeMigrationPerformanceIntegrationTests);
-        var ordinary = features.Where(type => type != exclusive).ToArray();
+        var ordinary = features
+            .Where(type => type != exclusive)
+            .ToArray();
 
         // Act
-        var exclusiveRegistration = Assert.Single(exclusive.GetCustomAttributesData(),
+        var exclusiveRegistration = Assert.Single(
+            exclusive.GetCustomAttributesData(),
             attribute => attribute.AttributeType == typeof(CollectionAttribute));
-        var collectionName = Assert.IsType<string>(Assert.Single(exclusiveRegistration.ConstructorArguments).Value);
+
+        var collectionName = Assert.IsType<string>(Assert.Single(exclusiveRegistration.ConstructorArguments)
+            .Value);
+
         var definition = typeof(ProcessWideTestGroup).GetCustomAttribute<CollectionDefinitionAttribute>();
 
         // Assert
         Assert.NotNull(behavior);
-        Assert.Equal((int)CollectionBehavior.CollectionPerClass,
-            Convert.ToInt32(Assert.Single(registration.ConstructorArguments).Value, CultureInfo.InvariantCulture));
+        Assert.Equal(
+            (int)CollectionBehavior.CollectionPerClass,
+            Convert.ToInt32(Assert.Single(registration.ConstructorArguments)
+                    .Value,
+                CultureInfo.InvariantCulture));
+
         Assert.False(behavior.DisableTestParallelization);
         Assert.Equal(0, behavior.MaxParallelThreads);
         Assert.Equal(22, features.Length);
-        Assert.Equal(21, ordinary.Select(type => type.FullName).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(21,
+            ordinary
+                .Select(type => type.FullName)
+                .Distinct(StringComparer.Ordinal)
+                .Count());
+
         Assert.All(ordinary, type => Assert.Null(type.GetCustomAttribute<CollectionAttribute>()));
         Assert.Equal(ProcessWideTestGroup.Name, collectionName);
         Assert.NotNull(definition);
@@ -49,34 +66,56 @@ public sealed class SqliteParallelTestContractTests : SqliteIntegrationTestBase
             BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static);
 
         // Act
-        var featureTests = features.SelectMany(type => type.GetMethods()
-            .Where(method => method.GetCustomAttribute<FactAttribute>() is not null)
-            .Select(method => (Feature: type, Method: method))).ToArray();
+        var featureTests = features
+            .SelectMany(type => type
+                .GetMethods()
+                .Where(method => method.GetCustomAttribute<FactAttribute>() is not null)
+                .Select(method => (Feature: type, Method: method)))
+            .ToArray();
 
         // Assert
         Assert.True(owner.IsAbstract);
         Assert.DoesNotContain(ownerMethods, method => method.GetCustomAttribute<FactAttribute>() is not null);
+
         // WHY: Four additional methods expose the original three aggregate
         // contracts independently without adding runnable feature classes.
         Assert.Equal(199, featureTests.Length);
         Assert.All(featureTests, test => Assert.Equal(test.Feature, test.Method.DeclaringType));
-        Assert.All(featureTests.GroupBy(test => test.Method.Name, StringComparer.Ordinal), group =>
-            Assert.Single(group));
-        Assert.Contains(featureTests, test => test.Method.Name
-            == "ModelManagedData_UniqueCollisionFailsClosedWithoutMutation");
-        Assert.Contains(featureTests, test => test.Method.Name
-            == "ModelManagedData_UnmodeledDependencyDeletionFailsClosedWithoutMutation");
-        Assert.Contains(featureTests, test => test.Method.Name
-            == "GeneratedArithmeticColumn_IsComparedByPhysicalFacet");
-        Assert.Contains(featureTests, test => test.Method.Name
-            == "StringDefaultAndCollation_AreComparedByPhysicalFacet");
+        Assert.All(
+            featureTests.GroupBy(test => test.Method.Name, StringComparer.Ordinal),
+            group =>
+                Assert.Single(group));
+
+        Assert.Contains(
+            featureTests,
+            test => test.Method.Name
+                == "ModelManagedData_UniqueCollisionFailsClosedWithoutMutation");
+
+        Assert.Contains(
+            featureTests,
+            test => test.Method.Name
+                == "ModelManagedData_UnmodeledDependencyDeletionFailsClosedWithoutMutation");
+
+        Assert.Contains(
+            featureTests,
+            test => test.Method.Name
+                == "GeneratedArithmeticColumn_IsComparedByPhysicalFacet");
+
+        Assert.Contains(
+            featureTests,
+            test => test.Method.Name
+                == "StringDefaultAndCollation_AreComparedByPhysicalFacet");
+
         Assert.Contains(featureTests, test => test.Method.Name == "SchemaIntent_MainIsNoOp");
         Assert.Contains(featureTests, test => test.Method.Name == "SchemaIntent_ForeignSchemaIsRejected");
         Assert.Contains(featureTests, test => test.Method.Name == "SchemaIntent_DropSchemaIsRejected");
         Assert.Equal(
             typeof(SqliteSafeMigrationPerformanceIntegrationTests),
-            Assert.Single(featureTests, test => test.Method.Name
-                == "ModelManagedData_FiftyThousandMixedRowsConvergeAndReplayIdempotently").Feature);
+            Assert.Single(
+                    featureTests,
+                    test => test.Method.Name
+                        == "ModelManagedData_FiftyThousandMixedRowsConvergeAndReplayIdempotently")
+                .Feature);
     }
 
     /// <summary>Moving test discovery must not change EF model cache identities or nested entity ownership.</summary>
@@ -89,7 +128,9 @@ public sealed class SqliteParallelTestContractTests : SqliteIntegrationTestBase
     [InlineData("SqliteProjectedSeparateAddContext")]
     [InlineData("SqliteProjectedForeignKeyNullDefaultContext")]
     [InlineData("SqliteProjectedCompositeForeignKeyContext")]
-    public void NestedEfContexts_RetainTheOriginalDeclaringType(string modelName)
+    public void NestedEfContexts_RetainTheOriginalDeclaringType(
+        string modelName
+    )
     {
         // Arrange
         var owner = typeof(SqliteSafeMigrationCatalogIntegrationTests);
@@ -109,18 +150,33 @@ public sealed class SqliteParallelTestContractTests : SqliteIntegrationTestBase
     public async Task InMemoryConnections_KeepOverlappingNamesAndFailuresIndependent()
     {
         // Arrange
-        await using var first = await OpenConnectionAsync();
-        await using var second = await OpenConnectionAsync();
-        await ExecuteSqlAsync(first,
-            "CREATE TABLE parallel_owned_rows (Id INTEGER); INSERT INTO parallel_owned_rows VALUES (11);");
-        await ExecuteSqlAsync(second,
-            "CREATE TABLE parallel_owned_rows (Id INTEGER); INSERT INTO parallel_owned_rows VALUES (22);");
+        await using var first = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await using var second = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            first,
+            "CREATE TABLE parallel_owned_rows (Id INTEGER); INSERT INTO parallel_owned_rows VALUES (11);",
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteSqlAsync(
+            second,
+            "CREATE TABLE parallel_owned_rows (Id INTEGER); INSERT INTO parallel_owned_rows VALUES (22);",
+            cancellationToken: CancellationToken.None);
 
         // Act
-        var exception = await Record.ExceptionAsync(() => ExecuteSqlAsync(first,
-            "INSERT INTO nonexistent_parallel_table VALUES (33);"));
-        var firstValue = await ScalarIntAsync(first, "SELECT Id FROM parallel_owned_rows;");
-        var secondValue = await ScalarIntAsync(second, "SELECT Id FROM parallel_owned_rows;");
+        var exception = await Record.ExceptionAsync(() => ExecuteSqlAsync(
+            first,
+            "INSERT INTO nonexistent_parallel_table VALUES (33);",
+            cancellationToken: CancellationToken.None));
+
+        var firstValue = await ScalarIntAsync(
+            first,
+            "SELECT Id FROM parallel_owned_rows;",
+            cancellationToken: CancellationToken.None);
+
+        var secondValue = await ScalarIntAsync(
+            second,
+            "SELECT Id FROM parallel_owned_rows;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.NotSame(first, second);
@@ -134,14 +190,18 @@ public sealed class SqliteParallelTestContractTests : SqliteIntegrationTestBase
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task OwnedFileConnections_IsolateOnlyIndependentPaths(bool independentFiles)
+    public async Task OwnedFileConnections_IsolateOnlyIndependentPaths(
+        bool independentFiles
+    )
     {
         // Arrange
         var firstPath = SqliteSafeMigrationExecutionIntegrationTests.CreateOwnedDatabasePath();
         var secondPath = SqliteSafeMigrationExecutionIntegrationTests.CreateOwnedDatabasePath();
         var firstString = SqliteSafeMigrationExecutionIntegrationTests.CreateOwnedFileConnectionString(firstPath);
         var secondString = SqliteSafeMigrationExecutionIntegrationTests.CreateOwnedFileConnectionString(
-            independentFiles ? secondPath : firstPath);
+            independentFiles
+                ? secondPath
+                : firstPath);
 
         try
         {
@@ -152,22 +212,39 @@ public sealed class SqliteParallelTestContractTests : SqliteIntegrationTestBase
             await using (var first = new SqliteConnection(firstString))
             {
                 await first.OpenAsync(CancellationToken.None);
-                await ExecuteSqlAsync(first,
+                await ExecuteSqlAsync(
+                    first,
                     "PRAGMA journal_mode=WAL; CREATE TABLE parallel_owned_rows (Id INTEGER); "
-                    + "INSERT INTO parallel_owned_rows VALUES (11);");
+                    + "INSERT INTO parallel_owned_rows VALUES (11);",
+                    cancellationToken: CancellationToken.None);
             }
 
-            var observedTables = await ScalarIntAsync(second,
-                "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'parallel_owned_rows';");
-            await ExecuteSqlAsync(second, "CREATE TABLE surviving_connection (Id INTEGER);");
+            var observedTables = await ScalarIntAsync(
+                second,
+                "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'parallel_owned_rows';",
+                cancellationToken: CancellationToken.None);
+
+            await ExecuteSqlAsync(
+                second,
+                "CREATE TABLE surviving_connection (Id INTEGER);",
+                cancellationToken: CancellationToken.None);
 
             // Assert
             Assert.NotEqual(firstPath, secondPath);
             Assert.False(new SqliteConnectionStringBuilder(firstString).Pooling);
             Assert.False(new SqliteConnectionStringBuilder(secondString).Pooling);
-            Assert.Equal(independentFiles ? 0 : 1, observedTables);
-            Assert.Equal(1, await ScalarIntAsync(second,
-                "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'surviving_connection';"));
+            Assert.Equal(
+                independentFiles
+                    ? 0
+                    : 1,
+                observedTables);
+
+            Assert.Equal(
+                1,
+                await ScalarIntAsync(
+                    second,
+                    "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'surviving_connection';",
+                    cancellationToken: CancellationToken.None));
         }
         finally
         {
@@ -178,15 +255,19 @@ public sealed class SqliteParallelTestContractTests : SqliteIntegrationTestBase
 
     /// <summary>Finds independent catalog leaves, excluding models and unrelated standalone suites.</summary>
     /// <returns>The concrete classes whose discovery contract this metadata suite protects.</returns>
-    private static Type[] CatalogFeatureClasses() => typeof(SqliteSafeMigrationCatalogIntegrationTests).Assembly
+    private static Type[] CatalogFeatureClasses() => typeof(SqliteSafeMigrationCatalogIntegrationTests)
+        .Assembly
         .GetTypes()
-        .Where(type => type.IsClass && !type.IsAbstract
+        .Where(type => type.IsClass
+            && !type.IsAbstract
             && typeof(SqliteSafeMigrationCatalogIntegrationTests).IsAssignableFrom(type))
         .ToArray();
 
     /// <summary>Deletes only this test's allocated paths after the owning connections are disposed.</summary>
     /// <param name="databasePath">The invocation-owned native database path.</param>
-    private static void DeleteOwnedFile(string databasePath)
+    private static void DeleteOwnedFile(
+        string databasePath
+    )
     {
         File.Delete(databasePath);
         File.Delete(databasePath + "-wal");

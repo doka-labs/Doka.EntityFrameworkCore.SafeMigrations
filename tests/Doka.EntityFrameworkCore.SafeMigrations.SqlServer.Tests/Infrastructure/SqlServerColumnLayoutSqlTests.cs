@@ -35,18 +35,26 @@ public sealed class SqlServerColumnLayoutSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var clrType = storeType.StartsWith("binary", StringComparison.Ordinal)
-            || storeType.StartsWith("varbinary", StringComparison.Ordinal) ? typeof(byte[])
-            : storeType.StartsWith("char", StringComparison.Ordinal)
+            || storeType.StartsWith("varbinary", StringComparison.Ordinal)
+                ? typeof(byte[])
+                : storeType.StartsWith("char", StringComparison.Ordinal)
                 || storeType.StartsWith("varchar", StringComparison.Ordinal)
                 || storeType.StartsWith("nchar", StringComparison.Ordinal)
-                || storeType.StartsWith("nvarchar", StringComparison.Ordinal) ? typeof(string)
-            : storeType == "bit" ? typeof(bool)
-            : storeType == "int" ? typeof(int)
-            : storeType == "uniqueidentifier" ? typeof(Guid)
-            : storeType.StartsWith("decimal", StringComparison.Ordinal) ? typeof(decimal)
-            : storeType.StartsWith("time(", StringComparison.Ordinal) ? typeof(TimeSpan)
-            : storeType.StartsWith("datetimeoffset", StringComparison.Ordinal) ? typeof(DateTimeOffset)
-            : typeof(DateTime);
+                || storeType.StartsWith("nvarchar", StringComparison.Ordinal)
+                    ? typeof(string)
+                    : storeType == "bit"
+                        ? typeof(bool)
+                        : storeType == "int"
+                            ? typeof(int)
+                            : storeType == "uniqueidentifier"
+                                ? typeof(Guid)
+                                : storeType.StartsWith("decimal", StringComparison.Ordinal)
+                                    ? typeof(decimal)
+                                    : storeType.StartsWith("time(", StringComparison.Ordinal)
+                                        ? typeof(TimeSpan)
+                                        : storeType.StartsWith("datetimeoffset", StringComparison.Ordinal)
+                                            ? typeof(DateTimeOffset)
+                                            : typeof(DateTime);
 
         var definition = new ExpectedColumnDefinition("Added", clrType, true, storeType);
         var catalog = CreateLayoutCatalog(context);
@@ -68,15 +76,18 @@ public sealed class SqlServerColumnLayoutSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateLayoutCatalog(context);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("layout_probe",
-            new ExpectedColumnDefinition("Added", typeof(string), false, "char(5000)")),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "layout_probe",
+                new ExpectedColumnDefinition("Added", typeof(string), false, "char(5000)")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var plan = catalog.Build(operation);
         var selection = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan);
         var layoutGuard = selection.IndexOf("IF @doka_layout IS NOT NULL", StringComparison.Ordinal);
-        var rowBinding = selection.IndexOf("IF @doka_prerequisite = 1 EXEC sys.sp_executesql",
+        var rowBinding = selection.IndexOf(
+            "IF @doka_prerequisite = 1 EXEC sys.sp_executesql",
             StringComparison.Ordinal);
 
         // Assert
@@ -84,10 +95,16 @@ public sealed class SqlServerColumnLayoutSqlTests
         Assert.NotNull(plan.ColumnLayoutFailureExpression);
         Assert.Contains("max_column_id_used", plan.ColumnLayoutFailureExpression, StringComparison.Ordinal);
         Assert.Contains("column_count >= 1024", plan.ColumnLayoutFailureExpression, StringComparison.Ordinal);
-        Assert.Contains("THEN CONVERT(nvarchar(128), NULL) ELSE", plan.ColumnLayoutFailureExpression,
+        Assert.Contains(
+            "THEN CONVERT(nvarchar(128), NULL) ELSE",
+            plan.ColumnLayoutFailureExpression,
             StringComparison.Ordinal);
-        Assert.Contains(plan.ColumnLayoutFailureExpression.Replace("'", "''", StringComparison.Ordinal),
-            selection, StringComparison.Ordinal);
+
+        Assert.Contains(
+            plan.ColumnLayoutFailureExpression.Replace("'", "''", StringComparison.Ordinal),
+            selection,
+            StringComparison.Ordinal);
+
         Assert.True(layoutGuard >= 0);
         Assert.True(rowBinding > layoutGuard);
     }
@@ -143,8 +160,10 @@ public sealed class SqlServerColumnLayoutSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateLayoutCatalog(context);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("layout_probe",
-            new ExpectedColumnDefinition("Added", typeof(string), true, "varchar(80)")),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "layout_probe",
+                new ExpectedColumnDefinition("Added", typeof(string), true, "varchar(80)")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -202,7 +221,11 @@ public sealed class SqlServerColumnLayoutSqlTests
     [InlineData("datetime2(8)", typeof(DateTime), false)]
     [InlineData("time(1,2)", typeof(TimeSpan), false)]
     [InlineData("int(4)", typeof(int), false)]
-    public void StoreTypeArgumentsPreserveExactFacetValidation(string storeType, Type clrType, bool expected)
+    public void StoreTypeArgumentsPreserveExactFacetValidation(
+        string storeType,
+        Type clrType,
+        bool expected
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);

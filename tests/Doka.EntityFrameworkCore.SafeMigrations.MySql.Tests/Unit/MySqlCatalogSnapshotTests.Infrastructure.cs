@@ -23,7 +23,7 @@ public sealed partial class MySqlCatalogSnapshotTests
         public Func<string, Exception?>? DisposalFailure { get; set; }
 
         /// <inheritdoc />
-        [System.Diagnostics.CodeAnalysis.AllowNull]
+        [AllowNull]
         public override string ConnectionString { get; set; } = string.Empty;
 
         /// <inheritdoc />
@@ -108,9 +108,13 @@ public sealed partial class MySqlCatalogSnapshotTests
             else
             {
                 Assert.StartsWith("DROP TEMPORARY TABLE IF EXISTS ", sql, StringComparison.Ordinal);
-                foreach (var name in sql["DROP TEMPORARY TABLE IF EXISTS ".Length..].TrimEnd(';').Split(','))
+                foreach (var name in sql["DROP TEMPORARY TABLE IF EXISTS ".Length..]
+                    .TrimEnd(';')
+                    .Split(','))
                 {
-                    Assert.True(Tables.Remove(name.Trim().Trim('`')));
+                    Assert.True(Tables.Remove(name
+                        .Trim()
+                        .Trim('`')));
                 }
             }
 
@@ -133,7 +137,7 @@ public sealed partial class MySqlCatalogSnapshotTests
             }
 
             /// <inheritdoc />
-            [System.Diagnostics.CodeAnalysis.AllowNull]
+            [AllowNull]
             public override string CommandText { get; set; } = string.Empty;
 
             /// <inheritdoc />

@@ -6,11 +6,11 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// </summary>
 internal sealed class SafeMigrationCatalogBatch : IAsyncDisposable
 {
+    private readonly int? _commandTimeout;
+    private readonly DbConnection _connection;
     private readonly DbBatch? _providerBatch;
     private readonly List<DbCommand>? _sequentialCommands;
-    private readonly DbConnection _connection;
     private readonly DbTransaction? _transaction;
-    private readonly int? _commandTimeout;
     private bool _disposed;
 
     /// <summary>Creates one bounded catalog transport for the supplied connection.</summary>
@@ -54,6 +54,29 @@ internal sealed class SafeMigrationCatalogBatch : IAsyncDisposable
     /// <summary>Gets the number of catalog statements currently owned by this transport.</summary>
     public int Count => _providerBatch?.BatchCommands.Count ?? _sequentialCommands!.Count;
 
+    /// <summary>Disposes the native batch or every sequential command.</summary>
+    /// <returns>A value task that represents asynchronous disposal.</returns>
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        if (_providerBatch is not null)
+        {
+            await _providerBatch.DisposeAsync();
+
+            return;
+        }
+
+        foreach (var command in _sequentialCommands!)
+        {
+            await command.DisposeAsync();
+        }
+    }
+
     /// <summary>Creates and registers the next ordered catalog statement.</summary>
     /// <returns>A provider-neutral command adapter owned by this transport.</returns>
     public SafeMigrationCatalogCommand CreateCommand()
@@ -85,7 +108,7 @@ internal sealed class SafeMigrationCatalogBatch : IAsyncDisposable
     }
 
     /// <summary>Removes an unexecuted trailing statement that exceeded a payload budget.</summary>
-    /// <param name="command">The trailing command returned by <see cref="CreateCommand"/>.</param>
+    /// <param name="command">The trailing command returned by <see cref="CreateCommand" />.</param>
     /// <exception cref="InvalidOperationException">
     /// The command is not the last statement owned by this transport.
     /// </exception>
@@ -158,29 +181,6 @@ internal sealed class SafeMigrationCatalogBatch : IAsyncDisposable
         }
     }
 
-    /// <summary>Disposes the native batch or every sequential command.</summary>
-    /// <returns>A value task that represents asynchronous disposal.</returns>
-    public async ValueTask DisposeAsync()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _disposed = true;
-        if (_providerBatch is not null)
-        {
-            await _providerBatch.DisposeAsync();
-
-            return;
-        }
-
-        foreach (var command in _sequentialCommands!)
-        {
-            await command.DisposeAsync();
-        }
-    }
-
     private static async Task ReadResultSetsAsync(
         DbDataReader reader,
         Func<DbDataReader, CancellationToken, Task> readResultSet,
@@ -197,16 +197,13 @@ internal sealed class SafeMigrationCatalogBatch : IAsyncDisposable
 /// <summary>Provides one provider-neutral catalog command under batch ownership.</summary>
 internal sealed class SafeMigrationCatalogCommand
 {
-    private readonly DbBatchCommand? _providerCommand;
-    private readonly DbCommand? _sequentialCommand;
-
     internal SafeMigrationCatalogCommand(
         SafeMigrationCatalogBatch owner,
         DbBatchCommand command
     )
     {
         Owner = owner;
-        _providerCommand = command;
+        ProviderCommand = command;
     }
 
     internal SafeMigrationCatalogCommand(
@@ -215,37 +212,37 @@ internal sealed class SafeMigrationCatalogCommand
     )
     {
         Owner = owner;
-        _sequentialCommand = command;
+        SequentialCommand = command;
     }
 
     /// <summary>Gets the parameters owned by this statement.</summary>
-    public DbParameterCollection Parameters => _providerCommand?.Parameters ?? _sequentialCommand!.Parameters;
+    public DbParameterCollection Parameters => ProviderCommand?.Parameters ?? SequentialCommand!.Parameters;
 
     /// <summary>Gets or sets the SQL text for this statement.</summary>
     public string CommandText
     {
-        get => _providerCommand?.CommandText ?? _sequentialCommand!.CommandText;
+        get => ProviderCommand?.CommandText ?? SequentialCommand!.CommandText;
         set
         {
-            if (_providerCommand is not null)
+            if (ProviderCommand is not null)
             {
-                _providerCommand.CommandText = value;
+                ProviderCommand.CommandText = value;
             }
             else
             {
-                _sequentialCommand!.CommandText = value;
+                SequentialCommand!.CommandText = value;
             }
         }
     }
 
+    internal SafeMigrationCatalogBatch Owner { get; }
+
+    internal DbBatchCommand? ProviderCommand { get; }
+
+    internal DbCommand? SequentialCommand { get; }
+
     /// <summary>Creates a provider parameter compatible with this statement.</summary>
     /// <returns>A provider-specific parameter that is not yet registered.</returns>
     public DbParameter CreateParameter() =>
-        _providerCommand?.CreateParameter() ?? _sequentialCommand!.CreateParameter();
-
-    internal SafeMigrationCatalogBatch Owner { get; }
-
-    internal DbBatchCommand? ProviderCommand => _providerCommand;
-
-    internal DbCommand? SequentialCommand => _sequentialCommand;
+        ProviderCommand?.CreateParameter() ?? SequentialCommand!.CreateParameter();
 }

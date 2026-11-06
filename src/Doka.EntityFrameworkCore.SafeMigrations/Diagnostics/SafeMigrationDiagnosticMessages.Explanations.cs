@@ -50,20 +50,24 @@ public static partial class SafeMigrationDiagnosticMessages
 
         if (decisionCode is "runtime_validation_required" or "validate_at_runtime")
         {
-            return Explain("runtime_validation_required",
+            return Explain(
+                "runtime_validation_required",
                 "Earlier operations invalidated captured evidence. The final decision has not yet been made.",
                 "Let the fresh runtime guard classify the ordered state; this entry is not a successful execution.");
         }
 
         if (analysisCode == "postcondition_superseded")
         {
-            return Explain("postcondition_superseded",
-                "A later accepted operation supplies the final postcondition for this exact resource.", "");
+            return Explain(
+                "postcondition_superseded",
+                "A later accepted operation supplies the final postcondition for this exact resource.",
+                "");
         }
 
         if (analysisCode == "provider_owned_not_analyzed")
         {
-            return Explain("provider_owned_not_analyzed",
+            return Explain(
+                "provider_owned_not_analyzed",
                 "This ordinary EF or provider operation was not classified as a safe operation.",
                 "Verify its native behavior and independent postconditions; no SafeMigrations approval is implied.");
         }
@@ -75,46 +79,60 @@ public static partial class SafeMigrationDiagnosticMessages
 
         var decisionExplanation = decisionCode switch
         {
-            "matching_noop" => Explain("matching_noop",
-                "The observed definition already matches the requested contract; no change is planned.", ""),
-            "missing_noop" or "source_missing_noop" => Explain("missing_noop",
-                "The object to remove or rename is absent; no change is planned.", ""),
-            "missing_apply" => Explain("missing_apply",
+            "matching_noop" => Explain(
+                "matching_noop",
+                "The observed definition already matches the requested contract; no change is planned.",
+                ""),
+            "missing_noop" or "source_missing_noop" => Explain(
+                "missing_noop",
+                "The object to remove or rename is absent; no change is planned.",
+                ""),
+            "missing_apply" => Explain(
+                "missing_apply",
                 "The requested object is absent and its classified prerequisites permit creation.",
                 "Execute the migration normally; the runtime guard must still validate the current state."),
-            "existing_drop" => Explain("existing_drop",
+            "existing_drop" => Explain(
+                "existing_drop",
                 "The object is present and the classified removal contract permits dropping it.",
                 "Execute the reviewed removal and verify its final postcondition."),
-            "source_exists_rename" => Explain("source_exists_rename",
+            "source_exists_rename" => Explain(
+                "source_exists_rename",
                 "The source is present and the classified rename contract permits the transition.",
                 "Execute the reviewed rename and verify its final identity."),
-            "different_repair" => Explain("different_repair",
+            "different_repair" => Explain(
+                "different_repair",
                 "The definition differs and the provider proved a repair authorized by the explicit policy.",
                 "Execute the approved transition; fresh runtime and postcondition checks remain required."),
-            "existing_existence_noop" => Explain("existing_existence_noop",
+            "existing_existence_noop" => Explain(
+                "existing_existence_noop",
                 "The object exists. ExistenceOnly deliberately leaves its differing definition unchanged.",
                 "Confirm that ignoring definition differences is the intended policy."),
-            "transition_ready_apply" => Explain("transition_ready_apply",
+            "transition_ready_apply" => Explain(
+                "transition_ready_apply",
                 "The captured model-managed source permits attempting the compare-and-swap transition.",
                 "Execute with the existing fresh value and dependency guards; no row values are shown."),
-            "alter_target_missing" => Explain("alter_target_missing",
+            "alter_target_missing" => Explain(
+                "alter_target_missing",
                 "The column required for this alteration is absent.",
                 "Correct the ordered source state before retrying; an alteration does not create its missing source."),
-            "rename_target_conflict" => Explain("rename_target_conflict",
+            "rename_target_conflict" => Explain(
+                "rename_target_conflict",
                 "The rename target conflicts with the classified source or destination contract.",
                 "Inspect both endpoints and author a reviewed identity-preserving transition."),
-            "wrong_object_kind" => Explain("wrong_object_kind",
+            "wrong_object_kind" => Explain(
+                "wrong_object_kind",
                 "The existing object is not the kind required by this removal contract.",
                 "Identify the actual object and correct the operation; "
-                    + "do not drop it merely because its name matches."),
-            "missing_model_managed_row" => Explain("missing_model_managed_row",
+                + "do not drop it merely because its name matches."),
+            "missing_model_managed_row" => Explain(
+                "missing_model_managed_row",
                 "A captured source row required for the managed transition is absent.",
                 "Reconcile source-controlled data without inventing or logging missing row values."),
             "alter_not_approved" or "different_no_safe_repair" or "different_reject" => Explain(
                 "definition_change_not_authorized",
                 "The classified definition differs and this policy has no proven, authorized repair.",
                 "Inspect expected and actual schema facets and author a supported, reviewed transition; "
-                    + "do not weaken safety checks just to bypass this rejection."),
+                + "do not weaken safety checks just to bypass this rejection."),
             _ => (SafeMigrationDiagnosticExplanation?)null,
         };
 
@@ -125,216 +143,294 @@ public static partial class SafeMigrationDiagnosticMessages
 
         return state switch
         {
-            SafeMigrationObservedState.DataBlocked => Explain("data_precondition_failed",
+            SafeMigrationObservedState.DataBlocked => Explain(
+                "data_precondition_failed",
                 "Existing data prevents the requested transition. This classification alone does not identify "
-                    + "NULL values, excessive length, duplicates or foreign-key orphans.",
+                + "NULL values, excessive length, duplicates or foreign-key orphans.",
                 "Inspect the operation's data precondition and supply an explicit, reviewed data transformation."),
-            SafeMigrationObservedState.PrerequisiteMissing => Explain("prerequisite_unproven",
+            SafeMigrationObservedState.PrerequisiteMissing => Explain(
+                "prerequisite_unproven",
                 kind == SafeMigrationOperationKind.EnsureForeignKey
                     ? "The foreign-key endpoints, compatible column storage or usable referenced key are not proven."
                     : "A required owner, member or dependency is absent or cannot be proven from current evidence.",
                 "Inspect the named owners and ordered prerequisites before retrying; absence is not assumed."),
-            SafeMigrationObservedState.Unsupported => Explain("provider_contract_unsupported",
+            SafeMigrationObservedState.Unsupported => Explain(
+                "provider_contract_unsupported",
                 "The active provider cannot prove support for this operation contract.",
                 "Inspect the specific capability code and supported provider contract; no bypass is authorized."),
-            SafeMigrationObservedState.Different => Explain("definition_different",
+            SafeMigrationObservedState.Different => Explain(
+                "definition_different",
                 "The observed or projected definition differs from the requested contract.",
                 "Inspect expected and actual facets and the authored policy before choosing a reviewed transition."),
-            SafeMigrationObservedState.Matching => Explain("definition_matching",
-                "The observed or projected definition matches; the actual planner action determines execution.", ""),
-            SafeMigrationObservedState.Missing => Explain("object_missing",
-                "The classifier observed or projected absence; the actual planner action determines execution.", ""),
-            SafeMigrationObservedState.TransitionReady => Explain("transition_source_ready",
-                "A managed source state was captured; fresh compare-and-swap guards still determine execution.", ""),
+            SafeMigrationObservedState.Matching => Explain(
+                "definition_matching",
+                "The observed or projected definition matches; the actual planner action determines execution.",
+                ""),
+            SafeMigrationObservedState.Missing => Explain(
+                "object_missing",
+                "The classifier observed or projected absence; the actual planner action determines execution.",
+                ""),
+            SafeMigrationObservedState.TransitionReady => Explain(
+                "transition_source_ready",
+                "A managed source state was captured; fresh compare-and-swap guards still determine execution.",
+                ""),
             _ => default,
         };
     }
 
-    private static SafeMigrationDiagnosticExplanation? SpecificExplanation(string code) => code switch
+    private static SafeMigrationDiagnosticExplanation? SpecificExplanation(
+        string code
+    ) => code switch
     {
-        "opaque_sql_expression" or "computed_expression_unproven" => Explain(code,
+        "opaque_sql_expression" or "computed_expression_unproven" => Explain(
+            code,
             "The generated expression has no supported structural or deterministic interpretation.",
             "Use the bounded expression grammar and supported deterministic operations; do not bypass the guard."),
-        "generated_case_operand_type" or "computed_column_native_type_unproven" => Explain(code,
+        "generated_case_operand_type" or "computed_column_native_type_unproven" => Explain(
+            code,
             "The generated expression's operand or result types could not be bound to the requested native contract.",
             "Review CASE conditions, branch types, casts and the actual source-column types before retrying."),
-        "projected_generated_case_target_occupied" => Explain(code,
+        "projected_generated_case_target_occupied" => Explain(
+            code,
             "An accepted earlier operation occupies the requested CHECK target name.",
             "Inspect the accepted constraint lifetime and author an explicit reviewed transition; "
-                + "SafeMigrations does not overwrite a constraint with the same name."),
-        "generated_column_nullability" or "computed_column_nullability_unproven" => Explain(code,
+            + "SafeMigrations does not overwrite a constraint with the same name."),
+        "generated_column_nullability" or "computed_column_nullability_unproven" => Explain(
+            code,
             "The generated column's required result cannot be proven non-NULL; no offending row is established.",
             "Use a nullable result or a supported expression with verified non-NULL inputs and result branches."),
-        "generated_column_dependency_missing" or "generated_column_dependency_qualification"
-            or "computed_column_operand_unproven" or "projected_generated_column_dependency_unproven"
-            or "projected_generated_case_binding_unproven" => Explain(code,
+        "generated_column_dependency_missing"
+            or "generated_column_dependency_qualification"
+            or "computed_column_operand_unproven"
+            or "projected_generated_column_dependency_unproven"
+            or "projected_generated_case_binding_unproven" => Explain(
+                code,
                 "The generated expression's current source-column dependencies are absent or not proven.",
                 "Inspect preceding source-column changes and require a current supported dependency proof."),
-        "structured_convert_dialect" => Explain(code,
+        "structured_convert_dialect" => Explain(
+            code,
             "The parsed CONVERT syntax belongs to a different SQL dialect and cannot be safely reinterpreted.",
             "Use a supported expression authored for the active provider; argument order is not inferred."),
-        "captured_expression_dialect_unverified" => Explain(code,
+        "captured_expression_dialect_unverified" => Explain(
+            code,
             "The authored expression's identifier quoting cannot be certified for the active SQL dialect.",
             "Use native identifier quoting or the structured API; quoted string contents are not rewritten."),
-        "captured_sql_identifier" or "captured_expression_identifier_keyword_unverified" => Explain(code,
+        "captured_sql_identifier" or "captured_expression_identifier_keyword_unverified" => Explain(
+            code,
             "The captured expression's unquoted identifier roles are not certified by the native grammar.",
             "Review native reserved words and identifier quoting; no quoted substitute is inferred."),
-        "captured_sql_type_binding" or "captured_expression_cast_target_unverified" => Explain(code,
+        "captured_sql_type_binding" or "captured_expression_cast_target_unverified" => Explain(
+            code,
             "A captured cast does not resolve to the certified native built-in type contract.",
             "Review the authored type name, modifiers and native search path; no type alias is substituted."),
-        "captured_sql_function_binding" => Explain(code,
+        "captured_sql_function_binding" => Explain(
+            code,
             "The captured function or current value lacks the required native binding or immutability proof.",
             "Review overloads, visibility and volatility; custom bindings inherit no built-in proof."),
-        "captured_sql_operator_binding" => Explain(code,
+        "captured_sql_operator_binding" => Explain(
+            code,
             "The captured operator cannot be certified as the supported native built-in binding.",
             "Review native operator overloads and visibility; a custom operator does not inherit a built-in proof."),
-        "generated_column_nondeterministic_expression" => Explain(code,
+        "generated_column_nondeterministic_expression" => Explain(
+            code,
             "The generated expression has no certified deterministic contract for this engine and storage form.",
             "Use a supported deterministic expression; native virtual syntax alone does not establish support."),
-        "generated_column_function_unverified" => Explain(code,
+        "generated_column_function_unverified" => Explain(
+            code,
             "The generated function has no supported deterministic binding and argument contract.",
             "Use a supported built-in form; application functions are not executed to establish a proof."),
-        "generated_column_identity_dependency" => Explain(code,
+        "generated_column_identity_dependency" => Explain(
+            code,
             "MySQL does not permit this generated expression to reference an AUTO_INCREMENT source.",
             "Review the source-column generation and author a supported dependency; nullability does not waive it."),
-        "generated_column_rename_dependency" => Explain(code,
+        "generated_column_rename_dependency" => Explain(
+            code,
             "The source-column rename has a generated-expression dependency that this native ALTER cannot preserve.",
             "Review and explicitly migrate the dependent generated definition; a single rename cannot redefine it."),
-        "generated_column_rename_unproven" => Explain(code,
+        "generated_column_rename_unproven" => Explain(
+            code,
             "The complete current generated-expression dependency set is not certified for this source rename.",
             "Inspect the actual owner and generated definitions; sparse source facts do not prove nondependency."),
-        "generated_column_drop_dependency" or "projected_generated_column_drop_dependency" => Explain(code,
+        "generated_column_drop_dependency" or "projected_generated_column_drop_dependency" => Explain(
+            code,
             "A surviving generated column depends on the source column requested for removal.",
             "Review and explicitly remove or replace the dependent definition before dropping its source; "
-                + "dependent columns are not removed automatically."),
-        "generated_column_drop_unproven" => Explain(code,
+            + "dependent columns are not removed automatically."),
+        "generated_column_drop_unproven" => Explain(
+            code,
             "The surviving generated-expression dependency set is not certified for this source-column removal.",
             "Inspect the actual owner and current generated definitions; an incomplete or opaque set "
-                + "does not prove that removing the source is safe."),
-        "column_drop_dependency" or "generated_column_drop_other_dependency" => Explain(code,
+            + "does not prove that removing the source is safe."),
+        "column_drop_dependency" or "generated_column_drop_other_dependency" => Explain(
+            code,
             "A native dependency or protected table restriction prevents this source-column removal.",
             "Review current constraints, indexes, statistics, expressions and protected table features; "
-                + "explicitly remove only the reviewed blocking dependencies."),
-        "projected_check_source_dependency" or "projected_check_source_dependency_unproven" => Explain(code,
+            + "explicitly remove only the reviewed blocking dependencies."),
+        "projected_check_source_dependency" or "projected_check_source_dependency_unproven" => Explain(
+            code,
             "An accepted CHECK dependency prevents or cannot certify the requested native source-column change.",
             "Review the dependent CHECK and explicitly migrate its lifetime before changing the source column."),
-        "table_rebuild_foreign_key_violation" => Explain(code,
+        "table_rebuild_foreign_key_violation" => Explain(
+            code,
             "Retained foreign-key rows fail the SQLite rebuild integrity check.",
             "Inspect the affected relationships and correct orphan references or explicitly retire the reviewed "
-                + "relationship before rebuilding; no row values are included in this diagnosis."),
-        "captured_expression_literal_catalog_unverifiable" => Explain(code,
+            + "relationship before rebuilding; no row values are included in this diagnosis."),
+        "captured_expression_literal_catalog_unverifiable" => Explain(
+            code,
             "The native catalog cannot retain the captured literal's exact identity under this contract.",
             "Use a supported structured literal form; lossy catalog text is not evidence of equality."),
-        "generated_expression_assignment" => Explain(code,
+        "generated_expression_assignment" => Explain(
+            code,
             "The generated result cannot be assigned to the requested native type under the supported literal proof.",
             "Review the result type and literal format; arbitrary native input conversions are not executed as proof."),
-        "computed_column_operand_identity_unproven" => Explain(code,
+        "computed_column_operand_identity_unproven" => Explain(
+            code,
             "Distinct source-column identities cannot be preserved in the private native compiler scope.",
             "Review the database and tempdb identifier collations; no case-folded substitute is authorized."),
-        "computed_column_storage_unproven" => Explain(code,
+        "computed_column_storage_unproven" => Explain(
+            code,
             "The requested generated storage conflicts with an identity, row-version or unsupported physical facet.",
             "Review the explicit computed-column storage contract; persistence and generation are not inferred."),
-        "required_column_backfill_missing" or "required_column_has_rows" => Explain(code,
+        "required_column_backfill_missing" or "required_column_has_rows" => Explain(
+            code,
             "A required column cannot be added to existing rows without an explicitly supplied replacement value.",
             "Add nullable, explicitly backfill the intended values, then make the column required; "
-                + "or declare an approved replacement default."),
-        "column_nullability_data_blocked" => Explain(code,
+            + "or declare an approved replacement default."),
+        "column_nullability_data_blocked" => Explain(
+            code,
             "The selected required-column data check found NULL values incompatible with the target.",
             "Backfill the intended non-NULL values explicitly before making the column required."),
-        "column_transition_data_blocked" => Explain(code,
+        "column_transition_data_blocked" => Explain(
+            code,
             "A selected data check rejected this column transition; "
-                + "the generic code does not identify the exact row defect.",
+            + "the generic code does not identify the exact row defect.",
             "Inspect the target type and data precondition, then author a reviewed lossless transformation."),
-        "projected_foreign_key_replacement_data_blocked" => Explain(code,
+        "projected_foreign_key_replacement_data_blocked" => Explain(
+            code,
             "The qualified foreign-key replacement probe found orphaned dependent rows.",
             "Reconcile the dependent rows or their referenced principals before the reviewed foreign-key replacement."),
-        "column_primary_key_dependency" => Explain(code,
+        "column_primary_key_dependency" => Explain(
+            code,
             "The column remains part of a primary key and cannot accept the requested nullable contract.",
             "Remove or replace the exact owned key in the intended order before relaxing nullability."),
-        "column_set_null_dependency" or "projected_foreign_key_set_null_unrepresentable" => Explain(code,
+        "column_set_null_dependency" or "projected_foreign_key_set_null_unrepresentable" => Explain(
+            code,
             "A SET NULL foreign-key action conflicts with a required dependent-column contract.",
             "Make the reviewed dependent column nullable or explicitly replace the incompatible referential action."),
-        "database_qualifier_mismatch" => Explain(code,
+        "database_qualifier_mismatch" => Explain(
+            code,
             "An authored database qualifier does not match the supported active database identity.",
             "Correct the authored qualifier or intended connection; no database identity is inferred offline."),
-        "default_schema_mismatch" or "schema_identity_mismatch" or "table_identity_mismatch"
-            or "principal_table_identity_mismatch" or "schema_resolution_mismatch" => Explain(code,
+        "default_schema_mismatch"
+            or "schema_identity_mismatch"
+            or "table_identity_mismatch"
+            or "principal_table_identity_mismatch"
+            or "schema_resolution_mismatch" => Explain(
+                code,
                 "The authored or unqualified owner cannot be bound to the required native schema identity.",
                 "Use the intended explicit qualifier and verify the actual owner; do not guess a resolved schema."),
-        "column_atomic_add_unavailable" or "column_required_sql_add_unavailable" => Explain(code,
+        "column_atomic_add_unavailable" or "column_required_sql_add_unavailable" => Explain(
+            code,
             "The active engine, column shape or session contract cannot prove the required-column addition safe.",
             "Inspect the supported atomic-add contract or author an explicit "
-                + "nullable-add/backfill/required transition."),
-        "column_atomic_add_guard_conflict" => Explain(code,
+            + "nullable-add/backfill/required transition."),
+        "column_atomic_add_guard_conflict" => Explain(
+            code,
             "The required-column staging identity is occupied without its exact owned contract.",
             "Inspect the existing artifact and recovery evidence; its name alone does not authorize removal."),
-        "column_atomic_add_check_failed" => Explain(code,
+        "column_atomic_add_check_failed" => Explain(
+            code,
             "The exact owned required-column CHECK rejected the attempted atomic addition. "
-                + "Existing rows do not satisfy its required-value contract; no concurrent writer is inferred.",
+            + "Existing rows do not satisfy its required-value contract; no concurrent writer is inferred.",
             "Inspect the retained column state and provide explicit intended values before a guarded retry."),
-        "column_atomic_add_resume" => Explain(code,
+        "column_atomic_add_resume" => Explain(
+            code,
             "An exact owned required-column staging contract was recognized; current rows still determine completion.",
             "Resume only through the existing fresh NULL and environment guards; "
-                + "staging is not proof of an empty table."),
-        "projected_required_add_rows_unproven" => Explain(code,
+            + "staging is not proof of an empty table."),
+        "projected_required_add_rows_unproven" => Explain(
+            code,
             "The current ordered row state does not prove that this required-column "
-                + "addition can populate existing rows.",
+            + "addition can populate existing rows.",
             "Obtain an operation-bound current row proof or author an explicit reviewed backfill."),
-        "projected_structure_state_unknown" or "projected_column_transition_unproven"
-            or "projected_primary_key_replacement_unproven" => Explain(code,
+        "projected_structure_state_unknown"
+            or "projected_column_transition_unproven"
+            or "projected_primary_key_replacement_unproven" => Explain(
+                code,
                 "Earlier ordered changes left the required structural or transition proof incomplete.",
                 "Inspect preceding owner, column and key changes; require a supported current proof before retrying."),
-        "projected_data_state_unknown" or "projected_model_managed_data_state_unknown" => Explain(code,
+        "projected_data_state_unknown" or "projected_model_managed_data_state_unknown" => Explain(
+            code,
             "Earlier writes invalidated the captured row-safety proof; no current data defect is established.",
             "Require a fresh ordered runtime proof or an explicit, supported data transition."),
-        "incoming_foreign_key_key_dependency" or "table_drop_foreign_key_dependency" => Explain(code,
+        "incoming_foreign_key_key_dependency" or "table_drop_foreign_key_dependency" => Explain(
+            code,
             "A surviving incoming foreign key prevents the requested key or table removal.",
             "Inspect and explicitly remove or replace each exact dependent relationship in the reviewed order."),
-        "catalog_metadata_not_visible" or "dependency_catalog_permission" => Explain(code,
+        "catalog_metadata_not_visible" or "dependency_catalog_permission" => Explain(
+            code,
             "Effective catalog access cannot establish the metadata or dependency proof required by this operation.",
             "Verify the reviewed least-privilege access contract; SafeMigrations does not grant permissions."),
-        "column_alter_write_permission" or "column_alter_read_permission" or "column_nullability_data_unproven"
-            or "check_row_data_unproven" => Explain(code,
+        "column_alter_write_permission"
+            or "column_alter_read_permission"
+            or "column_nullability_data_unproven"
+            or "check_row_data_unproven" => Explain(
+                code,
                 "The effective access contract cannot establish the required row read or approved rewrite.",
                 "Verify the intended row-access permissions before retrying; no data-safety certificate is inferred."),
-        "schema_operations" => Explain(code,
+        "schema_operations" => Explain(
+            code,
             "The provider does not support this schema or database operation contract.",
             "Use a supported reviewed provider operation; do not reinterpret a database as an ordinary table owner."),
-        "column_type_mapping" => Explain(code,
+        "column_type_mapping" => Explain(
+            code,
             "The provider has no supported storage-type mapping for this column contract.",
             "Choose a supported explicit storage type and verify the intended model mapping."),
-        "column_limit" => Explain(code,
+        "column_limit" => Explain(
+            code,
             "The selected physical-layout check found no available column slot for the requested addition.",
             "Review the table's physical column capacity and choose a supported schema transition."),
-        "column_fixed_row_limit" => Explain(code,
+        "column_fixed_row_limit" => Explain(
+            code,
             "The selected physical-layout check found that the requested fixed-row storage exceeds supported capacity.",
             "Review the physical row layout and choose a supported storage shape before retrying."),
-        "column_layout_unproven" => Explain(code,
+        "column_layout_unproven" => Explain(
+            code,
             "The requested column's physical-layout and capacity contract could not be proven.",
             "Inspect the existing layout and the provider's bounded storage contract; no capacity is assumed."),
-        "integer_widening_unproven" => Explain(code,
+        "integer_widening_unproven" => Explain(
+            code,
             "The integer alteration lacks a proven native catalog, lock-authority or fresh-snapshot contract.",
             "Review metadata visibility, explicit table-lock authority and READ COMMITTED isolation; "
             + "matching targets need no repair lock, and no privileges or isolation settings "
             + "are changed automatically."),
-        "baseline_transaction_suppressed" => Explain(code,
+        "baseline_transaction_suppressed" => Explain(
+            code,
             "A transaction-suppressed baseline cannot be executed under this provider's guarded transaction contract.",
             "Use a supported transactional EF Core or migration-bundle baseline; do not bypass transaction ownership."),
-        "physical_table_unproven" or "table_unproven_facet" or "column_unproven_facet"
-            or "index_unproven_facet" or "default_expression_unproven" or "identifier_collation_unproven"
-            or "column_widening_storage_unproven" or "check_column_type_unproven" => Explain(code,
+        "physical_table_unproven"
+            or "table_unproven_facet"
+            or "column_unproven_facet"
+            or "index_unproven_facet"
+            or "default_expression_unproven"
+            or "identifier_collation_unproven"
+            or "column_widening_storage_unproven"
+            or "check_column_type_unproven" => Explain(
+                code,
                 "A physical type, facet, identity or capacity requirement has no supported equivalence proof.",
                 "Inspect the qualified provider contract and author an explicitly supported target shape."),
-        "postcondition_identity_unproven" => Explain(code,
+        "postcondition_identity_unproven" => Explain(
+            code,
             "Final metadata cannot prove this operation's historical owner across a later identity-changing boundary.",
             "Verify a reviewed explicitly qualified final-state contract; "
-                + "do not infer the earlier owner from today's default."),
+            + "do not infer the earlier owner from today's default."),
         "postcondition_failed" or "doka_sm_postcondition" => Explain(
             "postcondition_failed",
             "The required final condition was not satisfied after execution. Earlier DDL may already have applied.",
             "Inspect the partial migration and retained recovery evidence before retrying; "
-                + "no full rollback is implied."),
-        "script_unsupported" or "doka_sm_script_unsupported" => Explain("script_unsupported",
+            + "no full rollback is implied."),
+        "script_unsupported" or "doka_sm_script_unsupported" => Explain(
+            "script_unsupported",
             "This provider cannot express the guarded runtime contract in a SQL script.",
             "Execute through EF Core or a migration bundle with the registered SafeMigrations provider."),
         _ => null,
@@ -354,10 +450,12 @@ public static partial class SafeMigrationDiagnosticMessages
         ArgumentNullException.ThrowIfNull(intent);
         ArgumentNullException.ThrowIfNull(guardCode);
 
-        return GetRuntimeExplanationCore(intent.Kind,
+        return GetRuntimeExplanationCore(
+            intent.Kind,
             intent is EnsureColumnIntent column
-                && !SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(column.Definition),
-            guardCode, diagnosticReasonCode);
+            && !SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(column.Definition),
+            guardCode,
+            diagnosticReasonCode);
     }
 
     /// <summary>Explains an owned failure from payload-free captured command facts.</summary>
@@ -376,11 +474,15 @@ public static partial class SafeMigrationDiagnosticMessages
         if (context.Identity is null)
         {
             throw new ArgumentException(
-                "A runtime diagnostic context must contain a captured identity.", nameof(context));
+                "A runtime diagnostic context must contain a captured identity.",
+                nameof(context));
         }
 
-        return GetRuntimeExplanationCore(context.Identity.OperationKind, context.RequiredColumnReplacementUnproven,
-            guardCode, diagnosticReasonCode);
+        return GetRuntimeExplanationCore(
+            context.Identity.OperationKind,
+            context.RequiredColumnReplacementUnproven,
+            guardCode,
+            diagnosticReasonCode);
     }
 
     private static SafeMigrationDiagnosticExplanation GetRuntimeExplanationCore(
@@ -401,11 +503,13 @@ public static partial class SafeMigrationDiagnosticMessages
 
         if (guardCode is "doka_sm_identity_scope_in_use" or "doka_sm_identity_acquisition_unproven")
         {
-            return Explain(guardCode == "doka_sm_identity_scope_in_use"
-                    ? "identity_scope_in_use" : "identity_acquisition_unproven",
+            return Explain(
+                guardCode == "doka_sm_identity_scope_in_use"
+                    ? "identity_scope_in_use"
+                    : "identity_acquisition_unproven",
                 "The migration session cannot establish exclusive ownership of the required identity-insert resource.",
                 "Preserve caller-owned session state and inspect recovery status; "
-                    + "retry with a clean owned migration session.");
+                + "retry with a clean owned migration session.");
         }
 
         var state = guardCode switch
@@ -418,7 +522,9 @@ public static partial class SafeMigrationDiagnosticMessages
             _ => (SafeMigrationObservedState?)null,
         };
 
-        var decisionCode = guardCode == "doka_sm_missing" ? "alter_target_missing" : guardCode;
+        var decisionCode = guardCode == "doka_sm_missing"
+            ? "alter_target_missing"
+            : guardCode;
 
         var explanation = GetExplanation(kind, state, diagnosticReasonCode ?? guardCode, decisionCode);
         if (state == SafeMigrationObservedState.DataBlocked
@@ -431,25 +537,36 @@ public static partial class SafeMigrationDiagnosticMessages
         return explanation;
     }
 
-    private static string NormalizeGuardCode(string code) => code switch
+    private static string NormalizeGuardCode(
+        string code
+    ) => code switch
     {
         // WHY: Accept the former human-readable spelling as input, but emit the
         // existing native category. This does not broaden exception ownership.
         "doka_sm_postcondition_failed" => "doka_sm_postcondition",
-        "doka_sm_data_blocked" or "doka_sm_prerequisite_missing" or "doka_sm_different"
-            or "doka_sm_unsupported" or "doka_sm_postcondition"
-            or "doka_sm_missing" or "doka_sm_script_unsupported" or "doka_sm_identity_scope_in_use"
+        "doka_sm_data_blocked"
+            or "doka_sm_prerequisite_missing"
+            or "doka_sm_different"
+            or "doka_sm_unsupported"
+            or "doka_sm_postcondition"
+            or "doka_sm_missing"
+            or "doka_sm_script_unsupported"
+            or "doka_sm_identity_scope_in_use"
             or "doka_sm_identity_acquisition_unproven" => code,
         _ => "doka_sm_unknown",
     };
 
-    private static SafeMigrationDiagnosticExplanation Explain(string code, string reason, string nextStep)
+    private static SafeMigrationDiagnosticExplanation Explain(
+        string code,
+        string reason,
+        string nextStep
+    )
         => new(code, reason, nextStep);
 
     private static SafeMigrationDiagnosticExplanation RequiredColumnReplacementExplanation() => new(
         "required_column_replacement_unproven",
         "Existing data blocks this required-column contract, which declares no replacement for existing rows. "
-            + "The generic classification does not establish whether the column is missing or already staged.",
+        + "The generic classification does not establish whether the column is missing or already staged.",
         "Specify the intended value in a reviewed migration, or add nullable, explicitly backfill, "
-            + "then make the column required.");
+        + "then make the column required.");
 }

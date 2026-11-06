@@ -27,7 +27,7 @@ internal static class SafeMigrationSqlExpressionPropertyCases
         var identifier = Identifier(rawIdentifier);
         var literal = rawLiteral & int.MaxValue;
         var selector = unchecked((uint)shapeSelector);
-        var depth = 1 + (depthSelector % MaximumGeneratedDepth);
+        var depth = 1 + depthSelector % MaximumGeneratedDepth;
 
         return CreateExpression(identifier, literal, selector, depth);
     }
@@ -56,9 +56,9 @@ internal static class SafeMigrationSqlExpressionPropertyCases
         var secondSql = render(firstParsed);
 
         if (!SafeMigrationSqlExpressionParser.TryParse(
-                secondSql,
-                out var secondParsed,
-                out var secondFailureCode))
+            secondSql,
+            out var secondParsed,
+            out var secondFailureCode))
         {
             return false;
         }
@@ -184,7 +184,10 @@ internal static class SafeMigrationSqlExpressionPropertyCases
         string? value
     )
     {
-        var source = string.IsNullOrEmpty(value) ? "value" : value;
+        var source = string.IsNullOrEmpty(value)
+            ? "value"
+            : value;
+
         var length = Math.Min(source.Length, 24);
         var builder = new StringBuilder(length + 16);
 
@@ -193,9 +196,10 @@ internal static class SafeMigrationSqlExpressionPropertyCases
         for (var index = 0; index < length; index++)
         {
             var character = source[index];
-            builder.Append(character is '`' or '"' or '\'' || char.IsAsciiLetterOrDigit(character)
-                ? character
-                : '_');
+            builder.Append(
+                character is '`' or '"' or '\'' || char.IsAsciiLetterOrDigit(character)
+                    ? character
+                    : '_');
         }
 
         // Always exercise both provider delimiter-escaping paths instead of

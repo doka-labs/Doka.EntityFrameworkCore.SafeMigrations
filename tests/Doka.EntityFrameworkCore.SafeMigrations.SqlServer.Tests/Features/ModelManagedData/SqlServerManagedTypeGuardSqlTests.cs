@@ -13,12 +13,19 @@ public sealed class SqlServerManagedTypeGuardSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var intent = new EnsureModelManagedDataIntent("items", ["Id"], ["int"],
-            ["Id", "Caption", "Amount"], ["int", "nvarchar(40)", "decimal(9,3)"],
-            new object?[,] { { 1, null, null } }, null, null);
+        var intent = new EnsureModelManagedDataIntent(
+            "items",
+            ["Id"],
+            ["int"],
+            ["Id", "Caption", "Amount"],
+            ["int", "nvarchar(40)", "decimal(9,3)"],
+            new object?[,] { { 1, null, null } },
+            null,
+            null);
 
         // Act
-        var guard = catalog.BuildModelManagedDataAnalysisGuard(intent).Guard;
+        var guard = catalog.BuildModelManagedDataAnalysisGuard(intent)
+            .Guard;
 
         // Assert
         Assert.Equal(1, Occurrences(guard, "LEFT JOIN sys.columns c"));
@@ -26,10 +33,16 @@ public sealed class SqlServerManagedTypeGuardSqlTests
         Assert.Contains("ty.is_user_defined = 0 AND ty.is_assembly_type = 0", guard, StringComparison.Ordinal);
         Assert.Contains("WHERE CASE WHEN c.column_id IS NOT NULL", guard, StringComparison.Ordinal);
         Assert.Contains("THEN 0 ELSE 1 END = 1)", guard, StringComparison.Ordinal);
-        Assert.Contains("(N'Id', N'int', CAST(NULL AS int), CAST(NULL AS int), CAST(NULL AS int))",
-            guard, StringComparison.Ordinal);
-        Assert.Contains("(N'Caption', N'nvarchar', 80, CAST(NULL AS int), CAST(NULL AS int))",
-            guard, StringComparison.Ordinal);
+        Assert.Contains(
+            "(N'Id', N'int', CAST(NULL AS int), CAST(NULL AS int), CAST(NULL AS int))",
+            guard,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "(N'Caption', N'nvarchar', 80, CAST(NULL AS int), CAST(NULL AS int))",
+            guard,
+            StringComparison.Ordinal);
+
         Assert.Contains("(N'Amount', N'decimal', CAST(NULL AS int), 9, 3)", guard, StringComparison.Ordinal);
     }
 
@@ -51,20 +64,36 @@ public sealed class SqlServerManagedTypeGuardSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var intent = new EnsureModelManagedDataIntent("items", ["Id"], ["int"],
-            ["Id", "Value"], ["int", storeType], new object?[,] { { 1, null } }, null, null);
+        var intent = new EnsureModelManagedDataIntent(
+            "items",
+            ["Id"],
+            ["int"],
+            ["Id", "Value"],
+            ["int", storeType],
+            new object?[,] { { 1, null } },
+            null,
+            null);
 
         // Act
-        var guard = catalog.BuildModelManagedDataAnalysisGuard(intent).Guard;
+        var guard = catalog.BuildModelManagedDataAnalysisGuard(intent)
+            .Guard;
 
         // Assert
         Assert.Contains(expectedRow, guard, StringComparison.Ordinal);
-        Assert.Contains("expected.max_length IS NULL OR c.max_length = expected.max_length",
-            guard, StringComparison.Ordinal);
-        Assert.Contains("expected.precision_value IS NULL OR c.precision = expected.precision_value",
-            guard, StringComparison.Ordinal);
-        Assert.Contains("expected.scale_value IS NULL OR c.scale = expected.scale_value",
-            guard, StringComparison.Ordinal);
+        Assert.Contains(
+            "expected.max_length IS NULL OR c.max_length = expected.max_length",
+            guard,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "expected.precision_value IS NULL OR c.precision = expected.precision_value",
+            guard,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "expected.scale_value IS NULL OR c.scale = expected.scale_value",
+            guard,
+            StringComparison.Ordinal);
     }
 
     /// <summary>Malformed physical contracts cannot become an empty successful catalog proof.</summary>
@@ -81,11 +110,19 @@ public sealed class SqlServerManagedTypeGuardSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var intent = new EnsureModelManagedDataIntent("items", ["Id"], ["int"],
-            ["Id", "Value"], ["int", storeType], new object?[,] { { 1, null } }, null, null);
+        var intent = new EnsureModelManagedDataIntent(
+            "items",
+            ["Id"],
+            ["int"],
+            ["Id", "Value"],
+            ["int", storeType],
+            new object?[,] { { 1, null } },
+            null,
+            null);
 
         // Act
-        var guard = catalog.BuildModelManagedDataAnalysisGuard(intent).Guard;
+        var guard = catalog.BuildModelManagedDataAnalysisGuard(intent)
+            .Guard;
 
         // Assert
         Assert.Contains("AND (1 = 0)", guard, StringComparison.Ordinal);
@@ -99,15 +136,27 @@ public sealed class SqlServerManagedTypeGuardSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var intent = new EnsureModelManagedDataIntent("items", ["Id"], ["INT"],
-            ["Id"], ["int"], new object?[,] { { 1 } }, null, null);
+        var intent = new EnsureModelManagedDataIntent(
+            "items",
+            ["Id"],
+            ["INT"],
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            null,
+            null);
 
         // Act
-        var guard = catalog.BuildModelManagedDataAnalysisGuard(intent).Guard;
+        var guard = catalog.BuildModelManagedDataAnalysisGuard(intent)
+            .Guard;
 
         // Assert
-        Assert.Equal(1, Occurrences(guard,
-            "(N'Id', N'int', CAST(NULL AS int), CAST(NULL AS int), CAST(NULL AS int))"));
+        Assert.Equal(
+            1,
+            Occurrences(
+                guard,
+                "(N'Id', N'int', CAST(NULL AS int), CAST(NULL AS int), CAST(NULL AS int))"));
+
         Assert.Equal(1, Occurrences(guard, "LEFT JOIN sys.types ty"));
     }
 
@@ -118,23 +167,34 @@ public sealed class SqlServerManagedTypeGuardSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var intent = new DeleteModelManagedDataIntent("principals", ["Id"], ["int"],
-            new object?[,] { { 1 } }, ["Id", "Code"], ["int", "bigint"],
-            new object?[,] { { 1, 2L } }, null,
-            [new ExpectedModelManagedDataForeignKeyDefinition("dependents", ["ReferenceId"], ["Id"]),
+        var intent = new DeleteModelManagedDataIntent(
+            "principals",
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["Id", "Code"],
+            ["int", "bigint"],
+            new object?[,] { { 1, 2L } },
+            null,
+            [
+                new ExpectedModelManagedDataForeignKeyDefinition("dependents", ["ReferenceId"], ["Id"]),
                 new ExpectedModelManagedDataForeignKeyDefinition("dependents", ["ReferenceId"], ["Code"], "dbo"),
-                new ExpectedModelManagedDataForeignKeyDefinition("dependents", ["ReferenceId"], ["Id"], "audit")]);
+                new ExpectedModelManagedDataForeignKeyDefinition("dependents", ["ReferenceId"], ["Id"], "audit"),
+            ]);
 
         // Act
-        var guard = catalog.BuildModelManagedDataAnalysisGuard(intent).Guard;
+        var guard = catalog.BuildModelManagedDataAnalysisGuard(intent)
+            .Guard;
 
         // Assert
         Assert.Equal(3, Occurrences(guard, "LEFT JOIN sys.types ty"));
         Assert.Equal(1, Occurrences(guard, "OBJECT_ID(N'[dbo].[dependents]', 'U')"));
         Assert.Equal(1, Occurrences(guard, "OBJECT_ID(N'[audit].[dependents]', 'U')"));
-        Assert.Contains("(N'ReferenceId', N'int', CAST(NULL AS int), CAST(NULL AS int), CAST(NULL AS int)), "
+        Assert.Contains(
+            "(N'ReferenceId', N'int', CAST(NULL AS int), CAST(NULL AS int), CAST(NULL AS int)), "
             + "(N'ReferenceId', N'bigint', CAST(NULL AS int), CAST(NULL AS int), CAST(NULL AS int))",
-            guard, StringComparison.Ordinal);
+            guard,
+            StringComparison.Ordinal);
     }
 
     /// <summary>Analysis and execution keep identical proofs in their independent binding scopes.</summary>
@@ -144,8 +204,15 @@ public sealed class SqlServerManagedTypeGuardSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var intent = new EnsureModelManagedDataIntent("items", ["Id"], ["int"],
-            ["Id", "Caption"], ["int", "nvarchar(40)"], new object?[,] { { 1, "target" } }, null, null);
+        var intent = new EnsureModelManagedDataIntent(
+            "items",
+            ["Id"],
+            ["int"],
+            ["Id", "Caption"],
+            ["int", "nvarchar(40)"],
+            new object?[,] { { 1, "target" } },
+            null,
+            null);
 
         // Act
         var plan = catalog.Build(new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent));
@@ -177,7 +244,8 @@ public sealed class SqlServerManagedTypeGuardSqlTests
         var intent = CreateIdentityIntent(kind);
 
         // Act
-        var guard = catalog.BuildModelManagedDataAnalysisGuard(intent).Guard;
+        var guard = catalog.BuildModelManagedDataAnalysisGuard(intent)
+            .Guard;
 
         // Assert
         Assert.DoesNotContain("sys.identity_columns", guard, StringComparison.Ordinal);
@@ -198,13 +266,36 @@ public sealed class SqlServerManagedTypeGuardSqlTests
     )
         => kind switch
         {
-            "ensure" => new EnsureModelManagedDataIntent("items", ["Id"], ["int"],
-                ["Id"], ["int"], new object?[,] { { 1 } }, null, null),
-            "update" => new UpdateModelManagedDataIntent("items", ["Id"], ["int"],
-                new object?[,] { { 1 } }, ["Id"], ["int"],
-                new object?[,] { { 1 } }, new object?[,] { { 1 } }, null, null),
-            "delete" => new DeleteModelManagedDataIntent("items", ["Id"], ["int"],
-                new object?[,] { { 1 } }, ["Id"], ["int"], new object?[,] { { 1 } }, null, []),
+            "ensure" => new EnsureModelManagedDataIntent(
+                "items",
+                ["Id"],
+                ["int"],
+                ["Id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                null,
+                null),
+            "update" => new UpdateModelManagedDataIntent(
+                "items",
+                ["Id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                ["Id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                new object?[,] { { 1 } },
+                null,
+                null),
+            "delete" => new DeleteModelManagedDataIntent(
+                "items",
+                ["Id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                ["Id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                null,
+                []),
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
 
@@ -213,5 +304,7 @@ public sealed class SqlServerManagedTypeGuardSqlTests
         string sql,
         string value
     )
-        => sql.Split(value, StringSplitOptions.None).Length - 1;
+        => sql.Split(value)
+                .Length
+            - 1;
 }

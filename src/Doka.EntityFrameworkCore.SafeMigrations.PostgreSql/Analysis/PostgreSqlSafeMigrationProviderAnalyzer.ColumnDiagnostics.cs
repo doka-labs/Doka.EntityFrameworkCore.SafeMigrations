@@ -17,6 +17,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     )
     {
         var candidates = new List<int>();
+
         // WHY: Select diagnostics from matching operation and analysis slots.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -54,6 +55,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     parameters.Add);
 
                 var selections = new List<string>(count);
+
                 // WHY: Keep bounded probe slots aligned with their original candidate ordinals.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery

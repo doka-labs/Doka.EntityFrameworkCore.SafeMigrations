@@ -12,8 +12,10 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
     /// <summary>Validates populated integer predicates without rejecting NULL's UNKNOWN truth value.</summary>
     [SqlServerLiveTheory]
     [InlineData("[Value] >= 0", "NULL,0,2147483647", null)]
-    [InlineData("[Value] >= -9223372036854775808 AND [Value] <= 9223372036854775807",
-        "NULL,-9223372036854775808,9223372036854775807", "dbo")]
+    [InlineData(
+        "[Value] >= -9223372036854775808 AND [Value] <= 9223372036854775807",
+        "NULL,-9223372036854775808,9223372036854775807",
+        "dbo")]
     [InlineData("[Value] IS NULL OR NOT ([Value] < 0)", "NULL,0,1", "dbo")]
     public async Task PopulatedCheck_AdmitsTrueAndUnknownRowsAndReplays(
         string predicate,
@@ -22,26 +24,43 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        var rows = string.Join(",", values.Split(',').Select(static value => "(" + value + ")"));
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.checked_values(Value bigint NULL); INSERT dbo.checked_values VALUES " + rows + ";");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        var rows = string.Join(",",
+            values
+                .Split(',')
+                .Select(static value => "(" + value + ")"));
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.checked_values(Value bigint NULL); INSERT dbo.checked_values VALUES " + rows + ";",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists("CK_checked_values", "checked_values", predicate, schema);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-populated-check"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-populated-check"),
+                cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var trusted = await ScalarIntAsync(connectionString,
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        var trusted = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID(N'dbo.checked_values') "
-            + "AND name=N'CK_checked_values' AND is_disabled=0 AND is_not_trusted=0;");
+            + "AND name=N'CK_checked_values' AND is_disabled=0 AND is_not_trusted=0;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(report.Assessments)
+                .Action);
+
         Assert.Equal(1, trusted);
     }
 
@@ -50,26 +69,46 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
     public async Task PopulatedCheck_FalseRowIsDataBlocked()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.invalid_check_values(Value int NULL); "
-            + "INSERT dbo.invalid_check_values VALUES(NULL),(-1);");
+            + "INSERT dbo.invalid_check_values VALUES(NULL),(-1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists("CK_invalid_values", "invalid_check_values", "[Value]>=0");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-false-check"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-false-check"),
+                cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
-        var checks = await ScalarIntAsync(connectionString,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            cancellationToken: CancellationToken.None));
+
+        var checks = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.check_constraints "
-            + "WHERE parent_object_id=OBJECT_ID(N'dbo.invalid_check_values');");
+            + "WHERE parent_object_id=OBJECT_ID(N'dbo.invalid_check_values');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationObservedState.DataBlocked, Assert.Single(report.Assessments).ObservedState);
-        Assert.Equal(51003, Assert.IsType<SqlException>(failure).Number);
+        Assert.Equal(SafeMigrationObservedState.DataBlocked,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
+        Assert.Equal(51003,
+            Assert.IsType<SqlException>(failure)
+                .Number);
+
         Assert.Equal(0, checks);
     }
 
@@ -83,23 +122,43 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.typed_check_values(Value " + storeType + " NULL); "
-            + "INSERT dbo.typed_check_values VALUES(" + value + ");");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.typed_check_values(Value "
+            + storeType
+            + " NULL); "
+            + "INSERT dbo.typed_check_values VALUES("
+            + value
+            + ");",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists("CK_typed_values", "typed_check_values", "[Value]>=0");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-check-physical-type"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-check-physical-type"),
+                cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            cancellationToken: CancellationToken.None));
 
         // Assert
-        Assert.Equal(SafeMigrationObservedState.Unsupported, Assert.Single(report.Assessments).ObservedState);
-        Assert.Equal(51002, Assert.IsType<SqlException>(failure).Number);
+        Assert.Equal(SafeMigrationObservedState.Unsupported,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
+        Assert.Equal(51002,
+            Assert.IsType<SqlException>(failure)
+                .Number);
     }
 
     /// <summary>Existing name branches cannot bypass SELECT and accidentally compile an unauthorized row arm.</summary>
@@ -111,28 +170,33 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.permission_check_values(Value int NOT NULL); "
             + "INSERT dbo.permission_check_values VALUES(1); "
             + "CREATE USER check_metadata_reader WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; "
             + "GRANT VIEW DEFINITION TO check_metadata_reader; "
             + "GRANT ALTER ON OBJECT::dbo.permission_check_values TO check_metadata_reader; "
-            + "DENY SELECT ON OBJECT::dbo.permission_check_values TO check_metadata_reader;");
+            + "DENY SELECT ON OBJECT::dbo.permission_check_values TO check_metadata_reader;",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists("CK_permission_values", "permission_check_values", "[Value]>=0");
         if (existing == "matching")
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         }
         else
         {
-            await ExecuteSqlAsync(connectionString,
-                "ALTER TABLE dbo.permission_check_values ADD CONSTRAINT CK_permission_values UNIQUE(Value);");
+            await ExecuteSqlAsync(
+                connectionString,
+                "ALTER TABLE dbo.permission_check_values ADD CONSTRAINT CK_permission_values UNIQUE(Value);",
+                cancellationToken: CancellationToken.None);
         }
 
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("EXECUTE AS USER=N'check_metadata_reader';");
         IReadOnlyList<SafeMigrationProviderAnalysis> analyses;
         Exception? failure;
@@ -140,9 +204,20 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
         // Act
         try
         {
-            analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context,
-                builder.Operations.Cast<SafeMigrationOperation>().ToArray());
-            failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+            analyses = await context
+                .GetService<ISafeMigrationProviderAnalyzer>()
+                .AnalyzeAsync(
+                    context,
+                    builder
+                        .Operations
+                        .Cast<SafeMigrationOperation>()
+                        .ToArray(),
+                    cancellationToken: CancellationToken.None);
+
+            failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+                context,
+                builder.Operations,
+                cancellationToken: CancellationToken.None));
         }
         finally
         {
@@ -150,9 +225,17 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
         }
 
         // Assert
-        Assert.Equal(SafeMigrationObservedState.Unsupported, Assert.Single(analyses).ObservedState);
-        Assert.Equal("check_row_data_unproven", Assert.Single(analyses).Code);
-        Assert.Equal(51002, Assert.IsType<SqlException>(failure).Number);
+        Assert.Equal(SafeMigrationObservedState.Unsupported,
+            Assert.Single(analyses)
+                .ObservedState);
+
+        Assert.Equal("check_row_data_unproven",
+            Assert.Single(analyses)
+                .Code);
+
+        Assert.Equal(51002,
+            Assert.IsType<SqlException>(failure)
+                .Number);
     }
 
     /// <summary>Legacy stamped noninteger CHECKs replay without borrowing a new integer row certificate.</summary>
@@ -164,27 +247,47 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.legacy_check_values(Value " + storeType + " NULL);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.legacy_check_values(Value " + storeType + " NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var definition = new ExpectedCheckConstraintDefinition("CK_legacy_values", "legacy_check_values", "[Value]>=0");
-        var operation = new SafeMigrationOperation(new EnsureCheckConstraintIntent(definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(definition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "ALTER TABLE dbo.legacy_check_values ADD CONSTRAINT CK_legacy_values CHECK([Value]>=0); "
-            + catalog.Build(operation).PostApplySql + "; INSERT dbo.legacy_check_values VALUES(1);");
+            + catalog.Build(operation)
+                .PostApplySql
+            + "; INSERT dbo.legacy_check_values VALUES(1);",
+            cancellationToken: CancellationToken.None);
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-        await ExecuteOperationsAsync(context, [operation]);
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                cancellationToken: CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, [operation], cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(analyses).ObservedState);
-        Assert.False(Assert.Single(analyses).RequiresLiveDataProof);
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(analyses)
+                .ObservedState);
+
+        Assert.False(Assert.Single(analyses)
+            .RequiresLiveDataProof);
     }
 
     /// <summary>Raw foreign/session-dependent quoting never receives a populated integer proof.</summary>
@@ -196,23 +299,41 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.dialect_check_values(Value int NOT NULL); INSERT dbo.dialect_check_values VALUES(1);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.dialect_check_values(Value int NOT NULL); INSERT dbo.dialect_check_values VALUES(1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("SET QUOTED_IDENTIFIER OFF;");
-        var operation = new SafeMigrationOperation(new EnsureCheckConstraintIntent(
-            new ExpectedCheckConstraintDefinition("CK_dialect_values", "dialect_check_values", predicate)),
+        var operation = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(
+                new ExpectedCheckConstraintDefinition("CK_dialect_values", "dialect_check_values", predicate)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                cancellationToken: CancellationToken.None);
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [operation],
+            cancellationToken: CancellationToken.None));
 
         // Assert
-        Assert.Equal(SafeMigrationObservedState.DataBlocked, Assert.Single(analyses).ObservedState);
-        Assert.Equal(51003, Assert.IsType<SqlException>(failure).Number);
+        Assert.Equal(SafeMigrationObservedState.DataBlocked,
+            Assert.Single(analyses)
+                .ObservedState);
+
+        Assert.Equal(51003,
+            Assert.IsType<SqlException>(failure)
+                .Number);
     }
 
     /// <summary>A same-name local CHECK replacement retains new-predicate truth across an accepted widening.</summary>
@@ -227,41 +348,66 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.replacement_check_values(Value int NOT NULL); "
-            + "INSERT dbo.replacement_check_values VALUES(" + (valid ? "1" : "0") + "),(2147483647); "
-            + "ALTER TABLE dbo.replacement_check_values ADD CONSTRAINT CK_replacement_values CHECK(Value>=0);");
+            + "INSERT dbo.replacement_check_values VALUES("
+            + (valid
+                ? "1"
+                : "0")
+            + "),(2147483647); "
+            + "ALTER TABLE dbo.replacement_check_values ADD CONSTRAINT CK_replacement_values CHECK(Value>=0);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropCheckConstraintIfExists("CK_replacement_values", "replacement_check_values");
         if (widening)
         {
-            builder.AlterColumnIfDifferent("replacement_check_values",
+            builder.AlterColumnIfDifferent(
+                "replacement_check_values",
                 new ExpectedColumnDefinition("Value", typeof(long), false, "bigint"),
-                new ExpectedColumnDefinition("Value", typeof(int), false, "int"), SafeMigrationPolicy.RepairIfSafe);
+                new ExpectedColumnDefinition("Value", typeof(int), false, "int"),
+                SafeMigrationPolicy.RepairIfSafe);
         }
 
         builder.AddCheckConstraintIfNotExists("CK_replacement_values", "replacement_check_values", "[Value]>=1");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-same-name-check-replacement"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-same-name-check-replacement"),
+                cancellationToken: CancellationToken.None);
 
         if (valid)
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         }
 
-        var trusted = await ScalarIntAsync(connectionString,
+        var trusted = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.check_constraints "
             + "WHERE parent_object_id=OBJECT_ID(N'dbo.replacement_check_values') "
-            + "AND name=N'CK_replacement_values' AND is_disabled=0 AND is_not_trusted=0;");
+            + "AND name=N'CK_replacement_values' AND is_disabled=0 AND is_not_trusted=0;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(valid ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(valid ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.DataBlocked,
+        Assert.Equal(
+            valid
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
+            report.Status);
+
+        Assert.Equal(
+            valid
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.DataBlocked,
             report.Assessments[^1].ObservedState);
+
         Assert.Equal(1, trusted);
     }
 
@@ -274,28 +420,46 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.opaque_replacement_values(Value int NOT NULL); "
             + "ALTER TABLE dbo.opaque_replacement_values ADD CONSTRAINT CK_opaque_values CHECK(Value>=0); "
-            + (populated ? "INSERT dbo.opaque_replacement_values VALUES(1);" : string.Empty));
+            + (populated
+                ? "INSERT dbo.opaque_replacement_values VALUES(1);"
+                : string.Empty),
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropCheckConstraintIfExists("CK_opaque_values", "opaque_replacement_values");
         builder.AddCheckConstraintIfNotExists("CK_opaque_values", "opaque_replacement_values", "[Value]/0>0");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-opaque-check-replacement"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-opaque-check-replacement"),
+                cancellationToken: CancellationToken.None);
 
         if (!populated)
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         }
 
         // Assert
-        Assert.Equal(populated ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(populated ? SafeMigrationObservedState.DataBlocked : SafeMigrationObservedState.Missing,
+        Assert.Equal(
+            populated
+                ? SafeMigrationReportStatus.Blocked
+                : SafeMigrationReportStatus.Ready,
+            report.Status);
+
+        Assert.Equal(
+            populated
+                ? SafeMigrationObservedState.DataBlocked
+                : SafeMigrationObservedState.Missing,
             report.Assessments[^1].ObservedState);
     }
 
@@ -309,47 +473,103 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString,
-            "ALTER DATABASE CURRENT COLLATE Latin1_General_100_" + (caseSensitive ? "CS" : "CI") + "_AS;");
-        await ExecuteSqlAsync(connectionString,
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "ALTER DATABASE CURRENT COLLATE Latin1_General_100_"
+            + (caseSensitive
+                ? "CS"
+                : "CI")
+            + "_AS;",
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.alias_check_values(Value int NOT NULL); INSERT dbo.alias_check_values VALUES(1); "
-            + "ALTER TABLE dbo.alias_check_values ADD CONSTRAINT CK_alias_check_values CHECK([Value]>=0);");
+            + "ALTER TABLE dbo.alias_check_values ADD CONSTRAINT CK_alias_check_values CHECK([Value]>=0);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.DropCheckConstraintIfExists("ck_alias_check_values",
-            caseSensitive ? "alias_check_values" : "ALIAS_CHECK_VALUES", caseSensitive ? "dbo" : "DBO");
-        builder.AddCheckConstraintIfNotExists(caseSensitive ? "CK_alias_check_values" : "ck_alias_check_values",
-            caseSensitive ? "alias_check_values" : "ALIAS_CHECK_VALUES", "[Value]>=1",
-            caseSensitive ? "dbo" : "DBO");
+        builder.DropCheckConstraintIfExists(
+            "ck_alias_check_values",
+            caseSensitive
+                ? "alias_check_values"
+                : "ALIAS_CHECK_VALUES",
+            caseSensitive
+                ? "dbo"
+                : "DBO");
+
+        builder.AddCheckConstraintIfNotExists(
+            caseSensitive
+                ? "CK_alias_check_values"
+                : "ck_alias_check_values",
+            caseSensitive
+                ? "alias_check_values"
+                : "ALIAS_CHECK_VALUES",
+            "[Value]>=1",
+            caseSensitive
+                ? "dbo"
+                : "DBO");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-catalog-check-drop-identity"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-catalog-check-drop-identity"),
+                cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         if (!caseSensitive)
         {
-            await ExecuteOperationsAsync(context, [builder.Operations[1]]);
+            await ExecuteOperationsAsync(context, [builder.Operations[1]], cancellationToken: CancellationToken.None);
         }
 
-        var checks = await ScalarIntAsync(connectionString,
+        var checks = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID(N'dbo.alias_check_values') "
             + "AND is_disabled=0 AND is_not_trusted=0 AND CHARINDEX(N'"
-            + (caseSensitive ? ">=(0)" : ">=(1)") + "',definition)>0;");
+            + (caseSensitive
+                ? ">=(0)"
+                : ">=(1)")
+            + "',definition)>0;",
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.alias_check_values WHERE Value=1;");
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.alias_check_values WHERE Value=1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(caseSensitive ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready,
+        Assert.Equal(
+            caseSensitive
+                ? SafeMigrationReportStatus.Blocked
+                : SafeMigrationReportStatus.Ready,
             report.Status);
-        Assert.Equal(caseSensitive ? SafeMigrationAction.NoOp : SafeMigrationAction.Apply,
+
+        Assert.Equal(
+            caseSensitive
+                ? SafeMigrationAction.NoOp
+                : SafeMigrationAction.Apply,
             report.Assessments[0].Action);
-        Assert.Equal(caseSensitive ? SafeMigrationAction.RejectDifferent : SafeMigrationAction.Apply,
+
+        Assert.Equal(
+            caseSensitive
+                ? SafeMigrationAction.RejectDifferent
+                : SafeMigrationAction.Apply,
             report.Assessments[1].Action);
+
         if (caseSensitive)
         {
-            Assert.Equal(51001, Assert.IsType<SqlException>(failure).Number);
+            Assert.Equal(51001,
+                Assert.IsType<SqlException>(failure)
+                    .Number);
         }
         else
         {

@@ -24,12 +24,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 : TableMatches(definition, expectedTableConstraints: null);
 
         return Plan(
-            $"CASE WHEN NOT {exists} THEN 'missing' WHEN NOT {table} THEN 'unsupported' "
-            + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
-            matching) with
-        {
-            ExecutionPostcondition = executionPostcondition,
-        };
+                $"CASE WHEN NOT {exists} THEN 'missing' WHEN NOT {table} THEN 'unsupported' "
+                + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
+                matching) with
+            {
+                ExecutionPostcondition = executionPostcondition,
+            };
     }
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropTable(
@@ -52,7 +52,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var source = TableExists(intent.Name, intent.Schema);
         var target = BuildRenameTargetExistsExpression(intent);
         var intermediateTarget = BuildRenameIntermediateTargetExistsExpression(intent);
-        var collision = intermediateTarget is null ? target : $"({target}) OR ({intermediateTarget})";
+        var collision = intermediateTarget is null
+            ? target
+            : $"({target}) OR ({intermediateTarget})";
 
         return Plan(
             $"CASE WHEN NOT {sourceObject} THEN 'missing' WHEN NOT {source} THEN 'different' "
@@ -107,7 +109,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var conditions = new List<string>
         {
             TableExists(definition.Table, definition.Schema),
-            $"(SELECT COUNT(*) FROM pg_catalog.pg_attribute a "
+            "(SELECT COUNT(*) FROM pg_catalog.pg_attribute a "
             + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
             + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
             + $"WHERE n.nspname = {schema} AND c.relname = {Literal(definition.Table)} "
@@ -128,26 +130,29 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         // WHY: Each required constraint carries its own table and schema, so the set-oriented
         // check is emitted per owning relation rather than assuming the definition's own table.
-        conditions.AddRange(requiredUniqueConstraints
-            .GroupBy(static value => (value.Table, value.Schema))
-            .Select(group => AllRequiredUniqueConstraintsSatisfied(
-                group.Key.Table,
-                group.Key.Schema,
-                group.ToArray())));
+        conditions.AddRange(
+            requiredUniqueConstraints
+                .GroupBy(static value => (value.Table, value.Schema))
+                .Select(group => AllRequiredUniqueConstraintsSatisfied(
+                    group.Key.Table,
+                    group.Key.Schema,
+                    group.ToArray())));
 
-        conditions.AddRange(requiredCheckConstraints
-            .GroupBy(static value => (value.Table, value.Schema))
-            .Select(group => AllRequiredCheckConstraintsSatisfied(
-                group.Key.Table,
-                group.Key.Schema,
-                group.ToArray())));
+        conditions.AddRange(
+            requiredCheckConstraints
+                .GroupBy(static value => (value.Table, value.Schema))
+                .Select(group => AllRequiredCheckConstraintsSatisfied(
+                    group.Key.Table,
+                    group.Key.Schema,
+                    group.ToArray())));
 
-        conditions.AddRange(requiredForeignKeys
-            .GroupBy(static value => (value.Table, value.Schema))
-            .Select(group => AllRequiredForeignKeysSatisfied(
-                group.Key.Table,
-                group.Key.Schema,
-                group.ToArray())));
+        conditions.AddRange(
+            requiredForeignKeys
+                .GroupBy(static value => (value.Table, value.Schema))
+                .Select(group => AllRequiredForeignKeysSatisfied(
+                    group.Key.Table,
+                    group.Key.Schema,
+                    group.ToArray())));
 
         return $"({string.Join(" AND ", conditions)})";
     }
@@ -169,7 +174,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     definition.PrimaryKey.Columns);
         }
 
-        var allowed = expectedTableConstraints.AllowedPrimaryKeys
+        var allowed = expectedTableConstraints
+            .AllowedPrimaryKeys
             .Select(primaryKey => ConstraintColumnsMatch(
                 definition.Table,
                 definition.Schema,
@@ -193,7 +199,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         return allowed.Length == 0
             ? $"NOT {AnyConstraint(definition.Table, definition.Schema, 'p')}"
             : $"(NOT {AnyConstraint(definition.Table, definition.Schema, 'p')} "
-                + $"OR {string.Join(" OR ", allowed)})";
+            + $"OR {string.Join(" OR ", allowed)})";
     }
 
     /// <summary>Checks that every actual unique constraint is modeled by an allowed one.</summary>
@@ -223,7 +229,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             .GroupBy(static value => (value.Table, value.Schema))
             .Select(group =>
             {
-                var rows = group.Select(value => $"({NameArray(value.Columns)})").ToArray();
+                var rows = group
+                    .Select(value => $"({NameArray(value.Columns)})")
+                    .ToArray();
+
                 var matcher = ConstraintColumnsMatchQuery(
                     group.Key.Table,
                     group.Key.Schema,
@@ -267,6 +276,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 var items = group.ToArray();
                 var rows = new List<string>(items.Length);
                 var arms = new List<string>(items.Length);
+
                 // WHY: Use the same one-based ordinal for each expected CHECK row and CASE arm.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
@@ -346,7 +356,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
         + $"WHERE n.nspname = {SchemaExpression(definition.Schema)} "
         + $"AND c.relname = {Literal(definition.Table)}) IS NOT DISTINCT FROM "
-        + (definition.Comment is null ? "NULL" : Literal(definition.Comment));
+        + (definition.Comment is null
+            ? "NULL"
+            : Literal(definition.Comment));
 
     private string RelationExists(
         string table,

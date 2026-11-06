@@ -17,6 +17,7 @@ internal static class SafeMigrationModelManagedKeyIdentity
         var normalized = NormalizeColumns(columns, normalizer);
         canonicalOrdinals = null;
         var sorted = true;
+
         // WHY: Adjacent labels determine whether the authored key order already is canonical.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -39,6 +40,7 @@ internal static class SafeMigrationModelManagedKeyIdentity
         // order is not physical identity. This permutation never normalizes
         // ordered INDEX/FK definitions, nor copies or sorts the row matrices.
         canonicalOrdinals = new int[normalized.Count];
+
         // WHY: Seed the authored ordinal permutation before sorting labels without moving row values.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -47,7 +49,9 @@ internal static class SafeMigrationModelManagedKeyIdentity
             canonicalOrdinals[index] = index;
         }
 
-        canonicalOrdinals.AsSpan().Sort(new KeyOrdinalComparer(normalized));
+        canonicalOrdinals
+            .AsSpan()
+            .Sort(new KeyOrdinalComparer(normalized));
 
         return normalized;
     }
@@ -67,17 +71,20 @@ internal static class SafeMigrationModelManagedKeyIdentity
         }
 
         string[]? normalized = null;
+
         // WHY: Keep canonical labels aligned with authored ordinals while allocating only after a change.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < columns.Count; index++)
         {
             var canonical = normalizer.NormalizeColumnIdentifier(columns[index]);
-            if (normalized is null && !StringComparer.Ordinal.Equals(columns[index], canonical))
+            if (normalized is null
+                && !StringComparer.Ordinal.Equals(columns[index], canonical))
             {
                 // WHY: Most providers preserve authored spelling. An owned
                 // array is needed only after an actual canonicalization change.
                 normalized = new string[columns.Count];
+
                 // WHY: Copy only the unchanged prefix when the first normalized label differs.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
@@ -99,7 +106,9 @@ internal static class SafeMigrationModelManagedKeyIdentity
     /// <summary>Canonicalizes OrdinalIgnoreCase without accepting Unicode folds the comparer rejects.</summary>
     /// <param name="identifier">A typed column name, not SQL or a row value.</param>
     /// <returns>A deterministic spelling with the same ordinal-ignore-case identity.</returns>
-    public static string NormalizeOrdinalIgnoreCase(string identifier)
+    public static string NormalizeOrdinalIgnoreCase(
+        string identifier
+    )
     {
         var upper = identifier.ToUpperInvariant();
         if (StringComparer.OrdinalIgnoreCase.Equals(identifier, upper))
@@ -112,6 +121,7 @@ internal static class SafeMigrationModelManagedKeyIdentity
         // so an ASCII suffix still canonicalizes consistently in that case.
         Span<char> runeBuffer = stackalloc char[2];
         var length = 0;
+
         // WHY: Advance by decoded rune width while measuring the exact UTF-16 destination length.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -121,21 +131,27 @@ internal static class SafeMigrationModelManagedKeyIdentity
             offset += consumed;
         }
 
-        return string.Create(length, identifier, static (destination, source) =>
-        {
-            Span<char> buffer = stackalloc char[2];
-            var written = 0;
-            // WHY: Advance source and destination offsets independently when canonical rune widths differ.
-            // ReSharper disable once ForCanBeConvertedToForeach
-            // ReSharper disable once LoopCanBeConvertedToQuery
-            for (var offset = 0; offset < source.Length;)
+        return string.Create(
+            length,
+            identifier,
+            static (destination, source) =>
             {
-                var count = FoldOrdinalRune(source.AsSpan(offset), buffer, out var consumed);
-                buffer[..count].CopyTo(destination[written..]);
-                written += count;
-                offset += consumed;
-            }
-        });
+                Span<char> buffer = stackalloc char[2];
+                var written = 0;
+
+                // WHY: Advance source and destination offsets independently when canonical rune widths differ.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var offset = 0; offset < source.Length;)
+                {
+                    var count = FoldOrdinalRune(source.AsSpan(offset), buffer, out var consumed);
+                    buffer[..count]
+                        .CopyTo(destination[written..]);
+
+                    written += count;
+                    offset += consumed;
+                }
+            });
     }
 
     /// <summary>Retains rejected case mappings and invalid code units without replacement characters.</summary>
@@ -143,7 +159,11 @@ internal static class SafeMigrationModelManagedKeyIdentity
     /// <param name="destination">Two-code-unit scratch space for one canonical rune or original code unit.</param>
     /// <param name="consumed">The number of authored UTF-16 code units consumed.</param>
     /// <returns>The number of canonical code units written.</returns>
-    private static int FoldOrdinalRune(ReadOnlySpan<char> source, Span<char> destination, out int consumed)
+    private static int FoldOrdinalRune(
+        ReadOnlySpan<char> source,
+        Span<char> destination,
+        out int consumed
+    )
     {
         if (Rune.DecodeFromUtf16(source, out var rune, out consumed) != OperationStatus.Done)
         {
@@ -153,13 +173,18 @@ internal static class SafeMigrationModelManagedKeyIdentity
             return 1;
         }
 
-        var written = Rune.ToUpperInvariant(rune).EncodeToUtf16(destination);
-        if (source[..consumed].Equals(destination[..written], StringComparison.OrdinalIgnoreCase))
+        var written = Rune
+            .ToUpperInvariant(rune)
+            .EncodeToUtf16(destination);
+
+        if (source[..consumed]
+            .Equals(destination[..written], StringComparison.OrdinalIgnoreCase))
         {
             return written;
         }
 
-        source[..consumed].CopyTo(destination);
+        source[..consumed]
+            .CopyTo(destination);
 
         return consumed;
     }
@@ -171,13 +196,18 @@ internal static class SafeMigrationModelManagedKeyIdentity
     private sealed class KeyOrdinalComparer(IReadOnlyList<string> columns) : IComparer<int>
     {
         /// <inheritdoc />
-        public int Compare(int left, int right)
+        public int Compare(
+            int left,
+            int right
+        )
         {
             var comparison = StringComparer.Ordinal.Compare(columns[left], columns[right]);
 
             // WHY: Valid model keys have unique physical members. Stable ties
             // retain authored associations rather than merging duplicate labels.
-            return comparison != 0 ? comparison : left.CompareTo(right);
+            return comparison != 0
+                ? comparison
+                : left.CompareTo(right);
         }
     }
 }

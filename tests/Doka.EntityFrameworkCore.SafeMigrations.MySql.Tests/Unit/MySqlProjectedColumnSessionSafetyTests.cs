@@ -33,8 +33,12 @@ public sealed class MySqlProjectedColumnSessionSafetyTests
         var environment = Environment(strict);
 
         // Act
-        var safe = MySqlProjectedColumnTransition.IsSafe(new AlterColumnIntent("items", target, source), source,
-            new TableView(source), environment, context.GetService<IRelationalTypeMappingSource>(),
+        var safe = MySqlProjectedColumnTransition.IsSafe(
+            new AlterColumnIntent("items", target, source),
+            source,
+            new TableView(source),
+            environment,
+            context.GetService<IRelationalTypeMappingSource>(),
             canReuseCreationCharacterSet: true);
 
         // Assert
@@ -75,7 +79,10 @@ public sealed class MySqlProjectedColumnSessionSafetyTests
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Different, result.ObservedState);
-        Assert.Equal(strict ? SafeMigrationRepairCapability.Safe : SafeMigrationRepairCapability.None,
+        Assert.Equal(
+            strict
+                ? SafeMigrationRepairCapability.Safe
+                : SafeMigrationRepairCapability.None,
             result.RepairCapability);
     }
 
@@ -84,13 +91,28 @@ public sealed class MySqlProjectedColumnSessionSafetyTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void RetainedNonNullDomainCannotBypassPermissiveTightening(bool strict)
+    public void RetainedNonNullDomainCannotBypassPermissiveTightening(
+        bool strict
+    )
     {
         // Arrange
-        var original = MySqlProjectedAlterPhysicalSnapshot.CreateCatalogColumn("varchar", false, 10, 40,
-            null, null, null, 4, "utf8mb4_bin", "utf8mb4");
+        var original = MySqlProjectedAlterPhysicalSnapshot.CreateCatalogColumn(
+            "varchar",
+            false,
+            10,
+            40,
+            null,
+            null,
+            null,
+            4,
+            "utf8mb4_bin",
+            "utf8mb4");
+
         var snapshot = new MySqlProjectedAlterPhysicalSnapshot(
-            new Dictionary<string, MySqlAlterColumnPhysicalShape> { ["value"] = original }, [], Environment(strict));
+            new Dictionary<string, MySqlAlterColumnPhysicalShape> { ["value"] = original },
+            [],
+            Environment(strict));
+
         var source = Character("varchar(20)", nullable: true);
         var target = Character("varchar(30)", nullable: false);
 
@@ -120,8 +142,15 @@ public sealed class MySqlProjectedColumnSessionSafetyTests
         var source = Timestamp(explicitDefault: false, comment: "original");
         var target = Timestamp(explicitDefault, comment: "reviewed");
         var intent = new AlterColumnIntent("items", target, source);
-        var live = Proof(sourceBoundProof ? SafeMigrationObservedState.Different : SafeMigrationObservedState.Missing,
-            sourceBoundProof ? SafeMigrationRepairCapability.Safe : SafeMigrationRepairCapability.None, strict: true);
+        var live = Proof(
+            sourceBoundProof
+                ? SafeMigrationObservedState.Different
+                : SafeMigrationObservedState.Missing,
+            sourceBoundProof
+                ? SafeMigrationRepairCapability.Safe
+                : SafeMigrationRepairCapability.None,
+            strict: true);
+
         var projected = Proof(SafeMigrationObservedState.Different, SafeMigrationRepairCapability.Safe, strict: true);
         var state = ProjectionContext(source, complete: true, canReuse: sourceBoundProof);
 
@@ -130,7 +159,10 @@ public sealed class MySqlProjectedColumnSessionSafetyTests
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Different, result.ObservedState);
-        Assert.Equal(sourceBoundProof ? SafeMigrationRepairCapability.Safe : SafeMigrationRepairCapability.None,
+        Assert.Equal(
+            sourceBoundProof
+                ? SafeMigrationRepairCapability.Safe
+                : SafeMigrationRepairCapability.None,
             result.RepairCapability);
     }
 
@@ -139,7 +171,9 @@ public sealed class MySqlProjectedColumnSessionSafetyTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void MatchingProjectedTargetRemainsNoOpWithoutRepairSessionEvidence(bool timestamp)
+    public void MatchingProjectedTargetRemainsNoOpWithoutRepairSessionEvidence(
+        bool timestamp
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -147,39 +181,90 @@ public sealed class MySqlProjectedColumnSessionSafetyTests
         var projection = new SafeMigrationPreflightProjection(
             projectedColumnAnalyzer: (ISafeMigrationProjectedColumnAnalyzer)analyzer,
             objectIdentityNormalizer: (ISafeMigrationProviderObjectIdentityNormalizer)analyzer);
-        var target = timestamp ? Timestamp(explicitDefault: false) : Character("varchar(20)", nullable: false);
-        var create = new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition("items", [target]),
-            SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent);
+
+        var target = timestamp
+            ? Timestamp(explicitDefault: false)
+            : Character("varchar(20)", nullable: false);
+
+        var create = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("items", [target]),
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         var missing = Proof(SafeMigrationObservedState.Missing, SafeMigrationRepairCapability.None, strict: false);
         var creation = projection.Project(create, missing);
-        projection.Observe(create, missing, creation, SafeMigrationDecisionPlanner.Plan(create.Intent.Kind,
-            creation.ObservedState, create.Policy, creation.RepairCapability));
-        var alter = new SafeMigrationOperation(new AlterColumnIntent("items", target, target),
+        projection.Observe(
+            create,
+            missing,
+            creation,
+            SafeMigrationDecisionPlanner.Plan(
+                create.Intent.Kind,
+                creation.ObservedState,
+                create.Policy,
+                creation.RepairCapability));
+
+        var alter = new SafeMigrationOperation(
+            new AlterColumnIntent("items", target, target),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
         var result = projection.Project(alter, missing);
-        var decision = SafeMigrationDecisionPlanner.Plan(alter.Intent.Kind, result.ObservedState,
-            alter.Policy, result.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            alter.Intent.Kind,
+            result.ObservedState,
+            alter.Policy,
+            result.RepairCapability);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Matching, result.ObservedState);
         Assert.Equal(SafeMigrationAction.NoOp, decision.Action);
     }
 
-    private static ExpectedColumnDefinition Character(string type, bool nullable, bool explicitDefault = false) =>
-        new("value", typeof(string), nullable, type,
+    private static ExpectedColumnDefinition Character(
+        string type,
+        bool nullable,
+        bool explicitDefault = false
+    ) =>
+        new(
+            "value",
+            typeof(string),
+            nullable,
+            type,
             defaultValue: explicitDefault
-                ? SafeMigrationDefaultValue.Literal("fixed") : SafeMigrationDefaultValue.None);
-
-    private static ExpectedColumnDefinition Timestamp(bool explicitDefault, string? comment = null) =>
-        new("value", typeof(DateTime), false, "timestamp", comment: comment,
-            defaultValue: explicitDefault
-                ? SafeMigrationDefaultValue.Literal(new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Unspecified))
+                ? SafeMigrationDefaultValue.Literal("fixed")
                 : SafeMigrationDefaultValue.None);
 
-    private static SafeMigrationIndexPhysicalEnvironment Environment(bool strict) => new(3072,
-        StorageRowFormat: "Dynamic", StoragePageSize: 16384, DefaultCharacterSet: "utf8mb4", StrictSqlMode: strict);
+    private static ExpectedColumnDefinition Timestamp(
+        bool explicitDefault,
+        string? comment = null
+    ) =>
+        new(
+            "value",
+            typeof(DateTime),
+            false,
+            "timestamp",
+            comment: comment,
+            defaultValue: explicitDefault
+                ? SafeMigrationDefaultValue.Literal(
+                    new DateTime(
+                        2020,
+                        1,
+                        1,
+                        0,
+                        0,
+                        0,
+                        DateTimeKind.Unspecified))
+                : SafeMigrationDefaultValue.None);
+
+    private static SafeMigrationIndexPhysicalEnvironment Environment(
+        bool strict
+    ) => new(
+        3072,
+        StorageRowFormat: "Dynamic",
+        StoragePageSize: 16384,
+        DefaultCharacterSet: "utf8mb4",
+        StrictSqlMode: strict);
 
     private static SafeMigrationProviderAnalysis Proof(
         SafeMigrationObservedState state,
@@ -191,13 +276,23 @@ public sealed class MySqlProjectedColumnSessionSafetyTests
         ExpectedColumnDefinition source,
         bool complete,
         bool canReuse
-    ) => new(new TableView(source), HasCompleteTable: complete, ProvesEmpty: complete,
-        HasForeignKeyDependency: false, CanReuseLiveProof: canReuse, HasDataMutation: false,
-        PreservesLiveValueDomain: false, CanReuseCreationCharacterSet: true);
+    ) => new(
+        new TableView(source),
+        HasCompleteTable: complete,
+        ProvesEmpty: complete,
+        HasForeignKeyDependency: false,
+        CanReuseLiveProof: canReuse,
+        HasDataMutation: false,
+        PreservesLiveValueDomain: false,
+        CanReuseCreationCharacterSet: true);
 
-    private static DbContext CreateContext() => new(new DbContextOptionsBuilder<DbContext>()
-        .UseMySql("Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
-            MySqlServerVersion.MySql(new Version(8, 4, 11))).UseMySqlSafeMigrations().Options);
+    private static DbContext CreateContext() => new(
+        new DbContextOptionsBuilder<DbContext>()
+            .UseMySql(
+                "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
+                MySqlServerVersion.MySql(new Version(8, 4, 11)))
+            .UseMySqlSafeMigrations()
+            .Options);
 
     private sealed class TableView(ExpectedColumnDefinition source) : ISafeMigrationProjectedAlterTable
     {
@@ -209,10 +304,16 @@ public sealed class MySqlProjectedColumnSessionSafetyTests
 
         public IEnumerable<ExpectedIndexDefinition> Indexes => [];
 
-        public bool TryGetProjectedColumn(string table, string? schema, string column,
-            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ExpectedColumnDefinition? definition)
+        public bool TryGetProjectedColumn(
+            string table,
+            string? schema,
+            string column,
+            [NotNullWhen(true)] out ExpectedColumnDefinition? definition
+        )
         {
-            definition = StringComparer.Ordinal.Equals(column, source.Name) ? source : null;
+            definition = StringComparer.Ordinal.Equals(column, source.Name)
+                ? source
+                : null;
 
             return definition is not null;
         }

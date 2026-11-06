@@ -24,24 +24,33 @@ public sealed class PostgreSqlIndexesSimpleFiltersIntegrationTests : PostgreSqlS
         await ExecuteSqlAsync(
             connectionString,
             "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer NOT NULL);"
-            + "INSERT INTO hierarchy.simple_filters VALUES (1);");
+            + "INSERT INTO hierarchy.simple_filters VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = SimpleFilterBuilder(context, filter);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("simple-filter-missing-column"),
-            CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("simple-filter-missing-column"),
+                CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, assessment.Action);
-        Assert.Equal(0, await SimpleFilterIndexCountAsync(connectionString));
-        Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT count(*) FROM hierarchy.simple_filters;"));
+        Assert.Equal(0, await SimpleFilterIndexCountAsync(connectionString, cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT count(*) FROM hierarchy.simple_filters;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A missing canonical filter column rejects execution through the provider guard.</summary>
@@ -59,19 +68,29 @@ public sealed class PostgreSqlIndexesSimpleFiltersIntegrationTests : PostgreSqlS
         await ExecuteSqlAsync(
             connectionString,
             "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer NOT NULL);"
-            + "INSERT INTO hierarchy.simple_filters VALUES (1);");
+            + "INSERT INTO hierarchy.simple_filters VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = SimpleFilterBuilder(context, filter);
 
         // Act
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            CancellationToken.None));
 
         // Assert
         var postgres = Assert.IsType<PostgresException>(exception);
         Assert.Equal("P1004", postgres.SqlState);
         Assert.StartsWith("doka_sm_prerequisite_missing:", postgres.MessageText, StringComparison.Ordinal);
-        Assert.Equal(0, await SimpleFilterIndexCountAsync(connectionString));
-        Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT count(*) FROM hierarchy.simple_filters;"));
+        Assert.Equal(0, await SimpleFilterIndexCountAsync(connectionString, cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT count(*) FROM hierarchy.simple_filters;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Canonical null predicates execute without rewriting authored raw SQL or existing rows.</summary>
@@ -91,18 +110,26 @@ public sealed class PostgreSqlIndexesSimpleFiltersIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateSimpleFilterTableAsync(connectionString, column);
+        await CreateSimpleFilterTableAsync(connectionString, CancellationToken.None, column);
         await using var context = CreateContext(connectionString);
         var builder = SimpleFilterBuilder(context, filter);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Assert
-        Assert.Equal(1, await SimpleFilterIndexCountAsync(connectionString));
-        Assert.Equal(3, await ScalarIntAsync(connectionString, "SELECT count(*) FROM hierarchy.simple_filters;"));
+        Assert.Equal(1, await SimpleFilterIndexCountAsync(connectionString, cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            3,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT count(*) FROM hierarchy.simple_filters;",
+                cancellationToken: CancellationToken.None));
+
         var definition = Assert.IsType<EnsureIndexIntent>(
-            Assert.IsType<SafeMigrationOperation>(Assert.Single(builder.Operations)).Intent).Definition;
+                Assert.IsType<SafeMigrationOperation>(Assert.Single(builder.Operations))
+                    .Intent)
+            .Definition;
 
         Assert.Equal(filter, definition.Filter);
         Assert.Null(definition.StructuredFilter);
@@ -119,17 +146,22 @@ public sealed class PostgreSqlIndexesSimpleFiltersIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateSimpleFilterTableAsync(connectionString);
+        await CreateSimpleFilterTableAsync(connectionString, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = SimpleFilterBuilder(context, filter);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Assert
-        Assert.Equal(1, await SimpleFilterIndexCountAsync(connectionString));
-        Assert.Equal(3, await ScalarIntAsync(connectionString, "SELECT count(*) FROM hierarchy.simple_filters;"));
+        Assert.Equal(1, await SimpleFilterIndexCountAsync(connectionString, cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            3,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT count(*) FROM hierarchy.simple_filters;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Catalog deparsing of a canonical predicate is recognized as the same physical index.</summary>
@@ -147,23 +179,26 @@ public sealed class PostgreSqlIndexesSimpleFiltersIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateSimpleFilterTableAsync(connectionString, column);
+        await CreateSimpleFilterTableAsync(connectionString, CancellationToken.None, column);
         await using var context = CreateContext(connectionString);
         var builder = SimpleFilterBuilder(context, filter);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("simple-filter-matching"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("simple-filter-matching"),
+                CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
-        Assert.Equal(1, await SimpleFilterIndexCountAsync(connectionString));
+        Assert.Equal(1, await SimpleFilterIndexCountAsync(connectionString, cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Postflight verifies the preserved raw predicate against the physical catalog expression.</summary>
@@ -177,20 +212,24 @@ public sealed class PostgreSqlIndexesSimpleFiltersIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateSimpleFilterTableAsync(connectionString);
+        await CreateSimpleFilterTableAsync(connectionString, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = SimpleFilterBuilder(context, filter);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("simple-filter-postflight"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("simple-filter-postflight"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.True(Assert.Single(report.Assessments).PostconditionSatisfied);
+        Assert.True(Assert.Single(report.Assessments)
+            .PostconditionSatisfied);
     }
 
     /// <summary>Changing the filter while retaining an occupied name is a contract conflict.</summary>
@@ -199,16 +238,24 @@ public sealed class PostgreSqlIndexesSimpleFiltersIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateSimpleFilterTableAsync(connectionString);
+        await CreateSimpleFilterTableAsync(connectionString, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await ExecuteOperationsAsync(context, SimpleFilterBuilder(context, "parent IS NULL").Operations);
+        await ExecuteOperationsAsync(
+            context,
+            SimpleFilterBuilder(context, "parent IS NULL")
+                .Operations,
+            CancellationToken.None);
+
         var drift = SimpleFilterBuilder(context, "parent IS NOT NULL");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            drift.Operations,
-            new SafeMigrationRunOptions("simple-filter-drift"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                drift.Operations,
+                new SafeMigrationRunOptions("simple-filter-drift"),
+                CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
@@ -223,26 +270,34 @@ public sealed class PostgreSqlIndexesSimpleFiltersIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await CreateSimpleFilterTableAsync(connectionString);
+        await CreateSimpleFilterTableAsync(connectionString, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await ExecuteOperationsAsync(context, SimpleFilterBuilder(context, "parent IS NULL").Operations);
+        await ExecuteOperationsAsync(
+            context,
+            SimpleFilterBuilder(context, "parent IS NULL")
+                .Operations,
+            CancellationToken.None);
+
         var drift = SimpleFilterBuilder(context, "parent IS NOT NULL");
 
         // Act
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, drift.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            drift.Operations,
+            CancellationToken.None));
 
         // Assert
         var postgres = Assert.IsType<PostgresException>(exception);
         Assert.Equal("P1001", postgres.SqlState);
         Assert.StartsWith("doka_sm_different:", postgres.MessageText, StringComparison.Ordinal);
-        Assert.Equal(1, await SimpleFilterIndexCountAsync(connectionString));
+        Assert.Equal(1, await SimpleFilterIndexCountAsync(connectionString, cancellationToken: CancellationToken.None));
         Assert.Equal(
             "(parent IS NULL)",
             await ScalarStringAsync(
                 connectionString,
                 "SELECT pg_catalog.pg_get_expr(i.indpred, i.indrelid) FROM pg_catalog.pg_index i "
                 + "JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid "
-                + "WHERE c.relname = 'simple_filter_lookup';"));
+                + "WHERE c.relname = 'simple_filter_lookup';",
+                cancellationToken: CancellationToken.None));
     }
-
 }

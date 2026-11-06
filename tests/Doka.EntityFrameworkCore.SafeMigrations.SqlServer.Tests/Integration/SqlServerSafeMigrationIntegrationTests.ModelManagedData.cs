@@ -16,11 +16,13 @@ public sealed class SqlServerSafeMigrationModelManagedDataIntegrationTests : Sql
     public async Task ModelManagedInsert_AppliesAndReplaysExactRow()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.managed_settings (Id int NOT NULL CONSTRAINT PK_managed_settings PRIMARY KEY, "
-            + "Caption nvarchar(80) NOT NULL);");
+            + "Caption nvarchar(80) NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel(
@@ -32,13 +34,17 @@ public sealed class SqlServerSafeMigrationModelManagedDataIntegrationTests : Sql
             values: new object?[,] { { 1, "source" } });
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var rowCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM dbo.managed_settings WHERE Id = 1 AND Caption = N'source';");
+            "SELECT COUNT(*) FROM dbo.managed_settings WHERE Id = 1 AND Caption = N'source';",
+            cancellationToken: CancellationToken.None);
 
-        var totalCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.managed_settings;");
+        var totalCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.managed_settings;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, rowCount);
@@ -52,12 +58,14 @@ public sealed class SqlServerSafeMigrationModelManagedDataIntegrationTests : Sql
     public async Task ModelManagedInsert_RejectsDifferentExistingRowWithoutMutation()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.managed_drift (Id int NOT NULL CONSTRAINT PK_managed_drift PRIMARY KEY, "
             + "Caption nvarchar(80) NOT NULL); "
-            + "INSERT INTO dbo.managed_drift (Id, Caption) VALUES (1, N'user-edited');");
+            + "INSERT INTO dbo.managed_drift (Id, Caption) VALUES (1, N'user-edited');",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel(
@@ -69,18 +77,25 @@ public sealed class SqlServerSafeMigrationModelManagedDataIntegrationTests : Sql
             values: new object?[,] { { 1, "source" } });
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-managed-drift"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-managed-drift"),
+                cancellationToken: CancellationToken.None);
 
         var rowCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM dbo.managed_drift WHERE Id = 1 AND Caption = N'user-edited';");
+            "SELECT COUNT(*) FROM dbo.managed_drift WHERE Id = 1 AND Caption = N'user-edited';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Different,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
         Assert.Equal(1, rowCount);
     }
 }

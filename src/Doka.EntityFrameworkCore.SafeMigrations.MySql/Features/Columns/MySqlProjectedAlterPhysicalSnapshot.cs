@@ -61,16 +61,18 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
 
             rowBytes += shape.DeclaredRowBytes;
             if (!TryGetInlineBytes(
-                    shape,
-                    IsClusteredKeyColumn(name, intent, table, mappings),
-                    environment,
-                    out var inline))
+                shape,
+                IsClusteredKeyColumn(name, intent, table, mappings),
+                environment,
+                out var inline))
             {
                 return false;
             }
 
             inlineBytes += inline;
-            nullableColumns += shape.IsNullable ? 1 : 0;
+            nullableColumns += shape.IsNullable
+                ? 1
+                : 0;
         }
 
         // WHY: Convergence may have added columns that were absent from the
@@ -90,19 +92,21 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
 
             rowBytes += shape.DeclaredRowBytes;
             if (!TryGetInlineBytes(
-                    shape,
-                    IsClusteredKeyColumn(definition.Name, intent, table, mappings),
-                    environment,
-                    out var inline))
+                shape,
+                IsClusteredKeyColumn(definition.Name, intent, table, mappings),
+                environment,
+                out var inline))
             {
                 return false;
             }
 
             inlineBytes += inline;
-            nullableColumns += shape.IsNullable ? 1 : 0;
+            nullableColumns += shape.IsNullable
+                ? 1
+                : 0;
         }
 
-        if (rowBytes + ((nullableColumns + 7L) / 8) > 65535
+        if (rowBytes + (nullableColumns + 7L) / 8 > 65535
             || !InlineRowFits(inlineBytes, nullableColumns, environment))
         {
             return false;
@@ -205,16 +209,31 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         var width = type switch
         {
             "varchar" or "varbinary" => characterOctetLength is { } length
-                ? length + (length <= 255 ? 1 : 2) : 65536,
+                ? length
+                + (length <= 255
+                    ? 1
+                    : 2)
+                : 65536,
             "char" or "binary" => characterOctetLength ?? 65536,
-            "tinyblob" or "tinytext" or "blob" or "text" or "mediumblob" or "mediumtext"
-                or "longblob" or "longtext" or "json" or "geometry" => 12,
+            "tinyblob"
+                or "tinytext"
+                or "blob"
+                or "text"
+                or "mediumblob"
+                or "mediumtext"
+                or "longblob"
+                or "longtext"
+                or "json"
+                or "geometry" => 12,
             "tinyint" => 1,
             "smallint" => 2,
             "mediumint" => 3,
             "int" or "integer" => 4,
-            "float" => numericPrecision is > 24 ? 8 : 4,
+            "float" => numericPrecision is > 24
+                ? 8
+                : 4,
             "bigint" or "double" => 8,
+
             // WHY: Separate integer/fractional groups can need one extra byte
             // beyond ceil(total digits / 2). Thirty-six bounds every DECIMAL
             // precision accepted by the engines without undercounting a row.
@@ -225,6 +244,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
             "year" => 1,
             "enum" => 2,
             "set" => 8,
+
             // WHY: Native UUID storage is fixed at sixteen bytes, independent
             // of the provider's textual wire mapping and character metadata.
             "uuid" => 16,
@@ -232,8 +252,12 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         };
 
         var indexShape = MySqlProjectedIndexPhysicalShape.CreateCatalogColumnShape(
-            dataType, characterMaximumLength, characterOctetLength,
-            numericPrecision, numericScale, dateTimePrecision);
+            dataType,
+            characterMaximumLength,
+            characterOctetLength,
+            numericPrecision,
+            numericScale,
+            dateTimePrecision);
 
         if (type is "char" or "varchar" or "tinytext" or "text" or "mediumtext" or "longtext")
         {
@@ -247,17 +271,34 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         {
             "varchar" or "varbinary" => Math.Min(characterOctetLength ?? 65536, 255),
             "char" or "binary" when characterOctetLength >= 768 => 767,
-            "tinyblob" or "tinytext" or "blob" or "text" or "mediumblob" or "mediumtext"
-                or "longblob" or "longtext" or "json" or "geometry" => 40,
+            "tinyblob"
+                or "tinytext"
+                or "blob"
+                or "text"
+                or "mediumblob"
+                or "mediumtext"
+                or "longblob"
+                or "longtext"
+                or "json"
+                or "geometry" => 40,
             _ => width,
         };
 
         var compactInline = type switch
         {
             "varchar" or "varbinary" or "char" or "binary" => characterOctetLength is <= 768
-                ? characterOctetLength.Value : 788,
-            "tinyblob" or "tinytext" or "blob" or "text" or "mediumblob" or "mediumtext"
-                or "longblob" or "longtext" or "json" or "geometry" => 788,
+                ? characterOctetLength.Value
+                : 788,
+            "tinyblob"
+                or "tinytext"
+                or "blob"
+                or "text"
+                or "mediumblob"
+                or "mediumtext"
+                or "longblob"
+                or "longtext"
+                or "json"
+                or "geometry" => 788,
             _ => width,
         };
 
@@ -287,10 +328,18 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         out MySqlAlterColumnPhysicalShape shape
     )
     {
-        var storeType = definition.StoreType ?? mappings.FindMapping(
-            definition.ClrType, definition.StoreType, keyOrIndex: false, definition.IsUnicode,
-            definition.MaxLength, definition.IsRowVersion, definition.IsFixedLength,
-            definition.Precision, definition.Scale)?.StoreType;
+        var storeType = definition.StoreType
+            ?? mappings.FindMapping(
+                    definition.ClrType,
+                    definition.StoreType,
+                    keyOrIndex: false,
+                    definition.IsUnicode,
+                    definition.MaxLength,
+                    definition.IsRowVersion,
+                    definition.IsFixedLength,
+                    definition.Precision,
+                    definition.Scale)
+                ?.StoreType;
 
         if (storeType is null
             || characterBytes is < 1 or > 4)
@@ -300,11 +349,19 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
             return false;
         }
 
-        var value = storeType.AsSpan().Trim();
+        var value = storeType
+            .AsSpan()
+            .Trim();
+
         var open = value.IndexOf('(');
         var close = value.LastIndexOf(')');
         var nameEnd = value.IndexOfAny('(', ' ');
-        var type = (nameEnd < 0 ? value : value[..nameEnd]).ToString().ToLowerInvariant();
+        var type = (nameEnd < 0
+                ? value
+                : value[..nameEnd])
+            .ToString()
+            .ToLowerInvariant();
+
         long? units = null;
         if (type is "varchar" or "char" or "varbinary" or "binary")
         {
@@ -322,7 +379,10 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         }
 
         var binary = type is "varbinary" or "binary";
-        var bytes = binary ? 1 : characterBytes;
+        var bytes = binary
+            ? 1
+            : characterBytes;
+
         var precision = definition.Precision;
         var scale = definition.Scale;
         if (open >= 0
@@ -331,22 +391,35 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         {
             var arguments = value[(open + 1)..close];
             var comma = arguments.IndexOf(',');
-            var first = comma < 0 ? arguments : arguments[..comma];
+            var first = comma < 0
+                ? arguments
+                : arguments[..comma];
+
             if (int.TryParse(first.Trim(), CultureInfo.InvariantCulture, out var parsedPrecision))
             {
                 precision = parsedPrecision;
             }
 
             if (comma >= 0
-                && int.TryParse(arguments[(comma + 1)..].Trim(), CultureInfo.InvariantCulture, out var parsedScale))
+                && int.TryParse(arguments[(comma + 1)..]
+                        .Trim(),
+                    CultureInfo.InvariantCulture,
+                    out var parsedScale))
             {
                 scale = parsedScale;
             }
         }
 
         shape = CreateCatalogColumn(
-            type, definition.IsNullable, units, units * bytes,
-            precision, scale, precision, bytes, definition.Collation?.Name);
+            type,
+            definition.IsNullable,
+            units,
+            units * bytes,
+            precision,
+            scale,
+            precision,
+            bytes,
+            definition.Collation?.Name);
 
         return shape.DeclaredRowBytes <= 65535;
     }
@@ -406,8 +479,12 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         // short values below the overflow threshold still need their full
         // bytes. Two directory bytes per field cover both compact and legacy
         // formats without relying on actual row contents.
-        bytes = (primaryKey ? shape.DeclaredRowBytes
-            : dynamic ? shape.DynamicInlineBytes : shape.CompactInlineBytes) + 2;
+        bytes = (primaryKey
+                ? shape.DeclaredRowBytes
+                : dynamic
+                    ? shape.DynamicInlineBytes
+                    : shape.CompactInlineBytes)
+            + 2;
 
         return true;
     }
@@ -435,7 +512,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         // and is rejected by TryGetInlineBytes rather than guessed here.
         var maximum = Math.Min(environment.StoragePageSize.Value / 2, 16384) - 256;
 
-        return fieldBytes + ((nullableColumns + 7L) / 8) <= maximum;
+        return fieldBytes + (nullableColumns + 7L) / 8 <= maximum;
     }
 
     private bool IsClusteredKeyColumn(
@@ -518,10 +595,12 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
 
         return false;
 
-        bool IsRequired(string column) => StringComparer.OrdinalIgnoreCase.Equals(column, target.Name)
+        bool IsRequired(
+            string column
+        ) => StringComparer.OrdinalIgnoreCase.Equals(column, target.Name)
             ? !target.IsNullable
             : table.TryGetProjectedColumn(intent.Table, intent.Schema, column, out var definition)
-                && !definition.IsNullable;
+            && !definition.IsNullable;
     }
 
     private bool TryGetKeyBytes(
@@ -576,7 +655,9 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         var exists = columns.TryGetValue(name, out shape);
         var definition = StringComparer.OrdinalIgnoreCase.Equals(name, intent.Definition.Name)
             ? intent.Definition
-            : table.TryGetProjectedColumn(intent.Table, intent.Schema, name, out var accepted) ? accepted : null;
+            : table.TryGetProjectedColumn(intent.Table, intent.Schema, name, out var accepted)
+                ? accepted
+                : null;
 
         if (definition is null)
         {
@@ -589,11 +670,17 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot(
         // target-collation proof in its source-bound provider analysis.
         var retainsEncoding = exists
             && (StringComparer.OrdinalIgnoreCase.Equals(name, intent.Definition.Name)
-            || (definition.Collation is not null
-                && definition.Collation.Schema is null
-                && StringComparer.OrdinalIgnoreCase.Equals(definition.Collation.Name, shape.Collation)));
+                || (definition.Collation is not null
+                    && definition.Collation.Schema is null
+                    && StringComparer.OrdinalIgnoreCase.Equals(definition.Collation.Name, shape.Collation)));
 
-        return TryCreateProjectedColumn(definition, mappings, retainsEncoding ? shape.CharacterBytes : 4, out shape);
+        return TryCreateProjectedColumn(
+            definition,
+            mappings,
+            retainsEncoding
+                ? shape.CharacterBytes
+                : 4,
+            out shape);
     }
 
     /// <summary>Exposes no fabricated key or newly added-column authority for a narrow index-only lifetime.</summary>

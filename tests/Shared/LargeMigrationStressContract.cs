@@ -38,7 +38,8 @@ internal static class LargeMigrationStressContract
         // object, so the stress catalog varies structural identity as well.
         for (var ordinal = 0; ordinal < operationCount; ordinal++)
         {
-            scenarios[ordinal % scenarios.Count].AddOperation(builder, ordinal);
+            scenarios[ordinal % scenarios.Count]
+                .AddOperation(builder, ordinal);
         }
 
         return new LargeMigrationStressExpectation(
@@ -76,7 +77,10 @@ internal static class LargeMigrationStressContract
             return CreateSqlServerScenarios();
         }
 
-        var integerStoreType = dialect == LargeMigrationStressDialect.MySql ? "int" : "integer";
+        var integerStoreType = dialect == LargeMigrationStressDialect.MySql
+            ? "int"
+            : "integer";
+
         var textStoreType = dialect == LargeMigrationStressDialect.MySql
             ? "varchar(40)"
             : "character varying(40)";
@@ -580,17 +584,18 @@ internal static class LargeMigrationStressContract
 
         if (dialect == LargeMigrationStressDialect.MySql)
         {
-            scenarios.Add(Scenario(
-                (migrationBuilder, _) => migrationBuilder.EnsureColumn(
-                    TargetTable,
-                    booleanDefinition,
-                    SafeMigrationPolicy.RepairIfSafe),
-                _ => booleanDefinition.Name,
-                SafeMigrationOperationKind.EnsureColumn,
-                SafeMigrationObservedState.Different,
-                SafeMigrationAction.Repair,
-                operationalImpact: SafeMigrationOperationalImpact.TableRewritePossible,
-                convergesOnFirstAcceptedMutation: true));
+            scenarios.Add(
+                Scenario(
+                    (migrationBuilder, _) => migrationBuilder.EnsureColumn(
+                        TargetTable,
+                        booleanDefinition,
+                        SafeMigrationPolicy.RepairIfSafe),
+                    _ => booleanDefinition.Name,
+                    SafeMigrationOperationKind.EnsureColumn,
+                    SafeMigrationObservedState.Different,
+                    SafeMigrationAction.Repair,
+                    operationalImpact: SafeMigrationOperationalImpact.TableRewritePossible,
+                    convergesOnFirstAcceptedMutation: true));
         }
 
         scenarios.Add(UnsupportedScenario(dialect));
@@ -758,6 +763,7 @@ internal static class LargeMigrationStressContract
                 SafeMigrationOperationKind.EnsureIndex,
                 SafeMigrationObservedState.Unsupported,
                 SafeMigrationAction.RejectUnsupported),
+
             // WHY: Required addition depends on captured table contents. A managed
             // write can fire triggers; later cycles cannot reuse DataBlocked.
             Scenario(
@@ -882,9 +888,9 @@ internal static class LargeMigrationStressContract
 
 internal sealed class LargeMigrationStressExpectation
 {
-    private readonly IReadOnlyList<LargeMigrationStressScenario> _scenarios;
     private readonly bool _allowUnexpectedObjects;
     private readonly int _operationCount;
+    private readonly IReadOnlyList<LargeMigrationStressScenario> _scenarios;
 
     /// <summary>Captures the source scenarios and exact size of the ordered report to verify.</summary>
     /// <param name="scenarios">The repeating immutable source-state contracts.</param>
@@ -919,9 +925,12 @@ internal sealed class LargeMigrationStressExpectation
             Assert.Empty(report.UnexpectedObjects);
         }
 
+        var sourceStateCounts = new int[Enum.GetValues<SafeMigrationObservedState>()
+            .Length];
 
-        var sourceStateCounts = new int[Enum.GetValues<SafeMigrationObservedState>().Length];
-        var actionCounts = new int[Enum.GetValues<SafeMigrationAction>().Length];
+        var actionCounts = new int[Enum.GetValues<SafeMigrationAction>()
+            .Length];
+
         var convergedScenarios = new bool[_scenarios.Count];
         var projectedDataMutationSeen = false;
         var managedMutationOrigin = -1;
@@ -1040,13 +1049,13 @@ internal sealed class LargeMigrationStressExpectation
             actionCounts[(int)expectedAction]++;
 
             if (scenario.ConvergesOnFirstAcceptedMutation
-                && (expectedAction is SafeMigrationAction.Apply or SafeMigrationAction.Repair))
+                && expectedAction is SafeMigrationAction.Apply or SafeMigrationAction.Repair)
             {
                 convergedScenarios[scenarioIndex] = true;
             }
 
             if (mutatesModelManagedData
-                && (expectedAction is SafeMigrationAction.Apply or SafeMigrationAction.ValidateAtRuntime))
+                && expectedAction is SafeMigrationAction.Apply or SafeMigrationAction.ValidateAtRuntime)
             {
                 projectedDataMutationSeen = true;
                 managedMutationOrigin = ordinal;

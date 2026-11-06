@@ -1,13 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <Compile Include="..\..\benchmarks\Doka.EntityFrameworkCore.SafeMigrations.Benchmarks\BenchmarkRunner.cs"
-             Link="Infrastructure\BenchmarkRunner.cs" />
+    <Compile Include="..\..\benchmarks\Shared\BenchmarkProgram.cs" Link="Infrastructure\BenchmarkProgram.cs" />
+    <Compile Include="..\..\benchmarks\Shared\SourceBoundToolchain.cs"
+             Link="Infrastructure\SourceBoundToolchain.cs" />
+    <AssemblyMetadata Include="BenchmarkProjectPath" Value="$(MSBuildProjectFullPath)" />
+    <PackageReference Include="BenchmarkDotNet" PrivateAssets="all" />
     <Compile Include="..\Shared\SafeMigrationLiteralContract.cs"
              Link="Infrastructure\SafeMigrationLiteralContract.cs" />
     <Compile Include="..\Shared\SafeMigrationStateSpaceGenerator.cs"
              Link="Infrastructure\SafeMigrationStateSpaceGenerator.cs" />
     <Compile Include="..\Shared\LargeMigrationStressContract.cs"
              Link="Infrastructure\LargeMigrationStressContract.cs" />
+    <Compile Include="..\Shared\LivePerformanceEvidence.cs"
+             Link="Infrastructure\LivePerformanceEvidence.cs" />
+    <Compile Include="..\Shared\ModelManagedDataLargeExecutionContract.cs"
+             Link="Infrastructure\ModelManagedDataLargeExecutionContract.cs" />
     <None Include="..\..\schemas\safe-migration-report-view-v1.schema.json"
           Link="schemas\safe-migration-report-view-v1.schema.json"
           CopyToOutputDirectory="PreserveNewest" />

@@ -17,6 +17,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             "doka_expected",
             "t",
             isMariaDb);
+
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var uniqueCollision = UniqueCollision(intent, intent.UniqueKeys, relation, "t");
         var engineUnsupported = EngineUnsupported(intent.Table);
@@ -71,6 +72,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             "doka_expected",
             "o",
             isMariaDb);
+
         var targetMatch = ColumnMatch(
             intent.Columns,
             intent.ColumnTypes,
@@ -78,6 +80,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             "doka_expected",
             "n",
             isMariaDb);
+
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var uniqueCollision = UniqueCollision(intent, intent.UniqueKeys, relation, "n");
         var engineUnsupported = EngineUnsupported(intent.Table);
@@ -94,8 +97,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch} "
             + $"WHERE NOT ({found}) OR NOT ({targetMatch}))";
 
-        var assignments = string.Join(", ", intent.Columns.Select((column, ordinal) =>
-            $"doka_actual.{Delimited(column)} = doka_expected.{Delimited($"n{ordinal}")}"));
+        var assignments = string.Join(
+            ", ",
+            intent.Columns.Select((column, ordinal) =>
+                $"doka_actual.{Delimited(column)} = doka_expected.{Delimited($"n{ordinal}")}"));
 
         var mutation = $"UPDATE {table} AS doka_actual JOIN {relation} ON {keyMatch} "
             + $"SET {assignments} WHERE ({sourceMatch}) AND NOT ({targetMatch})";
@@ -129,6 +134,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             "doka_expected",
             "o",
             isMariaDb);
+
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var dependencyExists = DependencyExists(intent, relation);
         var unmodeledDependency = UnmodeledIncomingForeignKey(intent);
@@ -173,7 +179,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         ModelManagedDataIntent intent
     )
     {
-        var columns = intent.KeyColumns
+        var columns = intent
+            .KeyColumns
             .Concat(intent.Columns)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
@@ -197,6 +204,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     )
     {
         var rows = new string[intent.RowCount];
+
         // WHY: Keep row selectors, declared column types and matrix values aligned by their original ordinals.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -293,7 +301,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         int count,
         string alias,
         string prefix
-    ) => Enumerable.Range(0, count).Select(ordinal => $"{alias}.{Delimited($"{prefix}{ordinal}")}");
+    ) => Enumerable
+        .Range(0, count)
+        .Select(ordinal => $"{alias}.{Delimited($"{prefix}{ordinal}")}");
 
     private string UniqueCollision(
         ModelManagedDataIntent intent,
@@ -403,7 +413,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         var modeledShapes = intent.ForeignKeys.Select(foreignKey =>
         {
-            var dependentSchema = foreignKey.Schema is null ? "DATABASE()" : Literal(foreignKey.Schema);
+            var dependentSchema = foreignKey.Schema is null
+                ? "DATABASE()"
+                : Literal(foreignKey.Schema);
+
             var columns = foreignKey.Columns.Select((column, ordinal) =>
                 "SUM(kcu.ORDINAL_POSITION = "
                 + (ordinal + 1).ToString(CultureInfo.InvariantCulture)
@@ -420,7 +433,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             ? "FALSE"
             : $"({string.Join(" OR ", modeledShapes)})";
 
-        var principalSchema = intent.Schema is null ? "DATABASE()" : Literal(intent.Schema);
+        var principalSchema = intent.Schema is null
+            ? "DATABASE()"
+            : Literal(intent.Schema);
 
         // A live incoming FK outside the source-frozen model cannot be guarded
         // by a statically rendered delete. Reject the operation before its

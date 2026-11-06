@@ -1,3 +1,5 @@
+using System.Data;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed partial class MySqlSafeMigrationProviderAnalyzer
@@ -27,12 +29,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     )
     {
         List<int>? ordinals = null;
+
         // WHY: Preserve binary-proof variable slots and their ordered bounded selection ranges.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < plans.Length; ordinal++)
         {
-            if (states[ordinal] is null && !plans[ordinal].IsStaticallyUnsupported
+            if (states[ordinal] is null
+                && !plans[ordinal].IsStaticallyUnsupported
                 && plans[ordinal].BinaryDefaultProofs.Count > 0)
             {
                 (ordinals ??= []).Add(ordinal);
@@ -69,30 +73,40 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 var plan = plans[ordinal];
                 var checkpoint = parameterizer.Capture();
                 var eligibility = new string[plan.BinaryDefaultProofs.Count];
+
                 // WHY: Preserve binary-proof variable slots and their ordered bounded selection ranges.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var proof = 0; proof < eligibility.Length; proof++)
                 {
                     eligibility[proof] = plan.RenderBinaryDefaultEligibilityExpression(
-                        plan.BinaryDefaultProofs[proof], parameterizer.Add);
+                        plan.BinaryDefaultProofs[proof],
+                        parameterizer.Add);
                 }
 
                 var evaluation = MySqlSafeMigrationBinaryDefaultProof.BuildEvaluationSql(
-                    plan.BinaryDefaultProofs, eligibility, "TRUE", BinaryDefaultStatementName,
-                    BinaryDefaultSqlVariable, proofCount);
+                    plan.BinaryDefaultProofs,
+                    eligibility,
+                    "TRUE",
+                    BinaryDefaultStatementName,
+                    BinaryDefaultSqlVariable,
+                    proofCount);
 
                 var evaluationBytes = Encoding.UTF8.GetByteCount(evaluation);
                 var candidateSelections = new string[eligibility.Length];
                 var candidateSelectionBytes = 0;
+
                 // WHY: Preserve binary-proof variable slots and their ordered bounded selection ranges.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var proof = 0; proof < candidateSelections.Length; proof++)
                 {
                     var index = proofCount + proof;
-                    candidateSelections[proof] = "SELECT " + index.ToString(CultureInfo.InvariantCulture)
-                        + ", " + MySqlSafeMigrationBinaryDefaultProof.Variable(index);
+                    candidateSelections[proof] = "SELECT "
+                        + index.ToString(CultureInfo.InvariantCulture)
+                        + ", "
+                        + MySqlSafeMigrationBinaryDefaultProof.Variable(index);
+
                     candidateSelectionBytes += Encoding.UTF8.GetByteCount(candidateSelections[proof])
                         + SafeMigrationCatalogQueryLimits.Separator.Length;
                 }
@@ -102,8 +116,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 // final cleanup without repeatedly materializing its growing
                 // SET text while filling a batch.
                 var prospectiveProofCount = checked(proofCount + eligibility.Length);
-                var payload = checked(sqlBytes + evaluationBytes + selectionBytes + candidateSelectionBytes
-                    + (prospectiveProofCount * 64) + 1024 + parameterizer.Utf8PayloadBytes);
+                var payload = checked(sqlBytes
+                    + evaluationBytes
+                    + selectionBytes
+                    + candidateSelectionBytes
+                    + prospectiveProofCount * 64
+                    + 1024
+                    + parameterizer.Utf8PayloadBytes);
+
                 if (SafeMigrationCatalogQueryLimits.Exceeded(parameterizer.Count, payload, maximumPayloadBytes))
                 {
                     var parameterCount = parameterizer.Count;
@@ -111,7 +131,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     if (selected.Count == 0)
                     {
                         throw SafeMigrationCatalogQueryLimits.OversizedOperation(
-                            operationOffset + ordinal, parameterCount, payload);
+                            operationOffset + ordinal,
+                            parameterCount,
+                            payload);
                     }
 
                     break;
@@ -127,17 +149,23 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             }
 
             var reset = MySqlSafeMigrationBinaryDefaultProof.BuildResetSql(proofCount, 0, clear: true)
-                + "SET " + BinaryDefaultSqlVariable + " = NULL;";
+                + "SET "
+                + BinaryDefaultSqlVariable
+                + " = NULL;";
 
-            command.CommandText = setup.Append(string.Join(SafeMigrationCatalogQueryLimits.Separator, selections))
-                .Append(';').Append(reset).ToString();
+            command.CommandText = setup
+                .Append(string.Join(SafeMigrationCatalogQueryLimits.Separator, selections))
+                .Append(';')
+                .Append(reset)
+                .ToString();
 
             var completed = false;
             Exception? failure = null;
             try
             {
                 await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-                while (reader.FieldCount == 0 && await reader.NextResultAsync(cancellationToken))
+                while (reader.FieldCount == 0
+                    && await reader.NextResultAsync(cancellationToken))
                 {
                     // WHY: Multi-statement commands can expose metadata-free
                     // status headers before the owned two-column result set.
@@ -154,13 +182,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 {
                     var plan = plans[ordinal];
                     var bindings = new MySqlSafeMigrationBinaryDefaultProof[plan.BinaryDefaultProofs.Count];
+
                     // WHY: Preserve binary-proof variable slots and their ordered bounded selection ranges.
                     // ReSharper disable once ForCanBeConvertedToForeach
                     // ReSharper disable once LoopCanBeConvertedToQuery
                     for (var proof = 0; proof < bindings.Length; proof++)
                     {
                         if (!await reader.ReadAsync(cancellationToken)
-                            || reader.GetInt32(0) != expected || reader.IsDBNull(1))
+                            || reader.GetInt32(0) != expected
+                            || reader.IsDBNull(1))
                         {
                             throw new InvalidOperationException(
                                 "The MySQL binary-default proof returned an invalid row.");
@@ -168,7 +198,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
                         bindings[proof] = plan.BinaryDefaultProofs[proof] with
                         {
-                            Binding = reader.GetBoolean(1) ? "TRUE" : "FALSE",
+                            Binding = reader.GetBoolean(1)
+                                ? "TRUE"
+                                : "FALSE",
                         };
 
                         expected++;
@@ -205,7 +237,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             }
             finally
             {
-                if (!completed && connection.State == System.Data.ConnectionState.Open)
+                if (!completed
+                    && connection.State == ConnectionState.Open)
                 {
                     try
                     {
@@ -215,8 +248,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                             cleanup.CommandTimeout = cleanupTimeout;
                         }
 
-                        cleanup.CommandText = "PREPARE " + BinaryDefaultStatementName + " FROM 'DO 0';"
-                            + "DEALLOCATE PREPARE " + BinaryDefaultStatementName + ";" + reset;
+                        cleanup.CommandText = "PREPARE "
+                            + BinaryDefaultStatementName
+                            + " FROM 'DO 0';"
+                            + "DEALLOCATE PREPARE "
+                            + BinaryDefaultStatementName
+                            + ";"
+                            + reset;
+
                         await cleanup.ExecuteNonQueryAsync(CancellationToken.None);
                     }
                     catch (Exception exception) when (failure is not null)

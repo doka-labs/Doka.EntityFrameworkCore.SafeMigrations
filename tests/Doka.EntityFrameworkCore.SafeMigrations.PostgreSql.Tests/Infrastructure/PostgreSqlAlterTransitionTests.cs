@@ -17,28 +17,39 @@ public sealed class PostgreSqlAlterTransitionTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext("Host=localhost;Database=unused;Username=unused");
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("alter_rows",
-            new ExpectedColumnDefinition("value", typeof(string), false, targetType),
-            new ExpectedColumnDefinition("value", typeof(string), true, sourceType)),
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "alter_rows",
+                new ExpectedColumnDefinition("value", typeof(string), false, targetType),
+                new ExpectedColumnDefinition("value", typeof(string), true, sourceType)),
             SafeMigrationPolicy.RepairIfSafe);
 
         var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         // Act
         var plan = builder.Build(operation, includeAnalysisEvidence: true, includeTransitionEvidence: true);
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
 
         // Assert
         Assert.Equal(SafeMigrationRepairCapability.Safe, plan.RepairCapability);
         Assert.NotNull(plan.DataProbe);
         Assert.NotNull(plan.NullabilityDataProbe);
-        Assert.Contains("pg_catalog.format_type", plan.DataProbe.TransitionInvariantExpression,
+        Assert.Contains(
+            "pg_catalog.format_type",
+            plan.DataProbe.TransitionInvariantExpression,
             StringComparison.Ordinal);
+
         Assert.Contains("NOT a.attnotnull", plan.DataProbe.TransitionInvariantExpression, StringComparison.Ordinal);
         Assert.Contains("column_max_length", plan.DiagnosticEvidenceExpression, StringComparison.Ordinal);
         Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, plan.RepairOperationalImpact);
-        Assert.Contains("char_length", Assert.Single(commands).CommandText, StringComparison.Ordinal);
+        Assert.Contains("char_length",
+            Assert.Single(commands)
+                .CommandText,
+            StringComparison.Ordinal);
     }
 
     /// <summary>Keeps unrelated type families and non-repair policies outside the transition gate.</summary>
@@ -55,12 +66,16 @@ public sealed class PostgreSqlAlterTransitionTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext("Host=localhost;Database=unused;Username=unused");
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("alter_rows",
-            new ExpectedColumnDefinition("value", typeof(string), false, "character varying(40)"),
-            new ExpectedColumnDefinition("value", typeof(string), true, sourceType)), policy);
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "alter_rows",
+                new ExpectedColumnDefinition("value", typeof(string), false, "character varying(40)"),
+                new ExpectedColumnDefinition("value", typeof(string), true, sourceType)),
+            policy);
 
         var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         // Act
         var plan = builder.Build(operation, includeTransitionEvidence: true);
@@ -78,13 +93,16 @@ public sealed class PostgreSqlAlterTransitionTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext("Host=localhost;Database=unused;Username=unused");
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("alter_rows",
-            new ExpectedColumnDefinition("value", typeof(string), true, "character varying(40)", comment: "next"),
-            new ExpectedColumnDefinition("value", typeof(string), true, "character varying(40)")),
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "alter_rows",
+                new ExpectedColumnDefinition("value", typeof(string), true, "character varying(40)", comment: "next"),
+                new ExpectedColumnDefinition("value", typeof(string), true, "character varying(40)")),
             SafeMigrationPolicy.RepairIfSafe);
 
         var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         // Act
         var plan = builder.Build(operation, includeTransitionEvidence: true);

@@ -22,9 +22,16 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return false;
         }
 
-        var type = storeType.Trim().ToLowerInvariant();
+        var type = storeType
+            .Trim()
+            .ToLowerInvariant();
+
         var opening = type.IndexOf('(');
-        var name = opening < 0 ? type : type[..opening].TrimEnd();
+        var name = opening < 0
+            ? type
+            : type[..opening]
+                .TrimEnd();
+
         var date = value switch
         {
             DateTime dateTime => dateTime,
@@ -46,14 +53,27 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             if (name == "smalldatetime")
             {
                 return instant >= new DateTime(1900, 1, 1)
-                    && instant < new DateTime(2079, 6, 6, 23, 59, 29, 999);
+                    && instant
+                    < new DateTime(
+                        2079,
+                        6,
+                        6,
+                        23,
+                        59,
+                        29,
+                        999);
             }
 
-            if (name is "datetime2" or "datetimeoffset" && opening >= 0
-                && int.TryParse(type.AsSpan(opening + 1, type.Length - opening - 2),
-                    NumberStyles.None, CultureInfo.InvariantCulture, out var precision))
+            if (name is "datetime2" or "datetimeoffset"
+                && opening >= 0
+                && int.TryParse(
+                    type.AsSpan(opening + 1, type.Length - opening - 2),
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var precision))
             {
                 var quantum = 1L;
+
                 // WHY: Scale by the exact remaining temporal precision digit count.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
@@ -62,14 +82,15 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     quantum *= 10;
                 }
 
-                var limit = DateTime.MaxValue.Ticks - (quantum / 2);
+                var limit = DateTime.MaxValue.Ticks - quantum / 2;
 
                 return instant.Ticks <= limit
                     && (value is not DateTimeOffset dateTimeOffset || dateTimeOffset.UtcTicks <= limit);
             }
         }
 
-        if (name == "time" && value is TimeSpan span)
+        if (name == "time"
+            && value is TimeSpan span)
         {
             return span >= TimeSpan.Zero && span < TimeSpan.FromDays(1);
         }
@@ -102,7 +123,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         int opening
     )
     {
-        if (opening < 0 || !type.EndsWith(')'))
+        if (opening < 0
+            || !type.EndsWith(')'))
         {
             return false;
         }
@@ -110,9 +132,17 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var args = type.AsSpan(opening + 1, type.Length - opening - 2);
         var comma = args.IndexOf(',');
         if (comma < 0
-            || !int.TryParse(args[..comma].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var precision)
-            || !int.TryParse(args[(comma + 1)..].Trim(),
-                NumberStyles.None, CultureInfo.InvariantCulture, out var scale))
+            || !int.TryParse(args[..comma]
+                    .Trim(),
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var precision)
+            || !int.TryParse(
+                args[(comma + 1)..]
+                    .Trim(),
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var scale))
         {
             return false;
         }
@@ -124,6 +154,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
 
         var bound = 1m;
+
         // WHY: Build the exact decimal integral-digit bound without floating-point powers.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -134,7 +165,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         // WHY: SQL Server rounds decimal scale before checking precision, so
         // a value just below the bound may still overflow the destination.
-        var rounded = scale < 28 ? decimal.Round(value, scale, MidpointRounding.AwayFromZero) : value;
+        var rounded = scale < 28
+            ? decimal.Round(value, scale, MidpointRounding.AwayFromZero)
+            : value;
 
         return rounded > -bound && rounded < bound;
     }
@@ -153,14 +186,17 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return "1 = 1";
         }
 
-        if (!IsManagedValueRepresentable(value, storeType) || !FitsManagedValueSize(value, storeType))
+        if (!IsManagedValueRepresentable(value, storeType)
+            || !FitsManagedValueSize(value, storeType))
         {
             return "1 = 0";
         }
 
         if ((value is string { Length: > 4_000 } && IsCharacterManagedStoreType(storeType))
             || (value is byte[] { Length: > 8_000 }
-                && storeType.Trim().Equals("varbinary(max)", StringComparison.OrdinalIgnoreCase)))
+                && storeType
+                    .Trim()
+                    .Equals("varbinary(max)", StringComparison.OrdinalIgnoreCase)))
         {
             // WHY: TRY_CAST limits large character inputs. Same-family LOB
             // casts cannot overflow; separate size/code-page predicates retain
@@ -189,18 +225,18 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     {
         var text = value switch
         {
-            string stringValue => stringValue,
-            char character => character.ToString(),
-            _ => null,
+            string stringValue => stringValue, char character => character.ToString(), _ => null,
         };
 
-        if (text is null || !IsAnsiManagedStoreType(storeType))
+        if (text is null
+            || !IsAnsiManagedStoreType(storeType))
         {
             return "1 = 1";
         }
 
-        if (collation is not null && _expressionRenderer.GetUnsupportedFeature(
-            new SafeMigrationSqlCollateExpression(SafeMigrationSql.Literal(text), collation)) is not null)
+        if (collation is not null
+            && _expressionRenderer.GetUnsupportedFeature(
+                new SafeMigrationSqlCollateExpression(SafeMigrationSql.Literal(text), collation)) is not null)
         {
             return "1 = 0";
         }

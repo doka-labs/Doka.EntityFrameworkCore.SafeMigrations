@@ -1,12 +1,14 @@
 global using System;
 global using System.Buffers;
 global using System.Collections.Generic;
-global using System.Diagnostics;
 global using System.Globalization;
 global using System.IO;
 global using System.Linq;
+global using System.Reflection;
+global using System.Runtime.InteropServices;
+global using System.Security.Cryptography;
+global using System.Text;
 global using System.Text.Json;
-global using Doka.EntityFrameworkCore.SafeMigrations;
 global using Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 global using Microsoft.EntityFrameworkCore.Migrations;
 global using Microsoft.EntityFrameworkCore.Migrations.Operations;

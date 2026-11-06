@@ -108,7 +108,11 @@ internal interface ISafeMigrationProjectedColumnSource
     /// <param name="columnComparer">The provider's column-only identity comparison rule.</param>
     /// <returns>Current accepted membership, or null when accepted key proof is unavailable.</returns>
     bool? IsProjectedPrimaryKeyColumn(
-        string table, string? schema, string column, IEqualityComparer<string> columnComparer) => null;
+        string table,
+        string? schema,
+        string column,
+        IEqualityComparer<string> columnComparer
+    ) => null;
 
     /// <summary>Checks accepted outgoing SET NULL actions before a required-column transition.</summary>
     /// <param name="table">The projected dependent table identity.</param>
@@ -117,7 +121,11 @@ internal interface ISafeMigrationProjectedColumnSource
     /// <param name="columnComparer">The provider's comparison rule for column identifiers, not table names.</param>
     /// <returns>Whether a current accepted FK requires this column to permit NULL.</returns>
     bool HasProjectedSetNullForeignKey(
-        string table, string? schema, string column, IEqualityComparer<string> columnComparer) => false;
+        string table,
+        string? schema,
+        string column,
+        IEqualityComparer<string> columnComparer
+    ) => false;
 
     /// <summary>Attempts to read one exact projected column definition.</summary>
     /// <param name="table">The table name.</param>

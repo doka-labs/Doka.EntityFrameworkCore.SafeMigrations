@@ -6,8 +6,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// </summary>
 internal sealed partial class SafeMigrationPostflightProjection
 {
+    private readonly HashSet<int>? _identityUnprovenOrdinals;
     private readonly HashSet<int> _supersededOrdinals = [];
-    private HashSet<int>? _identityUnprovenOrdinals;
 
     /// <summary>Creates the final-writer projection for one ordered migration operation stream.</summary>
     /// <param name="operations">The complete operation stream in execution order.</param>
@@ -28,6 +28,7 @@ internal sealed partial class SafeMigrationPostflightProjection
         var postflightNormalizer = objectIdentityNormalizer?.GetPostflightIdentityNormalizer(operations);
         var finalWriters = new HashSet<PostflightResource>(
             new PostflightResourceComparer(postflightNormalizer));
+
         var safeOrdinal = liveAnalyses?.Count ?? 0;
         var primaryKeyNameIndependent = projectedKeyAnalyzer?.PrimaryKeyUsesNameIndependentIdentity == true;
         var sharedUniqueIndexIdentity = projectedKeyAnalyzer?.SharesUniqueConstraintAndIndexIdentity == true;
@@ -53,7 +54,8 @@ internal sealed partial class SafeMigrationPostflightProjection
                 if (safeOrdinal == 0)
                 {
                     throw new ArgumentException(
-                        "Final-catalog analyses must match the safe operation subset.", nameof(liveAnalyses));
+                        "Final-catalog analyses must match the safe operation subset.",
+                        nameof(liveAnalyses));
                 }
 
                 analysis = liveAnalyses[--safeOrdinal];
@@ -75,13 +77,13 @@ internal sealed partial class SafeMigrationPostflightProjection
             // qualification still refer to the untouched authored operation.
             var resourceIntent = renamedManagedIntents?.GetValueOrDefault(ordinal) ?? safeOperation.Intent;
             if (!TryCreateResources(
-                    resourceIntent,
-                    postflightNormalizer,
-                    primaryKeyNameIndependent,
-                    sharedUniqueIndexIdentity,
-                    analysis,
-                    out var primaryResource,
-                    out var secondaryResource))
+                resourceIntent,
+                postflightNormalizer,
+                primaryKeyNameIndependent,
+                sharedUniqueIndexIdentity,
+                analysis,
+                out var primaryResource,
+                out var secondaryResource))
             {
                 continue;
             }
@@ -105,7 +107,8 @@ internal sealed partial class SafeMigrationPostflightProjection
         if (safeOrdinal != 0)
         {
             throw new ArgumentException(
-                "Final-catalog analyses must match the safe operation subset.", nameof(liveAnalyses));
+                "Final-catalog analyses must match the safe operation subset.",
+                nameof(liveAnalyses));
         }
     }
 
@@ -122,7 +125,9 @@ internal sealed partial class SafeMigrationPostflightProjection
     /// <summary>Determines whether final-catalog lookup cannot prove this historical physical identity.</summary>
     /// <param name="ordinal">The complete-stream operation position.</param>
     /// <returns>True when verification must retain an identity failure instead of trusting final lookup.</returns>
-    public bool IsIdentityUnproven(int ordinal) => _identityUnprovenOrdinals?.Contains(ordinal) == true;
+    public bool IsIdentityUnproven(
+        int ordinal
+    ) => _identityUnprovenOrdinals?.Contains(ordinal) == true;
 
     private static bool TryCreateResources(
         SafeMigrationIntent intent,
@@ -220,13 +225,17 @@ internal sealed partial class SafeMigrationPostflightProjection
                     PrimaryKeyResourceName(value.Name, primaryKeyNameIndependent, analysis)),
             EnsureUniqueConstraintIntent value =>
                 new PostflightResource(
-                    sharedUniqueIndexIdentity ? PostflightResourceKind.Index : PostflightResourceKind.UniqueConstraint,
+                    sharedUniqueIndexIdentity
+                        ? PostflightResourceKind.Index
+                        : PostflightResourceKind.UniqueConstraint,
                     Normalize(value.Definition.Schema),
                     value.Definition.Table,
                     PhysicalResourceName(value.Definition.Name, analysis)),
             DropUniqueConstraintIntent value =>
                 new PostflightResource(
-                    sharedUniqueIndexIdentity ? PostflightResourceKind.Index : PostflightResourceKind.UniqueConstraint,
+                    sharedUniqueIndexIdentity
+                        ? PostflightResourceKind.Index
+                        : PostflightResourceKind.UniqueConstraint,
                     Normalize(value.Schema),
                     value.Table,
                     value.Name),
@@ -310,7 +319,10 @@ internal sealed partial class SafeMigrationPostflightProjection
     /// <summary>Uses a physical semantic alias only when fresh matching evidence proves that exact identity.</summary>
     /// <param name="authoredName">The unsuperseded authored contract when physical identity is unproven.</param>
     /// <param name="analysis">The final live result, not an earlier diagnostic mismatch.</param>
-    private static string PhysicalResourceName(string authoredName, SafeMigrationProviderAnalysis? analysis) =>
+    private static string PhysicalResourceName(
+        string authoredName,
+        SafeMigrationProviderAnalysis? analysis
+    ) =>
         analysis is
         {
             ObservedState: SafeMigrationObservedState.Matching,
@@ -318,6 +330,48 @@ internal sealed partial class SafeMigrationPostflightProjection
         }
             ? physicalName
             : authoredName;
+
+    private static string ModelManagedKeySet(
+        ModelManagedDataIntent intent,
+        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer
+    )
+    {
+        var keyColumns = SafeMigrationModelManagedKeyIdentity.CanonicalizeColumns(
+            intent.KeyColumns,
+            objectIdentityNormalizer,
+            out var keyOrdinals);
+
+        var rowFingerprints = new string[intent.RowCount];
+
+        // WHY: Build one canonical fingerprint for each authored row without copying the matrix.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var row = 0; row < intent.RowCount; row++)
+        {
+            using var rowWriter = new CanonicalHashWriter();
+
+            // WHY: Pair each canonical key label with its value through the same ordinal mapping.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var column = 0; column < intent.KeyColumns.Count; column++)
+            {
+                var ordinal = keyOrdinals?[column] ?? column;
+                rowWriter.Add(keyColumns[ordinal]);
+                SafeMigrationModelManagedValue.Write(rowWriter, intent.KeyValues.GetUnsafeValue(row, ordinal));
+            }
+
+            rowFingerprints[row] = rowWriter.GetHash();
+        }
+
+        Array.Sort(rowFingerprints, StringComparer.Ordinal);
+        using var writer = new CanonicalHashWriter();
+        foreach (var fingerprint in rowFingerprints)
+        {
+            writer.Add(fingerprint);
+        }
+
+        return writer.GetHash();
+    }
 
     private enum PostflightResourceKind
     {
@@ -344,12 +398,13 @@ internal sealed partial class SafeMigrationPostflightProjection
         ISafeMigrationProviderObjectIdentityNormalizer? normalizer
     ) : IEqualityComparer<PostflightResource>
     {
-        private readonly StringComparer _identifierComparer = normalizer?.IdentifierComparer ?? StringComparer.Ordinal;
         private readonly StringComparer _columnIdentifierComparer =
             normalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal;
 
         private readonly StringComparer _foreignKeyIdentifierComparer =
             normalizer?.ForeignKeyIdentifierComparer ?? StringComparer.Ordinal;
+
+        private readonly StringComparer _identifierComparer = normalizer?.IdentifierComparer ?? StringComparer.Ordinal;
 
         private readonly StringComparer _indexIdentifierComparer =
             normalizer?.IndexIdentifierComparer ?? StringComparer.Ordinal;
@@ -360,15 +415,23 @@ internal sealed partial class SafeMigrationPostflightProjection
         ) => left.Kind == right.Kind
             && StringComparer.Ordinal.Equals(left.Schema, right.Schema)
             && _identifierComparer.Equals(left.Table, right.Table)
-            && NameComparer(left.Kind).Equals(left.Name, right.Name);
+            && NameComparer(left.Kind)
+                .Equals(left.Name, right.Name);
 
         public int GetHashCode(
             PostflightResource value
         ) => HashCode.Combine(
             value.Kind,
-            value.Schema is null ? 0 : StringComparer.Ordinal.GetHashCode(value.Schema),
-            value.Table is null ? 0 : _identifierComparer.GetHashCode(value.Table),
-            value.Name is null ? 0 : NameComparer(value.Kind).GetHashCode(value.Name));
+            value.Schema is null
+                ? 0
+                : StringComparer.Ordinal.GetHashCode(value.Schema),
+            value.Table is null
+                ? 0
+                : _identifierComparer.GetHashCode(value.Table),
+            value.Name is null
+                ? 0
+                : NameComparer(value.Kind)
+                    .GetHashCode(value.Name));
 
         private StringComparer NameComparer(
             PostflightResourceKind kind
@@ -379,43 +442,5 @@ internal sealed partial class SafeMigrationPostflightProjection
             PostflightResourceKind.Index => _indexIdentifierComparer,
             _ => _identifierComparer,
         };
-    }
-
-    private static string ModelManagedKeySet(
-        ModelManagedDataIntent intent,
-        ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer
-    )
-    {
-        var keyColumns = SafeMigrationModelManagedKeyIdentity.CanonicalizeColumns(
-            intent.KeyColumns, objectIdentityNormalizer, out var keyOrdinals);
-
-        var rowFingerprints = new string[intent.RowCount];
-        // WHY: Build one canonical fingerprint for each authored row without copying the matrix.
-        // ReSharper disable once ForCanBeConvertedToForeach
-        // ReSharper disable once LoopCanBeConvertedToQuery
-        for (var row = 0; row < intent.RowCount; row++)
-        {
-            using var rowWriter = new CanonicalHashWriter();
-            // WHY: Pair each canonical key label with its value through the same ordinal mapping.
-            // ReSharper disable once ForCanBeConvertedToForeach
-            // ReSharper disable once LoopCanBeConvertedToQuery
-            for (var column = 0; column < intent.KeyColumns.Count; column++)
-            {
-                var ordinal = keyOrdinals?[column] ?? column;
-                rowWriter.Add(keyColumns[ordinal]);
-                SafeMigrationModelManagedValue.Write(rowWriter, intent.KeyValues.GetUnsafeValue(row, ordinal));
-            }
-
-            rowFingerprints[row] = rowWriter.GetHash();
-        }
-
-        Array.Sort(rowFingerprints, StringComparer.Ordinal);
-        using var writer = new CanonicalHashWriter();
-        foreach (var fingerprint in rowFingerprints)
-        {
-            writer.Add(fingerprint);
-        }
-
-        return writer.GetHash();
     }
 }

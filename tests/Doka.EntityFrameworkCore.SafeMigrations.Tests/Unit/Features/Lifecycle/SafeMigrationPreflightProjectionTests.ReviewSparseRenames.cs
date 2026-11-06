@@ -12,7 +12,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         ObserveAccepted(projection, Index("ix_items"), SafeMigrationObservedState.Missing);
 
         // Act
-        var analysis = Project(projection, new DropIndexIntent("ix_items", "items"),
+        var analysis = Project(
+            projection,
+            new DropIndexIntent("ix_items", "items"),
             SafeMigrationObservedState.Missing);
 
         // Assert
@@ -29,7 +31,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         ObserveAccepted(projection, new DropIndexIntent("ix_items", "items"), SafeMigrationObservedState.Matching);
 
         // Act
-        var analysis = Project(projection, new DropIndexIntent("ix_items", "items"),
+        var analysis = Project(
+            projection,
+            new DropIndexIntent("ix_items", "items"),
             SafeMigrationObservedState.Matching);
 
         // Assert
@@ -50,7 +54,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
 
-        ObserveAccepted(projection, Index("ix_alias"), SafeMigrationObservedState.Matching,
+        ObserveAccepted(
+            projection,
+            Index("ix_alias"),
+            SafeMigrationObservedState.Matching,
             matchedObjectName: "ix_physical");
 
         // Act
@@ -87,8 +94,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         };
 
         // Act
-        var analysis = projection.Project(new SafeMigrationOperation(
-            new RenameIndexIntent("ix_source", "items", "ix_target"), SafeMigrationPolicy.ThrowIfDifferent), live);
+        var analysis = projection.Project(
+            new SafeMigrationOperation(
+                new RenameIndexIntent("ix_source", "items", "ix_target"),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            live);
 
         // Assert
         Assert.Equal(expectedState, analysis.ObservedState);
@@ -99,16 +109,20 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void SparseRenameWithBothEndpointsDroppedRemainsMissing(bool indexRename)
+    public void SparseRenameWithBothEndpointsDroppedRemainsMissing(
+        bool indexRename
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
         SafeMigrationIntent sourceDrop = indexRename
             ? new DropIndexIntent("source", "items")
             : new DropColumnIntent("source", "items");
+
         SafeMigrationIntent targetDrop = indexRename
             ? new DropIndexIntent("target", "items")
             : new DropColumnIntent("target", "items");
+
         SafeMigrationIntent rename = indexRename
             ? new RenameIndexIntent("source", "items", "target")
             : new RenameColumnIntent("source", "items", "target");
@@ -118,7 +132,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         // Act
         var analysis = Project(projection, rename, SafeMigrationObservedState.Different);
-        var decision = SafeMigrationDecisionPlanner.Plan(rename.Kind, analysis.ObservedState,
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            rename.Kind,
+            analysis.ObservedState,
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Assert
@@ -134,11 +150,15 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var projection = new SafeMigrationPreflightProjection();
 
         ObserveAccepted(projection, Index("ix_source"), SafeMigrationObservedState.Missing);
-        ObserveAccepted(projection, new RenameIndexIntent("ix_source", "items", "ix_target"),
+        ObserveAccepted(
+            projection,
+            new RenameIndexIntent("ix_source", "items", "ix_target"),
             SafeMigrationObservedState.Matching);
 
         // Act
-        var source = Project(projection, new DropIndexIntent("ix_source", "items"),
+        var source = Project(
+            projection,
+            new DropIndexIntent("ix_source", "items"),
             SafeMigrationObservedState.Matching);
 
         var target = Project(projection, new DropIndexIntent("ix_target", "items"), SafeMigrationObservedState.Missing);
@@ -160,8 +180,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         ObserveAccepted(projection, Index("ix_physical"), SafeMigrationObservedState.Matching, "ix_physical");
 
         // Act
-        var physical = Project(projection, new DropIndexIntent("ix_physical", "items"),
+        var physical = Project(
+            projection,
+            new DropIndexIntent("ix_physical", "items"),
             SafeMigrationObservedState.Missing);
+
         var alias = Project(projection, new DropIndexIntent("ix_alias", "items"), SafeMigrationObservedState.Matching);
 
         // Assert
@@ -188,7 +211,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
 
-        ObserveAccepted(projection, new EnsureColumnIntent("items", Column("source")),
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("items", Column("source")),
             SafeMigrationObservedState.Matching);
 
         var live = new SafeMigrationProviderAnalysis(liveState, SafeMigrationRepairCapability.None, false, "test_live")
@@ -197,8 +222,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         };
 
         // Act
-        var analysis = projection.Project(new SafeMigrationOperation(
-            new RenameColumnIntent("source", "items", "target"), SafeMigrationPolicy.ThrowIfDifferent), live);
+        var analysis = projection.Project(
+            new SafeMigrationOperation(
+                new RenameColumnIntent("source", "items", "target"),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            live);
 
         // Assert
         Assert.Equal(expectedState, analysis.ObservedState);
@@ -212,7 +240,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void CompleteTableRenameUsesCurrentDestinationEvidence(bool indexRename, bool targetPresent)
+    public void CompleteTableRenameUsesCurrentDestinationEvidence(
+        bool indexRename,
+        bool targetPresent
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
@@ -221,8 +252,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             ? new[] { Column("source"), Column("code"), Column("target") }
             : new[] { Column("source"), Column("code") };
 
-        Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items", columns),
-            SafeMigrationTableMode.StrictDefinition));
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("items", columns),
+                SafeMigrationTableMode.StrictDefinition));
 
         if (indexRename)
         {
@@ -230,23 +264,37 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
             if (targetPresent)
             {
-                ObserveAccepted(projection, new EnsureIndexIntent(new ExpectedIndexDefinition("target", "items",
-                    [new ExpectedIndexKeyDefinition(column: "source")])), SafeMigrationObservedState.Missing);
+                ObserveAccepted(
+                    projection,
+                    new EnsureIndexIntent(
+                        new ExpectedIndexDefinition(
+                            "target",
+                            "items",
+                            [new ExpectedIndexKeyDefinition(column: "source")])),
+                    SafeMigrationObservedState.Missing);
             }
         }
 
         SafeMigrationIntent rename = indexRename
             ? new RenameIndexIntent("source", "items", "target")
             : new RenameColumnIntent("source", "items", "target");
-        var live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-            SafeMigrationRepairCapability.None, false, "test_unobserved_destination");
+
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Missing,
+            SafeMigrationRepairCapability.None,
+            false,
+            "test_unobserved_destination");
 
         // Act
         var analysis = projection.Project(
-            new SafeMigrationOperation(rename, SafeMigrationPolicy.ThrowIfDifferent), live);
+            new SafeMigrationOperation(rename, SafeMigrationPolicy.ThrowIfDifferent),
+            live);
 
         // Assert
-        Assert.Equal(targetPresent ? SafeMigrationObservedState.Different : SafeMigrationObservedState.Matching,
+        Assert.Equal(
+            targetPresent
+                ? SafeMigrationObservedState.Different
+                : SafeMigrationObservedState.Matching,
             analysis.ObservedState);
     }
 }

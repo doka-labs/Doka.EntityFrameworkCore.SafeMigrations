@@ -57,7 +57,8 @@ public sealed partial class SafeMigrationRunContractTests
 
     private static readonly (SafeMigrationAction Value, string Code)[] s_actions =
     {
-        (Value: SafeMigrationAction.Apply, Code: "apply"), (Value: SafeMigrationAction.NoOp, Code: "no_op"),
+        (Value: SafeMigrationAction.Apply, Code: "apply"),
+        (Value: SafeMigrationAction.NoOp, Code: "no_op"),
         (Value: SafeMigrationAction.Repair, Code: "repair"),
         (Value: SafeMigrationAction.RejectUnsupported, Code: "reject_unsupported"),
         (Value: SafeMigrationAction.RejectDifferent, Code: "reject_different"),
@@ -135,13 +136,40 @@ public sealed partial class SafeMigrationRunContractTests
         var objects = Enum.GetValues<SafeMigrationDatabaseObjectKind>();
 
         // Assert
-        Assert.Equal(modes.Order(), s_modes.Select(static value => value.Value).Order());
-        Assert.Equal(statuses.Order(), s_statuses.Select(static value => value.Value).Order());
-        Assert.Equal(kinds.Order(), s_operationKinds.Select(static value => value.Value).Order());
-        Assert.Equal(states.Order(), s_states.Select(static value => value.Value).Order());
-        Assert.Equal(actions.Order(), s_actions.Select(static value => value.Value).Order());
-        Assert.Equal(impacts.Order(), s_operationalImpacts.Select(static value => value.Value).Order());
-        Assert.Equal(objects.Order(), s_objectKinds.Select(static value => value.Value).Order());
+        Assert.Equal(modes.Order(),
+            s_modes
+                .Select(static value => value.Value)
+                .Order());
+
+        Assert.Equal(statuses.Order(),
+            s_statuses
+                .Select(static value => value.Value)
+                .Order());
+
+        Assert.Equal(kinds.Order(),
+            s_operationKinds
+                .Select(static value => value.Value)
+                .Order());
+
+        Assert.Equal(states.Order(),
+            s_states
+                .Select(static value => value.Value)
+                .Order());
+
+        Assert.Equal(actions.Order(),
+            s_actions
+                .Select(static value => value.Value)
+                .Order());
+
+        Assert.Equal(impacts.Order(),
+            s_operationalImpacts
+                .Select(static value => value.Value)
+                .Order());
+
+        Assert.Equal(objects.Order(),
+            s_objectKinds
+                .Select(static value => value.Value)
+                .Order());
     }
 
     /// <summary>Serializes every mode/status pairing and preserves an absent migration target.</summary>
@@ -165,9 +193,21 @@ public sealed partial class SafeMigrationRunContractTests
         using var document = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
 
         // Assert
-        Assert.Equal(expectedMode, document.RootElement.GetProperty("mode").GetString());
-        Assert.Equal(expectedStatus, document.RootElement.GetProperty("status").GetString());
-        Assert.Equal(JsonValueKind.Null, document.RootElement.GetProperty("targetMigrationId").ValueKind);
+        Assert.Equal(expectedMode,
+            document
+                .RootElement
+                .GetProperty("mode")
+                .GetString());
+
+        Assert.Equal(expectedStatus,
+            document
+                .RootElement
+                .GetProperty("status")
+                .GetString());
+
+        Assert.Equal(JsonValueKind.Null,
+            document.RootElement.GetProperty("targetMigrationId")
+                .ValueKind);
     }
 
     /// <summary>Serializes each stable operationKind code independently of the other wire families.</summary>
@@ -187,8 +227,13 @@ public sealed partial class SafeMigrationRunContractTests
         using var document = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
 
         // Assert
-        Assert.Equal(expectedCode, document.RootElement.GetProperty("assessments")[0]
-            .GetProperty("operationKind").GetString());
+        Assert.Equal(
+            expectedCode,
+            document
+                .RootElement
+                .GetProperty("assessments")[0]
+                .GetProperty("operationKind")
+                .GetString());
     }
 
     /// <summary>Serializes each stable observedState code independently of the other wire families.</summary>
@@ -208,8 +253,13 @@ public sealed partial class SafeMigrationRunContractTests
         using var document = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
 
         // Assert
-        Assert.Equal(expectedCode, document.RootElement.GetProperty("assessments")[0]
-            .GetProperty("observedState").GetString());
+        Assert.Equal(
+            expectedCode,
+            document
+                .RootElement
+                .GetProperty("assessments")[0]
+                .GetProperty("observedState")
+                .GetString());
     }
 
     /// <summary>Serializes each stable action code independently of the other wire families.</summary>
@@ -229,8 +279,13 @@ public sealed partial class SafeMigrationRunContractTests
         using var document = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
 
         // Assert
-        Assert.Equal(expectedCode, document.RootElement.GetProperty("assessments")[0]
-            .GetProperty("action").GetString());
+        Assert.Equal(
+            expectedCode,
+            document
+                .RootElement
+                .GetProperty("assessments")[0]
+                .GetProperty("action")
+                .GetString());
     }
 
     /// <summary>Serializes each stable operationalImpact code independently of the other wire families.</summary>
@@ -250,8 +305,13 @@ public sealed partial class SafeMigrationRunContractTests
         using var document = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
 
         // Assert
-        Assert.Equal(expectedCode, document.RootElement.GetProperty("assessments")[0]
-            .GetProperty("operationalImpact").GetString());
+        Assert.Equal(
+            expectedCode,
+            document
+                .RootElement
+                .GetProperty("assessments")[0]
+                .GetProperty("operationalImpact")
+                .GetString());
     }
 
     /// <summary>Serializes each unexpected-object kind independently of assessment codes.</summary>
@@ -265,15 +325,21 @@ public sealed partial class SafeMigrationRunContractTests
     )
     {
         // Arrange
-        var report = CreateReport(unexpectedObjects:
+        var report = CreateReport(
+            unexpectedObjects:
             [new SafeMigrationUnexpectedObject(value, null, null, expectedCode, "unexpected")]);
 
         // Act
         using var document = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
 
         // Assert
-        Assert.Equal(expectedCode, document.RootElement.GetProperty("unexpectedObjects")[0]
-            .GetProperty("objectKind").GetString());
+        Assert.Equal(
+            expectedCode,
+            document
+                .RootElement
+                .GetProperty("unexpectedObjects")[0]
+                .GetProperty("objectKind")
+                .GetString());
     }
 
     /// <summary>Retains complete wire-family, closed-schema, fingerprint and provider-null-field coverage.</summary>
@@ -296,10 +362,8 @@ public sealed partial class SafeMigrationRunContractTests
         var objectKinds = s_objectKinds;
 
         var assessments = operationKinds
-            .Select((
-                value,
-                index
-            ) => new SafeMigrationAssessment(
+            .Select((value,
+                index) => new SafeMigrationAssessment(
                 index,
                 typeof(SafeMigrationOperation).FullName!,
                 isSafeOperation: true,
@@ -359,6 +423,7 @@ public sealed partial class SafeMigrationRunContractTests
                 .Select(static value => value
                     .GetProperty("operationKind")
                     .GetString()));
+
         Assert.Equal(
             states.Select(static value => value.Code),
             assessmentElements
@@ -367,6 +432,7 @@ public sealed partial class SafeMigrationRunContractTests
                 .Select(static value => value
                     .GetProperty("observedState")
                     .GetString()));
+
         Assert.Equal(
             actions.Select(static value => value.Code),
             assessmentElements
@@ -375,6 +441,7 @@ public sealed partial class SafeMigrationRunContractTests
                 .Select(static value => value
                     .GetProperty("action")
                     .GetString()));
+
         Assert.Equal(
             operationalImpacts.Select(static value => value.Code),
             assessmentElements
@@ -383,6 +450,7 @@ public sealed partial class SafeMigrationRunContractTests
                 .Select(static value => value
                     .GetProperty("operationalImpact")
                     .GetString()));
+
         Assert.Equal(
             objectKinds.Select(static value => value.Code),
             unexpectedElements
@@ -399,41 +467,48 @@ public sealed partial class SafeMigrationRunContractTests
                 .GetProperty("properties")
                 .GetProperty("mode"),
             modes.Select(static value => value.Code));
+
         AssertSchemaEnum(
             schemaRoot
                 .GetProperty("properties")
                 .GetProperty("status"),
             statuses.Select(static value => value.Code));
+
         AssertSchemaEnum(
             definitions
                 .GetProperty("environment")
                 .GetProperty("properties")
                 .GetProperty("engineFamily"),
             ["mysql", "mariadb", "postgresql", "sqlite", "sqlserver"]);
+
         AssertSchemaEnum(
             definitions
                 .GetProperty("assessment")
                 .GetProperty("properties")
                 .GetProperty("operationKind"),
             operationKinds.Select(static value => value.Code));
+
         AssertSchemaEnum(
             definitions
                 .GetProperty("assessment")
                 .GetProperty("properties")
                 .GetProperty("observedState"),
             states.Select(static value => value.Code));
+
         AssertSchemaEnum(
             definitions
                 .GetProperty("assessment")
                 .GetProperty("properties")
                 .GetProperty("action"),
             actions.Select(static value => value.Code));
+
         AssertSchemaEnum(
             definitions
                 .GetProperty("assessment")
                 .GetProperty("properties")
                 .GetProperty("operationalImpact"),
             operationalImpacts.Select(static value => value.Code));
+
         AssertSchemaEnum(
             definitions
                 .GetProperty("unexpectedObject")
@@ -445,11 +520,13 @@ public sealed partial class SafeMigrationRunContractTests
         AssertClosedObjectSurface(
             definitions.GetProperty("environment"),
             completeDocument.RootElement.GetProperty("environment"));
+
         AssertClosedObjectSurface(definitions.GetProperty("assessment"), assessmentElements[0]);
         AssertClosedObjectSurface(
             definitions.GetProperty("difference"),
             assessmentElements[0]
                 .GetProperty("differences")[0]);
+
         AssertClosedObjectSurface(definitions.GetProperty("unexpectedObject"), unexpectedElements[0]);
 
         var modelPattern = schemaRoot
@@ -474,18 +551,22 @@ public sealed partial class SafeMigrationRunContractTests
             JsonValueKind.Null,
             providerAssessment.GetProperty("operationKind")
                 .ValueKind);
+
         Assert.Equal(
             JsonValueKind.Null,
             providerAssessment.GetProperty("objectName")
                 .ValueKind);
+
         Assert.Equal(
             JsonValueKind.Null,
             providerAssessment.GetProperty("observedState")
                 .ValueKind);
+
         Assert.Equal(
             JsonValueKind.Null,
             providerAssessment.GetProperty("action")
                 .ValueKind);
+
         Assert.Equal(
             JsonValueKind.Null,
             providerAssessment.GetProperty("postconditionSatisfied")
@@ -506,7 +587,9 @@ public sealed partial class SafeMigrationRunContractTests
         "object_0",
         state,
         action,
-        action == SafeMigrationAction.ValidateAtRuntime ? null : true,
+        action == SafeMigrationAction.ValidateAtRuntime
+            ? null
+            : true,
         "stable_code",
         "provider_analysis",
         "policy_decision",

@@ -1,8 +1,10 @@
+using System.Security.Cryptography;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Measures prepared runtime generation on both MySQL and MariaDB without database latency.</summary>
 /// <param name="output">The diagnostic allocation and SQL fingerprint output.</param>
-public sealed class MySqlRuntimeAllocationTests(Xunit.Abstractions.ITestOutputHelper output)
+public sealed class MySqlRuntimeAllocationTests(ITestOutputHelper output)
 {
     private const string CanonicalCorrelation = "00000000000000000000000000000000";
 
@@ -12,15 +14,20 @@ public sealed class MySqlRuntimeAllocationTests(Xunit.Abstractions.ITestOutputHe
     [Theory]
     [InlineData(false, "232327923256A361556E3AC57704C05FDA133FD959BFD5B6198E1A011DFBB2FB")]
     [InlineData(true, "FD97289416687595DB3814B4BBCBA3EF29828FB22E8F8E46C2E6F92602A309F3")]
-    public void PreparedRuntimeColumnGenerationRemainsBounded(bool isMariaDb, string expectedSqlHash)
+    public void PreparedRuntimeColumnGenerationRemainsBounded(
+        bool isMariaDb,
+        string expectedSqlHash
+    )
     {
         // Arrange
         using var context = CreateContext(isMariaDb);
         var generator = context.GetService<IMigrationsSqlGenerator>();
-        var operations = Enumerable.Range(0, 128)
+        var operations = Enumerable
+            .Range(0, 128)
             .Select(index => (MigrationOperation)new SafeMigrationOperation(
                 new EnsureColumnIntent(
-                    "items", new ExpectedColumnDefinition($"value_{index}", typeof(int), true, "int")),
+                    "items",
+                    new ExpectedColumnDefinition($"value_{index}", typeof(int), true, "int")),
                 SafeMigrationPolicy.ThrowIfDifferent))
             .ToArray();
 
@@ -36,23 +43,29 @@ public sealed class MySqlRuntimeAllocationTests(Xunit.Abstractions.ITestOutputHe
                 MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation(command.CommandText)));
 
         var hash = Convert.ToHexString(
-            System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(canonicalSql)));
+            SHA256.HashData(Encoding.UTF8.GetBytes(canonicalSql)));
 
-        var legacySql = canonicalSql.Replace(
-            "CAST(COALESCE(c.COLUMN_COMMENT, '') AS BINARY)",
-            "COALESCE(c.COLUMN_COMMENT, '')", StringComparison.Ordinal).Replace(
-            "(c.COLUMN_DEFAULT IS NULL OR (CAST(c.COLUMN_DEFAULT AS BINARY) = 'NULL' "
+        var legacySql = canonicalSql
+            .Replace(
+                "CAST(COALESCE(c.COLUMN_COMMENT, '') AS BINARY)",
+                "COALESCE(c.COLUMN_COMMENT, '')",
+                StringComparison.Ordinal)
+            .Replace(
+                "(c.COLUMN_DEFAULT IS NULL OR (CAST(c.COLUMN_DEFAULT AS BINARY) = 'NULL' "
                 + "AND LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(c.EXTRA, ''))) > 0))",
-            "(c.COLUMN_DEFAULT IS NULL OR UPPER(c.COLUMN_DEFAULT) = 'NULL')", StringComparison.Ordinal);
+                "(c.COLUMN_DEFAULT IS NULL OR UPPER(c.COLUMN_DEFAULT) = 'NULL')",
+                StringComparison.Ordinal);
 
         var legacyHash = Convert.ToHexString(
-            System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(legacySql)));
+            SHA256.HashData(Encoding.UTF8.GetBytes(legacySql)));
 
         // Assert
         output.WriteLine(
             $"Prepared {(isMariaDb ? "MariaDB" : "MySQL")} generation: {allocated} bytes, SQL SHA256 {hash}.");
+
         output.WriteLine($"Legacy-facet reference SQL SHA256 {legacyHash}.");
-        output.WriteLine($"Runtime SQL: {commands.Count} commands, "
+        output.WriteLine(
+            $"Runtime SQL: {commands.Count} commands, "
             + $"{commands.Sum(static command => command.CommandText.Length)} characters, "
             + $"{commands.Sum(static command => Encoding.UTF8.GetByteCount(command.CommandText))} UTF8 bytes.");
 
@@ -72,8 +85,11 @@ public sealed class MySqlRuntimeAllocationTests(Xunit.Abstractions.ITestOutputHe
         // correlations vary. Guards, ordering, cleanup and default-identity SQL remain in both fingerprints.
         Assert.Equal(expectedSqlHash, hash);
         Assert.Equal(operations.Length, commands.Count);
-        Assert.All(commands, command =>
-            Assert.Contains("@doka_sm_state", command.CommandText, StringComparison.Ordinal));
+        Assert.All(
+            commands,
+            command =>
+                Assert.Contains("@doka_sm_state", command.CommandText, StringComparison.Ordinal));
+
         Assert.InRange(allocated, 0, 4_000_000);
     }
 
@@ -83,16 +99,32 @@ public sealed class MySqlRuntimeAllocationTests(Xunit.Abstractions.ITestOutputHe
     {
         // Arrange
         const string nonce = "0123456789abcdef0123456789abcdef";
-        const string payload = "SELECT `" + nonce + "`, '" + nonce + "';"
-            + "SET @ordinary_value = CONCAT('" + nonce + "-', 7);";
+        const string payload = "SELECT `"
+            + nonce
+            + "`, '"
+            + nonce
+            + "';"
+            + "SET @ordinary_value = CONCAT('"
+            + nonce
+            + "-', 7);";
 
-        const string sql = "/*doka_sm_runtime:7:" + nonce + "*/" + payload
+        const string sql = "/*doka_sm_runtime:7:"
+            + nonce
+            + "*/"
+            + payload
             + "SET @doka_sm_action = 'reject_data_blocked', "
-            + "@doka_sm_diag = CONCAT('" + nonce + "-', 7);\r\n";
+            + "@doka_sm_diag = CONCAT('"
+            + nonce
+            + "-', 7);\r\n";
 
-        const string expected = "/*doka_sm_runtime:7:" + CanonicalCorrelation + "*/" + payload
+        const string expected = "/*doka_sm_runtime:7:"
+            + CanonicalCorrelation
+            + "*/"
+            + payload
             + "SET @doka_sm_action = 'reject_data_blocked', "
-            + "@doka_sm_diag = CONCAT('" + CanonicalCorrelation + "-', 7);\n";
+            + "@doka_sm_diag = CONCAT('"
+            + CanonicalCorrelation
+            + "-', 7);\n";
 
         // Act
         var canonical = MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation(sql);
@@ -109,7 +141,9 @@ public sealed class MySqlRuntimeAllocationTests(Xunit.Abstractions.ITestOutputHe
     [InlineData("/*doka_sm_runtime:7:invalid*/")]
     [InlineData("/*doka_sm_runtime:007:0123456789abcdef0123456789abcdef*/")]
     [InlineData("/*doka_sm_other:7:0123456789abcdef0123456789abcdef*/")]
-    public void RuntimeCorrelationNormalizationRequiresOwnedMarker(string marker)
+    public void RuntimeCorrelationNormalizationRequiresOwnedMarker(
+        string marker
+    )
     {
         // Arrange
         var sql = marker
@@ -134,7 +168,9 @@ public sealed class MySqlRuntimeAllocationTests(Xunit.Abstractions.ITestOutputHe
         var exception = Record.Exception(() => MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation(sql));
 
         // Assert
-        Assert.Equal("sql", Assert.IsType<ArgumentNullException>(exception).ParamName);
+        Assert.Equal("sql",
+            Assert.IsType<ArgumentNullException>(exception)
+                .ParamName);
     }
 
     /// <summary>MariaDB integer aliases and modifiers preserve the generated canonical catalog predicate.</summary>
@@ -148,7 +184,10 @@ public sealed class MySqlRuntimeAllocationTests(Xunit.Abstractions.ITestOutputHe
     [InlineData("smallint", "smallint")]
     [InlineData("mediumint", "mediumint")]
     [InlineData("bigint", "bigint")]
-    public void MariaDbIntegerCatalogPredicatesPreserveCanonicalTypes(string storeType, string expected)
+    public void MariaDbIntegerCatalogPredicatesPreserveCanonicalTypes(
+        string storeType,
+        string expected
+    )
     {
         // Arrange
         using var context = CreateContext(isMariaDb: true);
@@ -157,6 +196,7 @@ public sealed class MySqlRuntimeAllocationTests(Xunit.Abstractions.ITestOutputHe
         var operation = new SafeMigrationOperation(
             new EnsureColumnIntent("items", new ExpectedColumnDefinition("value", typeof(int), true, storeType)),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         using var lease = capture.Begin([operation]);
 
         // Act
@@ -168,7 +208,9 @@ public sealed class MySqlRuntimeAllocationTests(Xunit.Abstractions.ITestOutputHe
         Assert.Contains(plan.ParameterValues, parameter => Equals(parameter.Value, expected));
     }
 
-    private static DbContext CreateContext(bool isMariaDb)
+    private static DbContext CreateContext(
+        bool isMariaDb
+    )
     {
         var options = new DbContextOptionsBuilder<DbContext>();
         options.UseMySql(
@@ -176,6 +218,7 @@ public sealed class MySqlRuntimeAllocationTests(Xunit.Abstractions.ITestOutputHe
             isMariaDb
                 ? MySqlServerVersion.MariaDb(new Version(11, 8, 8))
                 : MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         options.UseMySqlSafeMigrations();
 
         // WHY: SQL generation needs provider services but must never open a live connection for this allocation proof.

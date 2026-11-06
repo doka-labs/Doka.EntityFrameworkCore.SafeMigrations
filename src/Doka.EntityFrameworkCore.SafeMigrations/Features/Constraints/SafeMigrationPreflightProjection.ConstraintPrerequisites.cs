@@ -47,7 +47,9 @@ internal sealed partial class SafeMigrationPreflightProjection
 
     /// <summary>Defers only the member family whose historical physical alias cannot be reconstructed.</summary>
     /// <param name="origin">The accepted physical removal's complete-stream ordinal, when captured.</param>
-    private static SafeMigrationProviderAnalysis ConstraintIdentityUnknown(int? origin) => new(
+    private static SafeMigrationProviderAnalysis ConstraintIdentityUnknown(
+        int? origin
+    ) => new(
         SafeMigrationObservedState.PrerequisiteMissing,
         SafeMigrationRepairCapability.None,
         postconditionSatisfied: false,
@@ -62,32 +64,52 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationProviderAnalysis? liveAnalysis = null
     )
     {
-        if (definition.PrimaryKey is not null && !prerequisites.PrimaryKeyWasDropped)
+        if (definition.PrimaryKey is not null
+            && !prerequisites.PrimaryKeyWasDropped)
         {
             var physicalName = GetCapturedPrimaryKeyPhysicalName(definition.PrimaryKey, prerequisites.NewlyCreated)
-                ?? CapturedTableMemberName(liveAnalysis, SafeMigrationDatabaseObjectKind.PrimaryKey,
+                ?? CapturedTableMemberName(
+                    liveAnalysis,
+                    SafeMigrationDatabaseObjectKind.PrimaryKey,
                     definition.PrimaryKey.Name);
 
-            prerequisites.AcceptPrimaryKey(definition.PrimaryKey,
-                physicalName, createdByProjection: prerequisites.NewlyCreated);
+            prerequisites.AcceptPrimaryKey(
+                definition.PrimaryKey,
+                physicalName,
+                createdByProjection: prerequisites.NewlyCreated);
         }
 
         foreach (var constraint in definition.UniqueConstraints)
         {
-            CaptureTableMember(prerequisites.UniqueConstraints, constraint.Name, constraint,
-                prerequisites.NewlyCreated, SafeMigrationDatabaseObjectKind.UniqueConstraint, liveAnalysis);
+            CaptureTableMember(
+                prerequisites.UniqueConstraints,
+                constraint.Name,
+                constraint,
+                prerequisites.NewlyCreated,
+                SafeMigrationDatabaseObjectKind.UniqueConstraint,
+                liveAnalysis);
         }
 
         foreach (var constraint in definition.CheckConstraints)
         {
-            CaptureTableMember(prerequisites.CheckConstraints, constraint.Name, constraint,
-                prerequisites.NewlyCreated, SafeMigrationDatabaseObjectKind.CheckConstraint, liveAnalysis);
+            CaptureTableMember(
+                prerequisites.CheckConstraints,
+                constraint.Name,
+                constraint,
+                prerequisites.NewlyCreated,
+                SafeMigrationDatabaseObjectKind.CheckConstraint,
+                liveAnalysis);
         }
 
         foreach (var constraint in definition.ForeignKeys)
         {
-            CaptureTableMember(prerequisites.ForeignKeys, constraint.Name, constraint,
-                prerequisites.NewlyCreated, SafeMigrationDatabaseObjectKind.ForeignKey, liveAnalysis);
+            CaptureTableMember(
+                prerequisites.ForeignKeys,
+                constraint.Name,
+                constraint,
+                prerequisites.NewlyCreated,
+                SafeMigrationDatabaseObjectKind.ForeignKey,
+                liveAnalysis);
         }
 
         CaptureSharedUniqueKeys(prerequisites, definition, liveAnalysis);
@@ -141,7 +163,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         foreach (var binding in bindings)
         {
-            if (binding.Kind == kind && StringComparer.Ordinal.Equals(binding.AuthoredName, authoredName)
+            if (binding.Kind == kind
+                && StringComparer.Ordinal.Equals(binding.AuthoredName, authoredName)
                 && !string.IsNullOrEmpty(binding.PhysicalName))
             {
                 return binding.PhysicalName;
@@ -242,14 +265,18 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         var definition = intent.Definition;
         if (!HasConstraintColumns(definition.Table, definition.Schema, definition.Columns)
-            || !HasConstraintColumns(definition.PrincipalTable, definition.PrincipalSchema,
+            || !HasConstraintColumns(
+                definition.PrincipalTable,
+                definition.PrincipalSchema,
                 definition.PrincipalColumns))
         {
             return false;
         }
 
-        var acceptedKey = HasAcceptedCandidateKey(definition.PrincipalTable,
-            definition.PrincipalSchema, definition.PrincipalColumns);
+        var acceptedKey = HasAcceptedCandidateKey(
+            definition.PrincipalTable,
+            definition.PrincipalSchema,
+            definition.PrincipalColumns);
 
         // WHY: A new owner can inherit native defaults absent from its raw
         // column definitions. An explicit provider certificate requirement
@@ -257,7 +284,9 @@ internal sealed partial class SafeMigrationPreflightProjection
         // the default-false contract preserves unrelated projected owners.
         var requiresLiveQualification = _livePrerequisiteSource?.RequiresLiveForeignKeyQualification(intent) == true;
 
-        if (!requiresLiveQualification && acceptedKey && ForeignKeyColumnStorageMatches(definition))
+        if (!requiresLiveQualification
+            && acceptedKey
+            && ForeignKeyColumnStorageMatches(definition))
         {
             return true;
         }
@@ -325,7 +354,9 @@ internal sealed partial class SafeMigrationPreflightProjection
         {
             SafeMigrationDatabaseObjectKind.PrimaryKey => !prerequisites.PrimaryKeyWasDropped
                 && (prerequisites.PrimaryKey is null
-                    || SameColumns(prerequisites.PrimaryKey.Columns, foreignKey.PrincipalColumns,
+                    || SameColumns(
+                        prerequisites.PrimaryKey.Columns,
+                        foreignKey.PrincipalColumns,
                         _objectIdentityNormalizer)),
             SafeMigrationDatabaseObjectKind.UniqueConstraint =>
                 SurvivingLiveUniqueConstraint(prerequisites, candidate.PhysicalName, foreignKey.PrincipalColumns)
@@ -342,7 +373,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         string name,
         IReadOnlyList<string> columns
     ) => !prerequisites.UniqueConstraints.TryGetPhysicalState(name, out var present)
-        || (present && prerequisites.UniqueConstraints.TryGetPhysicalDefinition(name, out var definition)
+        || (present
+            && prerequisites.UniqueConstraints.TryGetPhysicalDefinition(name, out var definition)
             && SameColumns(definition.Columns, columns, _objectIdentityNormalizer));
 
     /// <summary>Rejects a removed or differently replaced backing index, including a constraint-owned index.</summary>
@@ -350,14 +382,21 @@ internal sealed partial class SafeMigrationPreflightProjection
         ProjectedPrerequisites prerequisites,
         string? name,
         IReadOnlyList<string> columns
-    ) => name is null || !prerequisites.Indexes.TryGetPhysicalState(name, out var present)
-        || (present && prerequisites.Indexes.TryGetPhysicalDefinition(name, out var definition)
+    ) => name is null
+        || !prerequisites.Indexes.TryGetPhysicalState(name, out var present)
+        || (present
+            && prerequisites.Indexes.TryGetPhysicalDefinition(name, out var definition)
             && IsUnfilteredCandidateIndex(definition, columns));
 
     /// <summary>Recognizes only ordinary complete keys without unproven provider-specific equality semantics.</summary>
-    private bool IsUnfilteredCandidateIndex(ExpectedIndexDefinition index, IReadOnlyList<string> columns)
+    private bool IsUnfilteredCandidateIndex(
+        ExpectedIndexDefinition index,
+        IReadOnlyList<string> columns
+    )
     {
-        if (!index.Unique || index.Filter is not null || index.StructuredFilter is not null
+        if (!index.Unique
+            || index.Filter is not null
+            || index.StructuredFilter is not null
             || index.Keys.Count != columns.Count)
         {
             return false;
@@ -369,11 +408,14 @@ internal sealed partial class SafeMigrationPreflightProjection
         for (var ordinal = 0; ordinal < columns.Count; ordinal++)
         {
             var part = index.Keys[ordinal];
+
             // WHY: A unique index can use equality different from the parent
             // column (SQLite COLLATE or a PostgreSQL operator class). Uniqueness
             // alone is not an FK certificate for those provider-specific keys.
-            if (part.Column is null || part.PrefixLength is not null
-                || part.Collation is not null || part.OperatorClass is not null
+            if (part.Column is null
+                || part.PrefixLength is not null
+                || part.Collation is not null
+                || part.OperatorClass is not null
                 || !(_objectIdentityNormalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal)
                     .Equals(part.Column, columns[ordinal]))
             {
@@ -443,17 +485,23 @@ internal sealed partial class SafeMigrationPreflightProjection
     }
 
     /// <summary>Combines accepted members with independently live untouched members of one surviving owner.</summary>
-    private bool HasConstraintColumns(string table, string? schema, IReadOnlyList<string> columns)
+    private bool HasConstraintColumns(
+        string table,
+        string? schema,
+        IReadOnlyList<string> columns
+    )
     {
         var owner = new TableKey(table, schema);
-        if (_projectedMissingTables.Contains(owner) || IsProjectedTableStructureUnknown(table, schema))
+        if (_projectedMissingTables.Contains(owner)
+            || IsProjectedTableStructureUnknown(table, schema))
         {
             return false;
         }
 
         foreach (var column in columns)
         {
-            if (IsProjectedColumnMissing(table, schema, column) || IsProjectedColumnUnknown(table, schema, column))
+            if (IsProjectedColumnMissing(table, schema, column)
+                || IsProjectedColumnUnknown(table, schema, column))
             {
                 return false;
             }
@@ -484,21 +532,22 @@ internal sealed partial class SafeMigrationPreflightProjection
             ? prerequisites.DataMutationVersion
             : prerequisites.EmptyTableProofVersion;
 
-        return proofVersion == _providerDataMutationVersion
+        return proofVersion == DataMutationVersion
             && !_projectedDataMutationTables.Contains(new TableKey(table, schema));
     }
 
     private bool HasNullPreservingAddedColumn(
         IReadOnlyList<string> columns,
         ProjectedPrerequisites prerequisites
-    ) => prerequisites.DataMutationVersion == _providerDataMutationVersion
-        && columns.Any(column => prerequisites.Columns.TryGetValue(column, out var projected) && projected is
-        {
-            AddedToExistingTable: true,
-            IsNullable: true,
-            PreservesNullForExistingRows: true,
-            IsComputed: false,
-        });
+    ) => prerequisites.DataMutationVersion == DataMutationVersion
+        && columns.Any(column => prerequisites.Columns.TryGetValue(column, out var projected)
+            && projected is
+            {
+                AddedToExistingTable: true,
+                IsNullable: true,
+                PreservesNullForExistingRows: true,
+                IsComputed: false,
+            });
 
     private bool HasAcceptedCandidateKey(
         string table,
@@ -527,21 +576,26 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         return prerequisites.HasCandidateKey(table, schema, columns)
-            || prerequisites.Indexes.Any((Projection: this, Columns: columns),
+            || prerequisites.Indexes.Any(
+                (Projection: this, Columns: columns),
                 static (index, state) => state.Projection.IsUnfilteredCandidateIndex(index, state.Columns));
     }
 
     /// <summary>Distinguishes newly established physical keys from reused live matching semantics.</summary>
-    private bool HasCreatedCandidateKey(ExpectedForeignKeyDefinition foreignKey)
+    private bool HasCreatedCandidateKey(
+        ExpectedForeignKeyDefinition foreignKey
+    )
     {
-        if (!_prerequisites.TryGetValue(new TableKey(foreignKey.PrincipalTable, foreignKey.PrincipalSchema),
-                out var prerequisites))
+        if (!_prerequisites.TryGetValue(
+            new TableKey(foreignKey.PrincipalTable, foreignKey.PrincipalSchema),
+            out var prerequisites))
         {
             return false;
         }
 
         var columns = foreignKey.PrincipalColumns;
-        if (prerequisites.PrimaryKeyCreatedByProjection && prerequisites.PrimaryKey is { } primary
+        if (prerequisites.PrimaryKeyCreatedByProjection
+            && prerequisites.PrimaryKey is { } primary
             && SameColumns(primary.Columns, columns, _objectIdentityNormalizer))
         {
             return true;
@@ -549,10 +603,14 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         var state = (Projection: this, Columns: columns);
 
-        return prerequisites.UniqueConstraints.AnyCreated(state,
-                static (key, value) => SameColumns(key.Columns, value.Columns,
+        return prerequisites.UniqueConstraints.AnyCreated(
+                state,
+                static (key, value) => SameColumns(
+                    key.Columns,
+                    value.Columns,
                     value.Projection._objectIdentityNormalizer))
-            || prerequisites.Indexes.AnyCreated(state,
+            || prerequisites.Indexes.AnyCreated(
+                state,
                 static (key, value) => value.Projection.IsUnfilteredCandidateIndex(key, value.Columns));
     }
 

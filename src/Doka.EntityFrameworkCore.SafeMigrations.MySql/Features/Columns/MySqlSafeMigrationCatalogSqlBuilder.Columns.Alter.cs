@@ -32,6 +32,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 intent.Definition.Name,
                 null,
                 MySqlSignedIntegerWidening.Width(intent.Definition));
+
             physical.Append(" AND ");
             AppendDependentIndexesRemainRepresentable(
                 physical,
@@ -39,12 +40,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 intent.Definition.Name,
                 null,
                 MySqlSignedIntegerWidening.Width(intent.Definition));
+
             physical
                 .Append(" AND ")
                 .Append(NoForeignKeyDependency(intent.Table, intent.Definition.Name));
+
             physical
                 .Append(" AND ")
                 .Append(StrictSqlModeExpression);
+
             physical
                 .Append(" AND ")
                 .Append(ColumnWithInvariantExists(intent.Table, intent.Definition.Name, OrdinaryColumnExtraMatches()));
@@ -481,14 +485,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         foreach (var characterSet in s_backfillCharacterSets)
         {
             if (CanRepresentAlterColumnBackfill(
-                    intent.OldDefinition,
-                    intent.Definition,
-                    sourceType,
-                    targetType,
-                    characterSet,
-                    strictMode: true,
-                    supportsQuotedExpressionDefaults: true,
-                    supportsTextExpressionControlCharacters: true))
+                intent.OldDefinition,
+                intent.Definition,
+                sourceType,
+                targetType,
+                characterSet,
+                strictMode: true,
+                supportsQuotedExpressionDefaults: true,
+                supportsTextExpressionControlCharacters: true))
             {
                 // WHY: Register each selected literal immediately, in the old lazy Where/Select
                 // order. Delaying registration would change operation-local parameter ordinals.

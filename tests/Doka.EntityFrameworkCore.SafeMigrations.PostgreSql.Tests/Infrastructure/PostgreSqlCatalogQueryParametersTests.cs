@@ -35,21 +35,33 @@ public sealed class PostgreSqlCatalogQueryParametersTests
             ? new PostgreSqlCatalogQueryParameters(batchCommand, mappingSource)
             : new PostgreSqlCatalogQueryParameters(command, mappingSource);
 
-        var collection = native ? batchCommand.Parameters : command.Parameters;
+        var collection = native
+            ? batchCommand.Parameters
+            : command.Parameters;
+
         for (var index = 0; index < retainedCount; index++)
         {
             _ = (index % 3) switch
             {
                 0 => parameters.AddString($"retained_{index}"),
                 1 => parameters.Add(index, "integer"),
-                _ => parameters.Add(index == 2 ? null : (object)index, "integer"),
+                _ => parameters.Add(
+                    index == 2
+                        ? null
+                        : index,
+                    "integer"),
             };
         }
 
         var checkpoint = parameters.Capture();
-        var originalParameters = collection.Cast<NpgsqlParameter>().ToArray();
-        var originalShapes = originalParameters.Select(parameter =>
-            (parameter.ParameterName, parameter.Value, parameter.DbType, parameter.NpgsqlDbType)).ToArray();
+        var originalParameters = collection
+            .Cast<NpgsqlParameter>()
+            .ToArray();
+
+        var originalShapes = originalParameters
+            .Select(parameter =>
+                (parameter.ParameterName, parameter.Value, parameter.DbType, parameter.NpgsqlDbType))
+            .ToArray();
 
         string? lastDiscarded = null;
         for (var index = 0; index < 8; index++)
@@ -72,8 +84,13 @@ public sealed class PostgreSqlCatalogQueryParametersTests
         Assert.Equal(retainedCount + 7, warmedLookup);
         Assert.Equal(retainedCount + 8, parameters.Count);
         Assert.Equal(parameters.Count, collection.Count);
-        Assert.Equal(checkpoint.Utf8PayloadBytes + Enumerable.Range(0, 8)
-            .Sum(index => Encoding.UTF8.GetByteCount($"replacement_{index}") + 32), parameters.Utf8PayloadBytes);
+        Assert.Equal(
+            checkpoint.Utf8PayloadBytes
+            + Enumerable
+                .Range(0, 8)
+                .Sum(index => Encoding.UTF8.GetByteCount($"replacement_{index}") + 32),
+            parameters.Utf8PayloadBytes);
+
         for (var index = 0; index < collection.Count; index++)
         {
             var parameter = Assert.IsType<NpgsqlParameter>(collection[index]);
@@ -84,7 +101,8 @@ public sealed class PostgreSqlCatalogQueryParametersTests
             if (index < retainedCount)
             {
                 Assert.Same(originalParameters[index], parameter);
-                Assert.Equal(originalShapes[index],
+                Assert.Equal(
+                    originalShapes[index],
                     (parameter.ParameterName, parameter.Value, parameter.DbType, parameter.NpgsqlDbType));
             }
         }
@@ -122,7 +140,7 @@ public sealed class PostgreSqlCatalogQueryParametersTests
         parameters.Rollback(checkpoint);
 
         Assert.Equal(1, parameters.Count);
-        Assert.Single(command.Parameters.Cast<NpgsqlParameter>());
+        Assert.Single(command.Parameters);
         Assert.Equal(checkpoint.Utf8PayloadBytes, parameters.Utf8PayloadBytes);
         Assert.Equal("@doka_sm_p1", parameters.AddString("discarded"));
     }

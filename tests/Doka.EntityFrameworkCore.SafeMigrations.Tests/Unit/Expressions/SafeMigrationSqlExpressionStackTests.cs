@@ -2,7 +2,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Preserves deep public-tree contracts without imposing the parser's syntax-depth limit.</summary>
 /// <param name="output">The informational allocation-evidence sink.</param>
-public sealed class SafeMigrationSqlExpressionStackTests(Xunit.Abstractions.ITestOutputHelper output)
+public sealed class SafeMigrationSqlExpressionStackTests(ITestOutputHelper output)
 {
     [Fact]
     public void MixedShallowContractPreservesNullCountsCaseOrderAndCapturedNumericTokens()
@@ -33,7 +33,9 @@ public sealed class SafeMigrationSqlExpressionStackTests(Xunit.Abstractions.ITes
     [InlineData("case_else")]
     [InlineData("cast")]
     [InlineData("collate")]
-    public void DeepTreesPreserveEqualityCanonicalEncodingAndSemanticHash(string shape)
+    public void DeepTreesPreserveEqualityCanonicalEncodingAndSemanticHash(
+        string shape
+    )
     {
         var left = Deep(shape, 10_000, SafeMigrationSql.Literal(new byte[] { 0, 1, 255 }));
         var right = Deep(shape, 10_000, SafeMigrationSql.Literal(new byte[] { 0, 1, 255 }));
@@ -61,12 +63,16 @@ public sealed class SafeMigrationSqlExpressionStackTests(Xunit.Abstractions.ITes
     [Fact]
     public void WideListsAndCaseClausesPreserveTheirLastElementAndFallback()
     {
-        var values = Enumerable.Range(0, 10_000)
+        var values = Enumerable
+            .Range(0, 10_000)
             .Select(static value => SafeMigrationSql.Literal(value))
             .ToArray();
 
         var changed = values.ToArray();
-        var clauses = values.Select(static value => new SafeMigrationSqlCaseWhenClause(value, value)).ToArray();
+        var clauses = values
+            .Select(static value => new SafeMigrationSqlCaseWhenClause(value, value))
+            .ToArray();
+
         var first = SafeMigrationSql.Function("probe", values);
         var equivalent = SafeMigrationSql.Function("probe", values.ToArray());
         var caseWithoutElse = SafeMigrationSql.Case(clauses);
@@ -105,10 +111,14 @@ public sealed class SafeMigrationSqlExpressionStackTests(Xunit.Abstractions.ITes
     public void EarlierMismatchShortCircuitsAnUnsupportedLaterChild()
     {
         var left = SafeMigrationSql.Binary(
-            SafeMigrationSql.Literal(1), SafeMigrationSqlBinaryOperator.Add, new UnknownExpression());
+            SafeMigrationSql.Literal(1),
+            SafeMigrationSqlBinaryOperator.Add,
+            new UnknownExpression());
 
         var right = SafeMigrationSql.Binary(
-            SafeMigrationSql.Literal(2), SafeMigrationSqlBinaryOperator.Add, new UnknownExpression());
+            SafeMigrationSql.Literal(2),
+            SafeMigrationSqlBinaryOperator.Add,
+            new UnknownExpression());
 
         var equal = SafeMigrationSqlExpressionContract.Equivalent(left, right);
 
@@ -120,10 +130,11 @@ public sealed class SafeMigrationSqlExpressionStackTests(Xunit.Abstractions.ITes
     {
         var left = SafeMigrationSql.In(new UnknownExpression(), [SafeMigrationSql.Literal(1)]);
         var right = SafeMigrationSql.In(
-            new UnknownExpression(), [SafeMigrationSql.Literal(1), SafeMigrationSql.Literal(2)]);
+            new UnknownExpression(),
+            [SafeMigrationSql.Literal(1), SafeMigrationSql.Literal(2)]);
 
-        var failure = Assert.Throws<UnreachableException>(
-            () => SafeMigrationSqlExpressionContract.Equivalent(left, right));
+        var failure =
+            Assert.Throws<UnreachableException>(() => SafeMigrationSqlExpressionContract.Equivalent(left, right));
 
         Assert.NotNull(failure);
     }
@@ -132,10 +143,14 @@ public sealed class SafeMigrationSqlExpressionStackTests(Xunit.Abstractions.ITes
     public void UnsupportedNodeWritingThrowsWithoutPreventingSubsequentTraversal()
     {
         var invalid = SafeMigrationSql.Binary(
-            SafeMigrationSql.Literal(1), SafeMigrationSqlBinaryOperator.Add, new UnknownExpression());
+            SafeMigrationSql.Literal(1),
+            SafeMigrationSqlBinaryOperator.Add,
+            new UnknownExpression());
 
         var valid = SafeMigrationSql.Binary(
-            SafeMigrationSql.Literal(1), SafeMigrationSqlBinaryOperator.Add, SafeMigrationSql.Literal(2));
+            SafeMigrationSql.Literal(1),
+            SafeMigrationSqlBinaryOperator.Add,
+            SafeMigrationSql.Literal(2));
 
         var failure = Assert.Throws<UnreachableException>(() => Hash(invalid));
         var recovered = Hash(valid);
@@ -171,7 +186,11 @@ public sealed class SafeMigrationSqlExpressionStackTests(Xunit.Abstractions.ITes
     }
 
     /// <summary>Builds a linear public tree without recursion or parser-dependent depth restrictions.</summary>
-    private static SafeMigrationSqlExpression Deep(string shape, int depth, SafeMigrationSqlExpression leaf)
+    private static SafeMigrationSqlExpression Deep(
+        string shape,
+        int depth,
+        SafeMigrationSqlExpression leaf
+    )
     {
         var expression = leaf;
         var scalar = SafeMigrationSql.Literal(0);
@@ -231,7 +250,9 @@ public sealed class SafeMigrationSqlExpressionStackTests(Xunit.Abstractions.ITes
     }
 
     /// <summary>Hashes the exact canonical bytes written by the production contract.</summary>
-    private static string Hash(SafeMigrationSqlExpression? expression)
+    private static string Hash(
+        SafeMigrationSqlExpression? expression
+    )
     {
         using var writer = new CanonicalHashWriter();
 

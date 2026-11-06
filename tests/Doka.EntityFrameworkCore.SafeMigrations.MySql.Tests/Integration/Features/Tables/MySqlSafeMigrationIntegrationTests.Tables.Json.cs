@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the TablesJson migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlTablesJsonIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlTablesJsonIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlTablesJsonIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlTablesJsonIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     [Fact]
     public async Task JsonTable_ConvergesAndTreatsOnlyTheProviderValidationCheckAsOwned()
@@ -21,6 +23,7 @@ public sealed partial class MySqlTablesJsonIntegrationTests : MySqlSafeMigration
                 Payload = table.Column<string>(type: "json", nullable: false),
             },
             constraints: table => table.PrimaryKey("pk_json_documents", value => value.Id));
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
@@ -42,13 +45,18 @@ public sealed partial class MySqlTablesJsonIntegrationTests : MySqlSafeMigration
 
         await ExecuteSqlAsync(
             connectionString,
-            "INSERT INTO `json_documents` (`id`, `Payload`) VALUES (1, '{\"valid\":true}');");
+            "INSERT INTO `json_documents` (`id`, `Payload`) VALUES (1, '{\"valid\":true}');",
+            cancellationToken: CancellationToken.None);
+
         var invalidJson = await Assert.ThrowsAsync<MySqlException>(() => ExecuteSqlAsync(
             connectionString,
-            "INSERT INTO `json_documents` (`id`, `Payload`) VALUES (2, 'not-json');"));
+            "INSERT INTO `json_documents` (`id`, `Payload`) VALUES (2, 'not-json');",
+            cancellationToken: CancellationToken.None));
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.True(Assert.Single(postflight.Assessments).PostconditionSatisfied);
+        Assert.True(Assert.Single(postflight.Assessments)
+            .PostconditionSatisfied);
+
         Assert.Empty(postflight.UnexpectedObjects);
         Assert.NotEmpty(invalidJson.Message);
     }
@@ -71,7 +79,8 @@ public sealed partial class MySqlTablesJsonIntegrationTests : MySqlSafeMigration
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "ALTER TABLE `json_check_drift` ADD CONSTRAINT `ck_json_check_drift_id` CHECK (`Id` > 0);");
+            "ALTER TABLE `json_check_drift` ADD CONSTRAINT `ck_json_check_drift_id` CHECK (`Id` > 0);",
+            cancellationToken: CancellationToken.None);
 
         var report = await context
             .GetService<ISafeMigrationRunner>()

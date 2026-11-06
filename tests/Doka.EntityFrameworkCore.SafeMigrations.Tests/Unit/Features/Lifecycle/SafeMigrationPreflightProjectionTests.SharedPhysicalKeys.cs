@@ -15,6 +15,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             constraint,
             SafeMigrationObservedState.Matching,
             "uq_items_code");
+
         ObserveAccepted(
             projection,
             new DropUniqueConstraintIntent("uq_items_code", "items"),
@@ -53,6 +54,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             index,
             SafeMigrationObservedState.Matching,
             "uq_items_code");
+
         ObserveAccepted(
             projection,
             new DropIndexIntent("uq_items_code", "items"),
@@ -109,10 +111,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             constraint,
             SafeMigrationObservedState.Matching,
             "uq_items_code");
+
         ObserveAccepted(
             projection,
             new DropIndexIntent("uq_items_code", "items"),
             SafeMigrationObservedState.Matching);
+
         projection.ObserveProviderPostcondition(
             new InsertDataOperation
             {

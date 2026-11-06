@@ -7,8 +7,8 @@ internal sealed partial class SafeMigrationPreflightProjection
     private const long RevokedModelManagedDataMutationVersion = -1;
 
     private readonly Dictionary<ModelManagedRowKey, ProjectedModelManagedRow> _modelManagedRows;
-    private Dictionary<TableKey, int>? _modelManagedLocalOrigins;
     private int _currentOperationOrdinal = -1;
+    private Dictionary<TableKey, int>? _modelManagedLocalOrigins;
 
     /// <summary>Gets or sets the complete-stream ordinal used to attribute ordered proof invalidation.</summary>
     internal int CurrentOperationOrdinal
@@ -78,7 +78,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         var canInferMissingRows = CanInferMissingModelManagedRows(intent);
 
-        if (_modelManagedRows.Count == 0 && !canInferMissingRows)
+        if (_modelManagedRows.Count == 0
+            && !canInferMissingRows)
         {
             // WHY: Without row evidence or a completeness proof every row must
             // use live fallback. Avoid scratch storage and a discarded key hash.
@@ -87,7 +88,9 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         var states = new SafeMigrationObservedState[intent.RowCount];
         var keyColumns = SafeMigrationModelManagedKeyIdentity.CanonicalizeColumns(
-            intent.KeyColumns, _objectIdentityNormalizer, out var keyOrdinals);
+            intent.KeyColumns,
+            _objectIdentityNormalizer,
+            out var keyOrdinals);
 
         // WHY: Classify each authored row into the state array at the same row ordinal.
         // ReSharper disable once ForCanBeConvertedToForeach
@@ -95,8 +98,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         for (var row = 0; row < intent.RowCount; row++)
         {
             if (_modelManagedRows.TryGetValue(
-                    ModelManagedRowKey.Create(intent, row, keyColumns, keyOrdinals),
-                    out var projected))
+                ModelManagedRowKey.Create(intent, row, keyColumns, keyOrdinals),
+                out var projected))
             {
                 if (TryClassify(intent, row, projected, out states[row]))
                 {
@@ -125,7 +128,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             return ProjectLiveModelManagedState(intent, liveAnalysis);
         }
 
-        if ((state is SafeMigrationObservedState.Missing or SafeMigrationObservedState.TransitionReady)
+        if (state is SafeMigrationObservedState.Missing or SafeMigrationObservedState.TransitionReady
             && HasProjectedUniqueCollision(intent, keyColumns, keyOrdinals))
         {
             state = SafeMigrationObservedState.DataBlocked;
@@ -154,7 +157,7 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         if (!_prerequisites.TryGetValue(new TableKey(intent.Table, intent.Schema), out var prerequisites)
             || !prerequisites.NewlyCreated
-            || prerequisites.ModelManagedDataMutationVersion != _providerDataMutationVersion)
+            || prerequisites.ModelManagedDataMutationVersion != DataMutationVersion)
         {
             return false;
         }
@@ -192,7 +195,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationProviderAnalysis liveAnalysis
     )
     {
-        if (_providerDataMutationVersion == 0
+        if (DataMutationVersion == 0
             && !HasUnanalyzedDataChanges(intent.Table, intent.Schema)
             && !HasChangedModelManagedDependencies(intent))
         {
@@ -215,7 +218,9 @@ internal sealed partial class SafeMigrationPreflightProjection
     }
 
     /// <summary>Finds the latest invalidation that actually affects this target or its declared dependencies.</summary>
-    private int? GetModelManagedLocalOrigin(ModelManagedDataIntent intent)
+    private int? GetModelManagedLocalOrigin(
+        ModelManagedDataIntent intent
+    )
     {
         if (_modelManagedLocalOrigins is null)
         {
@@ -228,15 +233,22 @@ internal sealed partial class SafeMigrationPreflightProjection
         {
             foreach (var foreignKey in deletion.ForeignKeys)
             {
-                ordinal = Math.Max(ordinal, _modelManagedLocalOrigins.GetValueOrDefault(
-                    new TableKey(foreignKey.Table, foreignKey.Schema), -1));
+                ordinal = Math.Max(
+                    ordinal,
+                    _modelManagedLocalOrigins.GetValueOrDefault(
+                        new TableKey(foreignKey.Table, foreignKey.Schema),
+                        -1));
             }
         }
 
-        return ordinal >= 0 ? ordinal : null;
+        return ordinal >= 0
+            ? ordinal
+            : null;
     }
 
-    private void TrackLocalModelManagedOrigin(TableKey table)
+    private void TrackLocalModelManagedOrigin(
+        TableKey table
+    )
     {
         if (CurrentOperationOrdinal < 0)
         {
@@ -251,9 +263,11 @@ internal sealed partial class SafeMigrationPreflightProjection
     }
 
     /// <summary>Distinguishes global side effects from later local loss of fresh-table row completeness.</summary>
-    private bool HasStaleGlobalModelManagedData(ModelManagedDataIntent intent)
+    private bool HasStaleGlobalModelManagedData(
+        ModelManagedDataIntent intent
+    )
     {
-        if (_providerDataMutationVersion == 0)
+        if (DataMutationVersion == 0)
         {
             return false;
         }
@@ -277,7 +291,10 @@ internal sealed partial class SafeMigrationPreflightProjection
         return false;
     }
 
-    private bool WasCreatedAfterLastGlobalDataMutation(string table, string? schema)
+    private bool WasCreatedAfterLastGlobalDataMutation(
+        string table,
+        string? schema
+    )
     {
         // WHY: A write cannot affect a table that did not exist yet. If a later
         // structural change discards its row proof, attribute uncertainty to
@@ -285,11 +302,13 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         return _prerequisites.TryGetValue(new TableKey(table, schema), out var prerequisites)
             && prerequisites.NewlyCreated
-            && prerequisites.DataMutationVersion == _providerDataMutationVersion;
+            && prerequisites.DataMutationVersion == DataMutationVersion;
     }
 
     /// <summary>Checks whether a delete's incoming-row counts were invalidated by confined child writes.</summary>
-    private bool HasChangedModelManagedDependencies(ModelManagedDataIntent intent)
+    private bool HasChangedModelManagedDependencies(
+        ModelManagedDataIntent intent
+    )
     {
         if (intent is not DeleteModelManagedDataIntent deletion)
         {
@@ -344,7 +363,10 @@ internal sealed partial class SafeMigrationPreflightProjection
 
             foreach (var uniqueKey in uniqueKeys)
             {
-                var ordinals = uniqueKey.Columns.Select(column => ColumnOrdinal(intent.Columns, column)).ToArray();
+                var ordinals = uniqueKey
+                    .Columns
+                    .Select(column => ColumnOrdinal(intent.Columns, column))
+                    .ToArray();
 
                 if (ordinals.Any(ordinal => targets.GetUnsafeValue(row, ordinal) is null))
                 {
@@ -362,11 +384,11 @@ internal sealed partial class SafeMigrationPreflightProjection
                     }
 
                     if (ordinals.All(ordinal => candidate.Values.TryGetValue(
-                                intent.Columns[ordinal],
-                                out var candidateValue)
-                            && SafeMigrationModelManagedValue.AreEqual(
-                                candidateValue,
-                                targets.GetUnsafeValue(row, ordinal))))
+                            intent.Columns[ordinal],
+                            out var candidateValue)
+                        && SafeMigrationModelManagedValue.AreEqual(
+                            candidateValue,
+                            targets.GetUnsafeValue(row, ordinal))))
                     {
                         return true;
                     }
@@ -402,7 +424,9 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         var keyColumns = SafeMigrationModelManagedKeyIdentity.CanonicalizeColumns(
-            intent.KeyColumns, _objectIdentityNormalizer, out var keyOrdinals);
+            intent.KeyColumns,
+            _objectIdentityNormalizer,
+            out var keyOrdinals);
 
         // WHY: Project each authored row using its own key and value matrix coordinates.
         // ReSharper disable once ForCanBeConvertedToForeach
@@ -598,7 +622,11 @@ internal sealed partial class SafeMigrationPreflightProjection
             foreach (var row in moved)
             {
                 _modelManagedRows.Remove(row.Key);
-                _modelManagedRows[row.Key with { Table = target.Table, Schema = target.Schema }] = row.Value;
+                _modelManagedRows[row.Key with
+                {
+                    Table = target.Table,
+                    Schema = target.Schema,
+                }] = row.Value;
             }
         }
 
@@ -730,6 +758,25 @@ internal sealed partial class SafeMigrationPreflightProjection
         _ => throw new ArgumentOutOfRangeException(nameof(state)),
     };
 
+    private int ColumnOrdinal(
+        IReadOnlyList<string> columns,
+        string column
+    )
+    {
+        // WHY: Return the physical column ordinal used to address the associated row matrix.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var ordinal = 0; ordinal < columns.Count; ordinal++)
+        {
+            if (IdentifierEquals(_objectIdentityNormalizer, columns[ordinal], column))
+            {
+                return ordinal;
+            }
+        }
+
+        throw new UnreachableException();
+    }
+
     private readonly record struct ModelManagedRowKey(
         string Table,
         string? Schema,
@@ -787,38 +834,19 @@ internal sealed partial class SafeMigrationPreflightProjection
             StringComparer.Ordinal.GetHashCode(value.KeyFingerprint));
     }
 
-    private int ColumnOrdinal(
-        IReadOnlyList<string> columns,
-        string column
-    )
-    {
-        // WHY: Return the physical column ordinal used to address the associated row matrix.
-        // ReSharper disable once ForCanBeConvertedToForeach
-        // ReSharper disable once LoopCanBeConvertedToQuery
-        for (var ordinal = 0; ordinal < columns.Count; ordinal++)
-        {
-            if (IdentifierEquals(_objectIdentityNormalizer, columns[ordinal], column))
-            {
-                return ordinal;
-            }
-        }
-
-        throw new UnreachableException();
-    }
-
     private sealed class ProjectedModelManagedRow(
         bool exists,
         ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer
     )
     {
-        public static ProjectedModelManagedRow Absent(
-            ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer
-        ) => new(exists: false, objectIdentityNormalizer);
-
         public bool Exists { get; } = exists;
 
         public Dictionary<string, object?> Values { get; } =
             new(new IdentifierComparer(objectIdentityNormalizer, objectIdentityNormalizer?.ColumnIdentifierComparer));
+
+        public static ProjectedModelManagedRow Absent(
+            ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer
+        ) => new(exists: false, objectIdentityNormalizer);
 
         public ProjectedModelManagedRow Copy()
         {

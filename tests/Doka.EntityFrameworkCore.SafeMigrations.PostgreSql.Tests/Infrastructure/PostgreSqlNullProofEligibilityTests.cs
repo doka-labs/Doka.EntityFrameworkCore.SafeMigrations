@@ -19,7 +19,10 @@ public sealed class PostgreSqlNullProofEligibilityTests
         var plan = builder.Build(operation, includeAnalysisEvidence: true, includeTransitionEvidence: true);
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
+
         var analysis = plan.RenderStateExpression(dataBlocked: false, transitionEligible: false);
         var repair = plan.RenderRepairPrecondition(dataBlocked: false, transitionEligible: false);
 
@@ -27,27 +30,43 @@ public sealed class PostgreSqlNullProofEligibilityTests
         var command = Assert.Single(commands);
         var nullProbe = Assert.IsType<PostgreSqlSafeMigrationNullabilityDataProbe>(plan.NullabilityDataProbe)
             .BlockedExpression;
-        var qualifiedTable = context.GetService<ISqlGenerationHelper>().DelimitIdentifier("proof_rows");
+
+        var qualifiedTable = context
+            .GetService<ISqlGenerationHelper>()
+            .DelimitIdentifier("proof_rows");
+
         Assert.Equal(1, CountOccurrences(command.CommandText, nullProbe));
-        Assert.Contains("doka_nullability_blocked := COALESCE((" + nullProbe, command.CommandText,
+        Assert.Contains(
+            "doka_nullability_blocked := COALESCE((" + nullProbe,
+            command.CommandText,
             StringComparison.Ordinal);
+
         Assert.Contains("doka_complete_not_null := COALESCE((EXISTS", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("AND NOT COALESCE((doka_complete_not_null)", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("AND NOT c.relhassubclass", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("not_null_constraint.convalidated", command.CommandText, StringComparison.Ordinal);
-        Assert.Contains("pg_catalog.to_jsonb(not_null_constraint)->>'conenforced'", command.CommandText,
+        Assert.Contains(
+            "pg_catalog.to_jsonb(not_null_constraint)->>'conenforced'",
+            command.CommandText,
             StringComparison.Ordinal);
+
         Assert.DoesNotContain("not_null_constraint.conenforced", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("FOR doka_evaluation_pass IN 1..2 LOOP", command.CommandText, StringComparison.Ordinal);
-        Assert.Contains($"LOCK TABLE {qualifiedTable} IN ACCESS EXCLUSIVE MODE", command.CommandText,
+        Assert.Contains(
+            $"LOCK TABLE {qualifiedTable} IN ACCESS EXCLUSIVE MODE",
+            command.CommandText,
             StringComparison.Ordinal);
+
         Assert.Contains("THEN (" + nullProbe + ") ELSE FALSE END", analysis, StringComparison.Ordinal);
         Assert.Contains("THEN (" + nullProbe + ") ELSE FALSE END", repair, StringComparison.Ordinal);
         Assert.DoesNotContain("doka_nullability_blocked", analysis, StringComparison.Ordinal);
         Assert.DoesNotContain("__DOKA_SM_", analysis, StringComparison.Ordinal);
-        Assert.True(command.CommandText.IndexOf(plan.StateEvaluationGuardExpression, StringComparison.Ordinal)
+        Assert.True(
+            command.CommandText.IndexOf(plan.StateEvaluationGuardExpression, StringComparison.Ordinal)
             < command.CommandText.IndexOf("doka_nullability_blocked := FALSE;", StringComparison.Ordinal));
-        Assert.True(command.CommandText.IndexOf("'data_blocked'", StringComparison.Ordinal)
+
+        Assert.True(
+            command.CommandText.IndexOf("'data_blocked'", StringComparison.Ordinal)
             < command.CommandText.IndexOf("THEN 'matching'", StringComparison.Ordinal));
     }
 
@@ -63,10 +82,14 @@ public sealed class PostgreSqlNullProofEligibilityTests
         // Arrange
         using var context = CreateOfflineContext();
         var operation = RequiredOperation(varchar);
-        var plan = CreateBuilder(context).Build(operation, includeTransitionEvidence: true);
+        var plan = CreateBuilder(context)
+            .Build(operation, includeTransitionEvidence: true);
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
+
         var runtimeInvariant = plan.RenderNullabilityRepairInvariantExpression();
         var appendedInvariant = new StringBuilder();
         plan.AppendNullabilityRepairInvariantExpression(appendedInvariant);
@@ -75,21 +98,33 @@ public sealed class PostgreSqlNullProofEligibilityTests
         var runtimeRepair = plan.RenderRepairPrecondition("length_cache", "transition_cache");
 
         // Assert
-        var command = Assert.Single(commands).CommandText;
+        var command = Assert.Single(commands)
+            .CommandText;
+
         Assert.Equal(1, CountOccurrences(command, runtimeInvariant));
         Assert.Equal(runtimeInvariant, appendedInvariant.ToString());
-        Assert.Contains("doka_nullability_repair_eligible := COALESCE((" + runtimeInvariant,
-            command, StringComparison.Ordinal);
-        Assert.Contains("IF doka_nullability_repair_eligible AND NOT COALESCE((",
-            command, StringComparison.Ordinal);
+        Assert.Contains(
+            "doka_nullability_repair_eligible := COALESCE((" + runtimeInvariant,
+            command,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "IF doka_nullability_repair_eligible AND NOT COALESCE((",
+            command,
+            StringComparison.Ordinal);
+
         Assert.Contains("WHEN (doka_nullability_repair_eligible) AND (", runtimeState, StringComparison.Ordinal);
         Assert.StartsWith("(doka_nullability_repair_eligible) AND NOT (", runtimeRepair, StringComparison.Ordinal);
         Assert.DoesNotContain("doka_nullability_repair_eligible", inlineState, StringComparison.Ordinal);
         Assert.DoesNotContain("__DOKA_SM_", inlineState, StringComparison.Ordinal);
-        Assert.True(command.IndexOf("FOR doka_evaluation_pass IN 1..2 LOOP", StringComparison.Ordinal)
+        Assert.True(
+            command.IndexOf("FOR doka_evaluation_pass IN 1..2 LOOP", StringComparison.Ordinal)
             < command.IndexOf("doka_nullability_repair_eligible := COALESCE((", StringComparison.Ordinal));
-        Assert.True(command.IndexOf(plan.StateEvaluationGuardExpression, StringComparison.Ordinal)
+
+        Assert.True(
+            command.IndexOf(plan.StateEvaluationGuardExpression, StringComparison.Ordinal)
             < command.IndexOf("doka_nullability_repair_eligible := COALESCE((", StringComparison.Ordinal));
+
         Assert.Contains(plan.Postcondition, command, StringComparison.Ordinal);
     }
 
@@ -106,13 +141,23 @@ public sealed class PostgreSqlNullProofEligibilityTests
     {
         // Arrange
         using var context = CreateOfflineContext();
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("proof_rows",
-            new ExpectedColumnDefinition("value", typeof(DateTime), nullable,
-                storeType: "timestamp without time zone")), policy);
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "proof_rows",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(DateTime),
+                    nullable,
+                    storeType: "timestamp without time zone")),
+            policy);
 
         // Act
-        var plan = CreateBuilder(context).Build(operation, includeTransitionEvidence: true);
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        var plan = CreateBuilder(context)
+            .Build(operation, includeTransitionEvidence: true);
+
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
 
         // Assert
         var command = Assert.Single(commands);
@@ -136,10 +181,15 @@ public sealed class PostgreSqlNullProofEligibilityTests
         var quoted = "'doubled ''" + token + "' || \"doubled\"\"" + token + "\" || ";
         var plan = new PostgreSqlSafeMigrationRuntimePlan(
             quoted + PostgreSqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder,
-            "TRUE", SafeMigrationRepairCapability.Safe, "TRUE")
+            "TRUE",
+            SafeMigrationRepairCapability.Safe,
+            "TRUE")
         {
             NullabilityDataProbe = new PostgreSqlSafeMigrationNullabilityDataProbe(
-                "proven_not_null", "eligible", "row_probe", "\"proof_rows\""),
+                "proven_not_null",
+                "eligible",
+                "row_probe",
+                "\"proof_rows\""),
         };
 
         // Act
@@ -149,8 +199,10 @@ public sealed class PostgreSqlNullProofEligibilityTests
         plan.AppendStateExpression(appended, "length_cache", "transition_cache");
 
         // Assert
-        Assert.Equal(quoted + "CASE WHEN (eligible) AND NOT (proven_not_null) THEN (row_probe) ELSE FALSE END",
+        Assert.Equal(
+            quoted + "CASE WHEN (eligible) AND NOT (proven_not_null) THEN (row_probe) ELSE FALSE END",
             inline);
+
         Assert.Equal(quoted + "doka_nullability_blocked", runtime);
         Assert.Equal(runtime, appended.ToString());
     }
@@ -163,10 +215,16 @@ public sealed class PostgreSqlNullProofEligibilityTests
         var token = PostgreSqlSafeMigrationRuntimePlan.NullabilityRepairInvariantPlaceholder;
         var quoted = "'doubled ''" + token + "' || \"doubled\"\"" + token + "\" || ";
         var plan = new PostgreSqlSafeMigrationRuntimePlan(
-            quoted + token, "TRUE", SafeMigrationRepairCapability.Safe, token)
+            quoted + token,
+            "TRUE",
+            SafeMigrationRepairCapability.Safe,
+            token)
         {
             NullabilityDataProbe = new PostgreSqlSafeMigrationNullabilityDataProbe(
-                "proven_not_null", "eligible", "row_probe", "\"proof_rows\""),
+                "proven_not_null",
+                "eligible",
+                "row_probe",
+                "\"proof_rows\""),
         };
 
         // Act
@@ -191,13 +249,17 @@ public sealed class PostgreSqlNullProofEligibilityTests
     {
         // Arrange
         using var context = CreateOfflineContext();
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("proof_rows",
-            new ExpectedColumnDefinition("value", typeof(DateTime), false, "timestamp without time zone"),
-            new ExpectedColumnDefinition("value", typeof(DateTime), true, "timestamp without time zone")),
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "proof_rows",
+                new ExpectedColumnDefinition("value", typeof(DateTime), false, "timestamp without time zone"),
+                new ExpectedColumnDefinition("value", typeof(DateTime), true, "timestamp without time zone")),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var plan = CreateBuilder(context).Build(operation);
+        var plan = CreateBuilder(context)
+            .Build(operation);
+
         var runtimeRepair = plan.RenderRepairPrecondition("length_cache", "transition_cache");
 
         // Assert
@@ -220,7 +282,14 @@ public sealed class PostgreSqlNullProofEligibilityTests
         var plan = new PostgreSqlSafeMigrationRuntimePlan("TRUE", "TRUE", SafeMigrationRepairCapability.Safe, "TRUE")
         {
             DataProbe = new PostgreSqlSafeMigrationDataProbe(
-                "proof_rows", null, "value", 800, "proof_rows", "value", "fresh_transition", "narrowing"),
+                "proof_rows",
+                null,
+                "value",
+                800,
+                "proof_rows",
+                "value",
+                "fresh_transition",
+                "narrowing"),
             NullabilityDataProbe = new PostgreSqlSafeMigrationNullabilityDataProbe(
                 "complete_not_null_contract",
                 "same_type OR " + PostgreSqlSafeMigrationRuntimePlan.TransitionInvariantPlaceholder,
@@ -233,8 +302,14 @@ public sealed class PostgreSqlNullProofEligibilityTests
         var absent = (plan with { NullabilityDataProbe = null }).RenderNullabilityDataProbeRequiredExpression();
 
         // Assert
-        Assert.Equal("(same_type OR " + (transitionEligible ? "TRUE" : "FALSE")
-            + ") AND NOT (complete_not_null_contract)", required);
+        Assert.Equal(
+            "(same_type OR "
+            + (transitionEligible
+                ? "TRUE"
+                : "FALSE")
+            + ") AND NOT (complete_not_null_contract)",
+            required);
+
         Assert.DoesNotContain("SELECT", required, StringComparison.Ordinal);
         Assert.DoesNotContain("__DOKA_SM_", required, StringComparison.Ordinal);
         Assert.Equal("FALSE", absent);
@@ -252,10 +327,22 @@ public sealed class PostgreSqlNullProofEligibilityTests
     /// <summary>Creates one generic required-column repair with either length or timestamp metadata.</summary>
     private static SafeMigrationOperation RequiredOperation(
         bool varchar
-    ) => new(new EnsureColumnIntent("proof_rows", new ExpectedColumnDefinition(
-        "value", varchar ? typeof(string) : typeof(DateTime), false,
-        storeType: varchar ? "character varying(800)" : "timestamp without time zone",
-        maxLength: varchar ? 800 : null)), SafeMigrationPolicy.RepairIfSafe);
+    ) => new(
+        new EnsureColumnIntent(
+            "proof_rows",
+            new ExpectedColumnDefinition(
+                "value",
+                varchar
+                    ? typeof(string)
+                    : typeof(DateTime),
+                false,
+                storeType: varchar
+                    ? "character varying(800)"
+                    : "timestamp without time zone",
+                maxLength: varchar
+                    ? 800
+                    : null)),
+        SafeMigrationPolicy.RepairIfSafe);
 
     /// <summary>Counts exact SQL probes without matching unrelated catalog statements.</summary>
     private static int CountOccurrences(

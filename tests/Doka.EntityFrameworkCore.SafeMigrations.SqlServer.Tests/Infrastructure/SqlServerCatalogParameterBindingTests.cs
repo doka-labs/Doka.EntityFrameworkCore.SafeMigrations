@@ -15,8 +15,17 @@ public sealed class SqlServerCatalogParameterBindingTests
         { 123456789.12345678901234567890m, "decimal(38,20)", SqlDbType.Decimal },
         { 1.0000000000000000000000000000m, "decimal(38,28)", SqlDbType.Decimal },
         { new DateTime(2026, 1, 2, 3, 4, 5).AddTicks(1234567), "datetime2(7)", SqlDbType.DateTime2 },
-        { new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.FromHours(5.5)).AddTicks(1234567),
-            "datetimeoffset(7)", SqlDbType.DateTimeOffset },
+        {
+            new DateTimeOffset(
+                2026,
+                1,
+                2,
+                3,
+                4,
+                5,
+                TimeSpan.FromHours(5.5)).AddTicks(1234567),
+            "datetimeoffset(7)", SqlDbType.DateTimeOffset
+        },
         { new TimeSpan(123456789), "time(7)", SqlDbType.Time },
     };
 
@@ -39,21 +48,32 @@ public sealed class SqlServerCatalogParameterBindingTests
     /// <param name="destination">The pre-existing supported destination store type.</param>
     [Theory]
     [MemberData(nameof(NaturalSources))]
-    public void NaturalSource_RetainsSupportedLiteralDomain(object value, string destination)
+    public void NaturalSource_RetainsSupportedLiteralDomain(
+        object value,
+        string destination
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var mappings = context.GetService<IRelationalTypeMappingSource>();
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureModelManagedDataFromModel("natural_sources", ["Id"], ["int"],
-            ["Id", "Value"], ["int", destination], new object?[,] { { 1, value } });
+        builder.EnsureModelManagedDataFromModel(
+            "natural_sources",
+            ["Id"],
+            ["int"],
+            ["Id", "Value"],
+            ["int", destination],
+            new[,] { { 1, value } });
 
         var operation = (SafeMigrationOperation)builder.Operations[0];
-        var unbound = new SqlServerSafeMigrationCatalogSqlBuilder(mappings,
+        var unbound = new SqlServerSafeMigrationCatalogSqlBuilder(
+            mappings,
             context.GetService<ISqlGenerationHelper>());
 
         var bindings = new SqlServerCatalogParameterBindings(mappings, 0);
-        var bound = new SqlServerSafeMigrationCatalogSqlBuilder(mappings, context.GetService<ISqlGenerationHelper>(),
+        var bound = new SqlServerSafeMigrationCatalogSqlBuilder(
+            mappings,
+            context.GetService<ISqlGenerationHelper>(),
             sourceParameter: (source, _) => bindings.Add(source));
 
         // Act
@@ -61,8 +81,11 @@ public sealed class SqlServerCatalogParameterBindingTests
         var parameterized = bound.Build(operation);
         var captured = bindings.Values.First(parameter => Equals(parameter.Value, value));
         using var command = new SqlCommand();
-        var parameter = (SqlParameter)captured.Mapping.CreateParameter(command,
-            captured.ExternalName, captured.Value, nullable: false);
+        var parameter = (SqlParameter)captured.Mapping.CreateParameter(
+            command,
+            captured.ExternalName,
+            captured.Value,
+            nullable: false);
 
         // Assert
         Assert.False(original.IsStaticallyUnsupported);
@@ -72,17 +95,20 @@ public sealed class SqlServerCatalogParameterBindingTests
         Assert.Contains("@doka_value", parameterized.StateExpression, StringComparison.Ordinal);
         if (value is sbyte or ushort or uint or ulong or BindingValue)
         {
-            Assert.Equal(Convert.ToDecimal(value, CultureInfo.InvariantCulture),
+            Assert.Equal(
+                Convert.ToDecimal(value, CultureInfo.InvariantCulture),
                 Convert.ToDecimal(parameter.Value, CultureInfo.InvariantCulture));
         }
         else if (value is DateOnly date)
         {
-            Assert.Equal(date, parameter.Value switch
-            {
-                DateOnly actual => actual,
-                DateTime actual => DateOnly.FromDateTime(actual),
-                _ => throw new InvalidOperationException("The parameter changed the date domain."),
-            });
+            Assert.Equal(
+                date,
+                parameter.Value switch
+                {
+                    DateOnly actual => actual,
+                    DateTime actual => DateOnly.FromDateTime(actual),
+                    _ => throw new InvalidOperationException("The parameter changed the date domain."),
+                });
         }
         else
         {
@@ -94,7 +120,7 @@ public sealed class SqlServerCatalogParameterBindingTests
             Assert.Equal(SqlDbType.Decimal, parameter.SqlDbType);
             Assert.True(parameter.Precision >= 20);
             Assert.Equal((byte)0, parameter.Scale);
-            Assert.Equal((decimal)ulong.MaxValue, Assert.IsType<decimal>(parameter.Value));
+            Assert.Equal(ulong.MaxValue, Assert.IsType<decimal>(parameter.Value));
         }
     }
 
@@ -104,7 +130,11 @@ public sealed class SqlServerCatalogParameterBindingTests
     /// <param name="sqlType">The corresponding native parameter type.</param>
     [Theory]
     [MemberData(nameof(LosslessSources))]
-    public void SourceBinding_PreservesValueAndSourceFacets(object value, string storeType, SqlDbType sqlType)
+    public void SourceBinding_PreservesValueAndSourceFacets(
+        object value,
+        string storeType,
+        SqlDbType sqlType
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
@@ -114,8 +144,11 @@ public sealed class SqlServerCatalogParameterBindingTests
         var marker = bindings.Add(value);
         var captured = bindings.Values[0];
         using var command = new SqlCommand();
-        var parameter = (SqlParameter)captured.Mapping.CreateParameter(command, captured.ExternalName,
-            captured.Value, nullable: false);
+        var parameter = (SqlParameter)captured.Mapping.CreateParameter(
+            command,
+            captured.ExternalName,
+            captured.Value,
+            nullable: false);
 
         // Assert
         Assert.Single(bindings.Values);
@@ -137,25 +170,36 @@ public sealed class SqlServerCatalogParameterBindingTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void WideSource_IsNotSizedToTheDestination(bool binary)
+    public void WideSource_IsNotSizedToTheDestination(
+        bool binary
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var bindings = new SqlServerCatalogParameterBindings(context.GetService<IRelationalTypeMappingSource>(), 0);
-        object source = binary ? new byte[9000] : new string('\u20ac', 9000);
+        object source = binary
+            ? new byte[9000]
+            : new string('\u20ac', 9000);
 
         // Act
         bindings.Add(source);
         var captured = bindings.Values[0];
         using var command = new SqlCommand();
-        var parameter = (SqlParameter)captured.Mapping.CreateParameter(command, captured.ExternalName,
-            captured.Value, nullable: false);
+        var parameter = (SqlParameter)captured.Mapping.CreateParameter(
+            command,
+            captured.ExternalName,
+            captured.Value,
+            nullable: false);
 
         // Assert
         Assert.Single(bindings.Values);
         Assert.Equal(-1, parameter.Size);
         Assert.Same(source, captured.Value);
-        Assert.True(captured.PayloadBytes >= (binary ? 9000 : 18000));
+        Assert.True(
+            captured.PayloadBytes
+            >= (binary
+                ? 9000
+                : 18000));
     }
 
     /// <summary>Preserves all TimeOnly ticks through the provider's native time conversion.</summary>
@@ -171,19 +215,24 @@ public sealed class SqlServerCatalogParameterBindingTests
         bindings.Add(value);
         var captured = bindings.Values[0];
         using var command = new SqlCommand();
-        var parameter = (SqlParameter)captured.Mapping.CreateParameter(command, captured.ExternalName,
-            captured.Value, nullable: false);
+        var parameter = (SqlParameter)captured.Mapping.CreateParameter(
+            command,
+            captured.ExternalName,
+            captured.Value,
+            nullable: false);
 
         // Assert
         Assert.Single(bindings.Values);
         Assert.Equal("time(7)", captured.Mapping.StoreType);
         Assert.Equal(SqlDbType.Time, parameter.SqlDbType);
-        Assert.Equal(value.Ticks, parameter.Value switch
-        {
-            TimeOnly time => time.Ticks,
-            TimeSpan time => time.Ticks,
-            _ => throw new InvalidOperationException("The source mapping changed the time domain."),
-        });
+        Assert.Equal(
+            value.Ticks,
+            parameter.Value switch
+            {
+                TimeOnly time => time.Ticks,
+                TimeSpan time => time.Ticks,
+                _ => throw new InvalidOperationException("The source mapping changed the time domain."),
+            });
     }
 
     /// <summary>Shares a repeated source binding locally without conflating differing decimal scales.</summary>
@@ -211,13 +260,19 @@ public sealed class SqlServerCatalogParameterBindingTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void SignedZero_DoesNotMergeSourceBits(bool useReducedPrecision)
+    public void SignedZero_DoesNotMergeSourceBits(
+        bool useReducedPrecision
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var bindings = new SqlServerCatalogParameterBindings(context.GetService<IRelationalTypeMappingSource>(), 0);
-        var positive = useReducedPrecision ? (object)0.0f : 0.0d;
-        var negative = useReducedPrecision ? (object)BitConverter.Int32BitsToSingle(int.MinValue)
+        var positive = useReducedPrecision
+            ? (object)0.0f
+            : 0.0d;
+
+        var negative = useReducedPrecision
+            ? (object)BitConverter.Int32BitsToSingle(int.MinValue)
             : BitConverter.Int64BitsToDouble(long.MinValue);
 
         // Act
@@ -241,7 +296,15 @@ public sealed class SqlServerCatalogParameterBindingTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var bindings = new SqlServerCatalogParameterBindings(context.GetService<IRelationalTypeMappingSource>(), 19);
-        var source = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero);
+        var source = new DateTimeOffset(
+            2026,
+            1,
+            2,
+            3,
+            4,
+            5,
+            TimeSpan.Zero);
+
         var target = source.ToOffset(TimeSpan.FromHours(1));
 
         // Act
@@ -264,12 +327,26 @@ public sealed class SqlServerCatalogParameterBindingTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var source = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero);
+        var source = new DateTimeOffset(
+            2026,
+            1,
+            2,
+            3,
+            4,
+            5,
+            TimeSpan.Zero);
+
         var target = source.ToOffset(TimeSpan.FromHours(1));
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.UpdateModelManagedDataFromModel("offset_bindings", ["Id"], ["int"],
-            new object?[,] { { 1 } }, ["Zoned"], ["datetimeoffset(7)"],
-            new object?[,] { { source } }, new object?[,] { { target } });
+        builder.UpdateModelManagedDataFromModel(
+            "offset_bindings",
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["Zoned"],
+            ["datetimeoffset(7)"],
+            new object?[,] { { source } },
+            new object?[,] { { target } });
 
         // Act
         var plan = BuildManagedPlan(context, 71, (SafeMigrationOperation)builder.Operations[0]);
@@ -335,7 +412,9 @@ public sealed class SqlServerCatalogParameterBindingTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task DistinctKeys_DoNotCoalesceResults(bool nativeBatch)
+    public async Task DistinctKeys_DoNotCoalesceResults(
+        bool nativeBatch
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
@@ -344,17 +423,29 @@ public sealed class SqlServerCatalogParameterBindingTests
         var results = new SafeMigrationProviderAnalysis[2];
 
         // Act
-        await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(connection, null, 93,
-            plans, 0, results, CancellationToken.None);
+        await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
+            connection,
+            null,
+            93,
+            plans,
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, results[0].ObservedState);
         Assert.Equal(SafeMigrationObservedState.Matching, results[1].ObservedState);
         var parameters = Assert.Single(connection.RecordedParameters);
-        Assert.Contains(parameters, parameter => parameter.ParameterName == "@doka_source0_0"
-            && Equals(parameter.Value, 1));
-        Assert.Contains(parameters, parameter => parameter.ParameterName == "@doka_source1_0"
-            && Equals(parameter.Value, 2));
+        Assert.Contains(
+            parameters,
+            parameter => parameter.ParameterName == "@doka_source0_0"
+                && Equals(parameter.Value, 1));
+
+        Assert.Contains(
+            parameters,
+            parameter => parameter.ParameterName == "@doka_source1_0"
+                && Equals(parameter.Value, 2));
+
         Assert.Equal(93, Assert.Single(connection.ObservedTimeouts));
     }
 
@@ -363,7 +454,9 @@ public sealed class SqlServerCatalogParameterBindingTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task OrdinalBinding_PreservesAFullSourceParameterBudget(bool nativeBatch)
+    public async Task OrdinalBinding_PreservesAFullSourceParameterBudget(
+        bool nativeBatch
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
@@ -374,7 +467,13 @@ public sealed class SqlServerCatalogParameterBindingTests
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, [plan], 0, results, CancellationToken.None);
+            connection,
+            null,
+            null,
+            [plan],
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
         var statement = Assert.Single(connection.RecordedStatements);
@@ -383,8 +482,12 @@ public sealed class SqlServerCatalogParameterBindingTests
         Assert.Contains("@doka_ordinal = @doka_ordinal,", statement, StringComparison.Ordinal);
         var parameters = Assert.Single(connection.RecordedParameters);
         Assert.Equal(2000, parameters.Length);
-        Assert.DoesNotContain(parameters, static parameter => parameter.ParameterName.StartsWith(
-            "@doka_ordinal", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            parameters,
+            static parameter => parameter.ParameterName.StartsWith(
+                "@doka_ordinal",
+                StringComparison.Ordinal));
+
         Assert.Equal(SafeMigrationObservedState.Missing, results[0].ObservedState);
     }
 
@@ -393,13 +496,19 @@ public sealed class SqlServerCatalogParameterBindingTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task MaximumManagedSourceCapture_PreservesAllAuthoredValues(bool nativeBatch)
+    public async Task MaximumManagedSourceCapture_PreservesAllAuthoredValues(
+        bool nativeBatch
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
-        var columns = Enumerable.Range(0, 16).Select(index => index == 0 ? "Id"
-            : "Value" + index.ToString(CultureInfo.InvariantCulture)).ToArray();
+        var columns = Enumerable
+            .Range(0, 16)
+            .Select(index => index == 0
+                ? "Id"
+                : "Value" + index.ToString(CultureInfo.InvariantCulture))
+            .ToArray();
 
         var values = new object?[125, columns.Length];
         for (var row = 0; row < values.GetLength(0); row++)
@@ -411,15 +520,28 @@ public sealed class SqlServerCatalogParameterBindingTests
         }
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureModelManagedDataFromModel("complete_source_capture", ["Id"], ["int"],
-            columns, Enumerable.Repeat("int", columns.Length).ToArray(), values);
+        builder.EnsureModelManagedDataFromModel(
+            "complete_source_capture",
+            ["Id"],
+            ["int"],
+            columns,
+            Enumerable
+                .Repeat("int", columns.Length)
+                .ToArray(),
+            values);
 
         var plan = BuildManagedPlan(context, 0, (SafeMigrationOperation)builder.Operations[0]);
         var results = new SafeMigrationProviderAnalysis[1];
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, [plan], 0, results, CancellationToken.None);
+            connection,
+            null,
+            null,
+            [plan],
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
@@ -429,25 +551,60 @@ public sealed class SqlServerCatalogParameterBindingTests
         var parameters = Assert.Single(connection.RecordedParameters);
         Assert.Equal(2000, parameters.Length);
         Assert.Equal(Enumerable.Range(0, 2000), parameters.Select(parameter => Assert.IsType<int>(parameter.Value)));
-        Assert.All(parameters, parameter =>
-        {
-            Assert.StartsWith("@doka_source0_", parameter.ParameterName, StringComparison.Ordinal);
-            Assert.Equal(DbType.Int32, parameter.DbType);
-        });
+        Assert.All(
+            parameters,
+            parameter =>
+            {
+                Assert.StartsWith("@doka_source0_", parameter.ParameterName, StringComparison.Ordinal);
+                Assert.Equal(DbType.Int32, parameter.DbType);
+            });
+
         var statement = Assert.Single(connection.RecordedStatements);
         Assert.Contains("@doka_ordinal = 0,", statement, StringComparison.Ordinal);
         Assert.DoesNotContain("INSERT INTO @doka_analysis", statement, StringComparison.Ordinal);
-        Assert.InRange(Encoding.UTF8.GetByteCount(statement)
-            + plan.AnalysisParameters.Sum(parameter => parameter.PayloadBytes), 1,
+        Assert.InRange(
+            Encoding.UTF8.GetByteCount(statement)
+            + plan.AnalysisParameters.Sum(parameter => parameter.PayloadBytes),
+            1,
             SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes);
+
         Assert.Equal(SafeMigrationObservedState.Missing, results[0].ObservedState);
-        Assert.Equal(nativeBatch ? 1 : 0, connection.BatchExecutions);
-        Assert.Equal(nativeBatch ? 0 : 1, connection.CommandExecutions);
-        Assert.Equal(nativeBatch ? 1 : 0, connection.BatchesDisposed);
-        Assert.Equal(nativeBatch ? 0 : 1, connection.CommandsDisposed);
-        Assert.Equal(nativeBatch ? 1 : 0, connection.ParameterFactoriesDisposed);
-        Assert.All(connection.BatchPayloadBytes, bytes => Assert.InRange(bytes, 1,
-            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes));
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.BatchExecutions);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : 1,
+            connection.CommandExecutions);
+
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : 1,
+            connection.CommandsDisposed);
+
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.ParameterFactoriesDisposed);
+
+        Assert.All(
+            connection.BatchPayloadBytes,
+            bytes => Assert.InRange(
+                bytes,
+                1,
+                SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes));
     }
 
     /// <summary>Splits parameter-heavy classifiers before SQL Server's RPC parameter ceiling.</summary>
@@ -455,7 +612,9 @@ public sealed class SqlServerCatalogParameterBindingTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ParameterBudget_SplitsBeforeTheNativeCeiling(bool nativeBatch)
+    public async Task ParameterBudget_SplitsBeforeTheNativeCeiling(
+        bool nativeBatch
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
@@ -466,7 +625,8 @@ public sealed class SqlServerCatalogParameterBindingTests
         // statement-width bound, decides where the capture splits. Otherwise this test would
         // silently degrade into another width test when the shape is tuned.
         const int parametersPerPlan = 300;
-        var plans = Enumerable.Range(0, 25)
+        var plans = Enumerable
+            .Range(0, 25)
             .Select(ordinal => ParameterizedConstantPlan(mappings, ordinal, parametersPerPlan))
             .ToArray();
 
@@ -475,8 +635,14 @@ public sealed class SqlServerCatalogParameterBindingTests
         var expectedStatements = (plans.Length + operationsPerStatement - 1) / operationsPerStatement;
 
         // Act
-        await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(connection, null, null,
-            plans, 0, results, CancellationToken.None);
+        await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
+            connection,
+            null,
+            null,
+            plans,
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
         Assert.InRange(operationsPerStatement, 1, SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement - 1);
@@ -490,14 +656,28 @@ public sealed class SqlServerCatalogParameterBindingTests
 
         // WHY: The parameter ceiling also bounds the whole batch, so a parameter-heavy
         // capture keeps one statement per transport batch instead of packing them.
-        Assert.Equal(nativeBatch ? expectedStatements : 0, connection.BatchExecutions);
-        Assert.Equal(nativeBatch ? 0 : expectedStatements, connection.CommandExecutions);
-        Assert.Equal(Enumerable.Range(0, plans.Length).Select(index => (index % 3) switch
-        {
-            0 => SafeMigrationObservedState.Missing,
-            1 => SafeMigrationObservedState.Matching,
-            _ => SafeMigrationObservedState.Different,
-        }), results.Select(analysis => analysis.ObservedState));
+        Assert.Equal(
+            nativeBatch
+                ? expectedStatements
+                : 0,
+            connection.BatchExecutions);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : expectedStatements,
+            connection.CommandExecutions);
+
+        Assert.Equal(
+            Enumerable
+                .Range(0, plans.Length)
+                .Select(index => (index % 3) switch
+                {
+                    0 => SafeMigrationObservedState.Missing,
+                    1 => SafeMigrationObservedState.Matching,
+                    _ => SafeMigrationObservedState.Different,
+                }),
+            results.Select(analysis => analysis.ObservedState));
     }
 
     /// <summary>Includes source payload bytes when splitting otherwise-small SQL templates.</summary>
@@ -508,14 +688,23 @@ public sealed class SqlServerCatalogParameterBindingTests
         using var context = new SafeMigrationDbContext(ConnectionString);
         await using var connection = new SqlServerCatalogTestConnection();
         var mappings = context.GetService<IRelationalTypeMappingSource>();
-        var plans = Enumerable.Range(0, 3).Select(ordinal =>
-            ParameterizedConstantPlan(mappings, ordinal, 1, new string('x', 1_100_000))).ToArray();
+        var plans = Enumerable
+            .Range(0, 3)
+            .Select(ordinal =>
+                ParameterizedConstantPlan(mappings, ordinal, 1, new string('x', 1_100_000)))
+            .ToArray();
 
         var results = new SafeMigrationProviderAnalysis[3];
 
         // Act
-        await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(connection, null, null,
-            plans, 0, results, CancellationToken.None);
+        await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
+            connection,
+            null,
+            null,
+            plans,
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(3, connection.BatchExecutions);
@@ -529,21 +718,36 @@ public sealed class SqlServerCatalogParameterBindingTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task OversizedParameterCapture_RejectsBeforeExecution(bool parameterOverflow)
+    public async Task OversizedParameterCapture_RejectsBeforeExecution(
+        bool parameterOverflow
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         await using var connection = new SqlServerCatalogTestConnection();
         var mappings = context.GetService<IRelationalTypeMappingSource>();
-        var plan = ParameterizedConstantPlan(mappings, 0, parameterOverflow ? 2001 : 1,
-            parameterOverflow ? null : new string('x', 2_100_000));
+        var plan = ParameterizedConstantPlan(
+            mappings,
+            0,
+            parameterOverflow
+                ? 2001
+                : 1,
+            parameterOverflow
+                ? null
+                : new string('x', 2_100_000));
 
         var results = new SafeMigrationProviderAnalysis[1];
 
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(connection, null, null,
-                [plan], 0, results, CancellationToken.None));
+            SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
+                connection,
+                null,
+                null,
+                [plan],
+                0,
+                results,
+                CancellationToken.None));
 
         // Assert
         Assert.Contains("operation 0 exceeds a bounded query limit", failure.Message, StringComparison.Ordinal);
@@ -561,17 +765,27 @@ public sealed class SqlServerCatalogParameterBindingTests
         var mappings = context.GetService<IRelationalTypeMappingSource>();
         var bindings = new SqlServerCatalogParameterBindings(mappings, 0);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureModelManagedDataFromModel("catalog_nulls", ["Id"], ["int"],
-            ["Id", "Caption"], ["int", "nvarchar(80)"], new object?[,] { { 1, null } });
+        builder.EnsureModelManagedDataFromModel(
+            "catalog_nulls",
+            ["Id"],
+            ["int"],
+            ["Id", "Caption"],
+            ["int", "nvarchar(80)"],
+            new object?[,] { { 1, null } });
 
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(mappings,
-            context.GetService<ISqlGenerationHelper>(), sourceParameter: (value, _) => bindings.Add(value));
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            mappings,
+            context.GetService<ISqlGenerationHelper>(),
+            sourceParameter: (value, _) => bindings.Add(value));
 
         // Act
         var plan = catalog.Build((SafeMigrationOperation)builder.Operations[0]);
 
         // Assert
-        Assert.Equal(1, Assert.Single(bindings.Values).Value);
+        Assert.Equal(1,
+            Assert.Single(bindings.Values)
+                .Value);
+
         Assert.Contains("CAST(NULL AS nvarchar(80))", plan.StateExpression, StringComparison.Ordinal);
         Assert.DoesNotContain(bindings.Values, value => value.Value is null);
     }
@@ -583,12 +797,21 @@ public sealed class SqlServerCatalogParameterBindingTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.UpdateModelManagedDataFromModel("catalog_bindings", ["Id"], ["int"],
-            new object?[,] { { 17 } }, ["Caption"], ["nvarchar(80)"],
-            new object?[,] { { "source" } }, new object?[,] { { "target" } });
+        builder.UpdateModelManagedDataFromModel(
+            "catalog_bindings",
+            ["Id"],
+            ["int"],
+            new object?[,] { { 17 } },
+            ["Caption"],
+            ["nvarchar(80)"],
+            new object?[,] { { "source" } },
+            new object?[,] { { "target" } });
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
+
         var sql = string.Join("\n", commands.Select(command => command.CommandText));
 
         // Assert
@@ -596,18 +819,29 @@ public sealed class SqlServerCatalogParameterBindingTests
         Assert.Contains("source", sql, StringComparison.Ordinal);
         Assert.Contains("target", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("@doka_source", sql, StringComparison.Ordinal);
+
         // WHY: Runtime guards already own an unnumbered @doka_value output scalar. Only the
         // numbered source markers identify the new analysis parameterization boundary.
         Assert.DoesNotMatch(@"@doka_value\d+\b", sql);
     }
 
     /// <summary>Captures a synthetic one-row update using its original analysis ordinal.</summary>
-    private static SqlServerSafeMigrationRuntimePlan BuildUpdate(SafeMigrationDbContext context, int ordinal, int key)
+    private static SqlServerSafeMigrationRuntimePlan BuildUpdate(
+        SafeMigrationDbContext context,
+        int ordinal,
+        int key
+    )
     {
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.UpdateModelManagedDataFromModel("catalog_bindings", ["Id"], ["int"],
-            new object?[,] { { key } }, ["Caption"], ["nvarchar(80)"],
-            new object?[,] { { "source" } }, new object?[,] { { "target" } });
+        builder.UpdateModelManagedDataFromModel(
+            "catalog_bindings",
+            ["Id"],
+            ["int"],
+            new object?[,] { { key } },
+            ["Caption"],
+            ["nvarchar(80)"],
+            new object?[,] { { "source" } },
+            new object?[,] { { "target" } });
 
         return BuildManagedPlan(context, ordinal, (SafeMigrationOperation)builder.Operations[0]);
     }
@@ -622,10 +856,14 @@ public sealed class SqlServerCatalogParameterBindingTests
         var mappings = context.GetService<IRelationalTypeMappingSource>();
         var bindings = new SqlServerCatalogParameterBindings(mappings, ordinal);
         var helper = context.GetService<ISqlGenerationHelper>();
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(mappings, helper,
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            mappings,
+            helper,
             sourceParameter: (value, _) => bindings.Add(value));
 
-        var outerCatalog = new SqlServerSafeMigrationCatalogSqlBuilder(mappings, helper,
+        var outerCatalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            mappings,
+            helper,
             sourceParameter: (value, _) => bindings.Add(value));
 
         var plan = catalog.Build(operation);
@@ -640,7 +878,9 @@ public sealed class SqlServerCatalogParameterBindingTests
     }
 
     /// <summary>Extracts the complete escaped classifier without its operation-specific outer guards.</summary>
-    private static string DelayedInner(string sql)
+    private static string DelayedInner(
+        string sql
+    )
     {
         const string prefix = "EXEC sys.sp_executesql N'";
         var start = sql.IndexOf(prefix, StringComparison.Ordinal) + prefix.Length;

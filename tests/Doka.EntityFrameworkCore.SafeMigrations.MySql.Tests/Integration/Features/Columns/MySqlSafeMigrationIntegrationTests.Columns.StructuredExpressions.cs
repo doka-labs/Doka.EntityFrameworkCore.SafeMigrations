@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ColumnsStructuredExpressions migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlColumnsStructuredExpressionsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlColumnsStructuredExpressionsIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     [Fact]
     public async Task StructuredIntegerCast_ConvergesRoundTripsAndDetectsSemanticDrift()
@@ -29,7 +31,8 @@ public sealed partial class MySqlColumnsStructuredExpressionsIntegrationTests : 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "INSERT INTO `structured_expression_columns` (`id`) VALUES (7);");
+            "INSERT INTO `structured_expression_columns` (`id`) VALUES (7);",
+            cancellationToken: CancellationToken.None);
 
         var postflight = await runner.VerifyAsync(
             context,
@@ -43,13 +46,16 @@ public sealed partial class MySqlColumnsStructuredExpressionsIntegrationTests : 
             14,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT `doubled_id` FROM `structured_expression_columns` WHERE `id` = 7;"));
+                "SELECT `doubled_id` FROM `structured_expression_columns` WHERE `id` = 7;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM `structured_expression_columns` "
-                + "WHERE `id` = 7 AND `created_at` IS NOT NULL;"));
+                + "WHERE `id` = 7 AND `created_at` IS NOT NULL;",
+                cancellationToken: CancellationToken.None));
 
         var drift = new MigrationBuilder(context.Database.ProviderName!);
         drift.ConvergeTable(StructuredExpressionTable(multiplier: 3));
@@ -105,12 +111,14 @@ public sealed partial class MySqlColumnsStructuredExpressionsIntegrationTests : 
             report.Assessments,
             static assessment => assessment.ObservedState == SafeMigrationObservedState.Unsupported
                 && assessment.Code == "structured_cast_type");
+
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'unsupported_structured_cast';"));
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'unsupported_structured_cast';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -173,6 +181,7 @@ public sealed partial class MySqlColumnsStructuredExpressionsIntegrationTests : 
         var renderer = new MySqlSafeMigrationSqlExpressionRenderer(
             context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
+
         var storeTypes = new[]
         {
             "int",
@@ -192,7 +201,7 @@ public sealed partial class MySqlColumnsStructuredExpressionsIntegrationTests : 
         {
             var expression = renderer.Render(SafeMigrationSql.Literal(null, storeType));
 
-            await ExecuteSqlAsync(connectionString, $"SELECT {expression};");
+            await ExecuteSqlAsync(connectionString, $"SELECT {expression};", cancellationToken: CancellationToken.None);
         }
     }
 

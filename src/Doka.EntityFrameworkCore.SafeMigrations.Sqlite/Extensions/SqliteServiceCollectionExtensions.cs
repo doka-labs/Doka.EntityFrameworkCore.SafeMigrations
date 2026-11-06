@@ -61,6 +61,7 @@ public static class SqliteServiceCollectionExtensions
         services.TryAddScoped(
             typeof(ISqliteSafeMigrationsBaselineGenerator),
             typeof(SqliteSafeMigrationsBaselineGenerator<>).MakeGenericType(baselineGeneratorType));
+
         services.TryAddScoped<SqliteSafeMigrationExecutionState>();
         services.TryAddScoped<ISafeMigrationProviderAnalyzer, SqliteSafeMigrationProviderAnalyzer>();
         services.TryAddScoped<ISafeMigrationRunner, SafeMigrationRunner>();
@@ -71,6 +72,7 @@ public static class SqliteServiceCollectionExtensions
                 provider.GetRequiredService<ISafeMigrationProviderAnalyzer>(),
                 provider.GetRequiredService<SqliteSafeMigrationExecutionState>(),
                 provider.GetRequiredService<MigrationsSqlGeneratorDependencies>())));
+
         SafeMigrationServiceCollectionDecorator.DecorateMigrationsModelDiffer(services);
 
         return services;

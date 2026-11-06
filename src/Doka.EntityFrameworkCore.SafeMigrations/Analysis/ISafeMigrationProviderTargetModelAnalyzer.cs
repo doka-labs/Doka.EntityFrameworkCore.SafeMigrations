@@ -11,6 +11,6 @@ internal interface ISafeMigrationProviderTargetModelAnalyzer
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,
         IReadOnlyList<IModel?>? targetModels,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     );
 }

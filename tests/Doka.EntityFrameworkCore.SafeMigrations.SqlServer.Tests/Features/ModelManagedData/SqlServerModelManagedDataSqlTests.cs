@@ -15,8 +15,17 @@ public sealed class SqlServerModelManagedDataSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var operation = new SafeMigrationOperation(new EnsureModelManagedDataIntent("roles", ["Id"], ["int"],
-            ["Id"], ["int"], new object?[,] { { 1 } }, null, null), SafeMigrationPolicy.ThrowIfDifferent);
+        var operation = new SafeMigrationOperation(
+            new EnsureModelManagedDataIntent(
+                "roles",
+                ["Id"],
+                ["int"],
+                ["Id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                null,
+                null),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var plan = catalog.Build(operation);
@@ -36,8 +45,14 @@ public sealed class SqlServerModelManagedDataSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var intent = new EnsureModelManagedDataIntent(
-            "roles", ["Id"], ["int"], ["Id", "Caption"], ["int", "nvarchar(80)"],
-            new object?[,] { { 1, "Administrator" } }, null, null);
+            "roles",
+            ["Id"],
+            ["int"],
+            ["Id", "Caption"],
+            ["int", "nvarchar(80)"],
+            new object?[,] { { 1, "Administrator" } },
+            null,
+            null);
 
         var catalog = CreateCatalog(context);
 
@@ -47,14 +62,26 @@ public sealed class SqlServerModelManagedDataSqlTests
 
         // Assert
         Assert.True(plan.RequiresDelayedBinding);
-        Assert.Contains("compatibility_level", plan.StateEvaluationGuardExpression,
+        Assert.Contains(
+            "compatibility_level",
+            plan.StateEvaluationGuardExpression,
             StringComparison.Ordinal);
-        Assert.Contains("N'unsupported'", plan.StateEvaluationGuardFailureExpression,
+
+        Assert.Contains(
+            "N'unsupported'",
+            plan.StateEvaluationGuardFailureExpression,
             StringComparison.Ordinal);
-        Assert.Contains("CONVERT(varbinary(max), doka_actual.[Caption])", plan.StateExpression,
+
+        Assert.Contains(
+            "CONVERT(varbinary(max), doka_actual.[Caption])",
+            plan.StateExpression,
             StringComparison.Ordinal);
-        Assert.Contains("DATALENGTH(doka_actual.[Caption])", plan.StateExpression,
+
+        Assert.Contains(
+            "DATALENGTH(doka_actual.[Caption])",
+            plan.StateExpression,
             StringComparison.Ordinal);
+
         Assert.Contains("CAST(", plan.StateExpression, StringComparison.Ordinal);
         Assert.Contains("INSERT INTO [dbo].[roles]", mutation, StringComparison.Ordinal);
         Assert.Contains("WHERE NOT EXISTS", mutation, StringComparison.Ordinal);
@@ -70,11 +97,17 @@ public sealed class SqlServerModelManagedDataSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var intent = new EnsureModelManagedDataIntent(
-            "typed_roles", ["Id"], ["int"],
+            "typed_roles",
+            ["Id"],
+            ["int"],
             ["Id", "Marker", "ExternalId", "Payload"],
             ["int", "char(1)", "uniqueidentifier", "varbinary(16)"],
-            new object?[,] { { 1, 'A', Guid.Parse("00000000-0000-0000-0000-000000000001"),
-                new byte[] { 0x01, 0x02 } } }, null, null);
+            new object?[,]
+            {
+                { 1, 'A', Guid.Parse("00000000-0000-0000-0000-000000000001"), new byte[] { 0x01, 0x02 } }
+            },
+            null,
+            null);
 
         var catalog = CreateCatalog(context);
 
@@ -98,9 +131,16 @@ public sealed class SqlServerModelManagedDataSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var intent = new UpdateModelManagedDataIntent(
-            "roles", ["Id"], ["int"], new object?[,] { { 1 } },
-            ["Caption"], ["nvarchar(80)"],
-            new object?[,] { { "Old" } }, new object?[,] { { "New" } }, null, null);
+            "roles",
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["Caption"],
+            ["nvarchar(80)"],
+            new object?[,] { { "Old" } },
+            new object?[,] { { "New" } },
+            null,
+            null);
 
         var catalog = CreateCatalog(context);
 
@@ -127,9 +167,14 @@ public sealed class SqlServerModelManagedDataSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var intent = new DeleteModelManagedDataIntent(
-            "roles", ["Id"], ["int"], new object?[,] { { 1 } },
-            ["Id", "Caption"], ["int", "nvarchar(80)"],
-            new object?[,] { { 1, "Old" } }, null,
+            "roles",
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["Id", "Caption"],
+            ["int", "nvarchar(80)"],
+            new object?[,] { { 1, "Old" } },
+            null,
             [new ExpectedModelManagedDataForeignKeyDefinition("user_roles", ["RoleId"], ["Id"])]);
 
         var catalog = CreateCatalog(context);
@@ -143,8 +188,11 @@ public sealed class SqlServerModelManagedDataSqlTests
         Assert.Contains("sys.foreign_keys", plan.StateExpression, StringComparison.Ordinal);
         Assert.Contains("N'unsupported'", plan.StateExpression, StringComparison.Ordinal);
         Assert.Contains("N'data_blocked'", plan.StateExpression, StringComparison.Ordinal);
-        Assert.Contains("COUNT_BIG(*)", plan.ModelManagedDependencyCountsExpression,
+        Assert.Contains(
+            "COUNT_BIG(*)",
+            plan.ModelManagedDependencyCountsExpression,
             StringComparison.Ordinal);
+
         Assert.Contains("DELETE doka_actual", mutation, StringComparison.Ordinal);
         Assert.Contains("doka_expected.[o1]", mutation, StringComparison.Ordinal);
     }
@@ -162,13 +210,25 @@ public sealed class SqlServerModelManagedDataSqlTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var foreignKeys = Enumerable.Range(0, count).Select(index =>
-            new ExpectedModelManagedDataForeignKeyDefinition(
-                "dependent_" + index.ToString(CultureInfo.InvariantCulture), ["RoleId"], ["Id"])).ToArray();
+        var foreignKeys = Enumerable
+            .Range(0, count)
+            .Select(index =>
+                new ExpectedModelManagedDataForeignKeyDefinition(
+                    "dependent_" + index.ToString(CultureInfo.InvariantCulture),
+                    ["RoleId"],
+                    ["Id"]))
+            .ToArray();
 
         var intent = new DeleteModelManagedDataIntent(
-            "roles", ["Id"], ["int"], new object?[,] { { 1 } },
-            ["Id"], ["int"], new object?[,] { { 1 } }, null, foreignKeys);
+            "roles",
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            null,
+            foreignKeys);
 
         var catalog = CreateCatalog(context);
 
@@ -187,8 +247,15 @@ public sealed class SqlServerModelManagedDataSqlTests
         }
 
         Assert.StartsWith("(CONVERT(varchar(max), ", expression, StringComparison.Ordinal);
-        Assert.Equal(count, expression.Split("COUNT_BIG(*)", StringSplitOptions.None).Length - 1);
-        Assert.Equal(count - 1, expression.Split(" + ',' + ", StringSplitOptions.None).Length - 1);
+        Assert.Equal(count,
+            expression.Split("COUNT_BIG(*)")
+                .Length
+            - 1);
+
+        Assert.Equal(count - 1,
+            expression.Split(" + ',' + ")
+                .Length
+            - 1);
     }
 
     /// <summary>
@@ -200,8 +267,14 @@ public sealed class SqlServerModelManagedDataSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var intent = new EnsureModelManagedDataIntent(
-            "roles", ["Code"], ["nvarchar(40)"], ["Code"], ["nvarchar(40)"],
-            new object?[,] { { "Foo" }, { "foo" } }, null, null);
+            "roles",
+            ["Code"],
+            ["nvarchar(40)"],
+            ["Code"],
+            ["nvarchar(40)"],
+            new object?[,] { { "Foo" }, { "foo" } },
+            null,
+            null);
 
         var catalog = CreateCatalog(context);
 
@@ -209,10 +282,16 @@ public sealed class SqlServerModelManagedDataSqlTests
         var plan = catalog.Build(new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent));
 
         // Assert
-        Assert.Contains("doka_expected.[r] < doka_other.[r]", plan.StateExpression,
+        Assert.Contains(
+            "doka_expected.[r] < doka_other.[r]",
+            plan.StateExpression,
             StringComparison.Ordinal);
-        Assert.Contains("doka_expected.[k0] = doka_other.[k0]", plan.StateExpression,
+
+        Assert.Contains(
+            "doka_expected.[k0] = doka_other.[k0]",
+            plan.StateExpression,
             StringComparison.Ordinal);
+
         Assert.Contains("N'data_blocked'", plan.StateExpression, StringComparison.Ordinal);
     }
 
@@ -225,8 +304,14 @@ public sealed class SqlServerModelManagedDataSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var intent = new EnsureModelManagedDataIntent(
-            "locations", ["Id"], ["int"], ["Id", "Shape"], ["int", "geography"],
-            new object?[,] { { 1, "POINT(0 0)" } }, null, null);
+            "locations",
+            ["Id"],
+            ["int"],
+            ["Id", "Shape"],
+            ["int", "geography"],
+            new object?[,] { { 1, "POINT(0 0)" } },
+            null,
+            null);
 
         var catalog = CreateCatalog(context);
 
@@ -248,13 +333,26 @@ public sealed class SqlServerModelManagedDataSqlTests
         using var context = new SafeMigrationDbContext(ConnectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel(
-            "O'Brien", ["Id"], ["int"], ["Id"], ["int"], new object?[,] { { 7 } });
+            "O'Brien",
+            ["Id"],
+            ["int"],
+            ["Id"],
+            ["int"],
+            new object?[,] { { 7 } });
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
-        var identityCommands = commands.OfType<SqlServerSafeMigrationIdentityInsertCommand>().ToArray();
-        var guardedBodies = identityCommands.Select(static command =>
-            SqlServerGuardedSqlTestContract.DecodeScope(command.CommandText)).ToArray();
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
+
+        var identityCommands = commands
+            .OfType<SqlServerSafeMigrationIdentityInsertCommand>()
+            .ToArray();
+
+        var guardedBodies = identityCommands
+            .Select(static command =>
+                SqlServerGuardedSqlTestContract.DecodeScope(command.CommandText))
+            .ToArray();
 
         // Assert
         Assert.Single(identityCommands);
@@ -274,17 +372,33 @@ public sealed class SqlServerModelManagedDataSqlTests
     [InlineData("nvarchar(5)")]
     [InlineData("binary(5)")]
     [InlineData("varbinary(5)")]
-    public void BoundedPayload_RejectsOverlongValuesBeforeSqlGeneration(string storeType)
+    public void BoundedPayload_RejectsOverlongValuesBeforeSqlGeneration(
+        string storeType
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         object value = storeType.Contains("binary", StringComparison.Ordinal)
-            ? new byte[] { 1, 2, 3, 4, 5, 6 }
+            ? new byte[]
+            {
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+            }
             : "abcdef";
 
         var intent = new EnsureModelManagedDataIntent(
-            "bounded_payloads", ["Id"], ["int"], ["Id", "Payload"], ["int", storeType],
-            new object?[,] { { 1, value } }, null, null);
+            "bounded_payloads",
+            ["Id"],
+            ["int"],
+            ["Id", "Payload"],
+            ["int", storeType],
+            new[,] { { 1, value } },
+            null,
+            null);
 
         var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
         var catalog = CreateCatalog(context);
@@ -292,7 +406,9 @@ public sealed class SqlServerModelManagedDataSqlTests
         // Act
         var plan = catalog.Build(operation);
         var generationFailure = Record.Exception(() =>
-            context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model));
 
         var mutationFailure = Record.Exception(() => catalog.BuildModelManagedDataMutationSql(intent));
 
@@ -313,17 +429,32 @@ public sealed class SqlServerModelManagedDataSqlTests
     [InlineData("nvarchar(5)")]
     [InlineData("binary(5)")]
     [InlineData("varbinary(5)")]
-    public void BoundedPayload_AcceptsExactMaximumLength(string storeType)
+    public void BoundedPayload_AcceptsExactMaximumLength(
+        string storeType
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         object value = storeType.Contains("binary", StringComparison.Ordinal)
-            ? new byte[] { 1, 2, 3, 4, 5 }
+            ? new byte[]
+            {
+                1,
+                2,
+                3,
+                4,
+                5,
+            }
             : "abcde";
 
         var intent = new EnsureModelManagedDataIntent(
-            "bounded_payloads", ["Id"], ["int"], ["Id", "Payload"], ["int", storeType],
-            new object?[,] { { 1, value } }, null, null);
+            "bounded_payloads",
+            ["Id"],
+            ["int"],
+            ["Id", "Payload"],
+            ["int", storeType],
+            new[,] { { 1, value } },
+            null,
+            null);
 
         var catalog = CreateCatalog(context);
 
@@ -342,15 +473,37 @@ public sealed class SqlServerModelManagedDataSqlTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void UpdateBoundedPayload_RejectsOverlongSourceOrTarget(bool sourceOverlong)
+    public void UpdateBoundedPayload_RejectsOverlongSourceOrTarget(
+        bool sourceOverlong
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var intent = new UpdateModelManagedDataIntent(
-            "bounded_payloads", ["Id"], ["int"], new object?[,] { { 1 } },
-            ["Payload"], ["nvarchar(5)"],
-            new object?[,] { { sourceOverlong ? "abcdef" : "abcde" } },
-            new object?[,] { { sourceOverlong ? "ABCDE" : "ABCDEF" } }, null, null);
+            "bounded_payloads",
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["Payload"],
+            ["nvarchar(5)"],
+            new object?[,]
+            {
+                {
+                    sourceOverlong
+                        ? "abcdef"
+                        : "abcde",
+                },
+            },
+            new object?[,]
+            {
+                {
+                    sourceOverlong
+                        ? "ABCDE"
+                        : "ABCDEF",
+                },
+            },
+            null,
+            null);
 
         // Act
         var plan = CreateCatalog(context)
@@ -370,8 +523,14 @@ public sealed class SqlServerModelManagedDataSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var intent = new EnsureModelManagedDataIntent(
-            "ansi_payloads", ["Id"], ["int"], ["Id", "Payload"], ["int", "varchar(5)"],
-            new object?[,] { { 1, "\u4E2D" } }, null, null);
+            "ansi_payloads",
+            ["Id"],
+            ["int"],
+            ["Id", "Payload"],
+            ["int", "varchar(5)"],
+            new object?[,] { { 1, "\u4E2D" } },
+            null,
+            null);
 
         var catalog = CreateCatalog(context);
 
@@ -388,8 +547,10 @@ public sealed class SqlServerModelManagedDataSqlTests
         Assert.Contains("CAST(N'", mutation, StringComparison.Ordinal);
     }
 
-    private static SqlServerSafeMigrationCatalogSqlBuilder CreateCatalog(DbContext context)
+    private static SqlServerSafeMigrationCatalogSqlBuilder CreateCatalog(
+        DbContext context
+    )
         => new(
-            context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalTypeMappingSource>(),
-            context.GetService<Microsoft.EntityFrameworkCore.Storage.ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 }

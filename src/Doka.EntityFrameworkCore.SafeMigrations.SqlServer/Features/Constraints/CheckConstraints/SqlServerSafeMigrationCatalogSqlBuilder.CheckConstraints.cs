@@ -2,7 +2,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 {
-    private static string? GetUnsupportedCheckSourceFeature(ExpectedCheckConstraintDefinition definition)
+    private static string? GetUnsupportedCheckSourceFeature(
+        ExpectedCheckConstraintDefinition definition
+    )
     {
         var source = definition.CapturedSql ?? definition.Sql;
         if (source is null)
@@ -10,17 +12,22 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return null;
         }
 
-        var expression = definition.Expression ?? (SafeMigrationSqlExpressionParser.TryParseCapturedSource(source,
-            out var parsed)
-            ? parsed : null);
+        var expression = definition.Expression
+            ?? (SafeMigrationSqlExpressionParser.TryParseCapturedSource(
+                source,
+                out var parsed)
+                ? parsed
+                : null);
 
         // WHY: QUOTED_IDENTIFIER is caller-owned and is not forced by this
         // provider. Only bracket-quoted native source is independent of that
         // session option; quoted text inside literals is not an identifier.
-        return expression is not null && (!SqlServerSourceExpressionRoles.IsNativePredicate(expression)
-            || definition.CapturedSql is not null
-                && !SafeMigrationSqlExpressionParser.IsCapturedSourceDialectCompatible(source, '['))
-            ? "check_expression_unproven" : null;
+        return expression is not null
+            && (!SqlServerSourceExpressionRoles.IsNativePredicate(expression)
+                || (definition.CapturedSql is not null
+                    && !SafeMigrationSqlExpressionParser.IsCapturedSourceDialectCompatible(source, '[')))
+                ? "check_expression_unproven"
+                : null;
     }
 
     private SqlServerSafeMigrationRuntimePlan BuildEnsureCheck(
@@ -37,12 +44,16 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             occupied = $"({occupied}) AND NOT ({CheckExists(definition.Table, definition.Schema, definition.Name)})";
         }
 
-        var matching = orderedCapture ? "1 = 0" : CheckMatches(definition);
+        var matching = orderedCapture
+            ? "1 = 0"
+            : CheckMatches(definition);
+
         var expression = GetStructuredCheckExpression(definition);
         var safe = expression is not null && IsSafeIntegerCheckPredicate(expression);
         var columns = new HashSet<string>(StringComparer.Ordinal);
 
-        if (expression is not null && (safe || definition.Expression is not null))
+        if (expression is not null
+            && (safe || definition.Expression is not null))
         {
             // WHY: Empty-only validation does not prove that a parsed member
             // exists. Retain newly structured/captured operand existence even
@@ -52,15 +63,23 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             SafeMigrationSqlExpressionInspector.CollectIdentifiers(expression, columns);
         }
 
-        var support = safe ? BuildIntegerCheckColumnProof(definition, columns) : "1 = 1";
+        var support = safe
+            ? BuildIntegerCheckColumnProof(definition, columns)
+            : "1 = 1";
+
         var canRead = $"COALESCE(HAS_PERMS_BY_NAME({Literal(QualifiedTable(definition.Table, definition.Schema))}, "
             + "N'OBJECT', N'SELECT'), 0) = 1";
 
         var unsafeRows = $"EXISTS (SELECT TOP (1) 1 FROM {QualifiedTable(definition.Table, definition.Schema)}"
-            + (safe ? $" WHERE NOT ({CheckExpression(definition)})" : string.Empty) + ")";
+            + (safe
+                ? $" WHERE NOT ({CheckExpression(definition)})"
+                : string.Empty)
+            + ")";
 
         var classificationCode = $"CASE WHEN NOT ({canRead}) THEN N'check_row_data_unproven' "
-            + (orderedCapture ? string.Empty : $"WHEN {matching} OR ({occupied}) THEN NULL ")
+            + (orderedCapture
+                ? string.Empty
+                : $"WHEN {matching} OR ({occupied}) THEN NULL ")
             + $"WHEN NOT ({support}) THEN N'check_column_type_unproven' ELSE NULL END";
 
         // WHY: A CHECK rejects FALSE, not UNKNOWN. NOT(predicate) finds only
@@ -69,24 +88,31 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // the empty-only proof and every row probe has an outer permission gate.
 
         return Plan(
-            $"CASE WHEN NOT {table} THEN N'prerequisite_missing' "
-            + $"WHEN {matching} THEN N'matching' WHEN {occupied} THEN N'different' "
-            + $"WHEN {unsafeRows} THEN N'data_blocked' ELSE N'missing' END",
-            Bit(matching)) with
-        {
-            RequiresDelayedBinding = true,
-            RequiresLiveDataProof = true,
-            PrerequisiteExpression = Bit(TableAndColumnsExist(definition.Table, definition.Schema,
-                columns.Order(StringComparer.Ordinal).ToArray())),
-            StateEvaluationGuardExpression = Bit(orderedCapture ? $"({canRead}) AND ({support})"
-                : $"({canRead}) AND ({matching} OR ({occupied}) OR ({support}))"),
-            StateEvaluationGuardFailureExpression = "N'unsupported'",
-            ClassificationCodeExpression = classificationCode,
-            PrerequisiteFailureCodeExpression = $"CASE WHEN NOT {table} THEN N'check_prerequisite_missing' "
+                $"CASE WHEN NOT {table} THEN N'prerequisite_missing' "
+                + $"WHEN {matching} THEN N'matching' WHEN {occupied} THEN N'different' "
+                + $"WHEN {unsafeRows} THEN N'data_blocked' ELSE N'missing' END",
+                Bit(matching)) with
+            {
+                RequiresDelayedBinding = true,
+                RequiresLiveDataProof = true,
+                PrerequisiteExpression = Bit(
+                    TableAndColumnsExist(
+                        definition.Table,
+                        definition.Schema,
+                        columns
+                            .Order(StringComparer.Ordinal)
+                            .ToArray())),
+                StateEvaluationGuardExpression = Bit(
+                    orderedCapture
+                        ? $"({canRead}) AND ({support})"
+                        : $"({canRead}) AND ({matching} OR ({occupied}) OR ({support}))"),
+                StateEvaluationGuardFailureExpression = "N'unsupported'",
+                ClassificationCodeExpression = classificationCode,
+                PrerequisiteFailureCodeExpression = $"CASE WHEN NOT {table} THEN N'check_prerequisite_missing' "
                 + $"ELSE ({classificationCode}) END",
-            PostApplySql = BuildCheckStampSql(definition),
-            MatchedObjectNameExpression = $"CASE WHEN {matching} THEN {Literal(definition.Name)} ELSE NULL END",
-        };
+                PostApplySql = BuildCheckStampSql(definition),
+                MatchedObjectNameExpression = $"CASE WHEN {matching} THEN {Literal(definition.Name)} ELSE NULL END",
+            };
     }
 
     /// <summary>Validates a replacement predicate without erasing another owner's name occupancy.</summary>
@@ -118,8 +144,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         ExpectedCheckConstraintDefinition definition
     )
     {
-        var fingerprint = ContractFingerprint("check", definition.Schema, definition.Table,
-            definition.Name, CheckExpression(definition));
+        var fingerprint = ContractFingerprint(
+            "check",
+            definition.Schema,
+            definition.Table,
+            definition.Name,
+            CheckExpression(definition));
 
         return "EXISTS (SELECT 1 FROM sys.check_constraints cc "
             + $"WHERE cc.parent_object_id = {TableId(definition.Table, definition.Schema)} "
@@ -136,8 +166,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         ExpectedCheckConstraintDefinition definition
     )
     {
-        var fingerprint = ContractFingerprint("check", definition.Schema, definition.Table,
-            definition.Name, CheckExpression(definition));
+        var fingerprint = ContractFingerprint(
+            "check",
+            definition.Schema,
+            definition.Table,
+            definition.Name,
+            CheckExpression(definition));
 
         var check = CheckExists(definition.Table, definition.Schema, definition.Name);
         var contractValue = Literal(fingerprint);
@@ -145,22 +179,40 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var variable = SqlServerSqlStringLiteral.RequiresExpression(schemaName.AsSpan())
             || SqlServerSqlStringLiteral.RequiresExpression(definition.Table.AsSpan())
             || SqlServerSqlStringLiteral.RequiresExpression(definition.Name.AsSpan())
-                ? "@doka_check_stamp_" + fingerprint : string.Empty;
+                ? "@doka_check_stamp_" + fingerprint
+                : string.Empty;
 
         var schemaArgument = SqlServerSqlStringLiteral.ProcedureArgument(
-            schemaName, Literal(schemaName), variable.Length == 0 ? string.Empty : variable + "_schema",
+            schemaName,
+            Literal(schemaName),
+            variable.Length == 0
+                ? string.Empty
+                : variable + "_schema",
             out var schemaDeclaration);
+
         var tableArgument = SqlServerSqlStringLiteral.ProcedureArgument(
-            definition.Table, Literal(definition.Table), variable.Length == 0 ? string.Empty : variable + "_table",
+            definition.Table,
+            Literal(definition.Table),
+            variable.Length == 0
+                ? string.Empty
+                : variable + "_table",
             out var tableDeclaration);
+
         var nameArgument = SqlServerSqlStringLiteral.ProcedureArgument(
-            definition.Name, Literal(definition.Name), variable.Length == 0 ? string.Empty : variable + "_name",
+            definition.Name,
+            Literal(definition.Name),
+            variable.Length == 0
+                ? string.Empty
+                : variable + "_name",
             out var nameDeclaration);
 
         return $"IF NOT {check} THROW 51004, N'SafeMigrations check contract was not created', 1; "
+
             // WHY: Procedure arguments cannot contain the lossless string
             // expression. Fingerprinted locals remain unique in table stamps.
-            + schemaDeclaration + tableDeclaration + nameDeclaration
+            + schemaDeclaration
+            + tableDeclaration
+            + nameDeclaration
             + "EXEC sys.sp_addextendedproperty "
             + "@name = N'Doka:SafeMigrations:Contract', "
             + $"@value = {contractValue}, "
@@ -175,10 +227,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private string CheckExpression(
         ExpectedCheckConstraintDefinition definition
     )
-        => definition.CapturedSql ?? definition.Sql ?? (definition.Expression is { } expression
-            ? _expressionRenderer.Render(expression)
-            : null)
-                ?? throw new InvalidOperationException("A check constraint has no expression.");
+        => definition.CapturedSql
+            ?? definition.Sql
+            ?? (definition.Expression is { } expression
+                ? _expressionRenderer.Render(expression)
+                : null)
+            ?? throw new InvalidOperationException("A check constraint has no expression.");
 
     private string CheckExists(
         string table,

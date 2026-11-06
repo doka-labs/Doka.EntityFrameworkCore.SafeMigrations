@@ -28,6 +28,7 @@ public sealed class SqliteSafeMigrationTestContext : DbContext
         optionsBuilder.UseSqlite(
             _connection ?? throw new InvalidOperationException("A SQLite connection is required."),
             provider => provider.MigrationsAssembly(typeof(SqliteSafeMigrationTestContext).Assembly.FullName));
+
         if (_registerSafeMigrations)
         {
             optionsBuilder.UseSqliteSafeMigrations<SqliteSafeMigrationTestContext>();
@@ -42,8 +43,13 @@ public sealed class SqliteSafeMigrationTestContext : DbContext
         {
             entity.ToTable("model_entities");
             entity.HasKey(value => value.Id);
-            entity.HasIndex(value => value.Code).IsUnique();
-            entity.Property(value => value.Code).HasMaxLength(80);
+            entity
+                .HasIndex(value => value.Code)
+                .IsUnique();
+
+            entity
+                .Property(value => value.Code)
+                .HasMaxLength(80);
         });
 
         modelBuilder.Entity<RebuildEntity>(entity =>
@@ -51,10 +57,22 @@ public sealed class SqliteSafeMigrationTestContext : DbContext
             entity.ToTable(
                 "rebuild_entities",
                 table => table.HasCheckConstraint("ck_rebuild_entities_code", "length(\"Code\") > 0"));
-            entity.HasKey(value => value.Id).HasName("pk_rebuild_entities");
-            entity.HasAlternateKey(value => value.Code).HasName("uq_rebuild_entities_code");
-            entity.Property(value => value.Id).ValueGeneratedNever();
-            entity.Property(value => value.Code).IsRequired();
+
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_rebuild_entities");
+
+            entity
+                .HasAlternateKey(value => value.Code)
+                .HasName("uq_rebuild_entities_code");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
+
+            entity
+                .Property(value => value.Code)
+                .IsRequired();
         });
 
         modelBuilder.Entity<ConstraintParent>(entity =>
@@ -62,17 +80,33 @@ public sealed class SqliteSafeMigrationTestContext : DbContext
             entity.ToTable(
                 "constraint_parents",
                 table => table.HasCheckConstraint("ck_constraint_parents_positive", "Id > 0"));
-            entity.HasKey(value => value.Id).HasName("pk_constraint_parents");
-            entity.Property(value => value.Id).ValueGeneratedNever();
+
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_constraint_parents");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
         });
 
         modelBuilder.Entity<ConstraintChild>(entity =>
         {
             entity.ToTable("constraint_children");
-            entity.HasKey(value => value.Id).HasName("pk_constraint_children");
-            entity.Property(value => value.Id).ValueGeneratedNever();
-            entity.HasIndex(value => value.ParentId).HasDatabaseName("ix_constraint_children_parent_id");
-            entity.HasOne<ConstraintParent>()
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_constraint_children");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
+
+            entity
+                .HasIndex(value => value.ParentId)
+                .HasDatabaseName("ix_constraint_children_parent_id");
+
+            entity
+                .HasOne<ConstraintParent>()
                 .WithMany()
                 .HasForeignKey(value => value.ParentId)
                 .HasConstraintName("fk_constraint_children_parent")

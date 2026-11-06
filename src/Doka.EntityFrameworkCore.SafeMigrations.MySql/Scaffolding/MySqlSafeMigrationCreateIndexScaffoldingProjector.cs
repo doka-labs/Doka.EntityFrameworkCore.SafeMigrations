@@ -15,8 +15,14 @@ internal sealed class MySqlSafeMigrationCreateIndexScaffoldingProjector
         ArgumentNullException.ThrowIfNull(operation);
 
         var metadata = operation.GetMySqlMigrationMetadata();
-        var recognizedAnnotationCount = metadata.IndexPrefixLengths is null ? 0 : 1;
-        if (operation.GetAnnotations().Count() != recognizedAnnotationCount)
+        var recognizedAnnotationCount = metadata.IndexPrefixLengths is null
+            ? 0
+            : 1;
+
+        if (operation
+                .GetAnnotations()
+                .Count()
+            != recognizedAnnotationCount)
         {
             throw new InvalidOperationException(
                 $"The create-index operation '{operation.Name}' contains provider metadata that "

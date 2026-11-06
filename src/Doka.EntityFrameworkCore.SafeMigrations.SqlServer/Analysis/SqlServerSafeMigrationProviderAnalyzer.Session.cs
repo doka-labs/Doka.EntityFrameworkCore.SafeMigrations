@@ -4,47 +4,16 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 {
-    /// <summary>Permanently rejects supported migration and catalog reuse of this scoped session.</summary>
-    internal void QuarantineConnection()
-    {
-        _connectionQuarantined = true;
-        ClearCatalogPreamble();
-    }
-
-    /// <summary>Discards both successful proofs and scope-local invariant rejections.</summary>
-    private void ClearCatalogPreamble()
-    {
-        _catalogPreamble = null;
-        _catalogInventoryRejectedContext = null;
-    }
-
-    /// <summary>Requires the same still-active physical analysis session for cached evidence.</summary>
-    private bool HasCurrentAnalysisSession(
-        DbContext context,
-        DbConnection connection,
-        DbTransaction? transaction
-    ) => _analysisScope?.Matches(context, connection, transaction) == true;
-
     /// <summary>Releases any outstanding scope when the scoped analyzer is disposed.</summary>
     public ValueTask DisposeAsync() => _analysisScope?.DisposeAsync() ?? ValueTask.CompletedTask;
 
     /// <summary>Releases an outstanding scope when EF disposes its service scope synchronously.</summary>
     public void Dispose() => _analysisScope?.Dispose();
 
-    /// <summary>Requires a replacement context after any provider session-recovery failure.</summary>
-    internal void ThrowIfConnectionQuarantined()
-    {
-        if (_connectionQuarantined)
-        {
-            throw new InvalidOperationException(
-                "SQL Server SafeMigrations requires a new context after session recovery failed.");
-        }
-    }
-
     /// <inheritdoc />
     public async Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
         DbContext context,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ValidateContext(context);
@@ -105,6 +74,37 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         }
     }
 
+    /// <summary>Permanently rejects supported migration and catalog reuse of this scoped session.</summary>
+    internal void QuarantineConnection()
+    {
+        _connectionQuarantined = true;
+        ClearCatalogPreamble();
+    }
+
+    /// <summary>Discards both successful proofs and scope-local invariant rejections.</summary>
+    private void ClearCatalogPreamble()
+    {
+        _catalogPreamble = null;
+        _catalogInventoryRejectedContext = null;
+    }
+
+    /// <summary>Requires the same still-active physical analysis session for cached evidence.</summary>
+    private bool HasCurrentAnalysisSession(
+        DbContext context,
+        DbConnection connection,
+        DbTransaction? transaction
+    ) => _analysisScope?.Matches(context, connection, transaction) == true;
+
+    /// <summary>Requires a replacement context after any provider session-recovery failure.</summary>
+    internal void ThrowIfConnectionQuarantined()
+    {
+        if (_connectionQuarantined)
+        {
+            throw new InvalidOperationException(
+                "SQL Server SafeMigrations requires a new context after session recovery failed.");
+        }
+    }
+
     /// <summary>Proves an invocation-owned temporary scope is gone or quarantines its connection.</summary>
     /// <param name="connection">The borrowed connection retaining the temporary scope.</param>
     /// <param name="transaction">The caller transaction, which is never explicitly rolled back here.</param>
@@ -137,7 +137,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             using var cleanupTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             await using var command = connection.CreateCommand();
             command.Transaction = transaction;
-            command.CommandTimeout = commandTimeout is > 0 ? Math.Min(commandTimeout.Value, 30) : 30;
+            command.CommandTimeout = commandTimeout is > 0
+                ? Math.Min(commandTimeout.Value, 30)
+                : 30;
+
             command.CommandText = $"IF OBJECT_ID(N'tempdb..{temporaryTable}') IS NOT NULL DROP TABLE {temporaryTable};";
             await command.ExecuteNonQueryAsync(cleanupTimeout.Token);
         }
@@ -202,13 +205,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     private sealed class AnalysisScope : IDisposable, IAsyncDisposable
     {
         private readonly SqlServerSafeMigrationProviderAnalyzer _analyzer;
-        private readonly DbContext _context;
-        private readonly DbConnection _connection;
-        private readonly DbTransaction _transaction;
-        private readonly IDbContextTransaction? _ownedTransaction;
         private readonly int? _commandTimeout;
-        private readonly string _database;
+        private readonly DbConnection _connection;
         private readonly string _connectionString;
+        private readonly DbContext _context;
+        private readonly string _database;
+        private readonly IDbContextTransaction? _ownedTransaction;
+        private readonly DbTransaction _transaction;
         private bool _disposed;
         private bool _sessionInvalidated;
 
@@ -237,6 +240,94 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             _database = connection.Database;
             _connectionString = connection.ConnectionString;
             connection.StateChange += OnConnectionStateChange;
+        }
+
+        /// <inheritdoc />
+        public async ValueTask DisposeAsync()
+        {
+            if (!Detach())
+            {
+                return;
+            }
+
+            if (_analyzer._connectionQuarantined)
+            {
+                // WHY: Recovery already reported the primary failure and
+                // invalidated the connection. A release on the borrowed
+                // transaction must not replace that failure. Only an owned
+                // EF transaction may need best-effort local disposal here.
+                if (_ownedTransaction is not null)
+                {
+                    try
+                    {
+                        await _ownedTransaction.DisposeAsync();
+                    }
+                    catch (Exception)
+                    {
+                        // ignored
+                    }
+                }
+
+                return;
+            }
+
+            if (_ownedTransaction is not null)
+            {
+                await _ownedTransaction.DisposeAsync();
+
+                return;
+            }
+
+            if (!CanReleaseBorrowedLock())
+            {
+                return;
+            }
+
+            // WHY: a transaction-owned application lock would otherwise remain
+            // until the caller commits its unrelated transaction. SQL Server
+            // requires one release for each successful acquisition.
+            await using var command = CreateReleaseCommand();
+            ValidateReleaseResult(await command.ExecuteScalarAsync());
+        }
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            if (!Detach())
+            {
+                return;
+            }
+
+            // WHY: EF can dispose its scoped services synchronously. Use synchronous ADO.NET
+            // cleanup instead of blocking an asynchronous continuation on a caller's context.
+            if (_analyzer._connectionQuarantined)
+            {
+                try
+                {
+                    _ownedTransaction?.Dispose();
+                }
+                catch (Exception)
+                {
+                    // ignored
+                }
+
+                return;
+            }
+
+            if (_ownedTransaction is not null)
+            {
+                _ownedTransaction.Dispose();
+
+                return;
+            }
+
+            if (!CanReleaseBorrowedLock())
+            {
+                return;
+            }
+
+            using var command = CreateReleaseCommand();
+            ValidateReleaseResult(command.ExecuteScalar());
         }
 
         /// <summary>Rejects evidence after transaction replacement or any physical session change.</summary>
@@ -303,96 +394,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             return true;
         }
 
-        /// <inheritdoc />
-        public void Dispose()
-        {
-            if (!Detach())
-            {
-                return;
-            }
-
-            // WHY: EF can dispose its scoped services synchronously. Use synchronous ADO.NET
-            // cleanup instead of blocking an asynchronous continuation on a caller's context.
-            if (_analyzer._connectionQuarantined)
-            {
-                try
-                {
-                    _ownedTransaction?.Dispose();
-                }
-                catch (Exception)
-                {
-                    // ignored
-                }
-
-                return;
-            }
-
-            if (_ownedTransaction is not null)
-            {
-                _ownedTransaction.Dispose();
-
-                return;
-            }
-
-            if (!CanReleaseBorrowedLock())
-            {
-                return;
-            }
-
-            using var command = CreateReleaseCommand();
-            ValidateReleaseResult(command.ExecuteScalar());
-        }
-
-        /// <inheritdoc />
-        public async ValueTask DisposeAsync()
-        {
-            if (!Detach())
-            {
-                return;
-            }
-
-            if (_analyzer._connectionQuarantined)
-            {
-                // WHY: Recovery already reported the primary failure and
-                // invalidated the connection. A release on the borrowed
-                // transaction must not replace that failure. Only an owned
-                // EF transaction may need best-effort local disposal here.
-                if (_ownedTransaction is not null)
-                {
-                    try
-                    {
-                        await _ownedTransaction.DisposeAsync();
-                    }
-                    catch (Exception)
-                    {
-                        // ignored
-                    }
-                }
-
-                return;
-            }
-
-            if (_ownedTransaction is not null)
-            {
-                await _ownedTransaction.DisposeAsync();
-
-                return;
-            }
-
-            if (!CanReleaseBorrowedLock())
-            {
-                return;
-            }
-
-            // WHY: a transaction-owned application lock would otherwise remain
-            // until the caller commits its unrelated transaction. SQL Server
-            // requires one release for each successful acquisition.
-            await using var command = CreateReleaseCommand();
-            ValidateReleaseResult(await command.ExecuteScalarAsync());
-        }
-
         /// <summary>Skips release only after the original session or transaction has already ended.</summary>
         private bool CanReleaseBorrowedLock() =>
+
             // WHY: EF service disposal can tear down its relational connection before this
             // analyzer. A transaction-owned lock ends with that transaction/session; attempting
             // another command then would turn successful disposal into a provider exception.

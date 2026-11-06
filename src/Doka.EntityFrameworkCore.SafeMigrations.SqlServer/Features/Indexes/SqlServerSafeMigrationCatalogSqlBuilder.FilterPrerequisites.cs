@@ -14,7 +14,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return structured;
         }
 
-        if (definition.Filter is not { } sql || sql.Length > SafeMigrationSqlExpressionParser.MaximumLength)
+        if (definition.Filter is not { } sql
+            || sql.Length > SafeMigrationSqlExpressionParser.MaximumLength)
         {
             return null;
         }
@@ -24,6 +25,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // literal's source encoding without rewriting the baseline predicate.
         var strings = new Queue<string>();
         var parsingCopy = sql.ToCharArray();
+
         // WHY: Track quote lookahead and UTF-16 offsets in the mutable parsing copy.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -36,7 +38,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
             if (sql[position] is '[' or '"')
             {
-                var terminator = sql[position] == '[' ? ']' : '"';
+                var terminator = sql[position] == '['
+                    ? ']'
+                    : '"';
+
                 while (++position < sql.Length)
                 {
                     if (sql[position] != terminator)
@@ -44,7 +49,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                         continue;
                     }
 
-                    if (position + 1 < sql.Length && sql[position + 1] == terminator)
+                    if (position + 1 < sql.Length
+                        && sql[position + 1] == terminator)
                     {
                         position++;
                         continue;
@@ -62,7 +68,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             }
 
             var unicode = position > 0 && sql[position - 1] is 'n' or 'N';
-            strings.Enqueue(unicode ? "nvarchar(max)" : "varchar(max)");
+            strings.Enqueue(
+                unicode
+                    ? "nvarchar(max)"
+                    : "varchar(max)");
+
             if (unicode)
             {
                 parsingCopy[position - 1] = ' ';
@@ -75,7 +85,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     continue;
                 }
 
-                if (position + 1 < sql.Length && sql[position + 1] == '\'')
+                if (position + 1 < sql.Length
+                    && sql[position + 1] == '\'')
                 {
                     position++;
                     continue;
@@ -97,7 +108,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private static IEnumerable<string> IndexFilterColumns(
         ExpectedIndexDefinition definition
     ) => GetStructuredIndexFilter(definition) is { } filter && IsSupportedIndexFilter(filter)
-        ? GetIndexFilterComparisons(filter).Select(static comparison => comparison.Column)
+        ? GetIndexFilterComparisons(filter)
+            .Select(static comparison => comparison.Column)
         : [];
 
     private string? BuildIndexFilterSupportExpression(
@@ -113,7 +125,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var predicates = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (column, literal) in GetIndexFilterComparisons(filter))
         {
-            var conversion = literal is null ? "1 = 1" : BuildPhysicalFilterLiteralProof(literal);
+            var conversion = literal is null
+                ? "1 = 1"
+                : BuildPhysicalFilterLiteralProof(literal);
+
             var physical = "EXISTS (SELECT 1 FROM sys.columns c JOIN sys.types ty ON ty.user_type_id = c.user_type_id "
                 + $"WHERE c.object_id = {TableId(definition.Table, definition.Schema)} AND c.name = {Literal(column)} "
                 + "AND c.is_computed = 0 AND ty.is_user_defined = 0 AND ty.is_assembly_type = 0 "
@@ -154,14 +169,27 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             // ReSharper disable once LoopCanBeConvertedToQuery
             for (var scale = 0; scale <= 7; scale++)
             {
-                Add(type, type + "(" + scale.ToString(CultureInfo.InvariantCulture) + ")",
+                Add(
+                    type,
+                    type + "(" + scale.ToString(CultureInfo.InvariantCulture) + ")",
                     $"c.scale = {scale.ToString(CultureInfo.InvariantCulture)}");
             }
         }
 
-        foreach (var type in new[] { "char", "varchar", "nchar", "nvarchar", "binary", "varbinary" })
+        foreach (var type in new[]
+            {
+                "char",
+                "varchar",
+                "nchar",
+                "nvarchar",
+                "binary",
+                "varbinary",
+            })
         {
-            var canonical = type is "char" or "nchar" or "binary" ? type + "(8000)" : type + "(max)";
+            var canonical = type is "char" or "nchar" or "binary"
+                ? type + "(8000)"
+                : type + "(max)";
+
             if (type == "nchar")
             {
                 canonical = "nchar(4000)";
@@ -177,9 +205,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             };
 
             var capacity = $"(c.max_length = -1 OR {size} <= c.max_length)";
-            if (IsAnsiManagedStoreType(canonical) && literal.Value is string or char)
+            if (IsAnsiManagedStoreType(canonical)
+                && literal.Value is string or char)
             {
-                var text = literal.Value is string value ? value : ((char)literal.Value).ToString();
+                var text = literal.Value is string value
+                    ? value
+                    : ((char)literal.Value).ToString();
+
                 if (text.Any(static character => character > 127))
                 {
                     capacity += " AND c.collation_name = CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(), 'Collation'))";
@@ -199,8 +231,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             for (var scale = 0; scale <= 38; scale++)
             {
                 var precision = Math.Max(1, scale);
-                while (precision <= 38 && !IsManagedValueRepresentable(numeric,
-                    $"decimal({precision.ToString(CultureInfo.InvariantCulture)},"
+                while (precision <= 38
+                    && !IsManagedValueRepresentable(
+                        numeric,
+                        $"decimal({precision.ToString(CultureInfo.InvariantCulture)},"
                         + $"{scale.ToString(CultureInfo.InvariantCulture)})"))
                 {
                     precision++;
@@ -218,7 +252,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             }
         }
 
-        return predicates.Count == 0 ? "1 = 0" : string.Join(" OR ", predicates);
+        return predicates.Count == 0
+            ? "1 = 0"
+            : string.Join(" OR ", predicates);
 
         void Add(
             string type,
@@ -229,17 +265,22 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             if (!FilterLiteralHasCompatibleScalarFamily(literal.Value, type)
                 || !FilterSourceHasCompatibleScalarFamily(EmittedIndexFilterLiteralStoreType(literal), type)
                 || !IsIndexFilterLiteralCompatible(literal, canonical)
-                || literal.Value is string { Length: > 4_000 } && !IsCharacterManagedStoreType(canonical))
+                || (literal.Value is string { Length: > 4_000 } && !IsCharacterManagedStoreType(canonical)))
             {
                 return;
             }
 
             var source = NonThrowingDefaultLiteral(literal, canonical);
-            var intermediate = literal.StoreType is null ? "1 = 1"
-                : "(" + ManagedValueRepresentationGuard(literal.Value, literal.StoreType) + ") AND ("
-                    + ManagedAnsiValueRepresentationGuard(literal.Value, literal.StoreType) + ")";
+            var intermediate = literal.StoreType is null
+                ? "1 = 1"
+                : "("
+                + ManagedValueRepresentationGuard(literal.Value, literal.StoreType)
+                + ") AND ("
+                + ManagedAnsiValueRepresentationGuard(literal.Value, literal.StoreType)
+                + ")";
 
-            predicates.Add($"(ty.name = {Literal(type)} AND ({additional}) AND ({intermediate}) "
+            predicates.Add(
+                $"(ty.name = {Literal(type)} AND ({additional}) AND ({intermediate}) "
                 + $"AND ({ManagedValueRepresentationGuard(literal.Value, canonical)}) "
                 + $"AND {NonThrowingScalarConversion(source, literal.Value, canonical)} IS NOT NULL)");
         }
@@ -256,10 +297,28 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         "date" or "datetime" or "datetime2" or "datetimeoffset" or "smalldatetime"
             => target is "date" or "datetime" or "datetime2" or "datetimeoffset" or "smalldatetime",
         "time" => target == "time",
-        "bigint" or "bit" or "decimal" or "float" or "int" or "money" or "numeric"
-            or "real" or "smallint" or "smallmoney" or "tinyint"
-            => target is "bigint" or "bit" or "decimal" or "float" or "int" or "money" or "numeric"
-                or "real" or "smallint" or "smallmoney" or "tinyint",
+        "bigint"
+            or "bit"
+            or "decimal"
+            or "float"
+            or "int"
+            or "money"
+            or "numeric"
+            or "real"
+            or "smallint"
+            or "smallmoney"
+            or "tinyint"
+            => target is "bigint"
+                or "bit"
+                or "decimal"
+                or "float"
+                or "int"
+                or "money"
+                or "numeric"
+                or "real"
+                or "smallint"
+                or "smallmoney"
+                or "tinyint",
         _ => false,
     };
 
@@ -271,13 +330,25 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string or char => target is not ("binary" or "varbinary"),
         byte[] => target is "binary" or "varbinary",
         Guid => target == "uniqueidentifier",
-        DateTime or DateOnly or DateTimeOffset => target is "date" or "datetime" or "datetime2"
-            or "datetimeoffset" or "smalldatetime",
+        DateTime or DateOnly or DateTimeOffset => target is "date"
+            or "datetime"
+            or "datetime2"
+            or "datetimeoffset"
+            or "smalldatetime",
         TimeOnly or TimeSpan => target == "time",
         float or double => target is "float" or "real",
         bool or byte or sbyte or short or ushort or int or uint or long or ulong or decimal or Enum
-            => target is "bigint" or "bit" or "decimal" or "float" or "int" or "money" or "numeric"
-                or "real" or "smallint" or "smallmoney" or "tinyint",
+            => target is "bigint"
+                or "bit"
+                or "decimal"
+                or "float"
+                or "int"
+                or "money"
+                or "numeric"
+                or "real"
+                or "smallint"
+                or "smallmoney"
+                or "tinyint",
         _ => false,
     };
 

@@ -16,13 +16,19 @@ public sealed class SqlServerConstraintDropCandidateTests
     [InlineData("table", false, false, true)]
     [InlineData("column", false, false, false)]
     [InlineData("index", false, false, false)]
-    public void CandidatesRetainOnlyTheirNativeConstraintKind(string kind, bool key, bool check, bool foreignKey)
+    public void CandidatesRetainOnlyTheirNativeConstraintKind(
+        string kind,
+        bool key,
+        bool check,
+        bool foreignKey
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(
             "Server=127.0.0.1;Database=constraint_candidates;User ID=sa;Password=unused;TrustServerCertificate=True");
 
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
         SafeMigrationIntent candidate = kind switch
@@ -37,7 +43,8 @@ public sealed class SqlServerConstraintDropCandidateTests
             _ => throw new UnreachableException(),
         };
 
-        var drop = new SafeMigrationOperation(new DropColumnIntent("source", "nodes"),
+        var drop = new SafeMigrationOperation(
+            new DropColumnIntent("source", "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var predecessor = new SafeMigrationOperation(candidate, SafeMigrationPolicy.ThrowIfDifferent);
@@ -53,8 +60,12 @@ public sealed class SqlServerConstraintDropCandidateTests
         Assert.Equal(foreignKey, classification.Contains("removed_fk.", StringComparison.Ordinal));
         Assert.Equal(kind == "primary", classification.Contains("removed_key.type=N'PK'", StringComparison.Ordinal));
         Assert.Equal(kind == "unique", classification.Contains("removed_key.type=N'UQ'", StringComparison.Ordinal));
-        Assert.Equal(key || check || kind == "foreign",
+        Assert.Equal(
+            key || check || kind == "foreign",
             classification.Contains(".name=N'candidate'", StringComparison.Ordinal));
-        Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+
+        Assert.Equal(ConnectionState.Closed,
+            context.Database.GetDbConnection()
+                .State);
     }
 }

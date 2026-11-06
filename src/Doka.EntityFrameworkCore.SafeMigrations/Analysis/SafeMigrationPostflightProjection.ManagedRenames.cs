@@ -10,7 +10,10 @@ internal sealed partial class SafeMigrationPostflightProjection
     )
     {
         if (!operations.Any(static operation => operation is SafeMigrationOperation { Intent: RenameColumnIntent })
-            || !operations.Any(static operation => operation is SafeMigrationOperation { Intent: ModelManagedDataIntent }))
+            || !operations.Any(static operation => operation is SafeMigrationOperation
+            {
+                Intent: ModelManagedDataIntent
+            }))
         {
             return null;
         }
@@ -21,6 +24,7 @@ internal sealed partial class SafeMigrationPostflightProjection
 
         Dictionary<int, SafeMigrationPostflightRenameProbe>? rewritten = null;
         var safeOrdinal = 0;
+
         // WHY: Keep whole-stream positions aligned with safe-only analysis positions across rename boundaries.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -59,13 +63,13 @@ internal sealed partial class SafeMigrationPostflightProjection
             }
 
             if (!TryCreateResources(
-                    operation.Intent,
-                    normalizer,
-                    primaryKeyNameIndependent: false,
-                    sharedUniqueIndexIdentity: false,
-                    analysis,
-                    out var resource,
-                    out _))
+                operation.Intent,
+                normalizer,
+                primaryKeyNameIndependent: false,
+                sharedUniqueIndexIdentity: false,
+                analysis,
+                out var resource,
+                out _))
             {
                 // WHY: An unscoped safe structural effect cannot establish the
                 // historical owner of a row probe any more than opaque SQL can.
@@ -140,14 +144,18 @@ internal sealed partial class SafeMigrationPostflightProjection
             }
         }
 
-        return rewritten is { Count: > 0 } ? rewritten.Values.ToList() : null;
+        return rewritten is { Count: > 0 }
+            ? rewritten.Values.ToList()
+            : null;
 
         PostflightResource Owner(
             string table,
             string? schema
         ) => new(
             PostflightResourceKind.Table,
-            normalizer is null ? schema : normalizer.NormalizeSchema(schema),
+            normalizer is null
+                ? schema
+                : normalizer.NormalizeSchema(schema),
             table,
             null);
 
@@ -208,6 +216,7 @@ internal sealed partial class SafeMigrationPostflightProjection
         if (ownColumns && uniqueKeys is not null)
         {
             ExpectedModelManagedDataUniqueKeyDefinition[]? rewrittenKeys = null;
+
             // WHY: Replace only changed unique-key entries at their original snapshot positions.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
@@ -236,6 +245,7 @@ internal sealed partial class SafeMigrationPostflightProjection
         if (foreignKeys is not null)
         {
             ExpectedModelManagedDataForeignKeyDefinition[]? rewrittenKeys = null;
+
             // WHY: Replace only changed foreign-key entries without reordering the retained snapshot.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
@@ -297,7 +307,9 @@ internal sealed partial class SafeMigrationPostflightProjection
             string? schema
         ) => new(
             PostflightResourceKind.Table,
-            normalizer is null ? schema : normalizer.NormalizeSchema(schema),
+            normalizer is null
+                ? schema
+                : normalizer.NormalizeSchema(schema),
             table,
             null);
     }
@@ -312,6 +324,7 @@ internal sealed partial class SafeMigrationPostflightProjection
     {
         result = members;
         string[]? rewritten = null;
+
         // WHY: Rewrite the matching member in its original position without reordering composite keys.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery

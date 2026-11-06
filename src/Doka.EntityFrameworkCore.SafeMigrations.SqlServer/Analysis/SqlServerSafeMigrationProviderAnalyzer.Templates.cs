@@ -8,7 +8,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         private readonly Dictionary<(string Template, string Definitions), string> _variables = [];
 
         /// <summary>Prepares a dispatcher without publishing a template until payload admission succeeds.</summary>
-        public DelayedCatalogSelection Prepare(int ordinal, SqlServerSafeMigrationRuntimePlan plan, int slot)
+        public DelayedCatalogSelection Prepare(
+            int ordinal,
+            SqlServerSafeMigrationRuntimePlan plan,
+            int slot
+        )
         {
             var definitions = BuildDelayedParameterDefinitions(plan);
             var template = BuildDelayedCatalogTemplate(plan, definitions);
@@ -20,11 +24,16 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             // WHY: Template sharing must not admit an individually oversized classifier. Measure the
             // equivalent escaped literal invocation without allocating a second heavyweight SQL buffer.
             var encoded = SqlServerSqlStringLiteral.RequiresExpression(template.AsSpan())
-                ? SqlServerSqlStringLiteral.Render(template) : null;
+                ? SqlServerSqlStringLiteral.Render(template)
+                : null;
+
             var literalBytes = encoded is not null
                 ? Encoding.UTF8.GetByteCount(encoded)
                 : checked(Encoding.UTF8.GetByteCount(template) + 3);
-            foreach (var character in encoded is null ? template : string.Empty)
+
+            foreach (var character in encoded is null
+                ? template
+                : string.Empty)
             {
                 if (character == '\'')
                 {
@@ -32,19 +41,31 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 }
             }
 
-            var standaloneBytes = checked(literalBytes + Encoding.UTF8.GetByteCount(invocation)
+            var standaloneBytes = checked(literalBytes
+                + Encoding.UTF8.GetByteCount(invocation)
                 - Encoding.UTF8.GetByteCount(variable));
 
-            var declaration = shared ? null
-                : "DECLARE " + variable + " nvarchar(max) = "
-                    + (encoded ?? SqlServerSqlStringLiteral.Render(template)) + ";\n";
+            var declaration = shared
+                ? null
+                : "DECLARE "
+                + variable
+                + " nvarchar(max) = "
+                + (encoded ?? SqlServerSqlStringLiteral.Render(template))
+                + ";\n";
 
-            return new DelayedCatalogSelection(template, definitions, variable, invocation, declaration,
+            return new DelayedCatalogSelection(
+                template,
+                definitions,
+                variable,
+                invocation,
+                declaration,
                 standaloneBytes);
         }
 
         /// <summary>Publishes only a newly admitted template in the current statement's private namespace.</summary>
-        public void Accept(DelayedCatalogSelection selection)
+        public void Accept(
+            DelayedCatalogSelection selection
+        )
         {
             if (selection.Declaration is not null)
             {

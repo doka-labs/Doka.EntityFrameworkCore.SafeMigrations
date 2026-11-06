@@ -15,7 +15,9 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
     [InlineData("search-path")]
     [InlineData("temporary-shadow")]
     [InlineData("stable")]
-    public async Task RuntimeDdlTriggerIdentityEffect_IsRecheckedBeforePostcondition(string effect)
+    public async Task RuntimeDdlTriggerIdentityEffect_IsRecheckedBeforePostcondition(
+        string effect
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -28,32 +30,47 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
             _ => throw new ArgumentOutOfRangeException(nameof(effect)),
         };
 
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE public.identity_target (id integer NULL); "
             + "CREATE SCHEMA identity_redirect; "
             + "CREATE TABLE identity_redirect.identity_target (id integer NULL, added integer NULL); "
             + "CREATE FUNCTION public.identity_guard_effect() RETURNS event_trigger LANGUAGE plpgsql "
-            + "AS $identity_effect$ BEGIN IF TG_TAG = 'ALTER TABLE' THEN " + triggerBody
+            + "AS $identity_effect$ BEGIN IF TG_TAG = 'ALTER TABLE' THEN "
+            + triggerBody
             + " END IF; END; $identity_effect$; "
             + "CREATE EVENT TRIGGER identity_after_alter ON ddl_command_end "
-            + "EXECUTE FUNCTION public.identity_guard_effect();");
+            + "EXECUTE FUNCTION public.identity_guard_effect();",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("added", "identity_target", type: "integer", nullable: true);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
-        var currentSchema = await context.Database.SqlQueryRaw<string>(
-            "SELECT current_schema()::text AS \"Value\"").SingleAsync();
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            CancellationToken.None));
 
-        var temporaryShadows = await context.Database.SqlQueryRaw<int>(
-            "SELECT COUNT(*)::integer AS \"Value\" FROM pg_catalog.pg_class "
-            + "WHERE relnamespace = pg_catalog.pg_my_temp_schema() AND relname = 'identity_target'").SingleAsync();
+        var currentSchema = await context
+            .Database
+            .SqlQueryRaw<string>(
+                "SELECT current_schema()::text AS \"Value\"")
+            .SingleAsync();
 
-        var targetColumns = await ScalarIntAsync(connectionString,
+        var temporaryShadows = await context
+            .Database
+            .SqlQueryRaw<int>(
+                "SELECT COUNT(*)::integer AS \"Value\" FROM pg_catalog.pg_class "
+                + "WHERE relnamespace = pg_catalog.pg_my_temp_schema() AND relname = 'identity_target'")
+            .SingleAsync();
+
+        var targetColumns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' "
-            + "AND table_name = 'identity_target' AND column_name = 'added';");
+            + "AND table_name = 'identity_target' AND column_name = 'added';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal("public", currentSchema);
@@ -78,13 +95,17 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task TemporaryIndexShadow_IsRejectedBeforeChangingEitherIndex(bool rename)
+    public async Task TemporaryIndexShadow_IsRejectedBeforeChangingEitherIndex(
+        bool rename
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE public.identity_target (id integer NULL); "
-            + "CREATE INDEX ix_identity_target ON public.identity_target (id);");
+            + "CREATE INDEX ix_identity_target ON public.identity_target (id);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
@@ -103,25 +124,37 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
         }
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("temporary-index-owner-shadow"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("temporary-index-owner-shadow"),
+                CancellationToken.None);
 
-        var failure = await Assert.ThrowsAsync<PostgresException>(
-            () => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Assert.ThrowsAsync<PostgresException>(() =>
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
-        var temporaryIndexes = await context.Database.SqlQueryRaw<int>(
-            "SELECT COUNT(*)::integer AS \"Value\" FROM pg_catalog.pg_class "
-            + "WHERE relnamespace = pg_catalog.pg_my_temp_schema() AND relname = 'ix_identity_target' "
-            + "AND relkind = 'i'").SingleAsync();
+        var temporaryIndexes = await context
+            .Database
+            .SqlQueryRaw<int>(
+                "SELECT COUNT(*)::integer AS \"Value\" FROM pg_catalog.pg_class "
+                + "WHERE relnamespace = pg_catalog.pg_my_temp_schema() AND relname = 'ix_identity_target' "
+                + "AND relkind = 'i'")
+            .SingleAsync();
 
         // Assert
         Assert.Equal("schema_search_path_mismatch", report.Assessments[0].AnalysisCode);
         Assert.Equal("P1002", failure.SqlState);
         Assert.Equal(1, temporaryIndexes);
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_class relation "
-            + "JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace "
-            + "WHERE namespace.nspname = 'public' AND relation.relname = 'ix_identity_target';"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_class relation "
+                + "JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace "
+                + "WHERE namespace.nspname = 'public' AND relation.relname = 'ix_identity_target';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Consuming a source does not mistake its newly visible fallback for a changed surviving owner.</summary>
@@ -131,16 +164,20 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
     [InlineData("rename-table")]
     [InlineData("drop-index")]
     [InlineData("rename-index")]
-    public async Task ConsumedSourceFallback_RemainsIsolatedDuringExecutionAndVerification(string kind)
+    public async Task ConsumedSourceFallback_RemainsIsolatedDuringExecutionAndVerification(
+        string kind
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE SCHEMA identity_tail; "
             + "CREATE TABLE public.identity_target (id integer NULL); "
             + "CREATE TABLE identity_tail.identity_target (id integer NULL); "
             + "CREATE INDEX ix_identity_target ON public.identity_target (id); "
-            + "CREATE INDEX ix_identity_target ON identity_tail.identity_target (id);");
+            + "CREATE INDEX ix_identity_target ON identity_tail.identity_target (id);",
+            cancellationToken: CancellationToken.None);
 
         var configured = new NpgsqlConnectionStringBuilder(connectionString)
         {
@@ -168,17 +205,26 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
         }
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("consumed-source-fallback"));
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("consumed-source-fallback"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(2, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_class relation "
-            + "JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace "
-            + "WHERE namespace.nspname = 'identity_tail' "
-            + "AND relation.relname IN ('identity_target', 'ix_identity_target');"));
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_class relation "
+                + "JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace "
+                + "WHERE namespace.nspname = 'identity_tail' "
+                + "AND relation.relname IN ('identity_target', 'ix_identity_target');",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A creation target cannot exempt an actual same-name unqualified inline FK principal.</summary>
@@ -193,29 +239,48 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
             "CREATE TEMPORARY TABLE identity_target (id integer NOT NULL PRIMARY KEY);");
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureTable(new ExpectedTableDefinition("identity_target",
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "identity_target",
                 [
                     new ExpectedColumnDefinition("id", typeof(int), false, "integer"),
                     new ExpectedColumnDefinition("parent_id", typeof(int), true, "integer"),
                 ],
                 primaryKey: new ExpectedPrimaryKeyDefinition("pk_identity_target", "identity_target", ["id"]),
-                foreignKeys: [new ExpectedForeignKeyDefinition("fk_identity_parent", "identity_target", ["parent_id"],
-                    "identity_target", ["id"])]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+                foreignKeys:
+                [
+                    new ExpectedForeignKeyDefinition(
+                        "fk_identity_parent",
+                        "identity_target",
+                        ["parent_id"],
+                        "identity_target",
+                        ["id"]),
+                ]),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("same-name-inline-principal"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("same-name-inline-principal"),
+                CancellationToken.None);
 
-        var failure = await Assert.ThrowsAsync<PostgresException>(
-            () => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Assert.ThrowsAsync<PostgresException>(() =>
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         // Assert
         Assert.Equal("schema_search_path_mismatch", report.Assessments[0].AnalysisCode);
         Assert.Equal("P1002", failure.SqlState);
-        Assert.Equal(0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' "
-            + "AND table_name = 'identity_target';"));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' "
+                + "AND table_name = 'identity_target';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A qualified trigger-bearing DDL makes a later initial path mismatch runtime-dependent.</summary>
@@ -224,7 +289,8 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE SCHEMA identity_final; CREATE TABLE public.identity_source (id integer NULL); "
             + "CREATE TABLE identity_final.identity_target (id integer NULL); "
             + "CREATE FUNCTION public.identity_scope_move() RETURNS event_trigger LANGUAGE plpgsql "
@@ -232,7 +298,8 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
             + "PERFORM pg_catalog.set_config('search_path', 'identity_final,public', false); "
             + "END IF; END; $identity_move$; "
             + "CREATE EVENT TRIGGER identity_scope_after_alter ON ddl_command_end "
-            + "EXECUTE FUNCTION public.identity_scope_move();");
+            + "EXECUTE FUNCTION public.identity_scope_move();",
+            cancellationToken: CancellationToken.None);
 
         var configured = new NpgsqlConnectionStringBuilder(connectionString)
         {
@@ -241,26 +308,45 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
 
         await using var context = CreateContext(configured.ConnectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AddColumnIfNotExists<int>("first_added", "identity_source", type: "integer", nullable: true,
+        builder.AddColumnIfNotExists<int>(
+            "first_added",
+            "identity_source",
+            type: "integer",
+            nullable: true,
             schema: "public");
+
         builder.AddColumnIfNotExists<int>("later_added", "identity_target", type: "integer", nullable: true);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("trigger-qualified-schema-boundary"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("trigger-qualified-schema-boundary"),
+                CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, report.Assessments[1].Action);
         Assert.Equal("projected_schema_identity_state_unknown", report.Assessments[1].AnalysisCode);
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'identity_final' "
-            + "AND table_name = 'identity_target' AND column_name = 'later_added';"));
-        Assert.Equal(0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' "
-            + "AND table_name = 'identity_target';"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'identity_final' "
+                + "AND table_name = 'identity_target' AND column_name = 'later_added';",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' "
+                + "AND table_name = 'identity_target';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A schema boundary cannot defer an intrinsically unsupported annotated contract.</summary>
@@ -269,8 +355,10 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
-            "CREATE SCHEMA identity_final; CREATE TABLE identity_final.identity_target (id integer NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE SCHEMA identity_final; CREATE TABLE identity_final.identity_target (id integer NULL);",
+            cancellationToken: CancellationToken.None);
 
         var configured = new NpgsqlConnectionStringBuilder(connectionString)
         {
@@ -280,20 +368,30 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
         await using var context = CreateContext(configured.ConnectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.Sql("SET search_path TO identity_final,public;");
-        builder.AddColumnIfNotExists<int>("added", "identity_target", type: "integer", nullable: true)
+        builder
+            .AddColumnIfNotExists<int>("added", "identity_target", type: "integer", nullable: true)
             .Annotation("UncertifiedProviderExtension", true);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("invariant-unsupported-scoped-owner"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("invariant-unsupported-scoped-owner"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, report.Assessments[1].Action);
         Assert.Equal("schema_search_path_mismatch", report.Assessments[1].AnalysisCode);
-        Assert.Equal(0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'identity_final' "
-            + "AND table_name = 'identity_target' AND column_name = 'added';"));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'identity_final' "
+                + "AND table_name = 'identity_target' AND column_name = 'added';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Captured trigger risk cannot certify a retained old-schema owner through the final alias.</summary>
@@ -302,26 +400,32 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
     [InlineData("redirect")]
     [InlineData("absent")]
     [InlineData("certified-noop")]
-    public async Task PostflightQualifiedTriggerBoundary_DoesNotCertifyAnotherSchemaOwner(string effect)
+    public async Task PostflightQualifiedTriggerBoundary_DoesNotCertifyAnotherSchemaOwner(
+        string effect
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE SCHEMA identity_final; CREATE TABLE public.identity_source (id integer NULL); "
             + "CREATE TABLE public.identity_target (id integer NULL); "
             + "CREATE TABLE identity_final.identity_target (id integer NULL); "
             + "INSERT INTO public.identity_target VALUES (1); "
-            + "INSERT INTO identity_final.identity_target VALUES (2);");
+            + "INSERT INTO identity_final.identity_target VALUES (2);",
+            cancellationToken: CancellationToken.None);
 
         if (effect != "absent")
         {
-            await ExecuteSqlAsync(connectionString,
+            await ExecuteSqlAsync(
+                connectionString,
                 "CREATE FUNCTION public.identity_final_scope() RETURNS event_trigger LANGUAGE plpgsql "
                 + "AS $identity_final_scope$ BEGIN IF TG_TAG = 'ALTER TABLE' THEN "
                 + "PERFORM pg_catalog.set_config('search_path', 'identity_final,public', false); "
                 + "END IF; END; $identity_final_scope$; "
                 + "CREATE EVENT TRIGGER identity_final_scope_after_alter ON ddl_command_end "
-                + "EXECUTE FUNCTION public.identity_final_scope();");
+                + "EXECUTE FUNCTION public.identity_final_scope();",
+                cancellationToken: CancellationToken.None);
         }
 
         var configured = new NpgsqlConnectionStringBuilder(connectionString)
@@ -331,27 +435,52 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
 
         await using var context = CreateContext(configured.ConnectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureTable(new ExpectedTableDefinition("identity_target",
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "identity_target",
                 [new ExpectedColumnDefinition("id", typeof(int), true, "integer")]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         if (effect == "certified-noop")
         {
             builder.RenameTable("identity_source", schema: "public", newName: "identity_source");
         }
         else
         {
-            builder.AddColumnIfNotExists<int>("added", "identity_source", type: "integer", nullable: true,
+            builder.AddColumnIfNotExists<int>(
+                "added",
+                "identity_source",
+                type: "integer",
+                nullable: true,
                 schema: "public");
         }
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("historical-trigger-schema-owner"));
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("historical-trigger-schema-owner"),
+                CancellationToken.None);
 
         // Assert
-        Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT id FROM public.identity_target;"));
-        Assert.Equal(2, await ScalarIntAsync(connectionString, "SELECT id FROM identity_final.identity_target;"));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT id FROM public.identity_target;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT id FROM identity_final.identity_target;",
+                cancellationToken: CancellationToken.None));
+
         if (effect == "redirect")
         {
             Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -360,10 +489,13 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
         }
         else
         {
-            Assert.Equal(effect == "certified-noop" ? SafeMigrationReportStatus.ReadyWithProviderOperations
-                : SafeMigrationReportStatus.Ready, report.Status);
+            Assert.Equal(
+                effect == "certified-noop"
+                    ? SafeMigrationReportStatus.ReadyWithProviderOperations
+                    : SafeMigrationReportStatus.Ready,
+                report.Status);
+
             Assert.True(report.Assessments[0].PostconditionSatisfied);
         }
     }
-
 }

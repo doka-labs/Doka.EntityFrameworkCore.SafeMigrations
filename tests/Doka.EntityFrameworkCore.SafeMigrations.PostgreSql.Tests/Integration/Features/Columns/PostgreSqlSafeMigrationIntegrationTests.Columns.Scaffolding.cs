@@ -22,18 +22,26 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = AddScaffoldedIdentityTable(builder, "scaffolded_identity", strategy);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "INSERT INTO scaffolded_identity (display_name) VALUES ('first');");
+            "INSERT INTO scaffolded_identity (display_name) VALUES ('first');",
+            cancellationToken: CancellationToken.None);
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("scaffolded-identity"));
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("scaffolded-identity"),
+                CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
         Assert.Equal(
             expectedIdentity,
             await ScalarStringAsync(
@@ -42,8 +50,15 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
                 + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
                 + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
                 + "WHERE n.nspname = current_schema() AND c.relname = 'scaffolded_identity' "
-                + "AND a.attname = 'id';"));
-        Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT id FROM scaffolded_identity;"));
+                + "AND a.attname = 'id';",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT id FROM scaffolded_identity;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -54,7 +69,8 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
             connectionString,
             "CREATE TABLE scaffolded_identity_drift ("
             + "id integer NOT NULL, display_name character varying(80) NULL, "
-            + "CONSTRAINT pk_scaffolded_identity_drift PRIMARY KEY (id));");
+            + "CONSTRAINT pk_scaffolded_identity_drift PRIMARY KEY (id));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -62,13 +78,20 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("scaffolded-identity-drift"));
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("scaffolded-identity-drift"),
+                CancellationToken.None);
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-            ExecuteOperationsAsync(context, builder.Operations));
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Different,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
         Assert.Equal("P1001", exception.SqlState);
         Assert.Equal(
             "none",
@@ -79,7 +102,8 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
                 + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
                 + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
                 + "WHERE n.nspname = current_schema() AND c.relname = 'scaffolded_identity_drift' "
-                + "AND a.attname = 'id';"));
+                + "AND a.attname = 'id';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -93,13 +117,20 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("unsupported-operation-facet"));
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("unsupported-operation-facet"),
+                CancellationToken.None);
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-            ExecuteOperationsAsync(context, builder.Operations));
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Unsupported, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Unsupported,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
         Assert.Equal("P1002", exception.SqlState);
         Assert.Equal(
             0,
@@ -107,7 +138,8 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
                 connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_class c "
                 + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-                + "WHERE n.nspname = current_schema() AND c.relname = 'unsupported_scaffolded_annotation';"));
+                + "WHERE n.nspname = current_schema() AND c.relname = 'unsupported_scaffolded_annotation';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -123,13 +155,20 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("unsupported-serial"));
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("unsupported-serial"),
+                CancellationToken.None);
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-            ExecuteOperationsAsync(context, builder.Operations));
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Unsupported, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Unsupported,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
         Assert.Equal("P1002", exception.SqlState);
         Assert.Equal(
             0,
@@ -137,7 +176,8 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
                 connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_class c "
                 + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-                + "WHERE n.nspname = current_schema() AND c.relname = 'unsupported_serial_strategy';"));
+                + "WHERE n.nspname = current_schema() AND c.relname = 'unsupported_serial_strategy';",
+                cancellationToken: CancellationToken.None));
     }
 
     private static SafeMigrationOperation AddScaffoldedIdentityTable(
@@ -162,5 +202,4 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
 
         return Assert.IsType<SafeMigrationOperation>(Assert.Single(builder.Operations));
     }
-
 }

@@ -20,7 +20,9 @@ public sealed class SqlServerMigrationFixtureTests
         var idGenerator = context.GetService<IMigrationsIdGenerator>();
 
         // Act
-        var ids = typeof(SqlServerMigrationFixtureTests).Assembly.GetTypes()
+        var ids = typeof(SqlServerMigrationFixtureTests)
+            .Assembly
+            .GetTypes()
             .Where(static type => typeof(Migration).IsAssignableFrom(type))
             .SelectMany(static type => type.GetCustomAttributes(typeof(MigrationAttribute), inherit: false))
             .Cast<MigrationAttribute>()
@@ -48,15 +50,23 @@ public sealed class SqlServerMigrationFixtureTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString, registerSafeMigrations);
         var assembly = context.GetService<IMigrationsAssembly>();
-        var target = byName ? "SqlServerHistory" : SqlServerHistoryMigration.MigrationIdentifier;
+        var target = byName
+            ? "SqlServerHistory"
+            : SqlServerHistoryMigration.MigrationIdentifier;
 
         // Act
         var resolvedId = assembly.FindMigrationId(target);
 
         // Assert
         Assert.Equal(SqlServerHistoryMigration.MigrationIdentifier, resolvedId);
-        Assert.Equal(typeof(SqlServerHistoryMigration), assembly.Migrations[resolvedId!].AsType());
-        Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        Assert.Equal(typeof(SqlServerHistoryMigration),
+            assembly
+                .Migrations[resolvedId!]
+                .AsType());
+
+        Assert.Equal(ConnectionState.Closed,
+            context.Database.GetDbConnection()
+                .State);
     }
 
     /// <summary>Both real script modes resolve the fixture before any live database is needed.</summary>
@@ -71,14 +81,19 @@ public sealed class SqlServerMigrationFixtureTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var migrator = context.GetService<IMigrator>();
-        var options = idempotent ? MigrationsSqlGenerationOptions.Idempotent : MigrationsSqlGenerationOptions.Default;
+        var options = idempotent
+            ? MigrationsSqlGenerationOptions.Idempotent
+            : MigrationsSqlGenerationOptions.Default;
+
         var historyPredicate = $"WHERE [MigrationId] = N'{SqlServerHistoryMigration.MigrationIdentifier}'";
 
         // WHY: These are ordinary tests, not live-theory cases. Target resolution
         // and SQL generation must fail locally even when an ARM host skips DDL.
         // Act
         var script = migrator.GenerateScript(
-            Migration.InitialDatabase, SqlServerHistoryMigration.MigrationIdentifier, options);
+            Migration.InitialDatabase,
+            SqlServerHistoryMigration.MigrationIdentifier,
+            options);
 
         // Assert
         Assert.Contains(SqlServerHistoryMigration.MigrationIdentifier, script, StringComparison.Ordinal);
@@ -98,7 +113,9 @@ public sealed class SqlServerMigrationFixtureTests
             Assert.DoesNotContain(historyPredicate, script, StringComparison.Ordinal);
         }
 
-        Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        Assert.Equal(ConnectionState.Closed,
+            context.Database.GetDbConnection()
+                .State);
     }
 
     /// <summary>Malformed and unknown explicit targets remain rejected rather than silently selecting a migration.</summary>
@@ -125,6 +142,8 @@ public sealed class SqlServerMigrationFixtureTests
         var failure = Assert.IsType<InvalidOperationException>(exception);
 
         Assert.Contains(target, failure.Message, StringComparison.Ordinal);
-        Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        Assert.Equal(ConnectionState.Closed,
+            context.Database.GetDbConnection()
+                .State);
     }
 }

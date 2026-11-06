@@ -83,7 +83,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private static void VisitDatabaseQualifiers<TVisitor>(
         SafeMigrationIntent intent,
         ref TVisitor visitor
-    ) where TVisitor : struct, IDatabaseQualifierVisitor
+    )
+        where TVisitor : struct, IDatabaseQualifierVisitor
     {
         switch (intent)
         {
@@ -172,6 +173,37 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         }
     }
 
+    private static MySqlSafeMigrationRuntimePlan BuildEnsureSchema(
+        EnsureSchemaIntent intent
+    ) => Plan("'matching'", "TRUE");
+
+    private static MySqlSafeMigrationRuntimePlan BuildDropSchema(
+        DropSchemaIntent intent
+    ) => Unsupported("schema_operations");
+
+    private MySqlSafeMigrationRuntimePlan ApplyCurrentDatabaseQualification(
+        SafeMigrationIntent intent,
+        MySqlSafeMigrationRuntimePlan plan,
+        IReadOnlyList<string>? requiredDatabaseQualifiers
+    )
+    {
+        var expression = BuildCurrentDatabaseQualificationExpression(
+            intent,
+            requiredDatabaseQualifiers);
+
+        if (expression is null)
+        {
+            return plan;
+        }
+
+        return plan with
+        {
+            CurrentDatabaseQualificationExpression = expression,
+            CurrentDatabaseQualificationFailureCode = "database_qualifier_mismatch",
+            RequiresLazyStateEvaluation = true,
+        };
+    }
+
     private interface IDatabaseQualifierVisitor
     {
         void Visit(
@@ -243,35 +275,5 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 TargetsDatabase = false;
             }
         }
-    }
-
-    private static MySqlSafeMigrationRuntimePlan BuildEnsureSchema(
-        EnsureSchemaIntent intent
-    ) => Plan("'matching'", "TRUE");
-
-    private static MySqlSafeMigrationRuntimePlan BuildDropSchema(
-        DropSchemaIntent intent
-    ) => Unsupported("schema_operations");
-
-    private MySqlSafeMigrationRuntimePlan ApplyCurrentDatabaseQualification(
-        SafeMigrationIntent intent,
-        MySqlSafeMigrationRuntimePlan plan,
-        IReadOnlyList<string>? requiredDatabaseQualifiers
-    )
-    {
-        var expression = BuildCurrentDatabaseQualificationExpression(
-            intent,
-            requiredDatabaseQualifiers);
-        if (expression is null)
-        {
-            return plan;
-        }
-
-        return plan with
-        {
-            CurrentDatabaseQualificationExpression = expression,
-            CurrentDatabaseQualificationFailureCode = "database_qualifier_mismatch",
-            RequiresLazyStateEvaluation = true,
-        };
     }
 }

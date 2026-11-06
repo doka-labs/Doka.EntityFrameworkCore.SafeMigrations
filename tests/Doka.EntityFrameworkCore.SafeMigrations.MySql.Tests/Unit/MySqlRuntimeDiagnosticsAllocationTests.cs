@@ -13,7 +13,9 @@ public sealed class MySqlRuntimeDiagnosticsAllocationTests
     [InlineData("complete")]
     [InlineData("optional")]
     [InlineData("empty")]
-    public void DirectColumnPredicateMatchesMaterializedReference(string shape)
+    public void DirectColumnPredicateMatchesMaterializedReference(
+        string shape
+    )
     {
         // Arrange
         const string table = "'quoted''owner'";
@@ -22,14 +24,28 @@ public sealed class MySqlRuntimeDiagnosticsAllocationTests
         {
             "empty" => new[] { string.Empty, string.Empty },
             "optional" => new[] { "c.COLUMN_TYPE = 'int'", string.Empty, "c.IS_NULLABLE = 'YES'" },
-            _ => new[] { "c.COLUMN_TYPE = 'int'", "c.IS_NULLABLE = 'NO'", "c.COLUMN_COMMENT = '\u20AC'",
-                "c.ORDINAL_POSITION = 3" },
+            _ => new[]
+            {
+                "c.COLUMN_TYPE = 'int'",
+                "c.IS_NULLABLE = 'NO'",
+                "c.COLUMN_COMMENT = '\u20AC'",
+                "c.ORDINAL_POSITION = 3",
+            },
         };
 
-        var included = conditions.Where(static condition => condition.Length > 0).ToArray();
+        var included = conditions
+            .Where(static condition => condition.Length > 0)
+            .ToArray();
+
         var expected = "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c "
-            + "WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = " + table + " AND c.COLUMN_NAME = " + name
-            + (included.Length == 0 ? string.Empty : " AND " + string.Join(" AND ", included)) + ")";
+            + "WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = "
+            + table
+            + " AND c.COLUMN_NAME = "
+            + name
+            + (included.Length == 0
+                ? string.Empty
+                : " AND " + string.Join(" AND ", included))
+            + ")";
 
         // Act
         var actual = MySqlSafeMigrationCatalogSqlBuilder.ComposeColumnMatch(table, name, conditions);
@@ -65,22 +81,42 @@ public sealed class MySqlRuntimeDiagnosticsAllocationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void FeatureFailurePriorityRemainsGlobalAcrossColumns(bool reverse)
+    public void FeatureFailurePriorityRemainsGlobalAcrossColumns(
+        bool reverse
+    )
     {
         // Arrange
         using var context = Context();
-        var qualified = new ExpectedColumnDefinition("qualified", typeof(string), true, "varchar(20)",
+        var qualified = new ExpectedColumnDefinition(
+            "qualified",
+            typeof(string),
+            true,
+            "varchar(20)",
             collation: new SafeMigrationCollationIdentifier("utf8mb4_unicode_ci", "foreign_owner"));
-        var unmappable = new ExpectedColumnDefinition("unmappable",
-            typeof(MySqlRuntimeDiagnosticsAllocationTests), true);
-        var columns = reverse ? new[] { unmappable, qualified } : new[] { qualified, unmappable };
-        var operation = new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition("items", columns),
-            SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent);
+
+        var unmappable = new ExpectedColumnDefinition(
+            "unmappable",
+            typeof(MySqlRuntimeDiagnosticsAllocationTests),
+            true);
+
+        var columns = reverse
+            ? new[] { unmappable, qualified }
+            : new[] { qualified, unmappable };
+
+        var operation = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("items", columns),
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         var capture = context.GetService<MySqlSafeMigrationPlanCapture>();
         using var lease = capture.Begin([operation]);
 
         // Act
-        _ = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        _ = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
+
         var plan = Assert.Single(lease.Complete());
 
         // Assert
@@ -186,13 +222,131 @@ public sealed class MySqlRuntimeDiagnosticsAllocationTests
         var outerSql = Render(outerPlan, context);
 
         // Assert
-        Assert.Contains("reentrant", Assert.IsType<InvalidOperationException>(nestedFailure).Message,
+        Assert.Contains(
+            "reentrant",
+            Assert.IsType<InvalidOperationException>(nestedFailure)
+                .Message,
             StringComparison.Ordinal);
+
         Assert.Contains("'outer_items'", outerSql, StringComparison.Ordinal);
         Assert.DoesNotContain("nested_items", outerSql, StringComparison.Ordinal);
         Assert.NotEmpty(outerPlan.ParameterValues);
         AssertScratchCleared(catalog);
     }
+
+    /// <summary>
+    /// Checks both payload scratch and active sentinels rather than inferring cleanup from the next result.
+    /// </summary>
+    private static void AssertScratchCleared(
+        MySqlSafeMigrationCatalogSqlBuilder catalog
+    )
+    {
+        Assert.Equal(0, ScratchCount(catalog, "_identifierScratch"));
+        Assert.Equal(0, ScratchCount(catalog, "_valueScratch"));
+        Assert.Equal(0, ScratchCount(catalog, "_parameterScratch"));
+        Assert.Null(Field(catalog, "_identifierMarkers"));
+        Assert.Null(Field(catalog, "_valueMarkers"));
+        Assert.Null(Field(catalog, "_parameterValues"));
+    }
+
+    /// <summary>Reads a private scoped scratch collection only as an adversarial test observation.</summary>
+    private static int ScratchCount(
+        MySqlSafeMigrationCatalogSqlBuilder catalog,
+        string name
+    ) =>
+        Assert.IsAssignableFrom<ICollection>(Field(catalog, name))
+            .Count;
+
+    /// <summary>Requires the exact field to exist so an absent scratch probe cannot pass vacuously.</summary>
+    private static object? Field(
+        MySqlSafeMigrationCatalogSqlBuilder catalog,
+        string name
+    ) =>
+        (typeof(MySqlSafeMigrationCatalogSqlBuilder).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("The scratch field is unavailable.")).GetValue(catalog);
+
+    /// <summary>Renders a captured parameter snapshot using real provider type mappings.</summary>
+    private static string Render(
+        MySqlSafeMigrationRuntimePlan plan,
+        DbContext context
+    )
+    {
+        var mappings = context.GetService<IRelationalTypeMappingSource>();
+        var stringMapping = mappings.FindMapping(typeof(string))
+            ?? throw new InvalidOperationException("The provider has no identifier string mapping.");
+
+        // WHY: Identifier parameters intentionally have no store type; only
+        // captured typed values take the explicit native mapping resolver.
+        return plan.RenderStateExpression(value => value.StoreType is null
+            ? stringMapping.GenerateSqlLiteral(value.Value)
+            : MySqlCatalogTypeMapping
+                .Resolve(mappings, value.Value, value.StoreType)
+                .GenerateSqlLiteral(value.Value));
+    }
+
+    /// <summary>Creates one nullable column whose explicit default also exercises value scratch.</summary>
+    private static SafeMigrationOperation Operation(
+        string table,
+        string column,
+        int defaultValue
+    ) => new(
+        new EnsureColumnIntent(
+            table,
+            new ExpectedColumnDefinition(
+                column,
+                typeof(int),
+                true,
+                "int",
+                defaultValue: SafeMigrationDefaultValue.Literal(defaultValue))),
+        SafeMigrationPolicy.ThrowIfDifferent);
+
+    /// <summary>Creates catalog services without introducing a shared or global scratch owner.</summary>
+    private static MySqlSafeMigrationCatalogSqlBuilder Catalog(
+        IRelationalTypeMappingSource mappings,
+        DbContext context
+    ) =>
+        new(mappings, context.GetService<ISqlGenerationHelper>());
+
+    /// <summary>Uses the pinned provider's internal context constructor, like existing SPI contract fixtures.</summary>
+    private static MySqlMigrationOperationContext NativeContext(
+        DbContext context,
+        SafeMigrationOperation operation
+    )
+    {
+        var version = MySqlServerVersion.MariaDb(new Version(11, 8, 8));
+        var profile = typeof(MySqlServerVersion)
+                .GetProperty("Profile", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.GetValue(version)
+            ?? throw new InvalidOperationException("The native profile is unavailable.");
+
+        var featureConstructor = Assert.Single(
+            typeof(MySqlMigrationFeatureSet)
+                .GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic));
+
+        var features = Assert.IsType<MySqlMigrationFeatureSet>(featureConstructor.Invoke([profile]));
+        var constructor = Assert.Single(
+            typeof(MySqlMigrationOperationContext)
+                .GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic));
+
+        Func<MigrationOperation, IReadOnlyList<MySqlMigrationCommandSpec>> renderer = static _ =>
+            [MySqlMigrationCommandSpec.Create("DO 0;", transactionSuppressed: true)];
+
+        return Assert.IsType<MySqlMigrationOperationContext>(
+            constructor.Invoke(
+            [
+                operation, context.Model, MigrationsSqlGenerationOptions.Default, version, features, 0,
+                "Doka.EntityFrameworkCore.SafeMigrations.MySql.SafeMigrationOperation", renderer,
+            ]));
+    }
+
+    /// <summary>Constructs real mapping services without a database connection.</summary>
+    private static DbContext Context() => new(
+        new DbContextOptionsBuilder()
+            .UseMySql(
+                "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
+                MySqlServerVersion.MariaDb(new Version(11, 8, 8)))
+            .UseMySqlSafeMigrations()
+            .Options);
 
     /// <summary>Injects an adversarial mapping callback before forwarding the real provider's exact method.</summary>
     public class MappingProbe : DispatchProxy
@@ -204,7 +358,10 @@ public sealed class MySqlRuntimeDiagnosticsAllocationTests
         public Action? OnMapping { get; set; }
 
         /// <inheritdoc />
-        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        protected override object? Invoke(
+            MethodInfo? targetMethod,
+            object?[]? args
+        )
         {
             var method = targetMethod ?? throw new InvalidOperationException("The proxy has no target method.");
             if (method.Name == nameof(IRelationalTypeMappingSource.FindMapping))
@@ -215,77 +372,4 @@ public sealed class MySqlRuntimeDiagnosticsAllocationTests
             return method.Invoke(Inner, args);
         }
     }
-
-    /// <summary>
-    /// Checks both payload scratch and active sentinels rather than inferring cleanup from the next result.
-    /// </summary>
-    private static void AssertScratchCleared(MySqlSafeMigrationCatalogSqlBuilder catalog)
-    {
-        Assert.Equal(0, ScratchCount(catalog, "_identifierScratch"));
-        Assert.Equal(0, ScratchCount(catalog, "_valueScratch"));
-        Assert.Equal(0, ScratchCount(catalog, "_parameterScratch"));
-        Assert.Null(Field(catalog, "_identifierMarkers"));
-        Assert.Null(Field(catalog, "_valueMarkers"));
-        Assert.Null(Field(catalog, "_parameterValues"));
-    }
-
-    /// <summary>Reads a private scoped scratch collection only as an adversarial test observation.</summary>
-    private static int ScratchCount(MySqlSafeMigrationCatalogSqlBuilder catalog, string name) =>
-        Assert.IsAssignableFrom<System.Collections.ICollection>(Field(catalog, name)).Count;
-
-    /// <summary>Requires the exact field to exist so an absent scratch probe cannot pass vacuously.</summary>
-    private static object? Field(MySqlSafeMigrationCatalogSqlBuilder catalog, string name) =>
-        (typeof(MySqlSafeMigrationCatalogSqlBuilder).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("The scratch field is unavailable.")).GetValue(catalog);
-
-    /// <summary>Renders a captured parameter snapshot using real provider type mappings.</summary>
-    private static string Render(MySqlSafeMigrationRuntimePlan plan, DbContext context)
-    {
-        var mappings = context.GetService<IRelationalTypeMappingSource>();
-        var stringMapping = mappings.FindMapping(typeof(string))
-            ?? throw new InvalidOperationException("The provider has no identifier string mapping.");
-
-        // WHY: Identifier parameters intentionally have no store type; only
-        // captured typed values take the explicit native mapping resolver.
-        return plan.RenderStateExpression(value => value.StoreType is null
-            ? stringMapping.GenerateSqlLiteral(value.Value)
-            : MySqlCatalogTypeMapping.Resolve(mappings, value.Value, value.StoreType).GenerateSqlLiteral(value.Value));
-    }
-
-    /// <summary>Creates one nullable column whose explicit default also exercises value scratch.</summary>
-    private static SafeMigrationOperation Operation(string table, string column, int defaultValue) => new(
-        new EnsureColumnIntent(table, new ExpectedColumnDefinition(column, typeof(int), true, "int",
-            defaultValue: SafeMigrationDefaultValue.Literal(defaultValue))), SafeMigrationPolicy.ThrowIfDifferent);
-
-    /// <summary>Creates catalog services without introducing a shared or global scratch owner.</summary>
-    private static MySqlSafeMigrationCatalogSqlBuilder Catalog(
-        IRelationalTypeMappingSource mappings,
-        DbContext context
-    ) =>
-        new(mappings, context.GetService<ISqlGenerationHelper>());
-
-    /// <summary>Uses the pinned provider's internal context constructor, like existing SPI contract fixtures.</summary>
-    private static MySqlMigrationOperationContext NativeContext(DbContext context, SafeMigrationOperation operation)
-    {
-        var version = MySqlServerVersion.MariaDb(new Version(11, 8, 8));
-        var profile = typeof(MySqlServerVersion).GetProperty("Profile", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?.GetValue(version) ?? throw new InvalidOperationException("The native profile is unavailable.");
-        var featureConstructor = Assert.Single(typeof(MySqlMigrationFeatureSet)
-            .GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic));
-        var features = Assert.IsType<MySqlMigrationFeatureSet>(featureConstructor.Invoke([profile]));
-        var constructor = Assert.Single(typeof(MySqlMigrationOperationContext)
-            .GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic));
-        Func<MigrationOperation, IReadOnlyList<MySqlMigrationCommandSpec>> renderer = static _ =>
-            [MySqlMigrationCommandSpec.Create("DO 0;", transactionSuppressed: true)];
-
-        return Assert.IsType<MySqlMigrationOperationContext>(constructor.Invoke(
-            [operation, context.Model, MigrationsSqlGenerationOptions.Default, version, features, 0,
-                "Doka.EntityFrameworkCore.SafeMigrations.MySql.SafeMigrationOperation", renderer]));
-    }
-
-    /// <summary>Constructs real mapping services without a database connection.</summary>
-    private static DbContext Context() => new(new DbContextOptionsBuilder()
-        .UseMySql("Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
-            MySqlServerVersion.MariaDb(new Version(11, 8, 8)))
-        .UseMySqlSafeMigrations().Options);
 }

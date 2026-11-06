@@ -14,20 +14,26 @@ public sealed class SafeMigrationRuntimeDiagnosticContextTests
     /// <param name="intent">The immutable synthetic operation intent.</param>
     /// <param name="expectedTable">The expected owner supplied by the identity coverage fixture.</param>
     [Theory]
-    [MemberData(nameof(SafeMigrationOperationIdentityTests.AllIntents),
+    [MemberData(
+        nameof(SafeMigrationOperationIdentityTests.AllIntents),
         MemberType = typeof(SafeMigrationOperationIdentityTests))]
-    public void CapturedAndOperationBasedRenderingAreEquivalent(SafeMigrationIntent intent, string? expectedTable)
+    public void CapturedAndOperationBasedRenderingAreEquivalent(
+        SafeMigrationIntent intent,
+        string? expectedTable
+    )
     {
         // Arrange
         var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
         var context = SafeMigrationRuntimeDiagnosticContext.Create(operation);
 
         // Act
-        var actual = s_guardCodes.Select(code =>
+        var actual = s_guardCodes
+            .Select(code =>
                 SafeMigrationDiagnosticMessages.FormatCapturedRuntime(context, code, 5))
             .ToArray();
 
-        var expected = s_guardCodes.Select(code => SafeMigrationDiagnosticMessages.FormatRuntime(operation, code, 5))
+        var expected = s_guardCodes
+            .Select(code => SafeMigrationDiagnosticMessages.FormatRuntime(operation, code, 5))
             .ToArray();
 
         // Assert
@@ -44,12 +50,23 @@ public sealed class SafeMigrationRuntimeDiagnosticContextTests
     [InlineData(false, false, true)]
     [InlineData(true, false, false)]
     [InlineData(false, true, false)]
-    public void CaptureRetainsOnlyTheRequiredReplacementFact(bool hasDefault, bool isNullable, bool expectedUnproven)
+    public void CaptureRetainsOnlyTheRequiredReplacementFact(
+        bool hasDefault,
+        bool isNullable,
+        bool expectedUnproven
+    )
     {
         // Arrange
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("Items",
-            new ExpectedColumnDefinition("IsActive", typeof(bool), isNullable,
-                defaultValue: hasDefault ? SafeMigrationDefaultValue.Literal(false) : null)),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "Items",
+                new ExpectedColumnDefinition(
+                    "IsActive",
+                    typeof(bool),
+                    isNullable,
+                    defaultValue: hasDefault
+                        ? SafeMigrationDefaultValue.Literal(false)
+                        : null)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -58,7 +75,10 @@ public sealed class SafeMigrationRuntimeDiagnosticContextTests
 
         // Assert
         Assert.Equal(expectedUnproven, context.RequiredColumnReplacementUnproven);
-        Assert.Equal(expectedUnproven ? "required_column_replacement_unproven" : "data_precondition_failed",
+        Assert.Equal(
+            expectedUnproven
+                ? "required_column_replacement_unproven"
+                : "data_precondition_failed",
             explanation.ReasonCode);
     }
 
@@ -83,16 +103,21 @@ public sealed class SafeMigrationRuntimeDiagnosticContextTests
     public void UnknownCapturedClassifierRemainsEquivalentAndHonest()
     {
         // Arrange
-        var operation = new SafeMigrationOperation(new DropForeignKeyIntent("FK_Items_Parents", "Items"),
+        var operation = new SafeMigrationOperation(
+            new DropForeignKeyIntent("FK_Items_Parents", "Items"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var context = SafeMigrationRuntimeDiagnosticContext.Create(operation);
 
         // Act
-        var message = SafeMigrationDiagnosticMessages.FormatCapturedRuntime(context, "doka_sm_unsupported",
+        var message = SafeMigrationDiagnosticMessages.FormatCapturedRuntime(
+            context,
+            "doka_sm_unsupported",
             diagnosticReasonCode: "future_provider_capability");
 
-        var expected = SafeMigrationDiagnosticMessages.FormatRuntime(operation, "doka_sm_unsupported",
+        var expected = SafeMigrationDiagnosticMessages.FormatRuntime(
+            operation,
+            "doka_sm_unsupported",
             diagnosticReasonCode: "future_provider_capability");
 
         // Assert
@@ -100,5 +125,4 @@ public sealed class SafeMigrationRuntimeDiagnosticContextTests
         Assert.Contains("analysis=future_provider_capability", message, StringComparison.Ordinal);
         Assert.Contains("reasonCode=provider_contract_unsupported", message, StringComparison.Ordinal);
     }
-
 }

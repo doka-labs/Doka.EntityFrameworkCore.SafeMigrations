@@ -85,6 +85,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         + "WHERE widening_dependency.refclassid = 'pg_catalog.pg_class'::pg_catalog.regclass "
         + "AND widening_dependency.refobjid = widening_table.oid "
         + "AND widening_dependency.refobjsubid = widening_column.attnum "
+
         // WHY: Native ALTER TYPE rebuilds only indexes, constraints and
         // extended statistics. Exact-column procedure/trigger/policy/
         // publication and unknown dependency classes cannot be re-bound.
@@ -98,6 +99,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         + "AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class dependent_relation "
         + "WHERE dependent_relation.oid = widening_dependency.objid "
         + "AND dependent_relation.relkind IN ('i', 'I', 'S')))) "
+
         // WHY: A true whole-row CHECK can change truth without a native
         // ALTER failure (row size or an opaque function can inspect types).
         // PostgreSQL represents constants and whole-row checks with the
@@ -143,9 +145,6 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         ExpectedColumnDefinition definition
     ) => IntegerWidth(definition) switch
     {
-        1 => "21",
-        2 => "23",
-        3 => "20",
-        _ => throw new UnreachableException(),
+        1 => "21", 2 => "23", 3 => "20", _ => throw new UnreachableException(),
     };
 }

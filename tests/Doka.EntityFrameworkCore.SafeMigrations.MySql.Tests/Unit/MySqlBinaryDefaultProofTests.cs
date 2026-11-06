@@ -27,7 +27,8 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
         using var context = CreateContext();
         var operation = EnsureBinary("proof_items", "payload", "varbinary(8)", [0, 10]);
         using var command = new MySqlCommand();
-        var parameterizer = new MySqlCatalogQueryParameterizer(command,
+        var parameterizer = new MySqlCatalogQueryParameterizer(
+            command,
             context.GetService<IRelationalTypeMappingSource>());
 
         // Act
@@ -39,18 +40,27 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
         Assert.Single(plan.BinaryDefaultProofs);
         Assert.True(plan.RequiresLazyStateEvaluation);
         Assert.Contains("FROM INFORMATION_SCHEMA.COLUMNS binary_default_column", eligibility, StringComparison.Ordinal);
-        Assert.Contains("INNER JOIN INFORMATION_SCHEMA.TABLES binary_default_table", eligibility,
+        Assert.Contains(
+            "INNER JOIN INFORMATION_SCHEMA.TABLES binary_default_table",
+            eligibility,
             StringComparison.Ordinal);
+
         Assert.Contains("binary_default_column.TABLE_SCHEMA = DATABASE()", eligibility, StringComparison.Ordinal);
         Assert.Contains("CAST(binary_default_column.TABLE_NAME AS BINARY)", eligibility, StringComparison.Ordinal);
         Assert.Contains("binary_default_table.TABLE_TYPE = 'BASE TABLE'", eligibility, StringComparison.Ordinal);
         Assert.Contains("LOWER(binary_default_column.DATA_TYPE) IN ", eligibility, StringComparison.Ordinal);
         Assert.Contains("'binary', 'varbinary'", eligibility, StringComparison.Ordinal);
         Assert.Contains("binary_default_column.COLUMN_DEFAULT IS NOT NULL", eligibility, StringComparison.Ordinal);
-        Assert.Contains("COALESCE(binary_default_column.GENERATION_EXPRESSION, '') = ''", eligibility,
+        Assert.Contains(
+            "COALESCE(binary_default_column.GENERATION_EXPRESSION, '') = ''",
+            eligibility,
             StringComparison.Ordinal);
-        Assert.Contains("LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(binary_default_column.EXTRA, ''))) = 0",
-            eligibility, StringComparison.Ordinal);
+
+        Assert.Contains(
+            "LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(binary_default_column.EXTRA, ''))) = 0",
+            eligibility,
+            StringComparison.Ordinal);
+
         Assert.DoesNotContain("DEFAULT(", eligibility, StringComparison.Ordinal);
         Assert.DoesNotContain("FROM `proof_items`", eligibility, StringComparison.Ordinal);
         Assert.Contains(command.Parameters.Cast<DbParameter>(), value => Equals(value.Value, "proof_items"));
@@ -70,10 +80,12 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
         var proof = plan.BinaryDefaultProofs.Single();
 
         // Assert
-        Assert.Equal("SELECT EXISTS (SELECT 1 FROM (SELECT 1) AS doka_sm_seed "
+        Assert.Equal(
+            "SELECT EXISTS (SELECT 1 FROM (SELECT 1) AS doka_sm_seed "
             + "LEFT JOIN `proof_items` AS doka_sm_default ON FALSE "
             + "WHERE CAST(HEX(DEFAULT(doka_sm_default.`payload`)) AS BINARY) = '000A5C6EFF')",
             proof.QueryExpression);
+
         Assert.DoesNotContain("SELECT HEX(DEFAULT(", proof.QueryExpression, StringComparison.Ordinal);
         Assert.DoesNotContain("LIMIT", proof.QueryExpression, StringComparison.Ordinal);
         Assert.DoesNotContain("@doka_sm_p", proof.QueryExpression, StringComparison.Ordinal);
@@ -102,7 +114,8 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
 
         // Act
         var plan = Capture(context, operation);
-        var query = plan.BinaryDefaultProofs.Single().QueryExpression;
+        var query = plan.BinaryDefaultProofs.Single()
+            .QueryExpression;
 
         // Assert
         Assert.EndsWith("AS BINARY) = '" + expectedHex + "')", query, StringComparison.Ordinal);
@@ -147,7 +160,8 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
         var operation = EnsureBinary(table, column, "varbinary(8)", [0, 255]);
         var delimiter = context.GetService<ISqlGenerationHelper>();
         using var command = new MySqlCommand();
-        var parameterizer = new MySqlCatalogQueryParameterizer(command,
+        var parameterizer = new MySqlCatalogQueryParameterizer(
+            command,
             context.GetService<IRelationalTypeMappingSource>());
 
         // Act
@@ -157,10 +171,16 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
         var eligibility = plan.RenderBinaryDefaultEligibilityExpression(proof, parameterizer.Add);
 
         // Assert
-        Assert.Contains("LEFT JOIN " + delimiter.DelimitIdentifier(table) + " AS doka_sm_default", queryBeforeRendering,
+        Assert.Contains(
+            "LEFT JOIN " + delimiter.DelimitIdentifier(table) + " AS doka_sm_default",
+            queryBeforeRendering,
             StringComparison.Ordinal);
-        Assert.Contains("DEFAULT(doka_sm_default." + delimiter.DelimitIdentifier(column) + ")", queryBeforeRendering,
+
+        Assert.Contains(
+            "DEFAULT(doka_sm_default." + delimiter.DelimitIdentifier(column) + ")",
+            queryBeforeRendering,
             StringComparison.Ordinal);
+
         Assert.Contains(valueMarker, queryBeforeRendering, StringComparison.Ordinal);
         Assert.Contains(proofMarker, queryBeforeRendering, StringComparison.Ordinal);
         Assert.Equal(queryBeforeRendering, proof.QueryExpression);
@@ -237,10 +257,16 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
     {
         // Arrange
         var proof = new MySqlSafeMigrationBinaryDefaultProof(
-            "__DOKA_SM_BINARY_DEFAULT_0__", "TRUE", "SELECT 1", "TRUE");
+            "__DOKA_SM_BINARY_DEFAULT_0__",
+            "TRUE",
+            "SELECT 1",
+            "TRUE");
 
-        var plan = new MySqlSafeMigrationRuntimePlan("__DOKA_SM_BINARY_DEFAULT_1__", "TRUE",
-            SafeMigrationRepairCapability.None, "FALSE")
+        var plan = new MySqlSafeMigrationRuntimePlan(
+            "__DOKA_SM_BINARY_DEFAULT_1__",
+            "TRUE",
+            SafeMigrationRepairCapability.None,
+            "FALSE")
         {
             BinaryDefaultProofs = [proof],
         };
@@ -272,7 +298,8 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
         // Arrange
         using var context = CreateContext(mariaDb: kind == "mariadb");
         var definition = ExcludedDefinition(kind);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("proof_items", definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("proof_items", definition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -329,7 +356,8 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
         var parameterizer = new MySqlCatalogQueryParameterizer(command);
 
         // Act
-        var eligibility = plan.RenderBinaryDefaultEligibilityExpression(plan.BinaryDefaultProofs.Single(),
+        var eligibility = plan.RenderBinaryDefaultEligibilityExpression(
+            plan.BinaryDefaultProofs.Single(),
             parameterizer.Add);
 
         // Assert
@@ -350,12 +378,18 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
         var reset = "SET " + variable + " = FALSE";
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
-        var sql = commands.Single().CommandText;
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
+
+        var sql = commands.Single()
+            .CommandText;
+
         var initialReset = sql.IndexOf(reset, StringComparison.Ordinal);
         var initialEvaluation = sql.IndexOf("@doka_sm_state IS NULL THEN CONCAT('SELECT '", StringComparison.Ordinal);
         var postReset = sql.LastIndexOf(reset, StringComparison.Ordinal);
-        var postEvaluation = sql.IndexOf("@doka_sm_action IN ('apply', 'repair') THEN CONCAT('SELECT '",
+        var postEvaluation = sql.IndexOf(
+            "@doka_sm_action IN ('apply', 'repair') THEN CONCAT('SELECT '",
             StringComparison.Ordinal);
 
         var cleanup = sql.LastIndexOf(variable + " = NULL", StringComparison.Ordinal);
@@ -368,8 +402,10 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
         Assert.True(postEvaluation > postReset);
         Assert.True(cleanup > postEvaluation);
         Assert.Contains("EXECUTE doka_sm_statement;\nSET " + variable + " = FALSE", sql, StringComparison.Ordinal);
-        Assert.Contains("WHERE CAST(HEX(DEFAULT(doka_sm_default.`payload`)) AS BINARY)",
-            string.Join(Environment.NewLine, DecodePayloads(sql)), StringComparison.Ordinal);
+        Assert.Contains(
+            "WHERE CAST(HEX(DEFAULT(doka_sm_default.`payload`)) AS BINARY)",
+            string.Join(Environment.NewLine, DecodePayloads(sql)),
+            StringComparison.Ordinal);
     }
 
     /// <summary>Each command clears its proof scope before the next operation reuses the same closed slot.</summary>
@@ -385,17 +421,28 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
         ];
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(operations, context.Model);
-        var sql = commands.Select(static command => command.CommandText).ToArray();
-        var payloads = sql.Select(static text => string.Join(Environment.NewLine, DecodePayloads(text))).ToArray();
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(operations, context.Model);
+
+        var sql = commands
+            .Select(static command => command.CommandText)
+            .ToArray();
+
+        var payloads = sql
+            .Select(static text => string.Join(Environment.NewLine, DecodePayloads(text)))
+            .ToArray();
 
         // Assert
         Assert.Equal(2, commands.Count);
-        Assert.All(sql, static text =>
-        {
-            Assert.Contains("SET @doka_sm_binary_default_0 = FALSE", text, StringComparison.Ordinal);
-            Assert.Contains("@doka_sm_binary_default_0 = NULL", text, StringComparison.Ordinal);
-        });
+        Assert.All(
+            sql,
+            static text =>
+            {
+                Assert.Contains("SET @doka_sm_binary_default_0 = FALSE", text, StringComparison.Ordinal);
+                Assert.Contains("@doka_sm_binary_default_0 = NULL", text, StringComparison.Ordinal);
+            });
+
         Assert.Contains("DEFAULT(doka_sm_default.`first`)", payloads[0], StringComparison.Ordinal);
         Assert.DoesNotContain("DEFAULT(doka_sm_default.`second`)", payloads[0], StringComparison.Ordinal);
         Assert.Contains("DEFAULT(doka_sm_default.`second`)", payloads[1], StringComparison.Ordinal);
@@ -413,12 +460,20 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
     {
         // Arrange
         using var context = CreateContext(mariaDb);
-        var definition = ExcludedDefinition(mariaDb ? "mariadb" : "number");
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("proof_items", definition),
+        var definition = ExcludedDefinition(
+            mariaDb
+                ? "mariadb"
+                : "number");
+
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("proof_items", definition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
+
         var sql = string.Concat(commands.Select(static command => command.CommandText));
 
         // Assert
@@ -441,23 +496,43 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
         var secondPayload = Convert.ToHexString(Encoding.UTF8.GetBytes("EXISTS (SELECT 1 WHERE second_default)"));
 
         // Act
-        var sql = MySqlSafeMigrationBinaryDefaultProof.BuildEvaluationSql(proofs,
-            ["metadata_first", "metadata_second"], "identity_guard", "doka_sm_binary_probe", "@doka_sm_binary_sql", 3);
+        var sql = MySqlSafeMigrationBinaryDefaultProof.BuildEvaluationSql(
+            proofs,
+            ["metadata_first", "metadata_second"],
+            "identity_guard",
+            "doka_sm_binary_probe",
+            "@doka_sm_binary_sql",
+            3);
 
         // Assert
-        Assert.StartsWith("SET @doka_sm_binary_default_3 = FALSE, @doka_sm_binary_default_4 = FALSE;", sql,
+        Assert.StartsWith(
+            "SET @doka_sm_binary_default_3 = FALSE, @doka_sm_binary_default_4 = FALSE;",
+            sql,
             StringComparison.Ordinal);
+
         Assert.Contains("CASE WHEN identity_guard THEN CONCAT('SELECT '", sql, StringComparison.Ordinal);
-        Assert.Contains("CASE WHEN COALESCE((metadata_first), FALSE) THEN CONVERT(0x" + firstPayload, sql,
+        Assert.Contains(
+            "CASE WHEN COALESCE((metadata_first), FALSE) THEN CONVERT(0x" + firstPayload,
+            sql,
             StringComparison.Ordinal);
-        Assert.Contains("CASE WHEN COALESCE((metadata_second), FALSE) THEN CONVERT(0x" + secondPayload, sql,
+
+        Assert.Contains(
+            "CASE WHEN COALESCE((metadata_second), FALSE) THEN CONVERT(0x" + secondPayload,
+            sql,
             StringComparison.Ordinal);
+
         Assert.Contains(" ELSE 'FALSE' END", sql, StringComparison.Ordinal);
         Assert.Contains(" INTO @doka_sm_binary_default_3, @doka_sm_binary_default_4", sql, StringComparison.Ordinal);
-        Assert.Contains(" ELSE 'DO 0' END;PREPARE doka_sm_binary_probe FROM @doka_sm_binary_sql;", sql,
+        Assert.Contains(
+            " ELSE 'DO 0' END;PREPARE doka_sm_binary_probe FROM @doka_sm_binary_sql;",
+            sql,
             StringComparison.Ordinal);
-        Assert.EndsWith("EXECUTE doka_sm_binary_probe;DEALLOCATE PREPARE doka_sm_binary_probe;", sql,
+
+        Assert.EndsWith(
+            "EXECUTE doka_sm_binary_probe;DEALLOCATE PREPARE doka_sm_binary_probe;",
+            sql,
             StringComparison.Ordinal);
+
         Assert.DoesNotContain("SELECT EXISTS (SELECT 1 WHERE first_default)", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("@doka_sm_binary_default_0", sql, StringComparison.Ordinal);
     }
@@ -471,10 +546,16 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
 
         // Act
         var exception = Record.Exception(() => MySqlSafeMigrationBinaryDefaultProof.BuildEvaluationSql(
-            [proof], [], "TRUE", "doka_sm_binary_probe", "@doka_sm_binary_sql"));
+            [proof],
+            [],
+            "TRUE",
+            "doka_sm_binary_probe",
+            "@doka_sm_binary_sql"));
 
         // Assert
-        Assert.Equal("eligibility", Assert.IsType<ArgumentException>(exception).ParamName);
+        Assert.Equal("eligibility",
+            Assert.IsType<ArgumentException>(exception)
+                .ParamName);
     }
 
     /// <summary>The closed default-proof transport cannot prepare an arbitrary mutation body.</summary>
@@ -482,12 +563,18 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
     public void PreparedProofRejectsNonSelectBody()
     {
         // Arrange
-        var proof = new MySqlSafeMigrationBinaryDefaultProof("__DOKA_SM_BINARY_DEFAULT_0__", "TRUE",
+        var proof = new MySqlSafeMigrationBinaryDefaultProof(
+            "__DOKA_SM_BINARY_DEFAULT_0__",
+            "TRUE",
             "DELETE FROM proof_items");
 
         // Act
         var exception = Record.Exception(() => MySqlSafeMigrationBinaryDefaultProof.BuildEvaluationSql(
-            [proof], ["TRUE"], "TRUE", "doka_sm_binary_probe", "@doka_sm_binary_sql"));
+            [proof],
+            ["TRUE"],
+            "TRUE",
+            "doka_sm_binary_probe",
+            "@doka_sm_binary_sql"));
 
         // Assert
         Assert.IsType<InvalidOperationException>(exception);
@@ -516,8 +603,13 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
     public void EmptyProofScopeDoesNotCreateEvaluationOrCleanupSql()
     {
         // Act
-        var evaluation = MySqlSafeMigrationBinaryDefaultProof.BuildEvaluationSql([], [], "TRUE",
-            "doka_sm_binary_probe", "@doka_sm_binary_sql");
+        var evaluation = MySqlSafeMigrationBinaryDefaultProof.BuildEvaluationSql(
+            [],
+            [],
+            "TRUE",
+            "doka_sm_binary_probe",
+            "@doka_sm_binary_sql");
+
         var cleanup = MySqlSafeMigrationBinaryDefaultProof.BuildResetSql(0, 7, clear: true);
 
         // Assert
@@ -532,10 +624,18 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
         string storeType,
         byte[] value,
         bool structured = false
-    ) => new(new EnsureColumnIntent(table, new ExpectedColumnDefinition(column, typeof(byte[]), true, storeType,
-        defaultValue: structured
-            ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(value))
-            : SafeMigrationDefaultValue.Literal(value))), SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(
+        new EnsureColumnIntent(
+            table,
+            new ExpectedColumnDefinition(
+                column,
+                typeof(byte[]),
+                true,
+                storeType,
+                defaultValue: structured
+                    ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(value))
+                    : SafeMigrationDefaultValue.Literal(value))),
+        SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Captures the real provider-generated plan without opening a connection.</summary>
     private static MySqlSafeMigrationRuntimePlan Capture(
@@ -543,10 +643,17 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
         SafeMigrationOperation operation
     )
     {
-        using var lease = context.GetService<MySqlSafeMigrationPlanCapture>().Begin([operation]);
-        _ = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        using var lease = context
+            .GetService<MySqlSafeMigrationPlanCapture>()
+            .Begin([operation]);
 
-        return lease.Complete().Single();
+        _ = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
+
+        return lease
+            .Complete()
+            .Single();
     }
 
     /// <summary>Reads exact prepared payloads without executing or interpreting their SQL.</summary>
@@ -576,7 +683,7 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
         string kind
     )
     {
-        var value = new byte[] { 0, 10, };
+        var value = new byte[] { 0, 10 };
         var (clrType, storeType, defaultValue) = kind switch
         {
             "guid" => (typeof(Guid), "binary(16)", SafeMigrationDefaultValue.Literal(Guid.Empty)),
@@ -588,8 +695,10 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
             "typed" => (typeof(byte[]), "varbinary(8)",
                 SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(value, "binary(8)"))),
             "nested" => (typeof(byte[]), "varbinary(8)", SafeMigrationDefaultValue.Sql(
-                SafeMigrationSql.Function("COALESCE",
-                    SafeMigrationSql.Literal(value), SafeMigrationSql.Literal(null)))),
+                SafeMigrationSql.Function(
+                    "COALESCE",
+                    SafeMigrationSql.Literal(value),
+                    SafeMigrationSql.Literal(null)))),
             "mariadb" => (typeof(byte[]), "varbinary(8)", SafeMigrationDefaultValue.Literal(value)),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown excluded proof contract."),
         };
@@ -604,9 +713,12 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
     {
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
         options.UseInternalServiceProvider(_services);
-        options.UseMySql("Server=127.0.0.1;Port=1;User ID=test;Database=binary_proof;Allow User Variables=true",
-            mariaDb ? MySqlServerVersion.MariaDb(new Version(10, 11, 19))
+        options.UseMySql(
+            "Server=127.0.0.1;Port=1;User ID=test;Database=binary_proof;Allow User Variables=true",
+            mariaDb
+                ? MySqlServerVersion.MariaDb(new Version(10, 11, 19))
                 : MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         options.UseMySqlSafeMigrations();
 
         return new SafeMigrationDbContext(options.Options);

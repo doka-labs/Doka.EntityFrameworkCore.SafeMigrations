@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the MixedPendingStream migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlMixedPendingStreamIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlMixedPendingStreamIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     [Fact]
     public async Task PendingPreflight_DoesNotMisclassifyStrictOperationsAfterLegacyDataPreparationSql()
@@ -15,41 +17,48 @@ public sealed partial class MySqlMixedPendingStreamIntegrationTests : MySqlSafeM
             connectionString,
             "CREATE TABLE `mixed_records` (`id` int NOT NULL, `code` varchar(20) NOT NULL, "
             + "PRIMARY KEY (`id`)); "
-            + "INSERT INTO `mixed_records` (`id`, `code`) VALUES (1, 'duplicate'), (2, 'duplicate');");
+            + "INSERT INTO `mixed_records` (`id`, `code`) VALUES (1, 'duplicate'), (2, 'duplicate');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = new MixedPendingStreamDbContext(connectionString, Fixture.ServerVersion);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzePendingMigrationsAsync(
             context,
-            new SafeMigrationRunOptions("mixed-pending-stream"));
+            new SafeMigrationRunOptions("mixed-pending-stream"),
+            CancellationToken.None);
 
         await context.Database.MigrateAsync(cancellationToken: CancellationToken.None);
 
         var completed = await runner.AnalyzePendingMigrationsAsync(
             context,
-            new SafeMigrationRunOptions("mixed-pending-stream-completed"));
+            new SafeMigrationRunOptions("mixed-pending-stream-completed"),
+            CancellationToken.None);
 
         await context.Database.MigrateAsync(cancellationToken: CancellationToken.None);
 
         var distinctCodes = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(DISTINCT `code`) FROM `mixed_records`;");
+            "SELECT COUNT(DISTINCT `code`) FROM `mixed_records`;",
+            cancellationToken: CancellationToken.None);
 
         var indexCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
             + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mixed_records' "
-            + "AND INDEX_NAME = 'ux_mixed_records_code';");
+            + "AND INDEX_NAME = 'ux_mixed_records_code';",
+            cancellationToken: CancellationToken.None);
 
         var markerCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mixed_marker';");
+            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mixed_marker';",
+            cancellationToken: CancellationToken.None);
 
         var historyCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM `__MixedPendingStreamMigrationsHistory`;");
+            "SELECT COUNT(*) FROM `__MixedPendingStreamMigrationsHistory`;",
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(2, distinctCodes);
         Assert.Equal(1, indexCount);
@@ -71,30 +80,53 @@ public sealed partial class MySqlMixedPendingStreamIntegrationTests : MySqlSafeM
             connectionString,
             "CREATE TABLE `mixed_records` (`id` int NOT NULL, `code` varchar(20) NOT NULL, "
             + "PRIMARY KEY (`id`)); "
-            + "INSERT INTO `mixed_records` (`id`, `code`) VALUES (1, 'duplicate'), (2, 'duplicate');");
+            + "INSERT INTO `mixed_records` (`id`, `code`) VALUES (1, 'duplicate'), (2, 'duplicate');",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new MixedPendingStreamDbContext(connectionString, Fixture.ServerVersion);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzePendingMigrationsAsync(
             context,
-            new SafeMigrationRunOptions("mixed-pending-stream-diagnostics"));
+            new SafeMigrationRunOptions("mixed-pending-stream-diagnostics"),
+            CancellationToken.None);
 
         using var nonMatchingDocument = JsonDocument.Parse(
             SafeMigrationReportJson.SerializeToUtf8Bytes(
                 preflight,
                 SafeMigrationReportSelection.NonMatching));
 
-        var uncertainAssessment = nonMatchingDocument.RootElement
+        var uncertainAssessment = nonMatchingDocument
+            .RootElement
             .GetProperty("assessments")
             .EnumerateArray()
-            .Single(static assessment => assessment.GetProperty("ordinal").GetInt32() == 2);
+            .Single(static assessment => assessment
+                    .GetProperty("ordinal")
+                    .GetInt32()
+                == 2);
 
         var origin = uncertainAssessment.GetProperty("deferredOrigin");
 
-        Assert.Equal("runtime_validation_required", uncertainAssessment.GetProperty("code").GetString());
-        Assert.Equal("20260925000002_MixedDataPreparation", origin.GetProperty("migrationId").GetString());
-        Assert.Equal(1, origin.GetProperty("operationOrdinal").GetInt32());
-        Assert.EndsWith(nameof(SqlOperation), origin.GetProperty("operationType").GetString(), StringComparison.Ordinal);
+        Assert.Equal("runtime_validation_required",
+            uncertainAssessment
+                .GetProperty("code")
+                .GetString());
+
+        Assert.Equal("20260925000002_MixedDataPreparation",
+            origin
+                .GetProperty("migrationId")
+                .GetString());
+
+        Assert.Equal(1,
+            origin
+                .GetProperty("operationOrdinal")
+                .GetInt32());
+
+        Assert.EndsWith(nameof(SqlOperation),
+            origin
+                .GetProperty("operationType")
+                .GetString(),
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -105,7 +137,8 @@ public sealed partial class MySqlMixedPendingStreamIntegrationTests : MySqlSafeM
             connectionString,
             "CREATE TABLE `mixed_records` (`id` int NOT NULL, `code` varchar(20) NOT NULL, "
             + "PRIMARY KEY (`id`)); "
-            + "INSERT INTO `mixed_records` (`id`, `code`) VALUES (1, 'duplicate'), (2, 'duplicate');");
+            + "INSERT INTO `mixed_records` (`id`, `code`) VALUES (1, 'duplicate'), (2, 'duplicate');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = new MixedPendingStreamDbContext(connectionString, Fixture.ServerVersion);
         await context.Database.MigrateAsync(
@@ -116,25 +149,29 @@ public sealed partial class MySqlMixedPendingStreamIntegrationTests : MySqlSafeM
 
         var preflight = await runner.AnalyzePendingMigrationsAsync(
             context,
-            new SafeMigrationRunOptions("mixed-strict-pending-only"));
+            new SafeMigrationRunOptions("mixed-strict-pending-only"),
+            CancellationToken.None);
 
         await context.Database.MigrateAsync(cancellationToken: CancellationToken.None);
 
         var historyCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM `__MixedPendingStreamMigrationsHistory`;");
+            "SELECT COUNT(*) FROM `__MixedPendingStreamMigrationsHistory`;",
+            cancellationToken: CancellationToken.None);
 
         var indexCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
             + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mixed_records' "
-            + "AND INDEX_NAME = 'ux_mixed_records_code';");
+            + "AND INDEX_NAME = 'ux_mixed_records_code';",
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(2, preflight.Assessments.Count);
         Assert.All(
             preflight.Assessments,
             static assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
+
         Assert.Equal(3, historyCount);
         Assert.Equal(1, indexCount);
     }
@@ -154,7 +191,8 @@ public sealed partial class MySqlMixedPendingStreamIntegrationTests : MySqlSafeM
             connectionString,
             "CREATE TABLE `mixed_records` (`id` int NOT NULL, `code` varchar(20) NOT NULL, "
             + "PRIMARY KEY (`id`)); "
-            + "INSERT INTO `mixed_records` (`id`, `code`) VALUES (1, 'first'), (2, 'second');");
+            + "INSERT INTO `mixed_records` (`id`, `code`) VALUES (1, 'first'), (2, 'second');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = new MixedPendingStreamDbContext(connectionString, Fixture.ServerVersion);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -170,16 +208,20 @@ public sealed partial class MySqlMixedPendingStreamIntegrationTests : MySqlSafeM
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("opaque-sql-index-guard"));
+            new SafeMigrationRunOptions("opaque-sql-index-guard"),
+            CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(
-            () => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            CancellationToken.None));
 
         var indexCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
             + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mixed_records' "
-            + "AND INDEX_NAME = 'ux_mixed_records_code';");
+            + "AND INDEX_NAME = 'ux_mixed_records_code';",
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
@@ -200,7 +242,9 @@ public sealed partial class MySqlMixedPendingStreamIntegrationTests : MySqlSafeM
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `mixed_records` (`id` int NOT NULL, PRIMARY KEY (`id`));");
+            "CREATE TABLE `mixed_records` (`id` int NOT NULL, PRIMARY KEY (`id`));",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new MixedPendingStreamDbContext(connectionString, Fixture.ServerVersion);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexIfNotExists("ux_mixed_records_code", "mixed_records", ["code"], unique: true);
@@ -210,7 +254,8 @@ public sealed partial class MySqlMixedPendingStreamIntegrationTests : MySqlSafeM
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("opaque-sql-earlier-blocker"));
+            new SafeMigrationRunOptions("opaque-sql-earlier-blocker"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, preflight.Assessments[0].Action);
@@ -235,7 +280,8 @@ public sealed partial class MySqlMixedPendingStreamIntegrationTests : MySqlSafeM
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("opaque-sql-foreign-database"));
+            new SafeMigrationRunOptions("opaque-sql-foreign-database"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[1].Action);
@@ -261,7 +307,8 @@ public sealed partial class MySqlMixedPendingStreamIntegrationTests : MySqlSafeM
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("opaque-sql-unsupported-schema-drop"));
+            new SafeMigrationRunOptions("opaque-sql-unsupported-schema-drop"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
@@ -278,14 +325,17 @@ public sealed partial class MySqlMixedPendingStreamIntegrationTests : MySqlSafeM
         await using var context = new MixedPendingStreamDbContext(connectionString, Fixture.ServerVersion);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.Sql("SELECT 1;");
-        builder.CreateIndexIfNotExists("ix_unapproved", "missing_table", ["code"])
+        builder
+            .CreateIndexIfNotExists("ix_unapproved", "missing_table", ["code"])
             .Annotation("Unapproved:Test", true);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("opaque-sql-unsupported-annotation"));
+            new SafeMigrationRunOptions("opaque-sql-unsupported-annotation"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[1].Action);

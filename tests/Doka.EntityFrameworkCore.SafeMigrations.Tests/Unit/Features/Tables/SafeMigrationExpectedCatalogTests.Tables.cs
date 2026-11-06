@@ -9,7 +9,7 @@ public sealed partial class SafeMigrationExpectedCatalogTests
             "items",
             [new ExpectedColumnDefinition("id", typeof(int), false)],
             primaryKey: new ExpectedPrimaryKeyDefinition("pk_items", "items", ["id"]),
-            uniqueConstraints: [new ExpectedUniqueConstraintDefinition("uq_items_id", "items", ["id"]),]);
+            uniqueConstraints: [new ExpectedUniqueConstraintDefinition("uq_items_id", "items", ["id"])]);
 
         IReadOnlyList<MigrationOperation> operations =
         [
@@ -52,7 +52,10 @@ public sealed partial class SafeMigrationExpectedCatalogTests
         Assert.Equal(["ix_name", "ix_non_unique"], inventory.IndexDefinitions.Keys.Order());
         Assert.Equal(
             "name",
-            inventory.IndexDefinitions["ix_name"].Keys[0].Column);
+            inventory
+                .IndexDefinitions["ix_name"]
+                .Keys[0].Column);
+
         Assert.Equal(
             SafeMigrationDatabaseObjectKind.PrimaryKey,
             Assert.Single(inventory.Constraints)
@@ -93,7 +96,10 @@ public sealed partial class SafeMigrationExpectedCatalogTests
 
         Assert.Equal("items", index.Table);
         Assert.Equal("app", index.Schema);
-        Assert.Equal("code", Assert.Single(index.Keys).Column);
+        Assert.Equal("code",
+            Assert.Single(index.Keys)
+                .Column);
+
         Assert.Equal(32, index.Keys[0].PrefixLength);
     }
 
@@ -143,6 +149,7 @@ public sealed partial class SafeMigrationExpectedCatalogTests
             "ix_items_legacy",
             "items",
             [new ExpectedIndexKeyDefinition(column: "legacy")]);
+
         var operations = CreateColumnDropOperations(index);
 
         // Act
@@ -163,6 +170,7 @@ public sealed partial class SafeMigrationExpectedCatalogTests
             "items",
             [new ExpectedIndexKeyDefinition(column: "id")],
             includedColumns: ["legacy"]);
+
         var operations = CreateColumnDropOperations(index);
 
         // Act
@@ -180,6 +188,7 @@ public sealed partial class SafeMigrationExpectedCatalogTests
             "ix_items_expression",
             "items",
             [new ExpectedIndexKeyDefinition(structuredExpression: SafeMigrationSql.Identifier("legacy"))]);
+
         var operations = CreateColumnDropOperations(index);
 
         // Act
@@ -197,6 +206,7 @@ public sealed partial class SafeMigrationExpectedCatalogTests
             "ix_items_expression",
             "items",
             [new ExpectedIndexKeyDefinition(expression: "lower(id)")]);
+
         var operations = CreateColumnDropOperations(index);
 
         // Act
@@ -218,6 +228,7 @@ public sealed partial class SafeMigrationExpectedCatalogTests
                 SafeMigrationSql.Identifier("legacy"),
                 SafeMigrationSqlBinaryOperator.GreaterThan,
                 SafeMigrationSql.Literal(0)));
+
         var operations = CreateColumnDropOperations(index);
 
         // Act
@@ -236,6 +247,7 @@ public sealed partial class SafeMigrationExpectedCatalogTests
             "items",
             [new ExpectedIndexKeyDefinition(column: "id")],
             filter: "id > 0");
+
         var operations = CreateColumnDropOperations(index);
 
         // Act
@@ -253,6 +265,7 @@ public sealed partial class SafeMigrationExpectedCatalogTests
             "ix_items_legacy",
             "items",
             [new ExpectedIndexKeyDefinition(column: "legacy")]);
+
         var operations = CreateColumnDropOperations(index, dropIndexFirst: true);
 
         // Act
@@ -276,6 +289,7 @@ public sealed partial class SafeMigrationExpectedCatalogTests
                 SafeMigrationSql.Identifier("id"),
                 SafeMigrationSqlBinaryOperator.GreaterThan,
                 SafeMigrationSql.Literal(0)));
+
         var operations = CreateColumnDropOperations(index);
 
         // Act
@@ -284,7 +298,9 @@ public sealed partial class SafeMigrationExpectedCatalogTests
         // Assert
         Assert.Equal(["id"], inventory.Columns);
         Assert.Equal("ix_items_id", Assert.Single(inventory.Indexes));
-        Assert.Equal("ix_items_id", Assert.Single(inventory.IndexDefinitions).Key);
+        Assert.Equal("ix_items_id",
+            Assert.Single(inventory.IndexDefinitions)
+                .Key);
     }
 
     [Fact]
@@ -357,7 +373,10 @@ public sealed partial class SafeMigrationExpectedCatalogTests
 
         // Assert
         var invalidOperation = Assert.IsType<InvalidOperationException>(exception);
-        Assert.Contains("index 'ix_legacy_items_code' may depend on it", invalidOperation.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "index 'ix_legacy_items_code' may depend on it",
+            invalidOperation.Message,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -394,10 +413,12 @@ public sealed partial class SafeMigrationExpectedCatalogTests
                     new ExpectedIndexDefinition(
                         "ix_items_expression",
                         "items",
-                        [new ExpectedIndexKeyDefinition(
-                            structuredExpression: SafeMigrationSql.Function(
-                                "lower",
-                                SafeMigrationSql.Identifier("caption")))]))),
+                        [
+                            new ExpectedIndexKeyDefinition(
+                                structuredExpression: SafeMigrationSql.Function(
+                                    "lower",
+                                    SafeMigrationSql.Identifier("caption"))),
+                        ]))),
             Envelope(new RenameColumnIntent("legacy", "items", "name")),
         ];
 

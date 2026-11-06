@@ -32,8 +32,10 @@ var designTimeReferences = Assembly
     .ToArray();
 
 var hasExpectedDesignTimeReference = designTimeReferences is [{ ConstructorArguments.Count: 2 }]
-    && designTimeReferences[0].ConstructorArguments[0].Value is string typeName
-    && designTimeReferences[0].ConstructorArguments[1].Value is string referencedProvider
+    && designTimeReferences[0]
+        .ConstructorArguments[0].Value is string typeName
+    && designTimeReferences[0]
+        .ConstructorArguments[1].Value is string referencedProvider
     && typeName == designTimeServicesTypeName
     && referencedProvider == providerName;
 
@@ -74,12 +76,14 @@ internal sealed class PackageScaffoldingDbContext : DbContext
         ModelBuilder modelBuilder
     )
     {
-        modelBuilder.Entity<PackageScaffoldingEntity>().HasData(
-            new PackageScaffoldingEntity
-            {
-                Id = 1,
-                Name = "package-consumer",
-            });
+        modelBuilder
+            .Entity<PackageScaffoldingEntity>()
+            .HasData(
+                new PackageScaffoldingEntity
+                {
+                    Id = 1,
+                    Name = "package-consumer",
+                });
     }
 }
 

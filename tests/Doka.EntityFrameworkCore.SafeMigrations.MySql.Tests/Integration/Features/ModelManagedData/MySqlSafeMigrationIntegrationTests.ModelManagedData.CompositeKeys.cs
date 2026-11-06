@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ModelManagedDataCompositeKeys migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlModelManagedDataCompositeKeysIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlModelManagedDataCompositeKeysIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlModelManagedDataCompositeKeysIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlModelManagedDataCompositeKeysIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     [Fact]
     public async Task CompositeModelManagedKeysConvergeAndReplayInOperationOrder()
@@ -17,7 +19,8 @@ public sealed partial class MySqlModelManagedDataCompositeKeysIntegrationTests :
             + "`tenant_id` int NOT NULL, `id` int NOT NULL, `name` varchar(64) NOT NULL, "
             + "PRIMARY KEY (`tenant_id`, `id`)) ENGINE=InnoDB;"
             + "INSERT INTO `model_composite_roles` (`tenant_id`, `id`, `name`) VALUES "
-            + "(1, 1, 'source'), (2, 1, 'removed');");
+            + "(1, 1, 'source'), (2, 1, 'removed');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = CompositeModelManagedOperations(context.Database.ProviderName!, "int", "varchar(64)");
@@ -43,18 +46,24 @@ public sealed partial class MySqlModelManagedDataCompositeKeysIntegrationTests :
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[0].Action);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[2].Action);
-        Assert.All(replay.Assessments, static assessment =>
-            Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
+        Assert.All(
+            replay.Assessments,
+            static assessment =>
+                Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
+
         Assert.Equal(
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM `model_composite_roles` WHERE `name` = 'target';"));
+                "SELECT COUNT(*) FROM `model_composite_roles` WHERE `name` = 'target';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM `model_composite_roles` WHERE `tenant_id` = 2 AND `id` = 1;"));
+                "SELECT COUNT(*) FROM `model_composite_roles` WHERE `tenant_id` = 2 AND `id` = 1;",
+                cancellationToken: CancellationToken.None));
     }
 
     private static MigrationBuilder CompositeModelManagedOperations(
@@ -71,6 +80,7 @@ public sealed partial class MySqlModelManagedDataCompositeKeysIntegrationTests :
             ["tenant_id", "id", "name"],
             [integerStoreType, integerStoreType, textStoreType],
             new object?[,] { { 1, 2, "target" } });
+
         _ = builder.UpdateModelManagedDataFromModel(
             "model_composite_roles",
             ["tenant_id", "id"],
@@ -80,6 +90,7 @@ public sealed partial class MySqlModelManagedDataCompositeKeysIntegrationTests :
             [textStoreType],
             new object?[,] { { "source" } },
             new object?[,] { { "target" } });
+
         _ = builder.DeleteModelManagedDataFromModel(
             "model_composite_roles",
             ["tenant_id", "id"],

@@ -11,7 +11,9 @@ public sealed class MySqlNativeTransportProfileTests
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]
-    public async Task NativeTransportProfilePreservesExactQualifiedMode(int mode)
+    public async Task NativeTransportProfilePreservesExactQualifiedMode(
+        int mode
+    )
     {
         // Arrange
         using var facts = Facts();
@@ -20,7 +22,8 @@ public sealed class MySqlNativeTransportProfileTests
 
         // Act
         var profile = await MySqlSafeMigrationProviderAnalyzer.ReadNativeTransportProfileAsync(
-            reader, CancellationToken.None);
+            reader,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(64L * 1024 * 1024, profile.MaximumPacket);
@@ -41,7 +44,9 @@ public sealed class MySqlNativeTransportProfileTests
     [InlineData("packet_zero")]
     [InlineData("packet_wide")]
     [InlineData("packet_text")]
-    public async Task NativeTransportProfileRejectsMalformedFacts(string shape)
+    public async Task NativeTransportProfileRejectsMalformedFacts(
+        string shape
+    )
     {
         // Arrange
         using var facts = Facts();

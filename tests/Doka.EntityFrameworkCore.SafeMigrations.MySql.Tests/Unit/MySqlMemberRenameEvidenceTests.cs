@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Pins source-independent member destinations to complete bounded native catalog evidence.</summary>
@@ -8,7 +10,9 @@ public sealed class MySqlMemberRenameEvidenceTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task MissingSourcesRetainIndependentDestinationOccupancy(bool native)
+    public async Task MissingSourcesRetainIndependentDestinationOccupancy(
+        bool native
+    )
     {
         // Arrange
         var operations = Operations(4);
@@ -20,17 +24,32 @@ public sealed class MySqlMemberRenameEvidenceTests
         await using var connection = new CatalogStatementTestConnection(native, (sql, _) => Results(sql));
 
         // Act
-        await MySqlSafeMigrationProviderAnalyzer.ReadMemberRenameTargetEvidenceAsync(connection, operations,
-            analyses, "catalog-test", 4 * 1024 * 1024, 71, CancellationToken.None);
+        await MySqlSafeMigrationProviderAnalyzer.ReadMemberRenameTargetEvidenceAsync(
+            connection,
+            operations,
+            analyses,
+            "catalog-test",
+            4 * 1024 * 1024,
+            71,
+            CancellationToken.None);
 
         // Assert
-        Assert.Equal(expectedTargets, analyses.Select(static result =>
-            result.RenameTargetExists));
+        Assert.Equal(
+            expectedTargets,
+            analyses.Select(static result =>
+                result.RenameTargetExists));
+
         Assert.All(analyses, result => Assert.Equal(SafeMigrationObservedState.Missing, result.ObservedState));
-        Assert.Equal(expectedSources, analyses.Select(static result =>
-            result.RenameSourceSupported));
-        Assert.Equal(expectedTargetSupport, analyses.Select(static result =>
-            result.RenameTargetSupported));
+        Assert.Equal(
+            expectedSources,
+            analyses.Select(static result =>
+                result.RenameSourceSupported));
+
+        Assert.Equal(
+            expectedTargetSupport,
+            analyses.Select(static result =>
+                result.RenameTargetSupported));
+
         var submission = Assert.Single(connection.Submissions);
         Assert.Contains("INFORMATION_SCHEMA.COLUMNS", submission.Sql, StringComparison.Ordinal);
         Assert.Contains("INFORMATION_SCHEMA.STATISTICS", submission.Sql, StringComparison.Ordinal);
@@ -46,23 +65,38 @@ public sealed class MySqlMemberRenameEvidenceTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task LargeCaptureRetainsBoundedTransport(bool native)
+    public async Task LargeCaptureRetainsBoundedTransport(
+        bool native
+    )
     {
         // Arrange
         var operations = Operations(290);
         var analyses = Analyses(290);
-        int[] expectedBatches = native ? [8, 2] : [];
+        int[] expectedBatches = native
+            ? [8, 2]
+            : [];
 
         await using var connection = new CatalogStatementTestConnection(native, (sql, _) => Results(sql));
 
         // Act
-        await MySqlSafeMigrationProviderAnalyzer.ReadMemberRenameTargetEvidenceAsync(connection, operations,
-            analyses, "catalog-test", 4 * 1024 * 1024, 71, CancellationToken.None);
+        await MySqlSafeMigrationProviderAnalyzer.ReadMemberRenameTargetEvidenceAsync(
+            connection,
+            operations,
+            analyses,
+            "catalog-test",
+            4 * 1024 * 1024,
+            71,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(10, connection.Submissions.Count);
         Assert.Equal(expectedBatches, connection.BatchCounts);
-        Assert.All(connection.Submissions, submission => Assert.InRange(Results(submission.Sql).Rows.Count, 1, 32));
+        Assert.All(connection.Submissions,
+            submission => Assert.InRange(Results(submission.Sql)
+                    .Rows.Count,
+                1,
+                32));
+
         Assert.All(analyses, result => Assert.NotNull(result.RenameTargetExists));
     }
 
@@ -78,34 +112,56 @@ public sealed class MySqlMemberRenameEvidenceTests
     [InlineData("source-kind")]
     [InlineData("source-null")]
     [InlineData("column-source")]
-    public async Task InvalidEvidencePublishesNothing(string fault)
+    public async Task InvalidEvidencePublishesNothing(
+        string fault
+    )
     {
         // Arrange
         var operations = Operations(4);
         var analyses = Analyses(4);
-        await using var connection = new CatalogStatementTestConnection(true, (sql, _) =>
-        {
-            var table = Results(sql);
-            switch (fault)
+        await using var connection = new CatalogStatementTestConnection(
+            true,
+            (sql, _) =>
             {
-                case "ordinal": table.Rows[1][0] = 999; break;
-                case "missing": table.Rows.RemoveAt(1); break;
-                case "duplicate": table.Rows.Add(0, 0L, DBNull.Value); break;
-                case "boolean": table.Rows[1][1] = 2L; break;
-                case "null": table.Rows[1][1] = DBNull.Value; break;
-                case "width": table.Columns.Add("unexpected", typeof(int)); break;
-                case "source-kind": table.Rows[1][2] = 2L; break;
-                case "source-null": table.Rows[1][2] = DBNull.Value; break;
-                case "column-source": table.Rows[0][2] = 1L; break;
-            }
+                var table = Results(sql);
+                switch (fault)
+                {
+                    case "ordinal":
+                        table
+                            .Rows[1][0] = 999; break;
+                    case "missing": table.Rows.RemoveAt(1); break;
+                    case "duplicate": table.Rows.Add(0, 0L, DBNull.Value); break;
+                    case "boolean":
+                        table
+                            .Rows[1][1] = 2L; break;
+                    case "null":
+                        table
+                            .Rows[1][1] = DBNull.Value; break;
+                    case "width": table.Columns.Add("unexpected", typeof(int)); break;
+                    case "source-kind":
+                        table
+                            .Rows[1][2] = 2L; break;
+                    case "source-null":
+                        table
+                            .Rows[1][2] = DBNull.Value; break;
+                    case "column-source":
+                        table
+                            .Rows[0][2] = 1L; break;
+                }
 
-            return table;
-        });
+                return table;
+            });
 
         // Act
         var exception = await Record.ExceptionAsync(() =>
-            MySqlSafeMigrationProviderAnalyzer.ReadMemberRenameTargetEvidenceAsync(connection, operations,
-                analyses, "catalog-test", 4 * 1024 * 1024, 71, CancellationToken.None));
+            MySqlSafeMigrationProviderAnalyzer.ReadMemberRenameTargetEvidenceAsync(
+                connection,
+                operations,
+                analyses,
+                "catalog-test",
+                4 * 1024 * 1024,
+                71,
+                CancellationToken.None));
 
         // Assert
         Assert.IsType<InvalidOperationException>(exception);
@@ -123,9 +179,11 @@ public sealed class MySqlMemberRenameEvidenceTests
         // Arrange
         SafeMigrationOperation[] operations =
         [
-            new(new RenameColumnIntent("source", "items", "target", "foreign"),
+            new(
+                new RenameColumnIntent("source", "items", "target", "foreign"),
                 SafeMigrationPolicy.ThrowIfDifferent),
-            new(new RenameIndexIntent("source_index", "items", "target_index"),
+            new(
+                new RenameIndexIntent("source_index", "items", "target_index"),
                 SafeMigrationPolicy.ThrowIfDifferent),
             new(new DropColumnIntent("unrelated", "items"), SafeMigrationPolicy.ThrowIfDifferent),
         ];
@@ -139,8 +197,14 @@ public sealed class MySqlMemberRenameEvidenceTests
         await using var connection = new CatalogStatementTestConnection(true, (sql, _) => Results(sql));
 
         // Act
-        await MySqlSafeMigrationProviderAnalyzer.ReadMemberRenameTargetEvidenceAsync(connection, operations,
-            analyses, "catalog-test", 4 * 1024 * 1024, 71, CancellationToken.None);
+        await MySqlSafeMigrationProviderAnalyzer.ReadMemberRenameTargetEvidenceAsync(
+            connection,
+            operations,
+            analyses,
+            "catalog-test",
+            4 * 1024 * 1024,
+            71,
+            CancellationToken.None);
 
         // Assert
         Assert.Empty(connection.Submissions);
@@ -158,7 +222,10 @@ public sealed class MySqlMemberRenameEvidenceTests
     [InlineData("generated_column_rename_dependency", true, false)]
     [InlineData("unrelated_native_failure", false, false)]
     public async Task GeneratedDependencyRefusalCapturesOnlyIndependentDestination(
-        string code, bool invariant, bool expectedCapture)
+        string code,
+        bool invariant,
+        bool expectedCapture
+    )
     {
         // Arrange
         SafeMigrationOperation[] operations =
@@ -177,12 +244,28 @@ public sealed class MySqlMemberRenameEvidenceTests
         await using var connection = new CatalogStatementTestConnection(true, (sql, _) => Results(sql));
 
         // Act
-        await MySqlSafeMigrationProviderAnalyzer.ReadMemberRenameTargetEvidenceAsync(connection, operations,
-            analyses, "catalog-test", 4 * 1024 * 1024, 71, CancellationToken.None);
+        await MySqlSafeMigrationProviderAnalyzer.ReadMemberRenameTargetEvidenceAsync(
+            connection,
+            operations,
+            analyses,
+            "catalog-test",
+            4 * 1024 * 1024,
+            71,
+            CancellationToken.None);
 
         // Assert
-        Assert.Equal(expectedCapture ? 1 : 0, connection.Submissions.Count);
-        Assert.Equal(expectedCapture ? false : (bool?)null, analyses[0].RenameTargetExists);
+        Assert.Equal(
+            expectedCapture
+                ? 1
+                : 0,
+            connection.Submissions.Count);
+
+        Assert.Equal(
+            expectedCapture
+                ? false
+                : null,
+            analyses[0].RenameTargetExists);
+
         Assert.Equal(SafeMigrationObservedState.Unsupported, analyses[0].ObservedState);
         Assert.Equal(code, analyses[0].Code);
     }
@@ -209,8 +292,14 @@ public sealed class MySqlMemberRenameEvidenceTests
 
         // Act
         var exception = await Record.ExceptionAsync(() =>
-            MySqlSafeMigrationProviderAnalyzer.ReadMemberRenameTargetEvidenceAsync(connection, operations,
-                analyses, "catalog-test", 4 * 1024 * 1024, 71, cancellation.Token));
+            MySqlSafeMigrationProviderAnalyzer.ReadMemberRenameTargetEvidenceAsync(
+                connection,
+                operations,
+                analyses,
+                "catalog-test",
+                4 * 1024 * 1024,
+                71,
+                cancellation.Token));
 
         // Assert
         Assert.IsAssignableFrom<OperationCanceledException>(exception);
@@ -227,14 +316,19 @@ public sealed class MySqlMemberRenameEvidenceTests
     [InlineData("primary", false)]
     [InlineData("PrImArY", false)]
     [InlineData("destination_index", true)]
-    public async Task AuthoredDestinationRolePublishesWithCompleteCapture(string target, bool supported)
+    public async Task AuthoredDestinationRolePublishesWithCompleteCapture(
+        string target,
+        bool supported
+    )
     {
         // Arrange
         SafeMigrationOperation[] operations =
         [
-            new(new RenameColumnIntent("source_value", "items", "target_value"),
+            new(
+                new RenameColumnIntent("source_value", "items", "target_value"),
                 SafeMigrationPolicy.ThrowIfDifferent),
-            new(new RenameIndexIntent("source_index", "items", target),
+            new(
+                new RenameIndexIntent("source_index", "items", target),
                 SafeMigrationPolicy.ThrowIfDifferent),
         ];
 
@@ -242,8 +336,14 @@ public sealed class MySqlMemberRenameEvidenceTests
         await using var connection = new CatalogStatementTestConnection(true, (sql, _) => Results(sql));
 
         // Act
-        await MySqlSafeMigrationProviderAnalyzer.ReadMemberRenameTargetEvidenceAsync(connection, operations,
-            analyses, "catalog-test", 4 * 1024 * 1024, 71, CancellationToken.None);
+        await MySqlSafeMigrationProviderAnalyzer.ReadMemberRenameTargetEvidenceAsync(
+            connection,
+            operations,
+            analyses,
+            "catalog-test",
+            4 * 1024 * 1024,
+            71,
+            CancellationToken.None);
 
         // Assert
         Assert.Null(analyses[0].RenameTargetSupported);
@@ -252,29 +352,48 @@ public sealed class MySqlMemberRenameEvidenceTests
         Assert.Single(connection.Submissions);
     }
 
-    private static SafeMigrationOperation[] Operations(int count) => Enumerable.Range(0, count)
-        .Select(static ordinal => new SafeMigrationOperation(ordinal % 2 == 0
-            ? new RenameColumnIntent("source_" + ordinal, "items", "target_" + ordinal)
-            : new RenameIndexIntent("source_" + ordinal, "items", "target_" + ordinal),
-            SafeMigrationPolicy.ThrowIfDifferent)).ToArray();
+    private static SafeMigrationOperation[] Operations(
+        int count
+    ) => Enumerable
+        .Range(0, count)
+        .Select(static ordinal => new SafeMigrationOperation(
+            ordinal % 2 == 0
+                ? new RenameColumnIntent("source_" + ordinal, "items", "target_" + ordinal)
+                : new RenameIndexIntent("source_" + ordinal, "items", "target_" + ordinal),
+            SafeMigrationPolicy.ThrowIfDifferent))
+        .ToArray();
 
-    private static SafeMigrationProviderAnalysis[] Analyses(int count) => Enumerable.Range(0, count)
-        .Select(static _ => Live(SafeMigrationObservedState.Missing)).ToArray();
+    private static SafeMigrationProviderAnalysis[] Analyses(
+        int count
+    ) => Enumerable
+        .Range(0, count)
+        .Select(static _ => Live(SafeMigrationObservedState.Missing))
+        .ToArray();
 
-    private static SafeMigrationProviderAnalysis Live(SafeMigrationObservedState state) =>
+    private static SafeMigrationProviderAnalysis Live(
+        SafeMigrationObservedState state
+    ) =>
         new(state, SafeMigrationRepairCapability.None, false, "test");
 
-    private static System.Data.DataTable Results(string sql)
+    private static DataTable Results(
+        string sql
+    )
     {
-        var table = new System.Data.DataTable();
+        var table = new DataTable();
         table.Columns.Add("ordinal", typeof(int));
         table.Columns.Add("exists", typeof(long));
         table.Columns.Add("source", typeof(object));
-        foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(
-            sql, @"SELECT (\d+),"))
+        foreach (Match match in Regex.Matches(
+            sql,
+            @"SELECT (\d+),"))
         {
             var ordinal = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
-            table.Rows.Add(ordinal, (long)(ordinal % 2), ordinal % 2 != 0 ? 0L : DBNull.Value);
+            table.Rows.Add(
+                ordinal,
+                (long)(ordinal % 2),
+                ordinal % 2 != 0
+                    ? 0L
+                    : DBNull.Value);
         }
 
         return table;

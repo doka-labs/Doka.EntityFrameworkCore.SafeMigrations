@@ -10,20 +10,49 @@ public sealed class SqlServerProjectedFilterGrammarTests
     {
         var column = SafeMigrationSql.Identifier("Code");
         var other = SafeMigrationSql.Identifier("Other");
-        var equal = new SafeMigrationSqlBinaryExpression(column, SafeMigrationSqlBinaryOperator.Equal,
+        var equal = new SafeMigrationSqlBinaryExpression(
+            column,
+            SafeMigrationSqlBinaryOperator.Equal,
             SafeMigrationSql.Literal(1));
 
         yield return [SafeMigrationSql.IsNotNull(column), true];
         yield return [equal, true];
-        yield return [new SafeMigrationSqlBinaryExpression(equal, SafeMigrationSqlBinaryOperator.And,
-            SafeMigrationSql.IsNotNull(other)), true];
-        yield return [new SafeMigrationSqlInExpression(
-            column, [SafeMigrationSql.Literal(1), SafeMigrationSql.Literal(2)]), true];
-        yield return [new SafeMigrationSqlBinaryExpression(equal, SafeMigrationSqlBinaryOperator.Or,
-            SafeMigrationSql.IsNotNull(other)), false];
+        yield return
+        [
+            new SafeMigrationSqlBinaryExpression(
+                equal,
+                SafeMigrationSqlBinaryOperator.And,
+                SafeMigrationSql.IsNotNull(other)),
+            true,
+        ];
+
+        yield return
+        [
+            new SafeMigrationSqlInExpression(
+                column,
+                [SafeMigrationSql.Literal(1), SafeMigrationSql.Literal(2)]),
+            true,
+        ];
+
+        yield return
+        [
+            new SafeMigrationSqlBinaryExpression(
+                equal,
+                SafeMigrationSqlBinaryOperator.Or,
+                SafeMigrationSql.IsNotNull(other)),
+            false,
+        ];
+
         yield return [new SafeMigrationSqlBinaryExpression(column, SafeMigrationSqlBinaryOperator.Equal, other), false];
-        yield return [new SafeMigrationSqlBinaryExpression(column, SafeMigrationSqlBinaryOperator.Equal,
-            SafeMigrationSql.Literal(null)), false];
+        yield return
+        [
+            new SafeMigrationSqlBinaryExpression(
+                column,
+                SafeMigrationSqlBinaryOperator.Equal,
+                SafeMigrationSql.Literal(null)),
+            false,
+        ];
+
         yield return [new SafeMigrationSqlInExpression(column, [SafeMigrationSql.Literal(1)], negated: true), false];
         yield return [new SafeMigrationSqlInExpression(column, [SafeMigrationSql.Literal(null)]), false];
     }

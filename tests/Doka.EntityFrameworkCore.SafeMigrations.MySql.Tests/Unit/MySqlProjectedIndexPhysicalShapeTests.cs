@@ -5,6 +5,12 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
     private readonly DbContext _context = CreateContext();
     private ServiceProvider? _nativeServices;
 
+    public void Dispose()
+    {
+        _context.Dispose();
+        _nativeServices?.Dispose();
+    }
+
     [Fact]
     public void WidenedCharacterColumnAcceptsAValidTargetPrefix()
     {
@@ -235,7 +241,8 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
             : ProjectedColumns.Create();
 
         var shape = MySqlProjectedIndexPhysicalShape.CreateCatalogColumnShape("uuid", null, null, null, null, null);
-        var environment = new SafeMigrationIndexPhysicalEnvironment(maximumKeyBytes,
+        var environment = new SafeMigrationIndexPhysicalEnvironment(
+            maximumKeyBytes,
             Columns: new Dictionary<string, SafeMigrationIndexColumnPhysicalShape>(StringComparer.Ordinal)
             {
                 ["left_id"] = shape,
@@ -247,19 +254,28 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
         {
             0 => MySqlProjectedIndexPhysicalShape.Validate(
                 Index(new ExpectedIndexKeyDefinition("left_id"), new ExpectedIndexKeyDefinition("right_id")),
-                columns, environment, mappings),
+                columns,
+                environment,
+                mappings),
             1 => MySqlProjectedIndexPhysicalShape.Validate(
                 new ExpectedPrimaryKeyDefinition("pk_records", "records", ["left_id", "right_id"]),
-                columns, environment, mappings),
+                columns,
+                environment,
+                mappings),
             2 => MySqlProjectedIndexPhysicalShape.Validate(
                 new ExpectedUniqueConstraintDefinition("uq_records", "records", ["left_id", "right_id"]),
-                columns, environment, mappings),
+                columns,
+                environment,
+                mappings),
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
 
         // Assert
-        Assert.Equal(expected ? MySqlProjectedIndexPhysicalShapeResult.Feasible
-            : MySqlProjectedIndexPhysicalShapeResult.KeyExceedsPhysicalLimit, result);
+        Assert.Equal(
+            expected
+                ? MySqlProjectedIndexPhysicalShapeResult.Feasible
+                : MySqlProjectedIndexPhysicalShapeResult.KeyExceedsPhysicalLimit,
+            result);
     }
 
     /// <summary>A native UUID's textual wire representation does not make index prefixes legal.</summary>
@@ -267,22 +283,36 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void NativeUuidPrefixRemainsUnverifiable(bool projected)
+    public void NativeUuidPrefixRemainsUnverifiable(
+        bool projected
+    )
     {
         // Arrange
         using var context = CreateNativeUuidContext();
-        var columns = projected ? ProjectedColumns.Create(NativeUuidColumn("id")) : ProjectedColumns.Create();
+        var columns = projected
+            ? ProjectedColumns.Create(NativeUuidColumn("id"))
+            : ProjectedColumns.Create();
+
         var index = Index(new ExpectedIndexKeyDefinition("id", prefixLength: 1));
-        var environment = new SafeMigrationIndexPhysicalEnvironment(3072,
+        var environment = new SafeMigrationIndexPhysicalEnvironment(
+            3072,
             Columns: new Dictionary<string, SafeMigrationIndexColumnPhysicalShape>(StringComparer.Ordinal)
             {
                 ["id"] = MySqlProjectedIndexPhysicalShape.CreateCatalogColumnShape(
-                    "uuid", null, null, null, null, null),
+                    "uuid",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null),
             });
 
         // Act
         var result = MySqlProjectedIndexPhysicalShape.Validate(
-            index, columns, environment, context.GetService<IRelationalTypeMappingSource>());
+            index,
+            columns,
+            environment,
+            context.GetService<IRelationalTypeMappingSource>());
 
         // Assert
         Assert.Equal(MySqlProjectedIndexPhysicalShapeResult.Unverifiable, result);
@@ -297,7 +327,12 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
 
         // Act
         var shape = MySqlProjectedIndexPhysicalShape.CreateCatalogColumnShape(
-            dataType, null, null, null, null, null);
+            dataType,
+            null,
+            null,
+            null,
+            null,
+            null);
 
         // Assert
         Assert.Equal(16L, shape.FullWidthBytes);
@@ -315,10 +350,14 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
             .ToArray();
 
         var columns = ProjectedColumns.Create(
-            columnNames.Select(name => CharacterColumn(name, length: 1)).ToArray());
+            columnNames
+                .Select(name => CharacterColumn(name, length: 1))
+                .ToArray());
 
         var index = Index(
-            columnNames.Select(static name => new ExpectedIndexKeyDefinition(column: name)).ToArray());
+            columnNames
+                .Select(static name => new ExpectedIndexKeyDefinition(column: name))
+                .ToArray());
 
         var primaryKey = new ExpectedPrimaryKeyDefinition("pk_records", "records", columnNames);
         var uniqueConstraint = new ExpectedUniqueConstraintDefinition("uq_records", "records", columnNames);
@@ -348,12 +387,6 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
         Assert.Equal(MySqlProjectedIndexPhysicalShapeResult.TooManyKeyParts, uniqueConstraintResult);
     }
 
-    public void Dispose()
-    {
-        _context.Dispose();
-        _nativeServices?.Dispose();
-    }
-
     private MySqlProjectedIndexPhysicalShapeResult Validate(
         ExpectedIndexDefinition index,
         ISafeMigrationProjectedColumnSource columns,
@@ -377,8 +410,13 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
     /// <summary>Describes native storage without a character or binary GUID representation.</summary>
     /// <param name="name">The exact column name.</param>
     /// <returns>A native UUID column with no textual length facets.</returns>
-    private static ExpectedColumnDefinition NativeUuidColumn(string name) => new(
-        name, typeof(Guid), isNullable: false, storeType: "uuid");
+    private static ExpectedColumnDefinition NativeUuidColumn(
+        string name
+    ) => new(
+        name,
+        typeof(Guid),
+        isNullable: false,
+        storeType: "uuid");
 
     private static ExpectedIndexDefinition Index(
         params ExpectedIndexKeyDefinition[] keys
@@ -401,7 +439,8 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
     {
         // WHY: Capability-profile probes own their provider lifetime instead
         // of retaining additional configurations in EF's process-wide cache.
-        _nativeServices ??= new ServiceCollection().AddEntityFrameworkDokaMySql()
+        _nativeServices ??= new ServiceCollection()
+            .AddEntityFrameworkDokaMySql()
             .BuildServiceProvider(validateScopes: true);
 
         var options = new DbContextOptionsBuilder<DbContext>();
@@ -428,7 +467,7 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
             string table,
             string? schema,
             string column,
-            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ExpectedColumnDefinition? definition
+            [NotNullWhen(true)] out ExpectedColumnDefinition? definition
         ) => _definitions.TryGetValue(column, out definition);
 
         public static ProjectedColumns Create(

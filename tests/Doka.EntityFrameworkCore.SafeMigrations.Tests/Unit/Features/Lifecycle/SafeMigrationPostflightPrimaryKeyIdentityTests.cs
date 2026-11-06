@@ -9,7 +9,9 @@ public sealed class SafeMigrationPostflightPrimaryKeyIdentityTests
     [InlineData(SafeMigrationObservedState.Matching)]
     [InlineData(SafeMigrationObservedState.Different)]
     [InlineData(SafeMigrationObservedState.Missing)]
-    public void WrongNamedPrimaryKeyDropCannotSupersedeEarlierEnsure(SafeMigrationObservedState ensureState)
+    public void WrongNamedPrimaryKeyDropCannotSupersedeEarlierEnsure(
+        SafeMigrationObservedState ensureState
+    )
     {
         // Arrange
         MigrationOperation[] operations =
@@ -17,9 +19,14 @@ public sealed class SafeMigrationPostflightPrimaryKeyIdentityTests
             Operation(new EnsurePrimaryKeyIntent(new ExpectedPrimaryKeyDefinition("pk_expected", "items", ["id"]))),
             Operation(new DropPrimaryKeyIntent("pk_wrong", "items")),
         ];
+
         SafeMigrationProviderAnalysis[] analyses =
         [
-            Analysis(ensureState, ensureState == SafeMigrationObservedState.Matching ? "pk_expected" : "pk_wrong"),
+            Analysis(
+                ensureState,
+                ensureState == SafeMigrationObservedState.Matching
+                    ? "pk_expected"
+                    : "pk_wrong"),
             Analysis(SafeMigrationObservedState.Missing),
         ];
 
@@ -42,6 +49,7 @@ public sealed class SafeMigrationPostflightPrimaryKeyIdentityTests
             Operation(new DropPrimaryKeyIntent("pk_old", "items")),
             Operation(new EnsurePrimaryKeyIntent(new ExpectedPrimaryKeyDefinition("pk_new", "items", ["code"]))),
         ];
+
         SafeMigrationProviderAnalysis[] analyses =
         [
             Analysis(SafeMigrationObservedState.Different, "pk_new"),
@@ -66,9 +74,14 @@ public sealed class SafeMigrationPostflightPrimaryKeyIdentityTests
         MigrationOperation[] operations =
         [
             Operation(new EnsurePrimaryKeyIntent(new ExpectedPrimaryKeyDefinition("pk_first_alias", "items", ["id"]))),
-            new AlterTableOperation { Name = "other_items", Comment = "unrelated" },
+            new AlterTableOperation
+            {
+                Name = "other_items",
+                Comment = "unrelated",
+            },
             Operation(new EnsurePrimaryKeyIntent(new ExpectedPrimaryKeyDefinition("pk_second_alias", "items", ["id"]))),
         ];
+
         SafeMigrationProviderAnalysis[] analyses =
         [
             Analysis(SafeMigrationObservedState.Matching, "pk_physical"),
@@ -94,6 +107,7 @@ public sealed class SafeMigrationPostflightPrimaryKeyIdentityTests
             Operation(new EnsurePrimaryKeyIntent(new ExpectedPrimaryKeyDefinition("pk_alias", "items", ["id"]))),
             Operation(new DropPrimaryKeyIntent("pk_physical", "items")),
         ];
+
         SafeMigrationProviderAnalysis[] analyses =
         [
             Analysis(SafeMigrationObservedState.Missing),
@@ -120,7 +134,8 @@ public sealed class SafeMigrationPostflightPrimaryKeyIdentityTests
         ];
 
         // Act
-        var projection = new SafeMigrationPostflightProjection(operations,
+        var projection = new SafeMigrationPostflightProjection(
+            operations,
             projectedKeyAnalyzer: new SingletonPrimaryKeyAnalyzer());
 
         // Assert
@@ -147,7 +162,9 @@ public sealed class SafeMigrationPostflightPrimaryKeyIdentityTests
     }
 
     /// <summary>Creates one safe writer with a strict conflict policy.</summary>
-    private static SafeMigrationOperation Operation(SafeMigrationIntent intent) =>
+    private static SafeMigrationOperation Operation(
+        SafeMigrationIntent intent
+    ) =>
         new(intent, SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Creates final evidence, including diagnostic names that are not identity certificates.</summary>
@@ -170,18 +187,27 @@ public sealed class SafeMigrationPostflightPrimaryKeyIdentityTests
         public bool PrimaryKeyUsesNameIndependentIdentity => true;
 
         /// <inheritdoc />
-        public SafeMigrationProviderAnalysis ValidateProjectedIndex(EnsureIndexIntent intent,
-            ISafeMigrationProjectedColumnSource columns, SafeMigrationProviderAnalysis liveAnalysis,
-            SafeMigrationProviderAnalysis projectedAnalysis) => projectedAnalysis;
+        public SafeMigrationProviderAnalysis ValidateProjectedIndex(
+            EnsureIndexIntent intent,
+            ISafeMigrationProjectedColumnSource columns,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            SafeMigrationProviderAnalysis projectedAnalysis
+        ) => projectedAnalysis;
 
         /// <inheritdoc />
-        public SafeMigrationProviderAnalysis ValidateProjectedPrimaryKey(EnsurePrimaryKeyIntent intent,
-            ISafeMigrationProjectedColumnSource columns, SafeMigrationProviderAnalysis liveAnalysis,
-            SafeMigrationProviderAnalysis projectedAnalysis) => projectedAnalysis;
+        public SafeMigrationProviderAnalysis ValidateProjectedPrimaryKey(
+            EnsurePrimaryKeyIntent intent,
+            ISafeMigrationProjectedColumnSource columns,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            SafeMigrationProviderAnalysis projectedAnalysis
+        ) => projectedAnalysis;
 
         /// <inheritdoc />
-        public SafeMigrationProviderAnalysis ValidateProjectedUniqueConstraint(EnsureUniqueConstraintIntent intent,
-            ISafeMigrationProjectedColumnSource columns, SafeMigrationProviderAnalysis liveAnalysis,
-            SafeMigrationProviderAnalysis projectedAnalysis) => projectedAnalysis;
+        public SafeMigrationProviderAnalysis ValidateProjectedUniqueConstraint(
+            EnsureUniqueConstraintIntent intent,
+            ISafeMigrationProjectedColumnSource columns,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            SafeMigrationProviderAnalysis projectedAnalysis
+        ) => projectedAnalysis;
     }
 }

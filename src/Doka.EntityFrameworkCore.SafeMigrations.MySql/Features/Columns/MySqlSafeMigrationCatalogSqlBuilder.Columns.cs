@@ -5,6 +5,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private const string StrictSqlModeExpression = "FIND_IN_SET('STRICT_TRANS_TABLES', @@SESSION.sql_mode) > 0 "
         + "OR FIND_IN_SET('STRICT_ALL_TABLES', @@SESSION.sql_mode) > 0";
 
+    private const string ColumnMatchPrefix = "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c "
+        + "WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = ";
+
+    private const string ColumnMatchNamePrefix = " AND c.COLUMN_NAME = ";
+
     private static readonly SearchValues<char> s_modeDependentDefaultCharacters =
         SearchValues.Create("\\'\0\n\r\u001A");
 
@@ -130,20 +135,20 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     matching,
                     repairCapability,
                     repairPrecondition) with
-            {
-                PrerequisiteExpression = tableExists,
-                ClassificationCodeExpression = transition.HasDataProbe
-                    ? $"CASE WHEN {dataTransitionBlocked} THEN 'varchar_narrowing_value_too_long' ELSE NULL END"
-                    : null,
-                RepairOperationalImpact = transition.OperationalImpact,
-                DataProbe = transition.DataProbe,
-                NullabilityDataProbe = nullabilityProbe,
-                MayRequireNullabilityDataProof = repairCapability == SafeMigrationRepairCapability.Safe
+                {
+                    PrerequisiteExpression = tableExists,
+                    ClassificationCodeExpression = transition.HasDataProbe
+                        ? $"CASE WHEN {dataTransitionBlocked} THEN 'varchar_narrowing_value_too_long' ELSE NULL END"
+                        : null,
+                    RepairOperationalImpact = transition.OperationalImpact,
+                    DataProbe = transition.DataProbe,
+                    NullabilityDataProbe = nullabilityProbe,
+                    MayRequireNullabilityDataProof = repairCapability == SafeMigrationRepairCapability.Safe
                     && !intent.Definition.IsNullable,
-                DiagnosticEvidenceExpression = includeAnalysisEvidence
-                    ? BuildColumnDiagnosticEvidence(intent.Table, intent.Definition, isMariaDb)
-                    : null,
-            };
+                    DiagnosticEvidenceExpression = includeAnalysisEvidence
+                        ? BuildColumnDiagnosticEvidence(intent.Table, intent.Definition, isMariaDb)
+                        : null,
+                };
 
         // The data probe for nullability tightening can mention the target
         // column only after the catalog proves that the column exists. Missing
@@ -240,11 +245,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         var objectExists = TableExists(intent.Table);
         var tableExists = BaseTableExists(intent.Table);
+
         // WHY: MariaDB catalog collation can equate accent-distinct physical
         // columns. The same exact native lookup must govern missing-state
         // classification, dependency qualification and replay postconditions.
         var columnExists = isMariaDb
-            ? BuildRequiredColumnAddColumnExists(intent.Table, intent.Name,
+            ? BuildRequiredColumnAddColumnExists(
+                intent.Table,
+                intent.Name,
                 BuildNativeCaseInsensitiveIdentifierMatches("c.COLUMN_NAME", Literal(intent.Name)))
             : ColumnExists(intent.Table, intent.Name);
 
@@ -303,11 +311,6 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 modelCandidate,
                 foldedModelCandidate);
     }
-
-    private const string ColumnMatchPrefix = "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c "
-        + "WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = ";
-
-    private const string ColumnMatchNamePrefix = " AND c.COLUMN_NAME = ";
 
     private string ColumnExists(
         string table,

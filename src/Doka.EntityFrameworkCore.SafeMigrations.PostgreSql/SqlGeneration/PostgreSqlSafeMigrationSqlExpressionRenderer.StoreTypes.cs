@@ -54,13 +54,15 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
         var scalarLength = candidate.Length;
         while (scalarLength >= 2
-               && candidate[..scalarLength]
-                   .EndsWith("[]", StringComparison.Ordinal))
+            && candidate[..scalarLength]
+                .EndsWith("[]", StringComparison.Ordinal))
         {
             scalarLength -= 2;
         }
 
-        var scalarType = candidate[..scalarLength].TrimEnd();
+        var scalarType = candidate[..scalarLength]
+            .TrimEnd();
+
         var arraySuffix = candidate[scalarLength..];
         if (!scalarType.StartsWith("float", StringComparison.OrdinalIgnoreCase))
         {
@@ -70,6 +72,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
         var precisionClause = scalarType["float".Length..]
             .Trim();
+
         if (precisionClause.Length == 0)
         {
             normalizedStoreType = AppendArraySuffix("double precision", arraySuffix);
@@ -88,7 +91,8 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
         if (precisionClause[^1] != ')'
             || !int.TryParse(
-                precisionClause[1..^1].Trim(),
+                precisionClause[1..^1]
+                    .Trim(),
                 NumberStyles.None,
                 CultureInfo.InvariantCulture,
                 out var precision)
@@ -98,7 +102,12 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             return false;
         }
 
-        normalizedStoreType = AppendArraySuffix(precision <= 24 ? "real" : "double precision", arraySuffix);
+        normalizedStoreType = AppendArraySuffix(
+            precision <= 24
+                ? "real"
+                : "double precision",
+            arraySuffix);
+
         return true;
     }
 
@@ -106,7 +115,9 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
     private static string AppendArraySuffix(
         string scalarType,
         ReadOnlySpan<char> arraySuffix
-    ) => arraySuffix.Length == 0 ? scalarType : string.Concat(scalarType.AsSpan(), arraySuffix);
+    ) => arraySuffix.Length == 0
+        ? scalarType
+        : string.Concat(scalarType.AsSpan(), arraySuffix);
 
     /// <summary>Normalizes only known built-in aliases, preserving dimensions and custom scalar names.</summary>
     private static string CanonicalizeBuiltInAliases(
@@ -116,9 +127,9 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         var candidate = storeType.Trim();
         var scalarLength = candidate.Length;
         while (scalarLength >= 2
-               && candidate
-                   .AsSpan(0, scalarLength)
-                   .EndsWith("[]", StringComparison.Ordinal))
+            && candidate
+                .AsSpan(0, scalarLength)
+                .EndsWith("[]", StringComparison.Ordinal))
         {
             scalarLength -= 2;
         }

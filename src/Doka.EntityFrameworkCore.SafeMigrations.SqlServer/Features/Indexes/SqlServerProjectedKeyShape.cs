@@ -76,6 +76,7 @@ internal sealed record SqlServerProjectedComputedKeyProof(
         var state = default(SafeMigrationProjectedTableState);
         var hasTableState = source is ISafeMigrationProjectedTableSource tables
             && tables.TryGetProjectedTableState(table, schema, out state);
+
         var recreated = hasTableState && state.IsNewlyCreated;
 
         foreach (var (name, binding) in Operands)
@@ -162,7 +163,7 @@ internal static class SqlServerProjectedKeyShape
             return live;
         }
 
-        if (snapshot is { PhysicalSupported: false, })
+        if (snapshot is { PhysicalSupported: false })
         {
             return Unsupported("physical_table_unproven");
         }
@@ -207,6 +208,7 @@ internal static class SqlServerProjectedKeyShape
             var physical = hasProjected
                 ? ResolveProjected(definition!, mappingSource, computedColumns, source, request.Table, request.Schema)
                 : original;
+
             if (physical is null)
             {
                 return Unknown("projected_key_column_unknown");
@@ -327,12 +329,12 @@ internal static class SqlServerProjectedKeyShape
                 live.Code);
         }
 
-        if (snapshot is { Exists: true, RowCount: >= 0 and <= 1, })
+        if (snapshot is { Exists: true, RowCount: >= 0 and <= 1 })
         {
             return Actionable(projected);
         }
 
-        if (addedNullColumns is { Count: > 0, })
+        if (addedNullColumns is { Count: > 0 })
         {
             if (RejectsAddedNull(request.Filter, addedNullColumns))
             {
@@ -343,7 +345,7 @@ internal static class SqlServerProjectedKeyShape
             // SQL Server treats NULL tuples as equal. A new nullable column
             // is therefore not a blanket uniqueness proof for existing rows.
 
-            return request.ColumnCount == 1 && snapshot is { Exists: true, RowCount: 2, }
+            return request.ColumnCount == 1 && snapshot is { Exists: true, RowCount: 2 }
                 ? new SafeMigrationProviderAnalysis(
                     SafeMigrationObservedState.DataBlocked,
                     SafeMigrationRepairCapability.None,
@@ -393,7 +395,9 @@ internal static class SqlServerProjectedKeyShape
         var length = type switch
         {
             "binary" or "char" or "varbinary" or "varchar" => mapping.Size ?? -1,
-            "nchar" or "nvarchar" => mapping.Size is > 0 and <= 4000 ? mapping.Size.Value * 2 : -1,
+            "nchar" or "nvarchar" => mapping.Size is > 0 and <= 4000
+                ? mapping.Size.Value * 2
+                : -1,
             "bigint" or "datetime" or "money" or "timestamp" or "rowversion" => 8,
             "datetime2" => TemporalBytes(mapping.Precision ?? 7) + 3,
             "datetimeoffset" => TemporalBytes(mapping.Precision ?? 7) + 5,
@@ -402,7 +406,9 @@ internal static class SqlServerProjectedKeyShape
             "int" or "real" or "smalldatetime" or "smallmoney" => 4,
             "smallint" => 2,
             "time" => TemporalBytes(mapping.Precision ?? 7),
-            "float" => mapping.Precision is <= 24 ? 4 : 8,
+            "float" => mapping.Precision is <= 24
+                ? 4
+                : 8,
             "decimal" or "numeric" => (mapping.Precision ?? 18) switch
             {
                 <= 9 => 5, <= 19 => 9, <= 28 => 13, _ => 17,
@@ -498,7 +504,7 @@ internal static class SqlServerProjectedKeyShape
 
                 if (filter is SafeMigrationSqlNullTestExpression
                     {
-                        Negated: true, Operand: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 } identifier
+                        Negated: true, Operand: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 } identifier,
                     }
                     && addedColumns.Contains(identifier.Parts[0]))
                 {
@@ -557,13 +563,17 @@ internal static class SqlServerProjectedKeyShape
         SafeMigrationSqlExpression? Filter
     )
     {
-        public int MaximumBytes => Primary ? 900 : 1700;
+        public int MaximumBytes => Primary
+            ? 900
+            : 1700;
 
         public int ColumnCount => Columns?.Count ?? IndexKeys!.Count;
 
         public string Column(
             int ordinal
-        ) => Columns is null ? IndexKeys![ordinal].Column! : Columns[ordinal];
+        ) => Columns is null
+            ? IndexKeys![ordinal].Column!
+            : Columns[ordinal];
 
         public static Request From(
             SafeMigrationIntent intent,

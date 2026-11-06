@@ -25,9 +25,9 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSql
 
     private readonly ISqlServerSafeMigrationsBaselineGenerator _baselineGenerator;
     private readonly SqlServerSafeMigrationCatalogSqlBuilder _catalogSqlBuilder;
+    private readonly MigrationsSqlGeneratorDependencies _dependencies;
     private readonly SqlServerSafeMigrationSqlExpressionRenderer _expressionRenderer;
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
-    private readonly MigrationsSqlGeneratorDependencies _dependencies;
 
     /// <summary>Initializes the composed SQL Server generator.</summary>
     /// <param name="baselineGenerator">The generator for ordinary EF Core SQL Server operations.</param>
@@ -63,7 +63,7 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSql
         ArgumentNullException.ThrowIfNull(operations);
 
         var analyzer = _dependencies.CurrentContext.Context.GetService<ISafeMigrationProviderAnalyzer>()
-            as SqlServerSafeMigrationProviderAnalyzer
+                as SqlServerSafeMigrationProviderAnalyzer
             ?? throw new InvalidOperationException("SQL Server SafeMigrations requires its scoped provider analyzer.");
 
         // WHY: Even an ordinary-only retry through this enabled generator
@@ -110,8 +110,11 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSql
             if (plan.IsStaticallyUnsupported)
             {
                 throw new NotSupportedException(
-                    SafeMigrationDiagnosticMessages.FormatRuntime(safeOperation,
-                        "doka_sm_unsupported", ordinal, plan.UnsupportedCode));
+                    SafeMigrationDiagnosticMessages.FormatRuntime(
+                        safeOperation,
+                        "doka_sm_unsupported",
+                        ordinal,
+                        plan.UnsupportedCode));
             }
 
             plans[ordinal] = plan;
@@ -119,7 +122,10 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSql
         }
 
         var safeOperations = ExtractSafeOperations(operations, safeOperationCount);
-        var metadataCommand = _dependencies.CommandBuilderFactory.Create().Build();
+        var metadataCommand = _dependencies
+            .CommandBuilderFactory
+            .Create()
+            .Build();
 
         var commands = new List<MigrationCommand>(operations.Count);
 
@@ -150,10 +156,9 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSql
                 {
                     ordinary.Add(operations[ordinal]);
                     ordinal++;
-                }
-                while (ordinal < operations.Count
-                       && operations[ordinal] is not SafeMigrationOperation
-                           and not SafeMigrationDesignTimeServicesRequiredOperation);
+                } while (ordinal < operations.Count
+                    && operations[ordinal] is not SafeMigrationOperation
+                        and not SafeMigrationDesignTimeServicesRequiredOperation);
 
                 // WHY: SQL Server's baseline generator can inspect adjacent
                 // operations (for example, temporal-table DDL). Preserve each
@@ -175,7 +180,7 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSql
             var effectiveRepairBaseline = repairBaseline.Count > 0
                 ? repairBaseline
                 : safeOperation is { Policy: SafeMigrationPolicy.RepairIfSafe, Intent: AlterColumnIntent }
-                    && plan.RepairCapability == SafeMigrationRepairCapability.Safe
+                && plan.RepairCapability == SafeMigrationRepairCapability.Safe
                     ? baseline
                     : [];
 
@@ -206,14 +211,21 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSql
                 || HasTransactionSuppressedCommand(effectiveRepairBaseline))
             {
                 throw new NotSupportedException(
-                    SafeMigrationDiagnosticMessages.FormatRuntime(safeOperation,
-                        "doka_sm_unsupported", ordinal, "baseline_transaction_suppressed"));
+                    SafeMigrationDiagnosticMessages.FormatRuntime(
+                        safeOperation,
+                        "doka_sm_unsupported",
+                        ordinal,
+                        "baseline_transaction_suppressed"));
             }
 
             var guarded = new SqlOperation
             {
                 Sql = ProtectCommandSql(
-                    BuildGuardedSql(safeOperation, plan, baseline, effectiveRepairBaseline,
+                    BuildGuardedSql(
+                        safeOperation,
+                        plan,
+                        baseline,
+                        effectiveRepairBaseline,
                         scriptIdentityScope: (options & MigrationsSqlGenerationOptions.Script) != 0,
                         operationOrdinal: ordinal),
                     options),
@@ -225,6 +237,7 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSql
                 && (options & MigrationsSqlGenerationOptions.Script) == 0)
             {
                 var table = _sqlGenerationHelper.DelimitIdentifier(data.Table, data.Schema ?? "dbo");
+
                 // WHY: An acquired marker already certifies the original ON.
                 // Re-reading metadata after a failure could hide that fact or
                 // require rights on a rejected command that never acquired ON.
@@ -235,14 +248,15 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSql
                 // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var index = 0; index < guardedCommands.Count; index++)
                 {
-                    commands.Add(new SqlServerSafeMigrationIdentityInsertCommand(
-                        guardedCommands[index],
-                        cleanupSql,
-                        _dependencies,
-                        analyzer,
-                        metadataCommand,
-                        safeOperation,
-                        ordinal));
+                    commands.Add(
+                        new SqlServerSafeMigrationIdentityInsertCommand(
+                            guardedCommands[index],
+                            cleanupSql,
+                            _dependencies,
+                            analyzer,
+                            metadataCommand,
+                            safeOperation,
+                            ordinal));
                 }
             }
             else
@@ -324,7 +338,9 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSql
         return safeOperations;
     }
 
-    private static void ValidateGuardCommands(IReadOnlyList<MigrationCommand> commands)
+    private static void ValidateGuardCommands(
+        IReadOnlyList<MigrationCommand> commands
+    )
     {
         if (commands.Count == 0)
         {
@@ -358,8 +374,12 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSql
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < source.Count; index++)
         {
-            destination.Add(new SqlServerSafeMigrationGuardedCommand(
-                source[index], dependencies, analyzer, metadataCommand));
+            destination.Add(
+                new SqlServerSafeMigrationGuardedCommand(
+                    source[index],
+                    dependencies,
+                    analyzer,
+                    metadataCommand));
         }
     }
 

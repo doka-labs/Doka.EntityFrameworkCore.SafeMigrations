@@ -17,7 +17,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         // while scope cleanup is needed after failure. Until the provider
         // supplies a once-only cleanup contract, executing both is unsafe.
         if (commands.Any(static command => command.Fragments.Any(static fragment =>
-                fragment.Kind == MySqlMigrationCommandFragmentKind.Cleanup)))
+            fragment.Kind == MySqlMigrationCommandFragmentKind.Cleanup)))
         {
             throw new InvalidOperationException(
                 "A multi-command MySQL baseline with provider cleanup cannot be guarded safely.");
@@ -160,6 +160,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         }
 
         var builder = new StringBuilder();
+
         // WHY: Keep each prepared command's repair body tied to its provider-command ordinal.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -181,6 +182,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
                         command.BodyCommand,
                         GetRepairBody(operation, runtimePlan, repair, command, index))
                     .ToSql());
+
             AppendCommand(builder, $"PREPARE {PreparedStatementName} FROM @doka_sm_sql;");
             AppendCommand(builder, $"EXECUTE {PreparedStatementName};");
             AppendCommand(builder, $"DEALLOCATE PREPARE {PreparedStatementName};");
@@ -244,7 +246,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         {
             // WHY: These immutable SQL templates contain no operation or database state.
             // CreateScoped snapshots and reverses its own copy; it never mutates this input.
-            return hasNullabilityProof ? s_nullabilityGuardCleanupCommands : s_guardCleanupCommands;
+            return hasNullabilityProof
+                ? s_nullabilityGuardCleanupCommands
+                : s_guardCleanupCommands;
         }
 
         var commands = new List<string>(2 + cleanupCommandCount)
@@ -314,7 +318,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
             ? "SET @doka_sm_required_add_resume = NULL, @doka_sm_add_status = NULL; "
             : string.Empty;
 
-        var nativeScopeCleanup = hasNativeSqlModeCleanup ? ProviderSetupEnteredCleanup : string.Empty;
+        var nativeScopeCleanup = hasNativeSqlModeCleanup
+            ? ProviderSetupEnteredCleanup
+            : string.Empty;
 
         return hasNullabilityProof
             ? prefix
@@ -366,7 +372,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         var standardOperation = SafeMigrationStandardOperationFactory.Create(
             operation.Intent,
             RenderStructuredExpression,
-            static collation => collation.Schema is null ? collation.Name : null);
+            static collation => collation.Schema is null
+                ? collation.Name
+                : null);
 
         if (context.ServerVersion.IsMariaDb)
         {
@@ -441,7 +449,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         var repairOperation = SafeMigrationStandardOperationFactory.CreateFullDefinitionRepair(
             intent,
             RenderStructuredExpression,
-            static collation => collation.Schema is null ? collation.Name : null,
+            static collation => collation.Schema is null
+                ? collation.Name
+                : null,
             MySqlSafeMigrationColumnMetadata.CanSafelyConverge);
 
         var repair = GetBaselineBatch(RenderNativeOperation(context, repairOperation, intent));

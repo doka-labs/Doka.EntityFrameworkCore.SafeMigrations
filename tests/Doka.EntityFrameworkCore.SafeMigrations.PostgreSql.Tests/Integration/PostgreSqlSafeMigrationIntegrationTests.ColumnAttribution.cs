@@ -4,16 +4,16 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 [Collection(ProcessWideTestGroup.Name)]
 public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    private static readonly JsonSerializerOptions s_attributionJsonOptions = new()
+    {
+        WriteIndented = true,
+    };
+
     /// <summary>Uses the assembly-owned container for this feature.</summary>
     /// <param name="fixture">The shared PostgreSQL container fixture.</param>
     public PostgreSqlColumnAttributionIntegrationTests(
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
-
-    private static readonly System.Text.Json.JsonSerializerOptions s_attributionJsonOptions = new()
-    {
-        WriteIndented = true,
-    };
 
     /// <summary>Records complete catalog and runtime samples for paired column fixtures without timing gates.</summary>
     [Fact]
@@ -27,18 +27,24 @@ public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafe
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(CancellationToken.None);
         var catalog = new PostgreSqlSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var observedStates = new List<(bool Drift, string State)>();
         var convergedStates = new List<SafeMigrationObservedState>();
         var preservedRows = new List<int>();
         var controlPath = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_POSTGRES_ATTRIBUTION_CONTROL");
-        using var controlEvidence = string.IsNullOrWhiteSpace(controlPath) ? null
-            : System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.GetFullPath(controlPath)));
+        using var controlEvidence = string.IsNullOrWhiteSpace(controlPath)
+            ? null
+            : JsonDocument.Parse(File.ReadAllText(Path.GetFullPath(controlPath)));
 
         if (controlEvidence is not null
-            && controlEvidence.RootElement.GetProperty("ServerVersion").GetString() != Fixture.ServerVersion.ToString())
+            && controlEvidence
+                .RootElement
+                .GetProperty("ServerVersion")
+                .GetString()
+            != Fixture.ServerVersion.ToString())
         {
             throw new InvalidOperationException("The PostgreSQL attribution control must use the same engine version.");
         }
@@ -52,21 +58,35 @@ public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafe
                 {
                     var table = $"attribution_{count}_{mixed}_{drift}";
                     var columns = AttributionColumns(count, mixed);
-                    await ExecuteSqlAsync(connectionString, AttributionSetupSql(table, columns, drift));
-                    var tableOperation = new SafeMigrationOperation(new EnsureTableIntent(
-                        new ExpectedTableDefinition(table, columns), SafeMigrationTableMode.StrictDefinition),
+                    await ExecuteSqlAsync(
+                        connectionString,
+                        AttributionSetupSql(table, columns, drift),
+                        cancellationToken: CancellationToken.None);
+
+                    var tableOperation = new SafeMigrationOperation(
+                        new EnsureTableIntent(
+                            new ExpectedTableDefinition(table, columns),
+                            SafeMigrationTableMode.StrictDefinition),
                         SafeMigrationPolicy.ThrowIfDifferent);
 
                     var repairs = columns
                         .Select(column => (MigrationOperation)new SafeMigrationOperation(
-                            new EnsureColumnIntent(table, column), SafeMigrationPolicy.RepairIfSafe))
+                            new EnsureColumnIntent(table, column),
+                            SafeMigrationPolicy.RepairIfSafe))
                         .ToArray();
 
                     var plan = catalog.Build(tableOperation);
                     var catalogSql = "SELECT (" + plan.RenderStateExpression() + "), (" + plan.Postcondition + ");";
                     var commands = generator.Generate(repairs, context.Model);
-                    var arms = AttributionArms(controlEvidence, count, mixed, drift, catalogSql,
-                        commands.Select(command => command.CommandText).ToArray());
+                    var arms = AttributionArms(
+                        controlEvidence,
+                        count,
+                        mixed,
+                        drift,
+                        catalogSql,
+                        commands
+                            .Select(command => command.CommandText)
+                            .ToArray());
 
                     var catalogSamples = new List<object>();
                     var runtimeSamples = new List<object>();
@@ -80,21 +100,26 @@ public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafe
                             var allocated = GC.GetTotalAllocatedBytes(precise: true);
                             var started = Stopwatch.GetTimestamp();
                             var state = Convert.ToString(
-                                await classification.ExecuteScalarAsync(CancellationToken.None),
-                                CultureInfo.InvariantCulture) ?? "<null>";
+                                    await classification.ExecuteScalarAsync(CancellationToken.None),
+                                    CultureInfo.InvariantCulture)
+                                ?? "<null>";
 
-                            var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                            var elapsed = Stopwatch.GetElapsedTime(started)
+                                .TotalMilliseconds;
+
                             var bytes = GC.GetTotalAllocatedBytes(precise: true) - allocated;
                             if (sample >= 0)
                             {
-                                catalogSamples.Add(new
-                                {
-                                    Arm = arm.Name,
-                                    ElapsedMilliseconds = elapsed,
-                                    ProcessAllocatedBytes = bytes,
-                                    RoundTrips = 1,
-                                    State = state,
-                                });
+                                catalogSamples.Add(
+                                    new
+                                    {
+                                        Arm = arm.Name,
+                                        ElapsedMilliseconds = elapsed,
+                                        ProcessAllocatedBytes = bytes,
+                                        RoundTrips = 1,
+                                        State = state,
+                                    });
+
                                 observedStates.Add((drift, state));
                             }
 
@@ -122,11 +147,18 @@ public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafe
                                     if (!string.IsNullOrWhiteSpace(failedOutput))
                                     {
                                         var failedPath = Path.ChangeExtension(
-                                            Path.GetFullPath(failedOutput), "failure.sql");
+                                            Path.GetFullPath(failedOutput),
+                                            "failure.sql");
 
                                         Directory.CreateDirectory(Path.GetDirectoryName(failedPath)!);
-                                        File.WriteAllText(failedPath, "-- Fixture: " + table + "\n"
-                                            + AttributionSetupSql(table, columns, drift) + "\n" + sql);
+                                        File.WriteAllText(
+                                            failedPath,
+                                            "-- Fixture: "
+                                            + table
+                                            + "\n"
+                                            + AttributionSetupSql(table, columns, drift)
+                                            + "\n"
+                                            + sql);
                                     }
 
                                     throw new InvalidOperationException(
@@ -135,50 +167,73 @@ public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafe
                                 }
                             }
 
-                            elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                            elapsed = Stopwatch.GetElapsedTime(started)
+                                .TotalMilliseconds;
+
                             bytes = GC.GetTotalAllocatedBytes(precise: true) - allocated;
                             await transaction.RollbackAsync(CancellationToken.None);
                             if (sample >= 0)
                             {
-                                runtimeSamples.Add(new
-                                {
-                                    Arm = arm.Name,
-                                    ElapsedMilliseconds = elapsed,
-                                    ProcessAllocatedBytes = bytes,
-                                    GeneratedCommandRoundTrips = arm.Runtime.Count,
-                                    TransactionSetupTeardownRoundTrips = 2,
-                                });
+                                runtimeSamples.Add(
+                                    new
+                                    {
+                                        Arm = arm.Name,
+                                        ElapsedMilliseconds = elapsed,
+                                        ProcessAllocatedBytes = bytes,
+                                        GeneratedCommandRoundTrips = arm.Runtime.Count,
+                                        TransactionSetupTeardownRoundTrips = 2,
+                                    });
                             }
                         }
                     }
 
                     await using var explain = connection.CreateCommand();
                     explain.CommandText = "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + catalogSql;
-                    var explanation = Convert.ToString(await explain.ExecuteScalarAsync(CancellationToken.None),
-                        CultureInfo.InvariantCulture) ?? "<null>";
+                    var explanation = Convert.ToString(
+                            await explain.ExecuteScalarAsync(CancellationToken.None),
+                            CultureInfo.InvariantCulture)
+                        ?? "<null>";
 
-                    results.Add(new
-                    {
-                        Columns = count,
-                        MixedCollations = mixed,
-                        Drift = drift,
-                        CatalogSql = catalogSql,
-                        CatalogUtf8Bytes = Encoding.UTF8.GetByteCount(catalogSql),
-                        RuntimeSql = commands.Select(command => command.CommandText).ToArray(),
-                        RuntimeUtf8Bytes = commands.Sum(command => Encoding.UTF8.GetByteCount(command.CommandText)),
-                        CatalogSamples = catalogSamples,
-                        RuntimeSamples = runtimeSamples,
-                        ExplainJson = explanation,
-                    });
-                    await ExecuteOperationsAsync(context, repairs);
-                    await ExecuteOperationsAsync(context, repairs);
-                    var replay = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
-                        context, repairs.Cast<SafeMigrationOperation>().ToArray(), CancellationToken.None);
+                    results.Add(
+                        new
+                        {
+                            Columns = count,
+                            MixedCollations = mixed,
+                            Drift = drift,
+                            CatalogSql = catalogSql,
+                            CatalogUtf8Bytes = Encoding.UTF8.GetByteCount(catalogSql),
+                            RuntimeSql = commands
+                                .Select(command => command.CommandText)
+                                .ToArray(),
+                            RuntimeUtf8Bytes = commands.Sum(command => Encoding.UTF8.GetByteCount(command.CommandText)),
+                            CatalogSamples = catalogSamples,
+                            RuntimeSamples = runtimeSamples,
+                            ExplainJson = explanation,
+                        });
+
+                    await ExecuteOperationsAsync(context, repairs, CancellationToken.None);
+                    await ExecuteOperationsAsync(context, repairs, CancellationToken.None);
+                    var replay = await context
+                        .GetService<ISafeMigrationProviderAnalyzer>()
+                        .AnalyzeAsync(
+                            context,
+                            repairs
+                                .Cast<SafeMigrationOperation>()
+                                .ToArray(),
+                            CancellationToken.None);
 
                     convergedStates.AddRange(replay.Select(result => result.ObservedState));
-                    preservedRows.Add(await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM "
-                        + PostgreSqlIdentifier(table) + " WHERE " + string.Join(" AND ",
-                            columns.Select(column => PostgreSqlIdentifier(column.Name) + " = 'preserved'")) + ";"));
+                    preservedRows.Add(
+                        await ScalarIntAsync(
+                            connectionString,
+                            "SELECT COUNT(*) FROM "
+                            + PostgreSqlIdentifier(table)
+                            + " WHERE "
+                            + string.Join(
+                                " AND ",
+                                columns.Select(column => PostgreSqlIdentifier(column.Name) + " = 'preserved'"))
+                            + ";",
+                            cancellationToken: CancellationToken.None));
                 }
             }
         }
@@ -188,19 +243,37 @@ public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafe
         {
             var fullPath = Path.GetFullPath(output);
             Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-            File.WriteAllText(fullPath, System.Text.Json.JsonSerializer.Serialize(new
-            {
-                ServerVersion = Fixture.ServerVersion.ToString(),
-                AllocationScope = "Process-wide precise totals around asynchronous execution; no timing assertions.",
-                ControlEvidence = controlPath,
-                Results = results,
-            }, s_attributionJsonOptions));
+            File.WriteAllText(
+                fullPath,
+                JsonSerializer.Serialize(
+                    new
+                    {
+                        ServerVersion = Fixture.ServerVersion.ToString(),
+                        AllocationScope =
+                            "Process-wide precise totals around asynchronous execution; no timing assertions.",
+                        ControlEvidence = controlPath,
+                        Results = results,
+                    },
+                    s_attributionJsonOptions));
         }
 
         // Assert
         Assert.Equal(16, results.Count);
-        Assert.Equal(80 * (controlEvidence is null ? 1 : 3), observedStates.Count);
-        Assert.All(observedStates, result => Assert.Equal(result.Drift ? "different" : "matching", result.State));
+        Assert.Equal(
+            80
+            * (controlEvidence is null
+                ? 1
+                : 3),
+            observedStates.Count);
+
+        Assert.All(
+            observedStates,
+            result => Assert.Equal(
+                result.Drift
+                    ? "different"
+                    : "matching",
+                result.State));
+
         Assert.All(convergedStates, state => Assert.Equal(SafeMigrationObservedState.Matching, state));
         Assert.Equal(356, convergedStates.Count);
         Assert.All(preservedRows, count => Assert.Equal(1, count));
@@ -215,7 +288,7 @@ public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafe
     /// <param name="runtimeSql">The current ordered complete runtime commands.</param>
     /// <returns>The current arm, optionally bracketed by the identical immutable control.</returns>
     private static (string Name, string Catalog, IReadOnlyList<string> Runtime)[] AttributionArms(
-        System.Text.Json.JsonDocument? control,
+        JsonDocument? control,
         int columns,
         bool mixed,
         bool drift,
@@ -228,16 +301,26 @@ public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafe
             return [("current", catalogSql, runtimeSql)];
         }
 
-        var fixture = control.RootElement
+        var fixture = control
+            .RootElement
             .GetProperty("Results")
             .EnumerateArray()
-            .Single(result => result.GetProperty("Columns").GetInt32() == columns
-                && result.GetProperty("MixedCollations").GetBoolean() == mixed
-                && result.GetProperty("Drift").GetBoolean() == drift);
+            .Single(result => result
+                    .GetProperty("Columns")
+                    .GetInt32()
+                == columns
+                && result
+                    .GetProperty("MixedCollations")
+                    .GetBoolean()
+                == mixed
+                && result
+                    .GetProperty("Drift")
+                    .GetBoolean()
+                == drift);
 
         var controlCatalog = fixture
-            .GetProperty("CatalogSql")
-            .GetString()
+                .GetProperty("CatalogSql")
+                .GetString()
             ?? throw new InvalidOperationException("The PostgreSQL control has no catalog SQL.");
 
         var controlRuntime = fixture
@@ -247,8 +330,11 @@ public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafe
                 ?? throw new InvalidOperationException("The PostgreSQL control has no runtime SQL."))
             .ToArray();
 
-        return [("control_before", controlCatalog, controlRuntime), ("current", catalogSql, runtimeSql),
-            ("control_after", controlCatalog, controlRuntime)];
+        return
+        [
+            ("control_before", controlCatalog, controlRuntime), ("current", catalogSql, runtimeSql),
+            ("control_after", controlCatalog, controlRuntime),
+        ];
     }
 
     /// <summary>Creates the same complete target facets used by the offline generation workload.</summary>
@@ -258,14 +344,25 @@ public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafe
     private static ExpectedColumnDefinition[] AttributionColumns(
         int count,
         bool mixed
-    ) => Enumerable.Range(0, count)
+    ) => Enumerable
+        .Range(0, count)
         .Select(index => new ExpectedColumnDefinition(
-            $"value_{index:D2}", typeof(string), false, "character varying(32)", maxLength: 32,
+            $"value_{index:D2}",
+            typeof(string),
+            false,
+            "character varying(32)",
+            maxLength: 32,
             collation: !mixed || index % 3 == 2
                 ? null
                 : new SafeMigrationCollationIdentifier(
-                    index % 3 == 0 ? "C" : "POSIX", index % 3 == 0 ? null : "pg_catalog"),
-            defaultValue: SafeMigrationDefaultValue.Literal("canonical"), comment: "canonical"))
+                    index % 3 == 0
+                        ? "C"
+                        : "POSIX",
+                    index % 3 == 0
+                        ? null
+                        : "pg_catalog"),
+            defaultValue: SafeMigrationDefaultValue.Literal("canonical"),
+            comment: "canonical"))
         .ToArray();
 
     /// <summary>Creates one populated fixture with only a repairable comment difference in drift mode.</summary>
@@ -279,17 +376,37 @@ public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafe
         bool drift
     )
     {
-        var definitions = columns.Select(column => PostgreSqlIdentifier(column.Name) + " character varying(32)"
-            + (column.Collation is null ? string.Empty : " COLLATE "
-                + (column.Collation.Schema is null ? string.Empty : PostgreSqlIdentifier(column.Collation.Schema) + ".")
-                + PostgreSqlIdentifier(column.Collation.Name)) + " NOT NULL DEFAULT 'canonical'");
+        var definitions = columns.Select(column => PostgreSqlIdentifier(column.Name)
+            + " character varying(32)"
+            + (column.Collation is null
+                ? string.Empty
+                : " COLLATE "
+                + (column.Collation.Schema is null
+                    ? string.Empty
+                    : PostgreSqlIdentifier(column.Collation.Schema) + ".")
+                + PostgreSqlIdentifier(column.Collation.Name))
+            + " NOT NULL DEFAULT 'canonical'");
 
-        var comments = columns.Select(column => "COMMENT ON COLUMN " + PostgreSqlIdentifier(table) + "."
-            + PostgreSqlIdentifier(column.Name) + " IS '" + (drift ? "legacy" : "canonical") + "';");
+        var comments = columns.Select(column => "COMMENT ON COLUMN "
+            + PostgreSqlIdentifier(table)
+            + "."
+            + PostgreSqlIdentifier(column.Name)
+            + " IS '"
+            + (drift
+                ? "legacy"
+                : "canonical")
+            + "';");
 
-        return "CREATE TABLE " + PostgreSqlIdentifier(table) + " (" + string.Join(",", definitions) + ");"
-            + string.Join(string.Empty, comments) + "INSERT INTO " + PostgreSqlIdentifier(table) + " VALUES ("
-            + string.Join(",", columns.Select(_ => "'preserved'")) + ");";
+        return "CREATE TABLE "
+            + PostgreSqlIdentifier(table)
+            + " ("
+            + string.Join(",", definitions)
+            + ");"
+            + string.Join(string.Empty, comments)
+            + "INSERT INTO "
+            + PostgreSqlIdentifier(table)
+            + " VALUES ("
+            + string.Join(",", columns.Select(_ => "'preserved'"))
+            + ");";
     }
-
 }

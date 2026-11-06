@@ -1,18 +1,24 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the CatalogPacking migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlCatalogPackingIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlCatalogPackingIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlCatalogPackingIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlCatalogPackingIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>Prerequisite failures between live operations do not fragment bounded classification.</summary>
     [Fact]
     public async Task Analyzer_PacksAcrossShortCircuitGapsAndCaptureBoundariesWithoutMixingResults()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `catalog_packing` (`id` int NOT NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `catalog_packing` (`id` int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(new MySqlConnection(connectionString));
         context.Database.SetDbConnection(connection);
@@ -37,12 +43,17 @@ public sealed partial class MySqlCatalogPackingIntegrationTests : MySqlSafeMigra
             }
         }
 
-        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        var operations = builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
 
-        var results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
-            context,
-            operations,
-            CancellationToken.None);
+        var results = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                CancellationToken.None);
 
         Assert.False(connection.CanCreateBatch);
         Assert.Equal(10, connection.ClassificationStatementCount);
@@ -54,6 +65,7 @@ public sealed partial class MySqlCatalogPackingIntegrationTests : MySqlSafeMigra
                     ? SafeMigrationObservedState.Matching
                     : SafeMigrationObservedState.PrerequisiteMissing,
                 results[ordinal].ObservedState);
+
             Assert.Equal(ordinal % 2 == 0, results[ordinal].PostconditionSatisfied);
         }
     }
@@ -67,7 +79,11 @@ public sealed partial class MySqlCatalogPackingIntegrationTests : MySqlSafeMigra
     )
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `catalog_ownership` (`id` int NOT NULL);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `catalog_ownership` (`id` int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(
             new MySqlConnection(connectionString),
@@ -84,10 +100,18 @@ public sealed partial class MySqlCatalogPackingIntegrationTests : MySqlSafeMigra
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        var operations = builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations));
+            context
+                .GetService<ISafeMigrationProviderAnalyzer>()
+                .AnalyzeAsync(
+                    context,
+                    operations,
+                    CancellationToken.None));
 
         Assert.True(connection.FaultWasInjected);
         Assert.Equal(1, connection.ClassificationStatementCount);

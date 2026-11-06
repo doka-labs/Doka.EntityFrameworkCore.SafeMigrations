@@ -8,22 +8,35 @@ public sealed class SafeMigrationGeneratedExpressionDiagnosticsTests
     [Theory]
     [InlineData(SafeMigrationPolicy.ThrowIfDifferent)]
     [InlineData(SafeMigrationPolicy.RepairIfSafe)]
-    public void OccupiedGeneratedCaseTargetHasSpecificExplanationAndRecovery(SafeMigrationPolicy policy)
+    public void OccupiedGeneratedCaseTargetHasSpecificExplanationAndRecovery(
+        SafeMigrationPolicy policy
+    )
     {
         // Arrange
         const string code = "projected_generated_case_target_occupied";
-        var operation = new SafeMigrationOperation(new EnsureCheckConstraintIntent(
-            new ExpectedCheckConstraintDefinition("ck_case", "case_items", "private_expression_payload")), policy);
+        var operation = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(
+                new ExpectedCheckConstraintDefinition("ck_case", "case_items", "private_expression_payload")),
+            policy);
 
-        var analysis = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.None, postconditionSatisfied: false, code);
+        var analysis = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.None,
+            postconditionSatisfied: false,
+            code);
 
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind,
-            analysis.ObservedState, policy, analysis.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            analysis.ObservedState,
+            policy,
+            analysis.RepairCapability);
 
         // Act
         var explanation = SafeMigrationDiagnosticMessages.GetExplanation(
-            operation.Intent, analysis.ObservedState, code, decision.Code);
+            operation.Intent,
+            analysis.ObservedState,
+            code,
+            decision.Code);
 
         var message = SafeMigrationDiagnosticMessages.FormatRuntimeFromAnalysis(operation, analysis, decision, 7);
 
@@ -48,14 +61,19 @@ public sealed class SafeMigrationGeneratedExpressionDiagnosticsTests
     [InlineData(SafeMigrationObservedState.Missing, "missing_apply")]
     [InlineData(SafeMigrationObservedState.Matching, "matching_noop")]
     public void NonconflictingGeneratedCaseTargetDoesNotAcquireOccupancyExplanation(
-        SafeMigrationObservedState state, string decisionCode)
+        SafeMigrationObservedState state,
+        string decisionCode
+    )
     {
         // Arrange
         const string code = "classified_generated_case_binding";
 
         // Act
         var explanation = SafeMigrationDiagnosticMessages.GetExplanation(
-            SafeMigrationOperationKind.EnsureCheckConstraint, state, code, decisionCode);
+            SafeMigrationOperationKind.EnsureCheckConstraint,
+            state,
+            code,
+            decisionCode);
 
         // Assert
         Assert.Equal(decisionCode, explanation.ReasonCode);
@@ -72,8 +90,10 @@ public sealed class SafeMigrationGeneratedExpressionDiagnosticsTests
 
         // Act
         var explanation = SafeMigrationDiagnosticMessages.GetExplanation(
-            SafeMigrationOperationKind.EnsureCheckConstraint, SafeMigrationObservedState.Different,
-            code, "different_no_safe_repair");
+            SafeMigrationOperationKind.EnsureCheckConstraint,
+            SafeMigrationObservedState.Different,
+            code,
+            "different_no_safe_repair");
 
         // Assert
         Assert.Equal("definition_change_not_authorized", explanation.ReasonCode);
@@ -118,14 +138,20 @@ public sealed class SafeMigrationGeneratedExpressionDiagnosticsTests
     [InlineData("captured_expression_literal_catalog_unverifiable", "literal")]
     [InlineData("generated_expression_assignment", "literal")]
     [InlineData("computed_column_operand_identity_unproven", "identities")]
-    public void EstablishedGeneratedCodeHasSpecificExplanation(string code, string reasonFragment)
+    public void EstablishedGeneratedCodeHasSpecificExplanation(
+        string code,
+        string reasonFragment
+    )
     {
         // Arrange
         const SafeMigrationObservedState state = SafeMigrationObservedState.Unsupported;
 
         // Act
         var explanation = SafeMigrationDiagnosticMessages.GetExplanation(
-            SafeMigrationOperationKind.EnsureColumn, state, code, "unsupported");
+            SafeMigrationOperationKind.EnsureColumn,
+            state,
+            code,
+            "unsupported");
 
         // Assert
         Assert.Equal(code, explanation.ReasonCode);
@@ -144,8 +170,10 @@ public sealed class SafeMigrationGeneratedExpressionDiagnosticsTests
 
         // Act
         var explanation = SafeMigrationDiagnosticMessages.GetExplanation(
-            SafeMigrationOperationKind.EnsureColumn, SafeMigrationObservedState.Unsupported,
-            unknownCode, "unsupported");
+            SafeMigrationOperationKind.EnsureColumn,
+            SafeMigrationObservedState.Unsupported,
+            unknownCode,
+            "unsupported");
 
         // Assert
         Assert.Equal("provider_contract_unsupported", explanation.ReasonCode);
@@ -159,14 +187,20 @@ public sealed class SafeMigrationGeneratedExpressionDiagnosticsTests
     [Theory]
     [InlineData("generated_column_drop_dependency", "surviving generated column depends")]
     [InlineData("generated_column_drop_unproven", "not certified")]
-    public void GeneratedDropExplanationPreservesEstablishedEvidence(string code, string reasonFragment)
+    public void GeneratedDropExplanationPreservesEstablishedEvidence(
+        string code,
+        string reasonFragment
+    )
     {
         // Arrange
         const SafeMigrationObservedState state = SafeMigrationObservedState.Unsupported;
 
         // Act
         var explanation = SafeMigrationDiagnosticMessages.GetExplanation(
-            SafeMigrationOperationKind.DropColumn, state, code, "unsupported");
+            SafeMigrationOperationKind.DropColumn,
+            state,
+            code,
+            "unsupported");
 
         // Assert
         Assert.Equal(code, explanation.ReasonCode);
@@ -183,18 +217,28 @@ public sealed class SafeMigrationGeneratedExpressionDiagnosticsTests
     [Theory]
     [InlineData("column_drop_dependency", SafeMigrationObservedState.Different, "native dependency")]
     [InlineData("generated_column_drop_other_dependency", SafeMigrationObservedState.Different, "native dependency")]
-    [InlineData("projected_generated_column_drop_dependency", SafeMigrationObservedState.Different,
+    [InlineData(
+        "projected_generated_column_drop_dependency",
+        SafeMigrationObservedState.Different,
         "surviving generated column depends")]
     [InlineData("table_rebuild_foreign_key_violation", SafeMigrationObservedState.DataBlocked, "foreign-key rows")]
     public void SourceRemovalReasonPreservesItsEstablishedEvidence(
-        string code, SafeMigrationObservedState state, string reasonFragment)
+        string code,
+        SafeMigrationObservedState state,
+        string reasonFragment
+    )
     {
         // Arrange
-        var decision = state == SafeMigrationObservedState.DataBlocked ? "data_blocked" : "different_no_safe_repair";
+        var decision = state == SafeMigrationObservedState.DataBlocked
+            ? "data_blocked"
+            : "different_no_safe_repair";
 
         // Act
         var explanation = SafeMigrationDiagnosticMessages.GetExplanation(
-            SafeMigrationOperationKind.DropColumn, state, code, decision);
+            SafeMigrationOperationKind.DropColumn,
+            state,
+            code,
+            decision);
 
         // Assert
         Assert.Equal(code, explanation.ReasonCode);
@@ -209,14 +253,19 @@ public sealed class SafeMigrationGeneratedExpressionDiagnosticsTests
     [Theory]
     [InlineData("projected_check_source_dependency")]
     [InlineData("projected_check_source_dependency_unproven")]
-    public void CheckSourceExplanationDoesNotAssumeRename(string code)
+    public void CheckSourceExplanationDoesNotAssumeRename(
+        string code
+    )
     {
         // Arrange
         const SafeMigrationObservedState state = SafeMigrationObservedState.Different;
 
         // Act
         var explanation = SafeMigrationDiagnosticMessages.GetExplanation(
-            SafeMigrationOperationKind.DropColumn, state, code, "different_no_safe_repair");
+            SafeMigrationOperationKind.DropColumn,
+            state,
+            code,
+            "different_no_safe_repair");
 
         // Assert
         Assert.Equal(code, explanation.ReasonCode);
@@ -234,14 +283,19 @@ public sealed class SafeMigrationGeneratedExpressionDiagnosticsTests
     [InlineData("column_drop_dependency_private_payload")]
     [InlineData("generated_column_drop_other_dependency_private_payload")]
     [InlineData("table_rebuild_foreign_key_violation_private_payload")]
-    public void UnknownSourceRemovalCodeKeepsGenericExplanation(string code)
+    public void UnknownSourceRemovalCodeKeepsGenericExplanation(
+        string code
+    )
     {
         // Arrange
         const SafeMigrationObservedState state = SafeMigrationObservedState.Unsupported;
 
         // Act
         var explanation = SafeMigrationDiagnosticMessages.GetExplanation(
-            SafeMigrationOperationKind.DropColumn, state, code, "unsupported");
+            SafeMigrationOperationKind.DropColumn,
+            state,
+            code,
+            "unsupported");
 
         // Assert
         Assert.Equal("provider_contract_unsupported", explanation.ReasonCode);

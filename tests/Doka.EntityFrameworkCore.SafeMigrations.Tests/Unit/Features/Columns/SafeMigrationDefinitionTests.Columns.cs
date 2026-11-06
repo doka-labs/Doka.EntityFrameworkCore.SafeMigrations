@@ -22,9 +22,11 @@ public sealed partial class SafeMigrationDefinitionTests
         Assert.True(
             SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(
                 RepairColumn(defaultValue: SafeMigrationDefaultValue.Literal(1m))));
+
         Assert.True(
             SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(
                 RepairColumn(computedColumnSql: "1 + 1", isStored: true)));
+
         Assert.False(SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(RepairColumn()));
 
         var baseline = RepairColumn(isNullable: true, comment: "legacy");
@@ -35,8 +37,10 @@ public sealed partial class SafeMigrationDefinitionTests
 
         Assert.Throws<ArgumentNullException>(() =>
             SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(null!, losslessTarget));
+
         Assert.Throws<ArgumentNullException>(() =>
             SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(baseline, null!));
+
         Assert.True(SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(baseline, losslessTarget));
         Assert.All(
             new[]
@@ -62,10 +66,12 @@ public sealed partial class SafeMigrationDefinitionTests
 
         Assert.Throws<ArgumentNullException>(() =>
             SafeMigrationColumnRepairHelper.CanSafelyConvergeExistingColumn(null!));
+
         Assert.True(SafeMigrationColumnRepairHelper.CanSafelyConvergeExistingColumn(losslessTarget));
         Assert.False(
             SafeMigrationColumnRepairHelper.CanSafelyConvergeExistingColumn(
                 RepairColumn(isRowVersion: true)));
+
         Assert.False(
             SafeMigrationColumnRepairHelper.CanSafelyConvergeExistingColumn(
                 RepairColumn(computedColumnSql: "1 + 1", isStored: true)));
@@ -111,7 +117,9 @@ public sealed partial class SafeMigrationDefinitionTests
         isRowVersion,
         precision,
         scale,
-        collation is null ? null : new SafeMigrationCollationIdentifier(collation),
+        collation is null
+            ? null
+            : new SafeMigrationCollationIdentifier(collation),
         comment,
         defaultValue ?? SafeMigrationDefaultValue.None,
         computedColumnSql,

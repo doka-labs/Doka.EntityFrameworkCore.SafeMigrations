@@ -13,7 +13,10 @@ public sealed class MySqlProviderCleanupBindingTests
     [InlineData("", "")]
     [InlineData("\r\n\t", " \n")]
     [InlineData("\v\f", "\t\r\n")]
-    public void AcquisitionRetainsExactSnapshotAndSurroundingWhitespace(string prefix, string suffix)
+    public void AcquisitionRetainsExactSnapshotAndSurroundingWhitespace(
+        string prefix,
+        string suffix
+    )
     {
         // Arrange
         var source = prefix + Snapshot + suffix;
@@ -22,8 +25,13 @@ public sealed class MySqlProviderCleanupBindingTests
         var acquired = MySqlSafeMigrationOperationHandler.BuildAcquiredNativeSqlModeSnapshot(source);
 
         // Assert
-        Assert.Equal(prefix + "/*! SET @__doka_previous_sql_mode = @@SESSION.sql_mode, "
-            + "@doka_sm_provider_setup_entered = 1 */;" + suffix, acquired);
+        Assert.Equal(
+            prefix
+            + "/*! SET @__doka_previous_sql_mode = @@SESSION.sql_mode, "
+            + "@doka_sm_provider_setup_entered = 1 */;"
+            + suffix,
+            acquired);
+
         Assert.Equal(prefix + Snapshot + suffix, source);
     }
 
@@ -34,7 +42,10 @@ public sealed class MySqlProviderCleanupBindingTests
     [InlineData("", "")]
     [InlineData("\r\n\t", " \n")]
     [InlineData("\v\f", "\t\r\n")]
-    public void RestorationRetainsExactScopeAndSurroundingWhitespace(string prefix, string suffix)
+    public void RestorationRetainsExactScopeAndSurroundingWhitespace(
+        string prefix,
+        string suffix
+    )
     {
         // Arrange
         var source = prefix + Restore + suffix;
@@ -43,8 +54,13 @@ public sealed class MySqlProviderCleanupBindingTests
         var conditional = MySqlSafeMigrationOperationHandler.BuildConditionalNativeSqlModeRestore(source);
 
         // Assert
-        Assert.Equal(prefix + "/*! SET SESSION sql_mode = IF(COALESCE(@doka_sm_provider_setup_entered = 1, FALSE), "
-            + "@__doka_previous_sql_mode, @@SESSION.sql_mode) */;" + suffix, conditional);
+        Assert.Equal(
+            prefix
+            + "/*! SET SESSION sql_mode = IF(COALESCE(@doka_sm_provider_setup_entered = 1, FALSE), "
+            + "@__doka_previous_sql_mode, @@SESSION.sql_mode) */;"
+            + suffix,
+            conditional);
+
         Assert.Equal(prefix + Restore + suffix, source);
     }
 
@@ -57,7 +73,9 @@ public sealed class MySqlProviderCleanupBindingTests
     [InlineData("/*! SET @__doka_previous_sql_mode = @@SESSION.sql_mode */; /* comment */")]
     [InlineData("/*! SET @other = @@SESSION.sql_mode */;")]
     [InlineData("/*! SET @__doka_previous_sql_mode=@@SESSION.sql_mode */;")]
-    public void AcquisitionRejectsFragmentsOutsideCertifiedStatement(string snapshot)
+    public void AcquisitionRejectsFragmentsOutsideCertifiedStatement(
+        string snapshot
+    )
     {
         // Arrange
         var source = snapshot;
@@ -67,8 +85,12 @@ public sealed class MySqlProviderCleanupBindingTests
             MySqlSafeMigrationOperationHandler.BuildAcquiredNativeSqlModeSnapshot(source));
 
         // Assert
-        Assert.Contains("certified native SQL-mode statement", Assert.IsType<InvalidOperationException>(exception)
-            .Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "certified native SQL-mode statement",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
+            StringComparison.Ordinal);
+
         Assert.Equal(snapshot, source);
     }
 
@@ -81,7 +103,9 @@ public sealed class MySqlProviderCleanupBindingTests
     [InlineData("/*! SET SESSION sql_mode = @__doka_previous_sql_mode */; /* comment */")]
     [InlineData("/*! SET SESSION sql_mode=@__doka_previous_sql_mode */;")]
     [InlineData("/*! SET SESSION sql_mode = IF(TRUE, @__doka_previous_sql_mode, '') */;")]
-    public void RestorationRejectsFragmentsOutsideCertifiedStatement(string restore)
+    public void RestorationRejectsFragmentsOutsideCertifiedStatement(
+        string restore
+    )
     {
         // Arrange
         var source = restore;
@@ -91,8 +115,12 @@ public sealed class MySqlProviderCleanupBindingTests
             MySqlSafeMigrationOperationHandler.BuildConditionalNativeSqlModeRestore(source));
 
         // Assert
-        Assert.Contains("certified native SQL-mode statement", Assert.IsType<InvalidOperationException>(exception)
-            .Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "certified native SQL-mode statement",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
+            StringComparison.Ordinal);
+
         Assert.Equal(restore, source);
     }
 }

@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the Identifiers migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlIdentifiersIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlIdentifiersIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlIdentifiersIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlIdentifiersIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     [Fact]
     public async Task MaximumQuotedMixedCaseUnicodeIdentifiers_ConvergeAcrossOwnedObjects()
@@ -27,7 +29,7 @@ public sealed partial class MySqlIdentifiersIntegrationTests : MySqlSafeMigratio
                 new ExpectedColumnDefinition(parent, typeof(int), true, "int"),
             ],
             primaryKey: new ExpectedPrimaryKeyDefinition(primaryKey, table, [id]),
-            uniqueConstraints: [new ExpectedUniqueConstraintDefinition(unique, table, [code]),],
+            uniqueConstraints: [new ExpectedUniqueConstraintDefinition(unique, table, [code])],
             checkConstraints:
             [
                 ExpectedCheckConstraintDefinition.FromExpression(
@@ -41,24 +43,28 @@ public sealed partial class MySqlIdentifiersIntegrationTests : MySqlSafeMigratio
                             SafeMigrationSqlBinaryOperator.NotEqual,
                             SafeMigrationSql.Literal(string.Empty)))),
             ],
-            foreignKeys: [new ExpectedForeignKeyDefinition(foreignKey, table, [parent], table, [id]),]);
+            foreignKeys: [new ExpectedForeignKeyDefinition(foreignKey, table, [parent], table, [id])]);
 
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.ConvergeTable(
             definition,
-            [new ExpectedIndexDefinition(index, table, [new ExpectedIndexKeyDefinition(column: parent)]),]);
+            [new ExpectedIndexDefinition(index, table, [new ExpectedIndexKeyDefinition(column: parent)])]);
 
         try
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
         catch (Exception exception)
         {
             var diagnostics = await context
                 .GetService<ISafeMigrationRunner>()
-                .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("identifier-instance"));
+                .AnalyzeAsync(
+                    context,
+                    builder.Operations,
+                    new SafeMigrationRunOptions("identifier-instance"),
+                    CancellationToken.None);
 
             var failures = diagnostics
                 .Assessments
@@ -66,16 +72,24 @@ public sealed partial class MySqlIdentifiersIntegrationTests : MySqlSafeMigratio
                 .Select(static assessment => $"{assessment.Ordinal}:{assessment.OperationKind}:"
                     + $"{assessment.ObjectName}:{assessment.ObservedState}:{assessment.Code}");
 
-            var catalogCheck = await DescribeCheckConstraintAsync(connectionString, check);
+            var catalogCheck = await DescribeCheckConstraintAsync(
+                connectionString,
+                check,
+                cancellationToken: CancellationToken.None);
+
             throw new InvalidOperationException(
                 $"Identifier convergence failed: {string.Join(";", failures)}. " + $"Catalog check: {catalogCheck}",
                 exception);
         }
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("identifier-instance"));
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("identifier-instance"),
+                CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(

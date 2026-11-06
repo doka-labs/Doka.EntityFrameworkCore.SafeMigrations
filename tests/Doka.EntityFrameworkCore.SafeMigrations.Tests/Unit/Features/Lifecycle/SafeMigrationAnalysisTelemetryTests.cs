@@ -14,10 +14,16 @@ public sealed class SafeMigrationAnalysisTelemetryTests
     [InlineData("catalog-classification", 512)]
     [InlineData("catalog-batch", 256)]
     [InlineData("catalog-batch", 0)]
-    public void AnalysisStageContainsOnlyFixedPrivacySafeTags(string stage, int operationCount)
+    public void AnalysisStageContainsOnlyFixedPrivacySafeTags(
+        string stage,
+        int operationCount
+    )
     {
         // Arrange
-        using var parent = new Activity("analysis-telemetry-test").SetIdFormat(ActivityIdFormat.W3C).Start();
+        using var parent = new Activity("analysis-telemetry-test")
+            .SetIdFormat(ActivityIdFormat.W3C)
+            .Start();
+
         using var listener = CreateListener(parent.TraceId);
 
         // Act
@@ -41,10 +47,15 @@ public sealed class SafeMigrationAnalysisTelemetryTests
     [InlineData("")]
     [InlineData("catalog-batch\nforged")]
     [InlineData("private-object-name")]
-    public void AnalysisStageRejectsUnrecognizedIdentifiersWithoutEchoingThem(string? stage)
+    public void AnalysisStageRejectsUnrecognizedIdentifiersWithoutEchoingThem(
+        string? stage
+    )
     {
         // Arrange
-        using var parent = new Activity("analysis-telemetry-test").SetIdFormat(ActivityIdFormat.W3C).Start();
+        using var parent = new Activity("analysis-telemetry-test")
+            .SetIdFormat(ActivityIdFormat.W3C)
+            .Start();
+
         using var listener = CreateListener(parent.TraceId);
 
         // Act
@@ -53,8 +64,11 @@ public sealed class SafeMigrationAnalysisTelemetryTests
 
         // Assert
         Assert.Equal("stage", exception.ParamName);
-        Assert.StartsWith("The analysis stage is not a recognized fixed identifier.", exception.Message,
+        Assert.StartsWith(
+            "The analysis stage is not a recognized fixed identifier.",
+            exception.Message,
             StringComparison.Ordinal);
+
         Assert.DoesNotContain("private-object-name", exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("forged", exception.Message, StringComparison.Ordinal);
         Assert.Same(parent, Activity.Current);
@@ -65,7 +79,10 @@ public sealed class SafeMigrationAnalysisTelemetryTests
     public void AnalysisStageRejectsNegativeOperationCounts()
     {
         // Arrange
-        using var parent = new Activity("analysis-telemetry-test").SetIdFormat(ActivityIdFormat.W3C).Start();
+        using var parent = new Activity("analysis-telemetry-test")
+            .SetIdFormat(ActivityIdFormat.W3C)
+            .Start();
+
         using var listener = CreateListener(parent.TraceId);
 
         // Act
@@ -82,7 +99,10 @@ public sealed class SafeMigrationAnalysisTelemetryTests
     public void AnalysisStageRemainsUnsampledOutsideTheListenerTrace()
     {
         // Arrange
-        using var parent = new Activity("analysis-telemetry-test").SetIdFormat(ActivityIdFormat.W3C).Start();
+        using var parent = new Activity("analysis-telemetry-test")
+            .SetIdFormat(ActivityIdFormat.W3C)
+            .Start();
+
         using var listener = CreateListener(ActivityTraceId.CreateRandom());
 
         // Act
@@ -98,7 +118,10 @@ public sealed class SafeMigrationAnalysisTelemetryTests
     public void AnalysisStageNestingRestoresTheParentAndCompletesEveryScope()
     {
         // Arrange
-        using var parent = new Activity("analysis-telemetry-test").SetIdFormat(ActivityIdFormat.W3C).Start();
+        using var parent = new Activity("analysis-telemetry-test")
+            .SetIdFormat(ActivityIdFormat.W3C)
+            .Start();
+
         var completed = new List<Activity>();
         using var listener = CreateListener(parent.TraceId, completed.Add);
         Activity outer;
@@ -129,14 +152,19 @@ public sealed class SafeMigrationAnalysisTelemetryTests
     public void AnalysisStageTagsAreAvailableAtStart()
     {
         // Arrange
-        using var parent = new Activity("analysis-telemetry-test").SetIdFormat(ActivityIdFormat.W3C).Start();
+        using var parent = new Activity("analysis-telemetry-test")
+            .SetIdFormat(ActivityIdFormat.W3C)
+            .Start();
+
         object? startedStage = null;
         object? startedOperationCount = null;
-        using var listener = CreateListener(parent.TraceId, started: activity =>
-        {
-            startedStage = activity.GetTagItem("safe_migrations.analysis.stage");
-            startedOperationCount = activity.GetTagItem("safe_migrations.operation_count");
-        });
+        using var listener = CreateListener(
+            parent.TraceId,
+            started: activity =>
+            {
+                startedStage = activity.GetTagItem("safe_migrations.analysis.stage");
+                startedOperationCount = activity.GetTagItem("safe_migrations.operation_count");
+            });
 
         // Act
         using var activity = SafeMigrationTelemetry.StartAnalysisStage("provider-baseline", 100_000);
@@ -152,12 +180,17 @@ public sealed class SafeMigrationAnalysisTelemetryTests
     public void AnalysisStageInheritsTheRunnerTrace()
     {
         // Arrange
-        using var parent = new Activity("analysis-telemetry-test").SetIdFormat(ActivityIdFormat.W3C).Start();
+        using var parent = new Activity("analysis-telemetry-test")
+            .SetIdFormat(ActivityIdFormat.W3C)
+            .Start();
+
         using var listener = CreateListener(parent.TraceId);
 
         // Act
-        using var run = SafeMigrationTelemetry.ActivitySource.StartActivity(SafeMigrationDiagnostics.RunActivityName,
-            ActivityKind.Internal, parentContext: default);
+        using var run = SafeMigrationTelemetry.ActivitySource.StartActivity(
+            SafeMigrationDiagnostics.RunActivityName,
+            ActivityKind.Internal,
+            parentContext: default);
 
         using var stage = SafeMigrationTelemetry.StartAnalysisStage("ordered-projection", 100_000);
 
@@ -179,8 +212,10 @@ public sealed class SafeMigrationAnalysisTelemetryTests
         var listener = new ActivityListener
         {
             ShouldListenTo = static source => source.Name == SafeMigrationDiagnostics.ActivitySourceName,
-            Sample = (ref ActivityCreationOptions<ActivityContext> options) =>
-                options.Parent.TraceId == traceId ? ActivitySamplingResult.AllData : ActivitySamplingResult.None,
+            Sample = (ref options) =>
+                options.Parent.TraceId == traceId
+                    ? ActivitySamplingResult.AllData
+                    : ActivitySamplingResult.None,
             ActivityStarted = activity =>
             {
                 if (activity.TraceId == traceId)

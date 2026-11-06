@@ -2,10 +2,10 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 {
+    private bool _multiValuedIndexDropBoundaryUnknown;
+
     private Dictionary<(string? Schema, string Table, string Name), MultiValuedIndexDropProof>?
         _multiValuedIndexDropProofs;
-
-    private bool _multiValuedIndexDropBoundaryUnknown;
 
     /// <inheritdoc />
     bool ISafeMigrationLivePrerequisiteSource.CanRequalifyLiveDropIndexPrerequisites(
@@ -19,7 +19,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             || _multiValuedIndexDropBoundaryUnknown
             || _invalidatedForeignKeyTables?.Contains(owner) == true
             || _multiValuedIndexDropProofs?.TryGetValue((owner.Item1, owner.Table, intent.Name), out var proof) != true
-            || !proof.IndexExists || proof.ForeignKeyNames.Length == 0)
+            || !proof.IndexExists
+            || proof.ForeignKeyNames.Length == 0)
         {
             return false;
         }
@@ -51,8 +52,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     )
     {
         if (!analyses.Any(static analysis => analysis.ObservedState == SafeMigrationObservedState.Unsupported
-                && !analysis.IsInvariantUnsupported
-                && analysis.Code == "foreign_key_multi_valued_supporting_index"))
+            && !analysis.IsInvariantUnsupported
+            && analysis.Code == "foreign_key_multi_valued_supporting_index"))
         {
             return;
         }
@@ -73,7 +74,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
             if (intent is DropForeignKeyIntent foreignKey)
             {
-                (removalOwners ??= new(PhysicalOwnerComparer))
+                (removalOwners ??= new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer))
                     .Add((NormalizeProofSchema(foreignKey.Schema), foreignKey.Table));
             }
             else if (intent is DropIndexIntent index
@@ -82,7 +83,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 && analyses[ordinal].Code == "foreign_key_multi_valued_supporting_index"
                 && removalOwners?.Contains((NormalizeProofSchema(index.Schema), index.Table)) == true)
             {
-                (requests ??= new(PhysicalMemberComparer))
+                (requests ??=
+                        new Dictionary<(string? Schema, string Table, string Name), DropIndexIntent>(
+                            PhysicalMemberComparer))
                     .TryAdd((NormalizeProofSchema(index.Schema), index.Table, index.Name), index);
             }
         }
@@ -96,19 +99,28 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         var captured = new Dictionary<(string? Schema, string Table, string Name), MultiValuedIndexDropProof>(
             PhysicalMemberComparer);
 
-        var version = MySqlServerVersion.AutoDetect(context.Database.GetDbConnection(),
+        var version = MySqlServerVersion.AutoDetect(
+            context.Database.GetDbConnection(),
             MySqlServerVersionCompatibilityMode.AllowUnsupported);
 
-        await SafeMigrationCatalogProbeBatch.ReadAsync(context.Database.GetDbConnection(), targets.Length,
-            maximumPayloadBytes, commandTimeout,
-            (command, ordinal) => new SafeMigrationCatalogProbeStatement(1,
-                MySqlSafeMigrationCatalogSqlBuilder.BuildMultiValuedIndexDropProbe(command,
-                    targets[ordinal].Value, version.IsMariaDb), ordinal),
+        await SafeMigrationCatalogProbeBatch.ReadAsync(
+            context.Database.GetDbConnection(),
+            targets.Length,
+            maximumPayloadBytes,
+            commandTimeout,
+            (command, ordinal) => new SafeMigrationCatalogProbeStatement(
+                1,
+                MySqlSafeMigrationCatalogSqlBuilder.BuildMultiValuedIndexDropProbe(
+                    command,
+                    targets[ordinal].Value,
+                    version.IsMariaDb),
+                ordinal),
             async (reader, ordinal, _, token) =>
             {
                 captured.Add(targets[ordinal].Key, await ReadMultiValuedIndexDropProofAsync(reader, token));
             },
-            cancellationToken, context.Database.CurrentTransaction?.GetDbTransaction());
+            cancellationToken,
+            context.Database.CurrentTransaction?.GetDbTransaction());
 
         // Publish only complete independent aliases; canceled captures must
         // never expose partial dependency-removal authority to another run.
@@ -137,7 +149,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         while (await reader.ReadAsync(cancellationToken))
         {
             var current = ReadLivePrerequisiteBoolean(reader, 0);
-            if (exists is not null && exists != current)
+            if (exists is not null
+                && exists != current)
             {
                 throw new InvalidOperationException("MySQL returned inconsistent native index-drop facts.");
             }
@@ -156,8 +169,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             }
 
             var name = reader.GetString(1);
-            if (!current || sentinel || name.Length == 0
-                || !(identities ??= new(StringComparer.OrdinalIgnoreCase)).Add(name))
+            if (!current
+                || sentinel
+                || name.Length == 0
+                || !(identities ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase)).Add(name))
             {
                 throw new InvalidOperationException("MySQL returned an unowned or duplicate index-bound FK.");
             }
@@ -170,11 +185,18 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             throw new InvalidOperationException("MySQL omitted an owned native index-drop certificate.");
         }
 
-        return new MultiValuedIndexDropProof(exists.Value, aliases is null ? [] : aliases.ToArray());
+        return new MultiValuedIndexDropProof(
+            exists.Value,
+            aliases is null
+                ? []
+                : aliases.ToArray());
     }
 
     /// <summary>Retains the independently present index and every originally bound physical FK.</summary>
     /// <param name="IndexExists">Whether the exact physical index exists in this snapshot.</param>
     /// <param name="ForeignKeyNames">The complete originally bound FK alias inventory.</param>
-    internal readonly record struct MultiValuedIndexDropProof(bool IndexExists, string[] ForeignKeyNames);
+    internal readonly record struct MultiValuedIndexDropProof(
+        bool IndexExists,
+        string[] ForeignKeyNames
+    );
 }

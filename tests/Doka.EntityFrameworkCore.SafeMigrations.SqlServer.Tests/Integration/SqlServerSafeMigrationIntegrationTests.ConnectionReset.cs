@@ -16,7 +16,7 @@ public sealed class SqlServerSafeMigrationConnectionResetIntegrationTests : SqlS
     public async Task FixtureConnection_AfterCollationChangeSupportsRepeatedLogicalOpens()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
 
         await using var connection = new SqlConnection(connectionString);
 

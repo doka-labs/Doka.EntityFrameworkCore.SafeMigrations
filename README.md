@@ -30,7 +30,7 @@ equivalent.
 - `Doka.EntityFrameworkCore.SafeMigrations`: provider-neutral intent,
   definitions, planning, reports, and `MigrationBuilder` extensions
 - `Doka.EntityFrameworkCore.SafeMigrations.MySql`: MySQL and MariaDB adapter on
-  the public `Doka.EntityFrameworkCore.MySql` 10.6 operation-handler (minimum 10.6.3) and
+  the public `Doka.EntityFrameworkCore.MySql` 10.6 operation-handler (minimum 10.6.4) and
   typed migration-metadata SPI
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`: PostgreSQL adapter on
   Npgsql 10
@@ -55,35 +55,36 @@ evidence. See [Support and qualification](docs/support-and-qualification.md).
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-examples target version 10.6.1 and select that version exactly, so
+examples target version 10.7.0 and select that version exactly, so
 restore does not move to another version implicitly. Release changes and
-compatibility notes belong in the [10.6.1 changelog](CHANGELOG.md#1061---2026-10-29). Review the
-[10.6.1 upgrade notes](docs/support-and-qualification.md#upgrade-to-1061)
-before updating an application.
+compatibility notes belong in the [10.7.0 changelog](CHANGELOG.md#1070---2026-11-06).
+Review the [10.7.0 upgrade notes](docs/support-and-qualification.md#upgrade-to-1070):
+owned asynchronous APIs require an explicit cancellation token, even though
+the package major and .NET/EF Core 10 target remain unchanged.
 
 ```bash
-package_version='10.6.1'
+package_version='10.7.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.6.1'
+package_version='10.7.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.6.1'
+package_version='10.7.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.6.1'
+package_version='10.7.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.SqlServer --version "$package_version"
 ```
 
@@ -665,6 +666,15 @@ Resolve `ISafeMigrationRunner` from the configured context. Use a pseudonymous
 instance ID, never a host name, database name, credential, or connection
 string.
 
+Ordinary repository-owned asynchronous APIs require an explicit `CancellationToken`.
+Forward the deployment/request token throughout an operation; pass
+`CancellationToken.None` only when intentionally running without cancellation.
+Source callers that previously omitted this argument must add it. See the
+[cancellation contract](docs/api-reference.md#cancellation-contract).
+Framework-owned entry points and deliberately uninterruptible cleanup/recovery
+retain their separate contracts; an operation's cancellation must not prevent
+necessary cleanup.
+
 ```csharp
 using Doka.EntityFrameworkCore.SafeMigrations;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -1034,16 +1044,19 @@ Docker is required for server-provider tests. SQL Server live tests additionally
 require a supported x64 host; ARM64 runs skip them and cannot establish live
 qualification. CI additionally executes every supported
 engine profile, EF CLI/script/bundle paths, merged coverage thresholds,
-informational performance/allocation reports, deterministic double-pack, isolated
+BenchmarkDotNet execution/export smoke, deterministic double-pack, isolated
 package-only consumers, and SPDX SBOM validation. FsCheck exercises generated
 Core and provider invariants with shrunk counterexamples, while the separate
 Dependency Review gate rejects newly introduced high-severity vulnerabilities
 and dependencies outside the approved license policy before merge.
 
-Benchmark budget overruns do not block CI or release qualification on shared
-hardware. All five sets retain measured durations, allocations, comparison
-limits, and verdicts; invalid configuration or failed benchmark execution still
-blocks. See [Support and qualification](docs/support-and-qualification.md).
+The five isolated benchmark suites use BenchmarkDotNet 0.15.8 and retain native
+full JSON evidence under `artifacts/performance`. CI uses `--job Dry` to exercise
+all 56 default cases and validate export, not to establish statistically
+meaningful performance. Configuration, build, execution and missing/invalid
+evidence failures block qualification; numeric duration and managed allocation
+values do not. For measurement runs and the changed allocation methodology, see
+[Support and qualification](docs/support-and-qualification.md#performance-and-memory).
 
 Each provider matrix cell also persists a live full-runner latency artifact.
 It measures 20 full-runner invocations after a warmup against 100 expected

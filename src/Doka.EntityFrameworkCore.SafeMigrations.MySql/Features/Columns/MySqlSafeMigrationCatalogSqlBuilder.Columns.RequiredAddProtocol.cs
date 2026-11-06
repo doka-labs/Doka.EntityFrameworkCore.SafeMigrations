@@ -125,7 +125,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         foreach (var character in name.AsSpan(RequiredColumnAddGuardPrefix.Length))
         {
-            if (character is not ((>= '0' and <= '9') or >= 'a' and <= 'f'))
+            if (character is not (>= '0' and <= '9' or >= 'a' and <= 'f'))
             {
                 return false;
             }
@@ -150,6 +150,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var columnExists = RequiresNativeRequiredColumnAddOwnerQualification(intent.Definition)
             ? BuildRequiredColumnAddColumnExists(intent.Table, intent.Definition.Name)
             : ColumnExists(intent.Table, intent.Definition.Name);
+
         if (!CanUseRequiredColumnAddProtocol(intent.Definition))
         {
             return RequiresUnsupportedMissingRequiredAdd(intent.Definition)
@@ -170,7 +171,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var guardName = GetRequiredColumnAddGuardName(intent);
         var guardScope = "tc.CONSTRAINT_SCHEMA = DATABASE() "
             + $"AND tc.CONSTRAINT_NAME = {Literal(guardName)} "
-            + (isMariaDb ? $"AND tc.TABLE_NAME = {Literal(intent.Table)} " : string.Empty);
+            + (isMariaDb
+                ? $"AND tc.TABLE_NAME = {Literal(intent.Table)} "
+                : string.Empty);
 
         var guardExists = "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc " + $"WHERE {guardScope})";
         var oneGuard = "(SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc " + $"WHERE {guardScope}) = 1";
@@ -211,7 +214,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + $"AND {BuildRequiredColumnAddOwnerMatches("tc.CONSTRAINT_SCHEMA", "DATABASE()")} "
             + "AND CAST(cc.CONSTRAINT_SCHEMA AS BINARY) = CAST(tc.CONSTRAINT_SCHEMA AS BINARY) "
             + "AND CAST(cc.CONSTRAINT_NAME AS BINARY) = CAST(tc.CONSTRAINT_NAME AS BINARY) "
-            + (isMariaDb ? "AND CAST(cc.TABLE_NAME AS BINARY) = CAST(tc.TABLE_NAME AS BINARY) " : string.Empty)
+            + (isMariaDb
+                ? "AND CAST(cc.TABLE_NAME AS BINARY) = CAST(tc.TABLE_NAME AS BINARY) "
+                : string.Empty)
             + $"AND CAST(cc.CHECK_CLAUSE AS BINARY) IN ({string.Join(", ", exactExpressionCandidates)})";
 
         var ownership = supportsCheck
@@ -276,6 +281,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             NullabilityDataProbe = nullProbe,
             MayRequireNullabilityDataProof = true,
             StateEvaluationGuardExpression = columnExists,
+
             // WHY: The lazy missing-column branch runs before StateExpression.
             // Qualification must live here as well or an empty table could
             // bypass engine, session and ownership checks entirely.
@@ -303,10 +309,18 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         + $"AND {BuildRequiredColumnAddOwnerMatches("atomic_table.TABLE_NAME", Literal(table))} "
         + "AND atomic_table.TABLE_TYPE = 'BASE TABLE' AND UPPER(atomic_table.ENGINE) = 'INNODB') "
         + $"AND ({StrictSqlModeExpression}) "
-        + (isMariaDb ? "AND @@SESSION.check_constraint_checks = 1 " : string.Empty)
-        + (backslashEscapes ? "AND FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) = 0 " : string.Empty)
-        + (doubleQuotes ? "AND FIND_IN_SET('ANSI_QUOTES', @@SESSION.sql_mode) = 0 " : string.Empty)
-        + (requiresNoBackslashEscapes ? $"AND ({NativeEnumNoBackslashEscapesExpression})" : string.Empty);
+        + (isMariaDb
+            ? "AND @@SESSION.check_constraint_checks = 1 "
+            : string.Empty)
+        + (backslashEscapes
+            ? "AND FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) = 0 "
+            : string.Empty)
+        + (doubleQuotes
+            ? "AND FIND_IN_SET('ANSI_QUOTES', @@SESSION.sql_mode) = 0 "
+            : string.Empty)
+        + (requiresNoBackslashEscapes
+            ? $"AND ({NativeEnumNoBackslashEscapesExpression})"
+            : string.Empty);
 
     /// <summary>Proves the requested protocol table exists without borrowing a case-distinct catalog shadow.</summary>
     /// <param name="table">The raw authored owner bound to the protocol name.</param>
@@ -333,7 +347,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         + $"AND c.COLUMN_NAME = {Literal(column)} "
         + $"AND {BuildRequiredColumnAddOwnerMatches("c.TABLE_SCHEMA", "DATABASE()")} "
         + $"AND {BuildRequiredColumnAddOwnerMatches("c.TABLE_NAME", Literal(table))}"
-        + (invariant is not null ? $" AND ({invariant})" : string.Empty)
+        + (invariant is not null
+            ? $" AND ({invariant})"
+            : string.Empty)
         + ")";
 
     /// <summary>Qualifies a protocol owner using the server's native table and schema case rules.</summary>

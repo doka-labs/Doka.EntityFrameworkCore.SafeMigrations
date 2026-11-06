@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Measures diagnostic explanations after an isolated process-wide collection.</summary>
+
 // WHY: The explanation cache probe forces collection outside all other warmed allocation windows.
 [Collection(ProcessWideTestGroup.Name)]
 public sealed class SafeMigrationDiagnosticMessagesAllocationTests
@@ -10,9 +11,15 @@ public sealed class SafeMigrationDiagnosticMessagesAllocationTests
     public void ExplanationLookupDoesNotAllocateAfterGarbageCollection()
     {
         // Arrange
-        var intent = RequiredColumnOperation().Intent;
-        var checksum = SafeMigrationDiagnosticMessages.GetExplanation(intent,
-            SafeMigrationObservedState.DataBlocked, "required_column_backfill_missing", "data_blocked").Reason.Length;
+        var intent = RequiredColumnOperation()
+            .Intent;
+
+        var checksum = SafeMigrationDiagnosticMessages.GetExplanation(
+                intent,
+                SafeMigrationObservedState.DataBlocked,
+                "required_column_backfill_missing",
+                "data_blocked")
+            .Reason.Length;
 
         GC.Collect();
         GC.WaitForPendingFinalizers();
@@ -21,9 +28,12 @@ public sealed class SafeMigrationDiagnosticMessagesAllocationTests
         // Act
         for (var index = 0; index < 1000; index++)
         {
-            checksum += SafeMigrationDiagnosticMessages.GetExplanation(intent,
-                SafeMigrationObservedState.DataBlocked,
-                "required_column_backfill_missing", "data_blocked").Reason.Length;
+            checksum += SafeMigrationDiagnosticMessages.GetExplanation(
+                    intent,
+                    SafeMigrationObservedState.DataBlocked,
+                    "required_column_backfill_missing",
+                    "data_blocked")
+                .Reason.Length;
         }
 
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
@@ -34,7 +44,8 @@ public sealed class SafeMigrationDiagnosticMessagesAllocationTests
     }
 
     private static SafeMigrationOperation RequiredColumnOperation() => new(
-        new EnsureColumnIntent("Items",
+        new EnsureColumnIntent(
+            "Items",
             new ExpectedColumnDefinition("IsActive", typeof(bool), isNullable: false, storeType: "tinyint(1)"),
             schema: "application"),
         SafeMigrationPolicy.ThrowIfDifferent);

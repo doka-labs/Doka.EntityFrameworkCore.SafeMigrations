@@ -70,7 +70,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             SafeMigrationSemanticDefinitionComparers.UniqueForColumns(
                 objectIdentityNormalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal),
             objectIdentityNormalizer,
-            sharesUniqueIndexIdentity ? objectIdentityNormalizer?.IndexIdentifierComparer : null);
+            sharesUniqueIndexIdentity
+                ? objectIdentityNormalizer?.IndexIdentifierComparer
+                : null);
 
         /// <summary>Accepts key shape with separate authored-alias and physical-identity proof.</summary>
         /// <param name="definition">The accepted key shape.</param>
@@ -170,6 +172,12 @@ internal sealed partial class SafeMigrationPreflightProjection
         bool AddedToExistingTable
     )
     {
+        public static ProjectedColumn Unknown { get; } = new(
+            IsNullable: false,
+            PreservesNullForExistingRows: false,
+            IsComputed: true,
+            AddedToExistingTable: false);
+
         public static ProjectedColumn From(
             ExpectedColumnDefinition definition,
             bool addedToExistingTable
@@ -187,11 +195,5 @@ internal sealed partial class SafeMigrationPreflightProjection
             operation.DefaultValue is null && operation.DefaultValueSql is null,
             operation.ComputedColumnSql is not null,
             addedToExistingTable);
-
-        public static ProjectedColumn Unknown { get; } = new(
-            IsNullable: false,
-            PreservesNullForExistingRows: false,
-            IsComputed: true,
-            AddedToExistingTable: false);
     }
 }

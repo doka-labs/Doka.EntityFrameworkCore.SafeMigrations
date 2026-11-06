@@ -176,7 +176,8 @@ public sealed class MySqlCatalogRelationsTests
         // Arrange
         const string value = "FROM INFORMATION_SCHEMA.COLUMNS";
         var template = prefix + MySqlCatalogSqlTemplate.Marker(0) + suffix;
-        var expected = prefix + value + suffix.Replace("INFORMATION_SCHEMA.TABLES", "`snapshot`", StringComparison.Ordinal);
+        var expected =
+            prefix + value + suffix.Replace("INFORMATION_SCHEMA.TABLES", "`snapshot`", StringComparison.Ordinal);
 
         // Act
         var actual = prepared

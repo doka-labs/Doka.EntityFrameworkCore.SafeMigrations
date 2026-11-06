@@ -2,21 +2,6 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 {
-    private readonly IRelationalTypeMappingSource _typeMappingSource;
-    private readonly ISqlGenerationHelper _sqlGenerationHelper;
-    private readonly MySqlSafeMigrationSqlExpressionRenderer _expressionRenderer;
-    private readonly RelationalTypeMapping _stringMapping;
-    private readonly Dictionary<string, string> _identifierScratch = new(StringComparer.Ordinal);
-    private readonly Dictionary<MySqlCatalogParameterValue, string> _valueScratch =
-        new(MySqlCatalogParameterValueComparer.Instance);
-
-    private readonly List<MySqlCatalogParameterValue> _parameterScratch = [];
-    private Dictionary<string, string>? _identifierMarkers;
-    private Dictionary<MySqlCatalogParameterValue, string>? _valueMarkers;
-    private List<MySqlCatalogParameterValue>? _parameterValues;
-    private bool _renderValuesInline;
-    private List<MySqlSafeMigrationBinaryDefaultProof>? _binaryDefaultProofs;
-
     // WHY: This is immutable grammar data, not per-operation proof state. Keeping its canonical
     // order avoids repeating the array allocation while preserving Literal parameter registration.
     private static readonly string[] s_backfillCharacterSets =
@@ -31,6 +16,23 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         "utf16le",
         "utf32",
     ];
+
+    private readonly MySqlSafeMigrationSqlExpressionRenderer _expressionRenderer;
+    private readonly Dictionary<string, string> _identifierScratch = new(StringComparer.Ordinal);
+
+    private readonly List<MySqlCatalogParameterValue> _parameterScratch = [];
+    private readonly ISqlGenerationHelper _sqlGenerationHelper;
+    private readonly RelationalTypeMapping _stringMapping;
+    private readonly IRelationalTypeMappingSource _typeMappingSource;
+
+    private readonly Dictionary<MySqlCatalogParameterValue, string> _valueScratch =
+        new(MySqlCatalogParameterValueComparer.Instance);
+
+    private List<MySqlSafeMigrationBinaryDefaultProof>? _binaryDefaultProofs;
+    private Dictionary<string, string>? _identifierMarkers;
+    private List<MySqlCatalogParameterValue>? _parameterValues;
+    private bool _renderValuesInline;
+    private Dictionary<MySqlCatalogParameterValue, string>? _valueMarkers;
 
     public MySqlSafeMigrationCatalogSqlBuilder(
         IRelationalTypeMappingSource typeMappingSource,
@@ -85,7 +87,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         _renderValuesInline = !parameterizeValues;
         try
         {
-            var featureFailure = operation.GetAnnotations().Any()
+            var featureFailure = operation
+                .GetAnnotations()
+                .Any()
                 ? "operation_annotation"
                 : GetUnsupportedFeature(operation.Intent, context.Features, context.ServerVersion);
 
@@ -110,14 +114,22 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                         includeAnalysisEvidence,
                         includeTransitionEvidence,
                         Supported(context.Features, MySqlMigrationFeature.CheckConstraints)),
-                    DropColumnIntent value => BuildDropColumn(value, context.ServerVersion.IsMariaDb,
-                        generatedColumnDependency, foldedGeneratedColumnDependency,
+                    DropColumnIntent value => BuildDropColumn(
+                        value,
+                        context.ServerVersion.IsMariaDb,
+                        generatedColumnDependency,
+                        foldedGeneratedColumnDependency,
                         bindFoldedGeneratedColumnDependency,
-                        generatedColumnModelCandidate, foldedGeneratedColumnModelCandidate),
-                    RenameColumnIntent value => BuildRenameColumn(value, context.ServerVersion.IsMariaDb,
-                        generatedColumnDependency, foldedGeneratedColumnDependency,
+                        generatedColumnModelCandidate,
+                        foldedGeneratedColumnModelCandidate),
+                    RenameColumnIntent value => BuildRenameColumn(
+                        value,
+                        context.ServerVersion.IsMariaDb,
+                        generatedColumnDependency,
+                        foldedGeneratedColumnDependency,
                         bindFoldedGeneratedColumnDependency,
-                        generatedColumnModelCandidate, foldedGeneratedColumnModelCandidate),
+                        generatedColumnModelCandidate,
+                        foldedGeneratedColumnModelCandidate),
                     AlterColumnIntent value => BuildAlterColumn(
                         value,
                         context.ServerVersion.IsMariaDb,
@@ -160,20 +172,26 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 plan = plan with
                 {
                     PrerequisiteExpression = operation.Intent is EnsureColumnIntent column
-                        && (RequiresNativeRequiredColumnAddOwnerQualification(column.Definition)
-                            || column.Definition.ComputedExpression is not null)
+                    && (RequiresNativeRequiredColumnAddOwnerQualification(column.Definition)
+                        || column.Definition.ComputedExpression is not null)
                         ? plan.PrerequisiteExpression
                         : BuildPrerequisiteExpression(operation.Intent),
                     RequiresLazyStateEvaluation = RequiresLazyStateEvaluation(
                         operation.Intent,
                         plan.RepairCapability)
-                        || plan.RequiresDataProbe
-                        || plan.NullabilityDataProbe is not null,
+                    || plan.RequiresDataProbe
+                    || plan.NullabilityDataProbe is not null,
                 };
 
                 plan = ApplyNativeEnumModeQualification(operation.Intent, plan);
-                plan = ApplyGeneratedIdentityDependencyQualification(operation.Intent, plan, context.ServerVersion.IsMariaDb);
-                plan = ApplyCapturedSourceIdentifierQualification(operation.Intent, plan, context.ServerVersion.IsMariaDb);
+                plan = ApplyGeneratedIdentityDependencyQualification(
+                    operation.Intent,
+                    plan,
+                    context.ServerVersion.IsMariaDb);
+
+                plan = ApplyCapturedSourceIdentifierQualification(operation.Intent,
+                    plan,
+                    context.ServerVersion.IsMariaDb);
             }
 
             // Identity qualification has precedence over feature and catalog
@@ -264,6 +282,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             && SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(value.OldDefinition, value.Definition)
             && value.OldDefinition.IsNullable
             && !value.Definition.IsNullable,
+
         // Index classification now reads physical key widths for every index,
         // not only row data for unique indexes. Defer both probes until the
         // prerequisite guard has proved that every referenced column exists.
@@ -287,30 +306,48 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         ?? GetUnsupportedIndexFeature(intent, features) ?? GetUnsupportedCheckConstraintFeature(intent, features);
 
     /// <summary>Validates captured source before consulting AST-derived native displays or dependency proofs.</summary>
-    private static string? GetUnsupportedCapturedExpressionFeature(SafeMigrationIntent intent, bool isMariaDb) =>
+    private static string? GetUnsupportedCapturedExpressionFeature(
+        SafeMigrationIntent intent,
+        bool isMariaDb
+    ) =>
         intent switch
         {
             EnsureColumnIntent value => CapturedColumnFeature(value.Definition, isMariaDb),
             AlterColumnIntent value => CapturedColumnFeature(value.Definition, isMariaDb)
-                ?? (value.OldDefinition is null ? null : CapturedColumnFeature(value.OldDefinition, isMariaDb)),
+                ?? (value.OldDefinition is null
+                    ? null
+                    : CapturedColumnFeature(value.OldDefinition, isMariaDb)),
             EnsureCheckConstraintIntent value => MySqlCapturedExpressionContract.GetUnsupportedFeature(
-                value.Definition.CapturedSql, value.Definition.Expression, isMariaDb),
+                value.Definition.CapturedSql,
+                value.Definition.Expression,
+                isMariaDb),
             EnsureTableIntent value => CapturedTableFeature(value.Definition, isMariaDb),
             _ => null,
         };
 
     /// <summary>Retains a no-allocation fast path for ordinary noncaptured column definitions.</summary>
-    private static string? CapturedColumnFeature(ExpectedColumnDefinition definition, bool isMariaDb) =>
-        MySqlCapturedExpressionContract.GetUnsupportedFeature(definition.CapturedComputedSql,
-            definition.ComputedExpression, isMariaDb);
+    private static string? CapturedColumnFeature(
+        ExpectedColumnDefinition definition,
+        bool isMariaDb
+    ) =>
+        MySqlCapturedExpressionContract.GetUnsupportedFeature(
+            definition.CapturedComputedSql,
+            definition.ComputedExpression,
+            isMariaDb);
 
     /// <summary>Validates complete contracts directly rather than materializing single-item traversal arrays.</summary>
-    private static string? CapturedTableFeature(ExpectedTableDefinition table, bool isMariaDb)
+    private static string? CapturedTableFeature(
+        ExpectedTableDefinition table,
+        bool isMariaDb
+    )
     {
         foreach (var column in table.Columns)
         {
-            var failure = MySqlCapturedExpressionContract.GetUnsupportedFeature(column.CapturedComputedSql,
-                column.ComputedExpression, isMariaDb);
+            var failure = MySqlCapturedExpressionContract.GetUnsupportedFeature(
+                column.CapturedComputedSql,
+                column.ComputedExpression,
+                isMariaDb);
+
             if (failure is not null)
             {
                 return failure;
@@ -350,7 +387,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 .Concat(value.Definition.CheckConstraints.Select(CheckExpression)),
             EnsureColumnIntent value => ColumnExpressions(value.Definition),
             AlterColumnIntent value => ColumnExpressions(value.Definition)
-                .Concat(value.OldDefinition is null ? [] : ColumnExpressions(value.OldDefinition)),
+                .Concat(
+                    value.OldDefinition is null
+                        ? []
+                        : ColumnExpressions(value.OldDefinition)),
             EnsureIndexIntent value => IndexExpressions(value.Definition),
             EnsureCheckConstraintIntent value => [CheckExpression(value.Definition)],
             _ => [],

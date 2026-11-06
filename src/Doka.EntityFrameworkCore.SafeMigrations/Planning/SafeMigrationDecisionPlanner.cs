@@ -29,13 +29,14 @@ public static class SafeMigrationDecisionPlanner
     /// <param name="observedState">The provider-classified live state.</param>
     /// <param name="policy">The conflict policy for the operation.</param>
     /// <param name="repairCapability">The provider-proven repair capability.</param>
-    /// <returns>The same action and validation contract as <see cref="Plan"/>.</returns>
+    /// <returns>The same action and validation contract as <see cref="Plan" />.</returns>
     internal static SafeMigrationAction PlanAction(
         SafeMigrationOperationKind operationKind,
         SafeMigrationObservedState observedState,
         SafeMigrationPolicy policy,
         SafeMigrationRepairCapability repairCapability = SafeMigrationRepairCapability.None
-    ) => PlanValue(operationKind, observedState, policy, repairCapability).Action;
+    ) => PlanValue(operationKind, observedState, policy, repairCapability)
+        .Action;
 
     // WHY: SQL renderers consume only the action. Both entry points share one
     // value table, so avoiding their short-lived result objects cannot diverge
@@ -205,7 +206,6 @@ public static class SafeMigrationDecisionPlanner
         {
             throw new ArgumentOutOfRangeException(nameof(repairCapability));
         }
-
     }
 
     private enum OperationFamily

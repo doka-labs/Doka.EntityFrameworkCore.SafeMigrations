@@ -163,7 +163,7 @@ Require local shell syntax checks, portable-provenance and GitHub Release
 reconciliation positive/negative cases, version-validator positive/negative
 cases, locked restore of the five package projects, resolved restore of all
 execution projects, format, Release build, all test suites, coverage thresholds,
-informational performance reports, deterministic package qualification, package-only
+complete BenchmarkDotNet execution/export smoke, deterministic package qualification, package-only
 consumers, SBOM validation, and every supported live provider/tooling cell.
 Locked restore covers every platform-neutral CI restore of the package
 projects. EF Migration Bundles publish for the runner RID, which the
@@ -329,6 +329,28 @@ owns independent consumer readback.
   Keep local advisory warnings visible while qualification remains strict.
   Preserve historical 10.6.0 notes/approval boundaries; publication status
   remains owned by the runbook and exact candidate evidence.
+- 2026-11-04: Amend the 2026-10-02 benchmark policy to use native
+  BenchmarkDotNet 0.15.8 execution/export evidence instead of report-only budget
+  comparisons. All five suites retain their default workloads and run with
+  `--filter '*' --job Dry` during CI and release qualification. This is smoke,
+  not statistical performance qualification. Invalid configuration, generated
+  build/execution failure, missing/failed cases and missing/invalid full JSON
+  remain fatal; numeric duration/allocation values never determine success.
+  The compatibility input `capture-sqlserver-baseline` adds an ordinary native
+  Short job and artifact directory, not a separate median engine. Historical
+  reports and approvals are not rewritten or claimed as current BDN baselines.
+  Published package dependencies, protected publication, coverage, native
+  engine/tooling, supply-chain and readback gates remain unchanged.
+- 2026-11-06: Set the shared five-package stable identity to 10.7.0. The
+  operator explicitly selected the retained .NET/EF Core 10 package line
+  despite the source-breaking removal of public optional-token defaults.
+  Document this exception to strict SemVer, affected callers and unchanged
+  CLR method signatures; promote the ten required-token declarations into
+  the Core shipped baseline. Include the BenchmarkDotNet transition and
+  Doka 10.6.4 minimum without changing SQL/policies or historical releases.
+  Local ARM preparation is permitted while native x64 SQL Server and complete
+  merged coverage remain explicitly pending and blocking. This is not a
+  release waiver, extra-line activation or .NET 11 adoption.
 
 ### Implementation References
 

@@ -39,11 +39,26 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         var dependencies = plan.ModelManagedDependencyCountsExpression ?? "CONVERT(nvarchar(max), NULL)";
         var diagnostics = plan.DiagnosticEvidenceExpression ?? "CONVERT(nvarchar(max), NULL)";
         var matched = plan.MatchedObjectNameExpression ?? "CONVERT(nvarchar(128), NULL)";
-        var physicalTableSupport = includePhysicalTableSupport ? plan.PhysicalTableSupportExpression : null;
-        var defaultValueSupport = includePhysicalTableSupport ? plan.DefaultValueSupportExpression : null;
-        var columnCollationSupport = includePhysicalTableSupport ? plan.ColumnCollationSupportExpression : null;
-        var indexFilterSupport = includePhysicalTableSupport ? plan.IndexFilterSupportExpression : null;
-        var columnLayoutFailure = includePhysicalTableSupport ? plan.ColumnLayoutFailureExpression : null;
+        var physicalTableSupport = includePhysicalTableSupport
+            ? plan.PhysicalTableSupportExpression
+            : null;
+
+        var defaultValueSupport = includePhysicalTableSupport
+            ? plan.DefaultValueSupportExpression
+            : null;
+
+        var columnCollationSupport = includePhysicalTableSupport
+            ? plan.ColumnCollationSupportExpression
+            : null;
+
+        var indexFilterSupport = includePhysicalTableSupport
+            ? plan.IndexFilterSupportExpression
+            : null;
+
+        var columnLayoutFailure = includePhysicalTableSupport
+            ? plan.ColumnLayoutFailureExpression
+            : null;
+
         if (columnLayoutFailure is not null)
         {
             state = $"CASE WHEN doka_layout.failure IS NULL THEN ({state}) ELSE N'unsupported' END";
@@ -98,32 +113,42 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
         if (defaultValueSupport is not null)
         {
-            supportSource += (supportSource.Length == 0 ? string.Empty : " CROSS JOIN ")
+            supportSource += (supportSource.Length == 0
+                    ? string.Empty
+                    : " CROSS JOIN ")
                 + $"(SELECT COALESCE(({defaultValueSupport}), 0) AS supported) doka_default";
         }
 
         if (columnCollationSupport is not null)
         {
-            supportSource += (supportSource.Length == 0 ? string.Empty : " CROSS JOIN ")
+            supportSource += (supportSource.Length == 0
+                    ? string.Empty
+                    : " CROSS JOIN ")
                 + $"(SELECT COALESCE(({columnCollationSupport}), 0) AS supported) doka_collation";
         }
 
         if (indexFilterSupport is not null)
         {
-            supportSource += (supportSource.Length == 0 ? string.Empty : " CROSS JOIN ")
+            supportSource += (supportSource.Length == 0
+                    ? string.Empty
+                    : " CROSS JOIN ")
                 + $"(SELECT COALESCE(({indexFilterSupport}), 0) AS supported) doka_filter";
         }
 
         if (columnLayoutFailure is not null)
         {
-            supportSource += (supportSource.Length == 0 ? string.Empty : " CROSS JOIN ")
+            supportSource += (supportSource.Length == 0
+                    ? string.Empty
+                    : " CROSS JOIN ")
                 + $"(SELECT ({columnLayoutFailure}) AS failure) doka_layout";
         }
 
         return $"SELECT {ordinal}, ({state}), "
             + $"COALESCE(({post}), 0), COALESCE(({repair}), 0), ({code}), "
             + $"({rows}), ({dependencies}), ({diagnostics}), ({matched})"
-            + (supportSource.Length == 0 ? string.Empty : " FROM " + supportSource);
+            + (supportSource.Length == 0
+                ? string.Empty
+                : " FROM " + supportSource);
     }
 
     /// <summary>Builds one delayed classifier within the complete statement payload bound.</summary>
@@ -142,14 +167,19 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         var variable = SqlServerSqlStringLiteral.RequiresExpression(template.AsSpan())
             ? "@doka_selection_sql" + (dispatchSlot ?? ordinal).ToString(CultureInfo.InvariantCulture)
             : string.Empty;
-        var statement = SqlServerSqlStringLiteral.StatementArgument(template, variable,
+
+        var statement = SqlServerSqlStringLiteral.StatementArgument(
+            template,
+            variable,
             out var declaration);
+
         var selection = BuildDelayedCatalogInvocation(
             ordinal,
             plan,
             dispatchSlot,
             statement,
             definitions);
+
         selection = declaration + selection;
 
         var bytes = Encoding.UTF8.GetByteCount(selection);
@@ -157,7 +187,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         {
             throw SafeMigrationCatalogQueryLimits.OversizedOperation(
                 ordinal,
-                plan.AnalysisParameters.Count + (dispatchSlot is not null && UsesDelayedOrdinalParameter(plan) ? 1 : 0),
+                plan.AnalysisParameters.Count
+                + (dispatchSlot is not null && UsesDelayedOrdinalParameter(plan)
+                    ? 1
+                    : 0),
                 bytes);
         }
 
@@ -191,7 +224,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 .Append(value.Name)
                 .Append(" = ")
                 .Append(
-                    dispatchSlot is { } valueSlot ? DelayedSourceParameterName(valueSlot, index) : value.ExternalName);
+                    dispatchSlot is { } valueSlot
+                        ? DelayedSourceParameterName(valueSlot, index)
+                        : value.ExternalName);
         }
 
         // WHY: The heavyweight guarded body is compiled independently of neighboring classifiers.
@@ -215,11 +250,16 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         // WHY: SQL Server binds table and column references in a skipped IF
         // branch before execution. Dynamic SQL is required after the catalog
         // prerequisite has succeeded, not merely an IF wrapper.
-        var inner = (plan.CatalogPreambleSql is null ? string.Empty : plan.CatalogPreambleSql + "\n")
+        var inner = (plan.CatalogPreambleSql is null
+                ? string.Empty
+                : plan.CatalogPreambleSql + "\n")
             + BuildCatalogSelection("@doka_ordinal", plan, includePhysicalTableSupport: false);
 
         var innerArgument = SqlServerSqlStringLiteral.StatementArgument(
-            inner, "@doka_inner_sql", out var innerDeclaration);
+            inner,
+            "@doka_inner_sql",
+            out var innerDeclaration);
+
         var parameterArguments = plan.AnalysisParameters.Count == 0
             ? string.Empty
             : ", " + string.Join(", ", plan.AnalysisParameters.Select(static value => value.Name + " = " + value.Name));
@@ -302,7 +342,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE BEGIN ";
 
         var prerequisite = $"CASE WHEN COALESCE(({plan.PrerequisiteExpression}), 0) = 1 "
-            + (outerStateFailure is null ? string.Empty : $"AND COALESCE(({outerStateGuard}), 0) = 1 ")
+            + (outerStateFailure is null
+                ? string.Empty
+                : $"AND COALESCE(({outerStateGuard}), 0) = 1 ")
             + "THEN 1 ELSE 0 END";
 
         var fallback = "SELECT @doka_ordinal, "
@@ -314,8 +356,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             + (plan.PrerequisiteFailureCodeExpression ?? "CONVERT(nvarchar(128), NULL)")
             + ", CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
             + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL);";
+
         var fallbackArgument = SqlServerSqlStringLiteral.StatementArgument(
-            fallback, "@doka_fallback_sql", out var fallbackDeclaration);
+            fallback,
+            "@doka_fallback_sql",
+            out var fallbackDeclaration);
 
         var selection = physicalGate
             + layoutSetup
@@ -327,9 +372,12 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             + innerDeclaration
             + fallbackDeclaration
             + "IF @doka_prerequisite = 1 "
+
             // WHY: Returning the nested SELECT directly avoids INSERT EXEC and a statement-sized
             // table variable. Transport validates one result set per classifier before accepting evidence.
-            + "EXEC sys.sp_executesql " + innerArgument + ", "
+            + "EXEC sys.sp_executesql "
+            + innerArgument
+            + ", "
             + $"N'{definitions}', @doka_ordinal = @doka_ordinal"
             + parameterArguments
             + " "
@@ -341,11 +389,21 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
         // WHY: An ELSE protects only one T-SQL statement. Every admitted support gate must enclose
         // all subsequent declarations, scalar EXEC calls and the final classifier, not just a DECLARE.
-        var gateCount = (physicalGate.Length > 0 ? 1 : 0)
-            + (layoutGate.Length > 0 ? 1 : 0)
-            + (collationGate.Length > 0 ? 1 : 0)
-            + (defaultGate.Length > 0 ? 1 : 0)
-            + (indexFilterGate.Length > 0 ? 1 : 0);
+        var gateCount = (physicalGate.Length > 0
+                ? 1
+                : 0)
+            + (layoutGate.Length > 0
+                ? 1
+                : 0)
+            + (collationGate.Length > 0
+                ? 1
+                : 0)
+            + (defaultGate.Length > 0
+                ? 1
+                : 0)
+            + (indexFilterGate.Length > 0
+                ? 1
+                : 0);
 
         var closures = gateCount switch
         {
@@ -381,6 +439,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     private static bool UsesDelayedOrdinalParameter(
             SqlServerSafeMigrationRuntimePlan plan
         )
+
         // WHY: A previously admissible 2,000-source capture has no spare RPC parameter. Its generated
         // integer label can be literal only in the small outer dispatcher; the heavy classifier remains stable.
         => plan.AnalysisParameters.Count < SqlServerCatalogParameterBindings.MaximumParameters;

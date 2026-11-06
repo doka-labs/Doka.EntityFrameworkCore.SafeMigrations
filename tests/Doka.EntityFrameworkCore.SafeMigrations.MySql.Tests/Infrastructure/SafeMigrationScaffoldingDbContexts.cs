@@ -45,21 +45,34 @@ public abstract class SafeMigrationScaffoldingDbContext : DbContext
 
         // WHY: The CLI gate must compile and execute the same generated-column
         // and CHECK metadata bridge in strict and legacy scaffolding modes.
-        modelBuilder.Entity("ScaffoldingGeneratedNode", entity =>
-        {
-            entity.ToTable("scaffolding_generated_nodes", table =>
-                table.HasCheckConstraint("ck_scaffolding_generated_bounds", "`RightBound` > `LeftBound`"));
-            entity.Property<int>("Id").ValueGeneratedNever();
-            entity.HasKey("Id");
-            entity.Property<long>("LeftBound");
-            entity.Property<long>("RightBound");
-            // WHY: The unquoted ID role also exercises MariaDB's native
-            // keyword certificate through the actual CLI, script and bundle.
-            entity.Property<bool>("HasDescendants").HasComputedColumnSql(
-                "Id >= 0 AND `RightBound` > CASE WHEN `LeftBound` = 9223372036854775807 "
-                + "THEN `LeftBound` ELSE `LeftBound` + 1 END", stored: false);
-            entity.HasIndex("HasDescendants", "LeftBound", "RightBound");
-        });
+        modelBuilder.Entity(
+            "ScaffoldingGeneratedNode",
+            entity =>
+            {
+                entity.ToTable(
+                    "scaffolding_generated_nodes",
+                    table =>
+                        table.HasCheckConstraint("ck_scaffolding_generated_bounds", "`RightBound` > `LeftBound`"));
+
+                entity
+                    .Property<int>("Id")
+                    .ValueGeneratedNever();
+
+                entity.HasKey("Id");
+                entity.Property<long>("LeftBound");
+                entity.Property<long>("RightBound");
+
+                // WHY: The unquoted ID role also exercises MariaDB's native
+                // keyword certificate through the actual CLI, script and bundle.
+                entity
+                    .Property<bool>("HasDescendants")
+                    .HasComputedColumnSql(
+                        "Id >= 0 AND `RightBound` > CASE WHEN `LeftBound` = 9223372036854775807 "
+                        + "THEN `LeftBound` ELSE `LeftBound` + 1 END",
+                        stored: false);
+
+                entity.HasIndex("HasDescendants", "LeftBound", "RightBound");
+            });
 
         modelBuilder.Entity<SafeMigrationScaffoldingUser>(entity =>
         {
@@ -78,11 +91,14 @@ public abstract class SafeMigrationScaffoldingDbContext : DbContext
             entity
                 .HasIndex(user => user.Email)
                 .IsUnique();
-            entity.HasIndex(user => new
-            {
-                user.TenantId,
-                user.Email,
-            }).HasPrefixLength(0, 64);
+
+            entity
+                .HasIndex(user => new
+                {
+                    user.TenantId,
+                    user.Email,
+                })
+                .HasPrefixLength(0, 64);
 
             entity.HasData(
                 new SafeMigrationScaffoldingUser
@@ -374,26 +390,49 @@ public abstract class SafeMigrationDataTransitionScaffoldingDbContext : DbContex
                 .HasMaxLength(320)
                 .IsRequired();
 
-            entity.Property<string?>("RenamedCode")
-                .HasColumnName(targetState ? "renamed_code" : "old_code")
+            entity
+                .Property<string?>("RenamedCode")
+                .HasColumnName(
+                    targetState
+                        ? "renamed_code"
+                        : "old_code")
                 .HasMaxLength(32);
 
             if (targetState)
             {
-                entity.Property<string?>("AddedCode").HasMaxLength(32);
+                entity
+                    .Property<string?>("AddedCode")
+                    .HasMaxLength(32);
             }
 
-            entity.HasData(targetState
-                ?
-                [
-                    new SafeMigrationDataTransitionUser { Id = 1, Email = "owner@example.test", },
-                    new SafeMigrationDataTransitionUser { Id = 3, Email = "auditor@example.test", },
-                ]
-                :
-                [
-                    new SafeMigrationDataTransitionUser { Id = 1, Email = "administrator@example.test", },
-                    new SafeMigrationDataTransitionUser { Id = 2, Email = "member@example.test", },
-                ]);
+            entity.HasData(
+                targetState
+                    ?
+                    [
+                        new SafeMigrationDataTransitionUser
+                        {
+                            Id = 1,
+                            Email = "owner@example.test",
+                        },
+                        new SafeMigrationDataTransitionUser
+                        {
+                            Id = 3,
+                            Email = "auditor@example.test",
+                        },
+                    ]
+                    :
+                    [
+                        new SafeMigrationDataTransitionUser
+                        {
+                            Id = 1,
+                            Email = "administrator@example.test",
+                        },
+                        new SafeMigrationDataTransitionUser
+                        {
+                            Id = 2,
+                            Email = "member@example.test",
+                        },
+                    ]);
         });
 
         // WHY: EF can interpret a removed and added column on the same table

@@ -13,24 +13,33 @@ public sealed class SqlServerGeneratorSafetyTests
     [Theory]
     [InlineData(null, "application")]
     [InlineData("target", "target")]
-    public void SafeRename_UsesTheSameTargetSchemaForCatalogAndBaseline(string? newSchema, string expectedSchema)
+    public void SafeRename_UsesTheSameTargetSchemaForCatalogAndBaseline(
+        string? newSchema,
+        string expectedSchema
+    )
     {
         // Arrange
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
         options.UseSqlServer(ConnectionString);
-        ((DbContextOptionsBuilder)options)
+        options
             .UseSqlServerSafeMigrations<RecordingBaselineGenerator, SafeMigrationDbContext>();
+
         using var context = new SafeMigrationDbContext(options.Options);
         var baseline = context.GetService<RecordingBaselineGenerator>();
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("orders", "renamed_orders", schema: "application", newSchema: newSchema);
 
         // Act
-        context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+        context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
 
         // Assert
-        var rename = Assert.Single(baseline.Calls.SelectMany(static operations => operations)
-            .OfType<RenameTableOperation>());
+        var rename = Assert.Single(
+            baseline
+                .Calls
+                .SelectMany(static operations => operations)
+                .OfType<RenameTableOperation>());
 
         Assert.Equal("application", rename.Schema);
         Assert.Equal(expectedSchema, rename.NewSchema);
@@ -40,7 +49,9 @@ public sealed class SqlServerGeneratorSafetyTests
     [Theory]
     [InlineData(null)]
     [InlineData("application")]
-    public void SafeRename_UnchangedIdentityOnlyEmitsGuardedValidation(string? schema)
+    public void SafeRename_UnchangedIdentityOnlyEmitsGuardedValidation(
+        string? schema
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
@@ -48,7 +59,10 @@ public sealed class SqlServerGeneratorSafetyTests
         builder.RenameTableIfExists("orders", "orders", schema: schema, newSchema: schema);
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
+
         var sql = string.Join("\n", commands.Select(static command => command.CommandText));
 
         // Assert
@@ -71,13 +85,19 @@ public sealed class SqlServerGeneratorSafetyTests
         builder.DropTableIfExists("O'Brien");
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
-        var sql = string.Join("\n", commands.Select(static command =>
-            SqlServerGuardedSqlTestContract.DecodeScope(command.CommandText)));
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
+
+        var sql = string.Join(
+            "\n",
+            commands.Select(static command =>
+                SqlServerGuardedSqlTestContract.DecodeScope(command.CommandText)));
 
         // Assert
         Assert.Contains("HAS_PERMS_BY_NAME", sql, StringComparison.Ordinal);
         Assert.Contains("SCHEMA_NAME()", sql, StringComparison.Ordinal);
+
         // WHY: The permission-qualified classifier is a nested SQL literal;
         // both quoting levels must retain the original apostrophe as data.
         Assert.Contains("N''O''''Brien''", sql, StringComparison.Ordinal);
@@ -103,7 +123,10 @@ public sealed class SqlServerGeneratorSafetyTests
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
+
         var sql = string.Join("\n", commands.Select(command => command.CommandText));
 
         // Assert
@@ -131,7 +154,9 @@ public sealed class SqlServerGeneratorSafetyTests
 
         // Act
         var exception = Record.Exception(() =>
-            context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate(builder.Operations, context.Model));
 
         // Assert
         Assert.IsType<NotSupportedException>(exception);
@@ -146,8 +171,9 @@ public sealed class SqlServerGeneratorSafetyTests
         // Arrange
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
         options.UseSqlServer(ConnectionString);
-        ((DbContextOptionsBuilder)options)
+        options
             .UseSqlServerSafeMigrations<RecordingBaselineGenerator, SafeMigrationDbContext>();
+
         using var context = new SafeMigrationDbContext(options.Options);
         var baseline = context.GetService<RecordingBaselineGenerator>();
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -162,7 +188,9 @@ public sealed class SqlServerGeneratorSafetyTests
 
         // Act
         var exception = Record.Exception(() =>
-            context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate(builder.Operations, context.Model));
 
         // Assert
         Assert.IsType<NotSupportedException>(exception);
@@ -183,7 +211,10 @@ public sealed class SqlServerGeneratorSafetyTests
         builder.DropTableIfExists("roles", schema: "dbo");
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
+
         var firstCommand = commands[0].CommandText;
 
         // Assert
@@ -202,7 +233,9 @@ public sealed class SqlServerGeneratorSafetyTests
     public void DisabledSafeMigrations_PreservesOrdinaryEfGeneratorAndSql()
     {
         // Arrange
-        var options = new DbContextOptionsBuilder().UseSqlServer(ConnectionString).Options;
+        var options = new DbContextOptionsBuilder().UseSqlServer(ConnectionString)
+            .Options;
+
         using var context = new DbContext(options);
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var operation = new SqlOperation { Sql = "SELECT 7;" };
@@ -212,7 +245,11 @@ public sealed class SqlServerGeneratorSafetyTests
 
         // Assert
         Assert.IsNotType<SqlServerSafeMigrationsSqlGenerator>(generator);
-        Assert.Contains("SELECT 7;", Assert.Single(commands).CommandText, StringComparison.Ordinal);
+        Assert.Contains("SELECT 7;",
+            Assert.Single(commands)
+                .CommandText,
+            StringComparison.Ordinal);
+
         Assert.DoesNotContain("doka_sm_", commands[0].CommandText, StringComparison.Ordinal);
     }
 
@@ -232,8 +269,9 @@ public sealed class SqlServerGeneratorSafetyTests
         // Arrange
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
         options.UseSqlServer(ConnectionString);
-        ((DbContextOptionsBuilder)options)
+        options
             .UseSqlServerSafeMigrations<RecordingBaselineGenerator, SafeMigrationDbContext>();
+
         using var context = new SafeMigrationDbContext(options.Options);
         var baseline = context.GetService<RecordingBaselineGenerator>();
         IReadOnlyList<MigrationCommand> invalidCommands = transactionSuppressed
@@ -254,7 +292,9 @@ public sealed class SqlServerGeneratorSafetyTests
 
         // Act
         var exception = Record.Exception(() =>
-            context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate(builder.Operations, context.Model));
 
         // Assert
         if (transactionSuppressed)
@@ -276,8 +316,9 @@ public sealed class SqlServerGeneratorSafetyTests
         // Arrange
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
         options.UseSqlServer(ConnectionString);
-        ((DbContextOptionsBuilder)options)
+        options
             .UseSqlServerSafeMigrations<RecordingBaselineGenerator, SafeMigrationDbContext>();
+
         using var context = new SafeMigrationDbContext(options.Options);
         var baseline = context.GetService<RecordingBaselineGenerator>();
         baseline.ColumnCommands = [baseline.CreateCommand("ALTER TABLE [items] ADD [Amount] int NULL;", true)];
@@ -286,7 +327,9 @@ public sealed class SqlServerGeneratorSafetyTests
 
         // Act
         var exception = Record.Exception(() =>
-            context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate(builder.Operations, context.Model));
 
         // Assert
         var unsupported = Assert.IsType<NotSupportedException>(exception);
@@ -307,8 +350,9 @@ public sealed class SqlServerGeneratorSafetyTests
         // Arrange
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
         options.UseSqlServer(ConnectionString);
-        ((DbContextOptionsBuilder)options)
+        options
             .UseSqlServerSafeMigrations<RecordingBaselineGenerator, SafeMigrationDbContext>();
+
         using var context = new SafeMigrationDbContext(options.Options);
         var baseline = context.GetService<RecordingBaselineGenerator>();
         var table = new CreateTableOperation { Name = "temporal_orders" };
@@ -323,12 +367,16 @@ public sealed class SqlServerGeneratorSafetyTests
         };
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate([table, column], context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([table, column], context.Model);
 
         // Assert
         Assert.Equal(2, commands.Count);
-        Assert.Collection(baseline.Calls,
-            batch => Assert.Collection(batch,
+        Assert.Collection(
+            baseline.Calls,
+            batch => Assert.Collection(
+                batch,
                 operation => Assert.Same(table, operation),
                 operation => Assert.Same(column, operation)));
     }
@@ -342,8 +390,9 @@ public sealed class SqlServerGeneratorSafetyTests
         // Arrange
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
         options.UseSqlServer(ConnectionString);
-        ((DbContextOptionsBuilder)options)
+        options
             .UseSqlServerSafeMigrations<RecordingBaselineGenerator, SafeMigrationDbContext>();
+
         using var context = new SafeMigrationDbContext(options.Options);
         var baseline = context.GetService<RecordingBaselineGenerator>();
         var table = new CreateTableOperation { Name = "temporal_orders" };
@@ -361,9 +410,11 @@ public sealed class SqlServerGeneratorSafetyTests
 
         // Act
         var exception = Record.Exception(() =>
-            context.GetService<IMigrationsSqlGenerator>().Generate(
-                [table, safeBuilder.Operations[0], column],
-                context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate(
+                    [table, safeBuilder.Operations[0], column],
+                    context.Model));
 
         // Assert
         Assert.IsType<NotSupportedException>(exception);
@@ -383,8 +434,9 @@ public sealed class SqlServerGeneratorSafetyTests
         // Arrange
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
         options.UseSqlServer(ConnectionString);
-        ((DbContextOptionsBuilder)options)
+        options
             .UseSqlServerSafeMigrations<RecordingBaselineGenerator, SafeMigrationDbContext>();
+
         using var context = new SafeMigrationDbContext(options.Options);
         var baseline = context.GetService<RecordingBaselineGenerator>();
         var generator = context.GetService<IMigrationsSqlGenerator>();
@@ -408,8 +460,12 @@ public sealed class SqlServerGeneratorSafetyTests
 
         // Assert
         Assert.IsType<SqlServerSafeMigrationProviderAnalyzer>(analyzer);
-        Assert.Contains("requires a new context", Assert.IsType<InvalidOperationException>(failure).Message,
+        Assert.Contains(
+            "requires a new context",
+            Assert.IsType<InvalidOperationException>(failure)
+                .Message,
             StringComparison.Ordinal);
+
         Assert.Empty(baseline.Calls);
     }
 
@@ -430,7 +486,10 @@ public sealed class SqlServerGeneratorSafetyTests
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.Sql("SELECT 7;");
         builder.AddColumnIfNotExists<int>("Amount", "items", type: "int", nullable: true);
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations);
+
         var connection = context.GetService<IRelationalConnection>();
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)
             context.GetService<ISafeMigrationProviderAnalyzer>();
@@ -441,13 +500,15 @@ public sealed class SqlServerGeneratorSafetyTests
         var failures = new List<Exception?>();
         foreach (var command in commands)
         {
-            failures.Add(asynchronous
-                ? await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(connection,
-                    cancellationToken: cancellation.Token))
-                : Record.Exception(() =>
-                {
-                    command.ExecuteNonQuery(connection);
-                }));
+            failures.Add(
+                asynchronous
+                    ? await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(
+                        connection,
+                        cancellationToken: cancellation.Token))
+                    : Record.Exception(() =>
+                    {
+                        command.ExecuteNonQuery(connection);
+                    }));
         }
 
         // Assert
@@ -455,9 +516,15 @@ public sealed class SqlServerGeneratorSafetyTests
         Assert.True(commands.Count >= 3);
         Assert.Contains(commands, command => command.CommandText.Contains("SELECT 7;", StringComparison.Ordinal));
         Assert.All(commands, command => Assert.IsType<SqlServerSafeMigrationGuardedCommand>(command));
-        Assert.All(failures, failure =>
-            Assert.Contains("requires a new context", Assert.IsType<InvalidOperationException>(failure).Message,
-                StringComparison.Ordinal));
+        Assert.All(
+            failures,
+            failure =>
+                Assert.Contains(
+                    "requires a new context",
+                    Assert.IsType<InvalidOperationException>(failure)
+                        .Message,
+                    StringComparison.Ordinal));
+
         Assert.Equal(ConnectionState.Closed, connection.DbConnection.State);
     }
 
@@ -475,7 +542,10 @@ public sealed class SqlServerGeneratorSafetyTests
         using var context = new SafeMigrationDbContext(ConnectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.Sql("SELECT 7;");
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations);
+
         var command = commands.Single();
         var connection = context.GetService<IRelationalConnection>();
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)
@@ -496,8 +566,12 @@ public sealed class SqlServerGeneratorSafetyTests
         Assert.IsType<SqlServerSafeMigrationProviderAnalyzer>(analyzer);
         Assert.IsType<SqlServerSafeMigrationGuardedCommand>(command);
         Assert.Contains("SELECT 7;", command.CommandText, StringComparison.Ordinal);
-        Assert.Contains("requires a new context", Assert.IsType<InvalidOperationException>(failure).Message,
+        Assert.Contains(
+            "requires a new context",
+            Assert.IsType<InvalidOperationException>(failure)
+                .Message,
             StringComparison.Ordinal);
+
         Assert.Equal(ConnectionState.Closed, connection.DbConnection.State);
     }
 
@@ -520,20 +594,6 @@ public sealed class SqlServerGeneratorSafetyTests
 
         public List<IReadOnlyList<MigrationOperation>> Calls { get; } = [];
 
-        public MigrationCommand CreateCommand(
-            string sql,
-            bool suppressTransaction
-        )
-        {
-            var relationalCommand = _dependencies.CommandBuilderFactory.Create().Append(sql).Build();
-
-            return new MigrationCommand(
-                relationalCommand,
-                _dependencies.CurrentContext.Context,
-                _dependencies.Logger,
-                suppressTransaction);
-        }
-
         public IReadOnlyList<MigrationCommand> Generate(
             IReadOnlyList<MigrationOperation> operations,
             IModel? model = null,
@@ -542,7 +602,8 @@ public sealed class SqlServerGeneratorSafetyTests
         {
             Calls.Add(operations.ToArray());
 
-            if (operations.Count == 1 && operations[0] is SqlOperation sqlOperation)
+            if (operations.Count == 1
+                && operations[0] is SqlOperation sqlOperation)
             {
                 var operationGuard = sqlOperation.Sql.Contains("DECLARE @doka_state", StringComparison.Ordinal);
                 if (GuardedSqlCommands is { } guardedCommands
@@ -570,6 +631,24 @@ public sealed class SqlServerGeneratorSafetyTests
                     ? CreateCommand(sql.Sql, sql.SuppressTransaction)
                     : CreateCommand("SELECT 1;", false))
                 .ToArray();
+        }
+
+        public MigrationCommand CreateCommand(
+            string sql,
+            bool suppressTransaction
+        )
+        {
+            var relationalCommand = _dependencies
+                .CommandBuilderFactory
+                .Create()
+                .Append(sql)
+                .Build();
+
+            return new MigrationCommand(
+                relationalCommand,
+                _dependencies.CurrentContext.Context,
+                _dependencies.Logger,
+                suppressTransaction);
         }
     }
 }

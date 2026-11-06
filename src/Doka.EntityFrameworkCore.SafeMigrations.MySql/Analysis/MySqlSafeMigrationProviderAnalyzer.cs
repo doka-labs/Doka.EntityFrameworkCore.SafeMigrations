@@ -1,30 +1,40 @@
+using System.Data;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigrationProviderAnalyzer,
     ISafeMigrationProviderOperationProjection, ISafeMigrationProjectedKeyAnalyzer,
     ISafeMigrationProviderObjectIdentityNormalizer
 {
+    private const string MariaDbImplicitJsonCheckInventoryJoins = """
+                                                                  LEFT JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+                                                                    ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
+                                                                   AND cc.TABLE_NAME = tc.TABLE_NAME
+                                                                   AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+                                                                  LEFT JOIN INFORMATION_SCHEMA.COLUMNS json_column
+                                                                    ON json_column.TABLE_SCHEMA = tc.CONSTRAINT_SCHEMA
+                                                                   AND json_column.TABLE_NAME = tc.TABLE_NAME
+                                                                   AND json_column.COLUMN_NAME = tc.CONSTRAINT_NAME
+                                                                  """;
+
+    private const string MariaDbImplicitJsonCheckInventoryExpression = """
+                                                                       CASE WHEN tc.CONSTRAINT_TYPE = 'CHECK'
+                                                                         AND json_column.DATA_TYPE = 'longtext'
+                                                                         AND LOWER(json_column.COLLATION_NAME) = 'utf8mb4_bin'
+                                                                         AND LOWER(REPLACE(REPLACE(REPLACE(REPLACE(
+                                                                               cc.CHECK_CLAUSE, '`', ''), ' ', ''), '(', ''), ')', ''))
+                                                                             = CONCAT('json_valid', LOWER(json_column.COLUMN_NAME))
+                                                                       THEN TRUE ELSE FALSE END
+                                                                       """;
+
     private readonly MySqlSafeMigrationPlanCapture _planCapture;
     private readonly IMigrationsSqlGenerator _sqlGenerator;
     private readonly IRelationalTypeMappingSource _typeMappingSource;
     private string? _currentDatabase;
-    private bool _tableNamesIgnoreCase;
     private MySqlGeneratedColumnDependencyContractCatalog? _generatedColumnDependencyContracts;
     private bool _generatedColumnDependencyIsMariaDb;
     private bool _requiresGeneratedDependencyQualification;
-
-    /// <summary>
-    /// Uses the independently captured native owner policy without folding mode-zero table identities.
-    /// </summary>
-    private StringComparer TableIdentifierComparer =>
-        _tableNamesIgnoreCase ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-
-    /// <summary>Canonicalizes an owner only after the server proves case-insensitive physical identity.</summary>
-    private string NormalizeTableIdentifier(
-        string identifier
-    ) => _tableNamesIgnoreCase
-        ? SafeMigrationModelManagedKeyIdentity.NormalizeOrdinalIgnoreCase(identifier)
-        : identifier;
+    private bool _tableNamesIgnoreCase;
 
     public MySqlSafeMigrationProviderAnalyzer(
         IMigrationsSqlGenerator sqlGenerator,
@@ -41,9 +51,86 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         _typeMappingSource = typeMappingSource;
     }
 
-    public string ProviderId => "doka_mysql";
+    /// <summary>
+    /// Uses the independently captured native owner policy without folding mode-zero table identities.
+    /// </summary>
+    private StringComparer TableIdentifierComparer =>
+        _tableNamesIgnoreCase
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
 
     bool ISafeMigrationProjectedKeyAnalyzer.SharesUniqueConstraintAndIndexIdentity => true;
+
+    public string ProviderId => "doka_mysql";
+
+    public void ValidateContext(
+        DbContext context
+    )
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        // Validate the current connection instance rather than the immutable
+        // options snapshot. EF may reuse an internal service provider after a
+        // consumer replaces the relational connection for the same context
+        // type, but no SafeMigrations SQL may escape under invalid settings.
+        MySqlSafeMigrationConnectionValidator.Validate(context.Database.GetDbConnection());
+    }
+
+    public async Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
+        DbContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var connection = context.Database.GetDbConnection();
+        var openedHere = connection.State != ConnectionState.Open;
+        if (openedHere)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            var serverVersion = MySqlServerVersion.AutoDetect(
+                connection,
+                MySqlServerVersionCompatibilityMode.AllowUnsupported);
+
+            return new SafeMigrationProviderEnvironment(
+                ProviderId,
+                serverVersion.IsMariaDb
+                    ? "mariadb"
+                    : "mysql",
+                connection.ServerVersion);
+        }
+        finally
+        {
+            if (openedHere)
+            {
+                await connection.CloseAsync();
+            }
+        }
+    }
+
+    public async Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
+        DbContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var migrationLock = await context
+            .GetService<IHistoryRepository>()
+            .AcquireDatabaseLockAsync(cancellationToken);
+
+        return new AnalysisScope(migrationLock);
+    }
+
+    public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
+        DbContext context,
+        IReadOnlyList<SafeMigrationOperation> operations,
+        CancellationToken cancellationToken
+    ) => AnalyzeCoreAsync(context, operations, captureRenameSources: true, cancellationToken);
 
     StringComparer ISafeMigrationProviderObjectIdentityNormalizer.IdentifierComparer => TableIdentifierComparer;
 
@@ -71,7 +158,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
     string? ISafeMigrationProviderObjectIdentityNormalizer.NormalizeSchema(
         string? schema
-    ) => schema is not null && StringComparer.Ordinal.Equals(schema, _currentDatabase) ? null : schema;
+    ) => schema is not null && StringComparer.Ordinal.Equals(schema, _currentDatabase)
+        ? null
+        : schema;
 
     bool ISafeMigrationProviderObjectIdentityNormalizer.IsObjectIdentityMismatch(
         SafeMigrationProviderAnalysis analysis
@@ -91,72 +180,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         return operation is AlterDatabaseOperation;
     }
 
-    public void ValidateContext(
-        DbContext context
-    )
-    {
-        ArgumentNullException.ThrowIfNull(context);
-
-        // Validate the current connection instance rather than the immutable
-        // options snapshot. EF may reuse an internal service provider after a
-        // consumer replaces the relational connection for the same context
-        // type, but no SafeMigrations SQL may escape under invalid settings.
-        MySqlSafeMigrationConnectionValidator.Validate(context.Database.GetDbConnection());
-    }
-
-    public async Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
-        DbContext context,
-        CancellationToken cancellationToken = default
-    )
-    {
-        ArgumentNullException.ThrowIfNull(context);
-
-        var connection = context.Database.GetDbConnection();
-        var openedHere = connection.State != System.Data.ConnectionState.Open;
-        if (openedHere)
-        {
-            await connection.OpenAsync(cancellationToken);
-        }
-
-        try
-        {
-            var serverVersion = MySqlServerVersion.AutoDetect(
-                connection,
-                MySqlServerVersionCompatibilityMode.AllowUnsupported);
-
-            return new SafeMigrationProviderEnvironment(
-                ProviderId,
-                serverVersion.IsMariaDb ? "mariadb" : "mysql",
-                connection.ServerVersion);
-        }
-        finally
-        {
-            if (openedHere)
-            {
-                await connection.CloseAsync();
-            }
-        }
-    }
-
-    public async Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
-        DbContext context,
-        CancellationToken cancellationToken = default
-    )
-    {
-        ArgumentNullException.ThrowIfNull(context);
-
-        var migrationLock = await context
-            .GetService<IHistoryRepository>()
-            .AcquireDatabaseLockAsync(cancellationToken);
-
-        return new AnalysisScope(migrationLock);
-    }
-
-    public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
-        DbContext context,
-        IReadOnlyList<SafeMigrationOperation> operations,
-        CancellationToken cancellationToken = default
-    ) => AnalyzeCoreAsync(context, operations, captureRenameSources: true, cancellationToken);
+    /// <summary>Canonicalizes an owner only after the server proves case-insensitive physical identity.</summary>
+    private string NormalizeTableIdentifier(
+        string identifier
+    ) => _tableNamesIgnoreCase
+        ? SafeMigrationModelManagedKeyIdentity.NormalizeOrdinalIgnoreCase(identifier)
+        : identifier;
 
     /// <summary>Analyzes one immutable snapshot without recursively capturing rename-source evidence.</summary>
     private async Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeCoreAsync(
@@ -193,7 +222,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         }
 
         var connection = context.Database.GetDbConnection();
-        var openedHere = connection.State != System.Data.ConnectionState.Open;
+        var openedHere = connection.State != ConnectionState.Open;
         if (openedHere)
         {
             await connection.OpenAsync(cancellationToken);
@@ -207,7 +236,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             var commandTimeout = context.Database.GetCommandTimeout();
             _currentDatabase = null;
             if (operations.Any(static operation =>
-                    MySqlSafeMigrationCatalogSqlBuilder.HasDatabaseQualifier(operation.Intent)))
+                MySqlSafeMigrationCatalogSqlBuilder.HasDatabaseQualifier(operation.Intent)))
             {
                 _currentDatabase = await ReadCurrentDatabaseAsync(connection, commandTimeout, cancellationToken);
             }
@@ -219,6 +248,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             var physicalKeyOperations = operations
                 .Where(operation => TargetsCurrentDatabase(operation.Intent, _currentDatabase))
                 .ToArray();
+
             var columnSessionEnvironment = await ReadProjectedColumnSessionEnvironmentAsync(
                 connection,
                 physicalKeyOperations,
@@ -261,7 +291,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
             var generatedCandidates = MySqlGeneratedColumnModelCandidates.CaptureTargets(
                 dependencyOperations,
-                captureRenameSources ? _analysisTargetModels : null,
+                captureRenameSources
+                    ? _analysisTargetModels
+                    : null,
                 context.Model,
                 context.GetService<IModelRuntimeInitializer>());
 
@@ -270,6 +302,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 _currentDatabase,
                 TableIdentifierComparer,
                 generatedCandidates);
+
             if (captureRenameSources)
             {
                 // WHY: Normalize only after this invocation has read its native
@@ -287,6 +320,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                     connection,
                     MySqlServerVersionCompatibilityMode.AllowUnsupported)
                 .IsMariaDb;
+
             if (captureRenameSources)
             {
                 _generatedColumnDependencyIsMariaDb = isMariaDb;
@@ -306,7 +340,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
             var operationOffset = 0;
             foreach (var operationWindow in operations.Chunk(
-                         SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
+                SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
             {
                 var plans = CapturePlans(
                     operationWindow,
@@ -333,6 +367,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                 // by other databases; those dependencies must not disappear from the snapshot.
                 var bindable = new bool[operationWindow.Length];
                 var bindableCount = 0;
+
                 // WHY: Keep window-local plans and result slots aligned with their original operation ordinals.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
@@ -459,6 +494,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                     var workIndex = 0;
                     var captureDropCompleteness = plans.Any(static plan =>
                         plan.DropLeavesNoGeneratedColumnsExpression is not null);
+
                     while (workIndex < workOrder.Length)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
@@ -471,7 +507,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                         var batchParameterCount = 0;
                         var batchPayloadBytes = 0;
                         while (batch.Count < SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch
-                               && workIndex < workOrder.Length)
+                            && workIndex < workOrder.Length)
                         {
                             var command = batch.CreateCommand();
                             var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
@@ -482,7 +518,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
                             var sqlBytes = trailerBytes;
                             while (workIndex < workOrder.Length
-                                   && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+                                && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
                             {
                                 var ordinal = workOrder[workIndex];
                                 var checkpoint = parameterizer.Capture();
@@ -551,15 +587,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                                 }
 
                                 var selectionBytes = Encoding.UTF8.GetByteCount(selection)
-                                    + (selections.Count == 0 ? 0 : separatorBytes);
+                                    + (selections.Count == 0
+                                        ? 0
+                                        : separatorBytes);
 
                                 var statementPayload = sqlBytes + selectionBytes + parameterizer.Utf8PayloadBytes;
                                 var prospectiveBatchParameters = batchParameterCount + parameterizer.Count;
                                 var prospectiveBatchPayload = batchPayloadBytes + statementPayload;
                                 if (SafeMigrationCatalogQueryLimits.Exceeded(
-                                        prospectiveBatchParameters,
-                                        prospectiveBatchPayload,
-                                        maximumPayloadBytes))
+                                    prospectiveBatchParameters,
+                                    prospectiveBatchPayload,
+                                    maximumPayloadBytes))
                                 {
                                     parameterizer.Rollback(checkpoint);
                                     if (selections.Count == 0)
@@ -593,6 +631,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
                             command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
                                 + SafeMigrationCatalogQueryLimits.Trailer;
+
                             batchParameterCount += parameterizer.Count;
                             batchPayloadBytes += sqlBytes + parameterizer.Utf8PayloadBytes;
                         }
@@ -809,27 +848,6 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         SafeMigrationObservedState.TransitionReady => "transition_ready",
         _ => throw new ArgumentOutOfRangeException(nameof(state)),
     };
-
-    private const string MariaDbImplicitJsonCheckInventoryJoins = """
-                                                                  LEFT JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
-                                                                    ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
-                                                                   AND cc.TABLE_NAME = tc.TABLE_NAME
-                                                                   AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
-                                                                  LEFT JOIN INFORMATION_SCHEMA.COLUMNS json_column
-                                                                    ON json_column.TABLE_SCHEMA = tc.CONSTRAINT_SCHEMA
-                                                                   AND json_column.TABLE_NAME = tc.TABLE_NAME
-                                                                   AND json_column.COLUMN_NAME = tc.CONSTRAINT_NAME
-                                                                  """;
-
-    private const string MariaDbImplicitJsonCheckInventoryExpression = """
-                                                                       CASE WHEN tc.CONSTRAINT_TYPE = 'CHECK'
-                                                                         AND json_column.DATA_TYPE = 'longtext'
-                                                                         AND LOWER(json_column.COLLATION_NAME) = 'utf8mb4_bin'
-                                                                         AND LOWER(REPLACE(REPLACE(REPLACE(REPLACE(
-                                                                               cc.CHECK_CLAUSE, '`', ''), ' ', ''), '(', ''), ')', ''))
-                                                                             = CONCAT('json_valid', LOWER(json_column.COLUMN_NAME))
-                                                                       THEN TRUE ELSE FALSE END
-                                                                       """;
 
     private sealed class AnalysisScope : IAsyncDisposable
     {

@@ -17,6 +17,7 @@ public sealed class PostgreSqlIdentifiersIntegrationTests : PostgreSqlSafeMigrat
             SqlBinary(SqlColumn("user"), SafeMigrationSqlBinaryOperator.Add, SqlColumn("a$b")),
             SafeMigrationSqlBinaryOperator.Add,
             SqlColumn("ordinary"));
+
         var definition = new ExpectedTableDefinition(
             table,
             [
@@ -45,6 +46,7 @@ public sealed class PostgreSqlIdentifiersIntegrationTests : PostgreSqlSafeMigrat
                     table,
                     SqlBinary(sum, SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, SafeMigrationSql.Literal(0))),
             ]);
+
         var index = new ExpectedIndexDefinition(
             "ix_expression_identifiers",
             table,
@@ -63,7 +65,7 @@ public sealed class PostgreSqlIdentifiersIntegrationTests : PostgreSqlSafeMigrat
         {
             try
             {
-                await ExecuteOperationsAsync(context, [builder.Operations[ordinal]]);
+                await ExecuteOperationsAsync(context, [builder.Operations[ordinal]], CancellationToken.None);
             }
             catch (Exception exception)
             {
@@ -75,36 +77,49 @@ public sealed class PostgreSqlIdentifiersIntegrationTests : PostgreSqlSafeMigrat
             }
         }
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE INDEX ix_expression_identifiers ON expression_identifiers "
-            + "(((\"user\" + \"a$b\") + ordinary)) WHERE \"a$b\" > 0;");
+            + "(((\"user\" + \"a$b\") + ordinary)) WHERE \"a$b\" > 0;",
+            cancellationToken: CancellationToken.None);
+
         var indexBuilder = new MigrationBuilder(context.Database.ProviderName!);
         indexBuilder.EnsureIndex(index, SafeMigrationPolicy.ThrowIfDifferent);
         var indexReport = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, indexBuilder.Operations, new SafeMigrationRunOptions("server-quoted-index"));
+            .AnalyzeAsync(
+                context,
+                indexBuilder.Operations,
+                new SafeMigrationRunOptions("server-quoted-index"),
+                CancellationToken.None);
+
         var indexCatalog = await ScalarStringAsync(
             connectionString,
             "SELECT pg_catalog.pg_get_indexdef(i.indexrelid, 1, TRUE) || ' | ' || "
             + "pg_catalog.pg_get_expr(i.indpred, i.indrelid) "
             + "FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid "
-            + "WHERE c.relname = 'ix_expression_identifiers';");
+            + "WHERE c.relname = 'ix_expression_identifiers';",
+            cancellationToken: CancellationToken.None);
 
         Assert.True(
             indexReport.Status == SafeMigrationReportStatus.Ready,
             $"Index catalog form did not converge: {indexCatalog}");
 
-        await ExecuteOperationsAsync(context, indexBuilder.Operations);
-        await ExecuteOperationsAsync(context, indexBuilder.Operations);
+        await ExecuteOperationsAsync(context, indexBuilder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, indexBuilder.Operations, CancellationToken.None);
         var operations = builder
             .Operations
             .Concat(indexBuilder.Operations)
             .ToArray();
+
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, operations, new SafeMigrationRunOptions("server-quoted-identifiers"));
+            .AnalyzeAsync(
+                context,
+                operations,
+                new SafeMigrationRunOptions("server-quoted-identifiers"),
+                CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(
@@ -132,7 +147,7 @@ public sealed class PostgreSqlIdentifiersIntegrationTests : PostgreSqlSafeMigrat
                 new ExpectedColumnDefinition(parent, typeof(int), true, "integer"),
             ],
             primaryKey: new ExpectedPrimaryKeyDefinition(primaryKey, table, [id]),
-            uniqueConstraints: [new ExpectedUniqueConstraintDefinition(unique, table, [code]),],
+            uniqueConstraints: [new ExpectedUniqueConstraintDefinition(unique, table, [code])],
             checkConstraints:
             [
                 ExpectedCheckConstraintDefinition.FromExpression(
@@ -146,26 +161,26 @@ public sealed class PostgreSqlIdentifiersIntegrationTests : PostgreSqlSafeMigrat
                             SafeMigrationSqlBinaryOperator.NotEqual,
                             SafeMigrationSql.Literal(string.Empty, "text")))),
             ],
-            foreignKeys: [new ExpectedForeignKeyDefinition(foreignKey, table, [parent], table, [id]),]);
+            foreignKeys: [new ExpectedForeignKeyDefinition(foreignKey, table, [parent], table, [id])]);
 
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.ConvergeTable(
             definition,
-            [new ExpectedIndexDefinition(index, table, [new ExpectedIndexKeyDefinition(column: parent)]),]);
+            [new ExpectedIndexDefinition(index, table, [new ExpectedIndexKeyDefinition(column: parent)])]);
 
         for (var ordinal = 0; ordinal < builder.Operations.Count; ordinal++)
         {
             try
             {
-                await ExecuteOperationsAsync(context, [builder.Operations[ordinal]]);
+                await ExecuteOperationsAsync(context, [builder.Operations[ordinal]], CancellationToken.None);
             }
             catch (Exception exception)
             {
                 var operation = Assert.IsType<SafeMigrationOperation>(builder.Operations[ordinal]);
                 var detail = operation.Intent.Kind == SafeMigrationOperationKind.EnsureCheckConstraint
-                    ? await ReadCheckExpressionAsync(connectionString, check)
+                    ? await ReadCheckExpressionAsync(connectionString, check, cancellationToken: CancellationToken.None)
                     : "not_applicable";
 
                 throw new InvalidOperationException(
@@ -175,10 +190,14 @@ public sealed class PostgreSqlIdentifiersIntegrationTests : PostgreSqlSafeMigrat
             }
         }
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("identifier-instance"));
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("identifier-instance"),
+                CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(
@@ -193,5 +212,4 @@ public sealed class PostgreSqlIdentifiersIntegrationTests : PostgreSqlSafeMigrat
         var remainingBytes = 63 - Encoding.UTF8.GetByteCount(prefix);
         return prefix + new string('x', remainingBytes);
     }
-
 }

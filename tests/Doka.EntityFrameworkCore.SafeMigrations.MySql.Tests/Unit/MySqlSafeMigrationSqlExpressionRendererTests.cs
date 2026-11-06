@@ -12,9 +12,11 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
 
         var expectations = new (SafeMigrationSqlExpression Expression, string Sql)[]
         {
-            (value, "`app`.`Value`"), (SafeMigrationSql.Literal(null), "NULL"),
+            (value, "`app`.`Value`"),
+            (SafeMigrationSql.Literal(null), "NULL"),
             (SafeMigrationSql.Literal(null, "int"), "CAST(NULL AS SIGNED)"),
-            (SafeMigrationSql.Literal(42), "42"), (SafeMigrationSql.Literal(42, "int"), "CAST(42 AS SIGNED)"),
+            (SafeMigrationSql.Literal(42), "42"),
+            (SafeMigrationSql.Literal(42, "int"), "CAST(42 AS SIGNED)"),
             (SafeMigrationSql.Literal(42, "signed"), "CAST(42 AS SIGNED)"),
             (SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Not, value), "(NOT `app`.`Value`)"),
             (SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Negate, value), "(-`app`.`Value`)"),
@@ -131,8 +133,7 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
 
         Assert.False(whitespaceAccepted);
         Assert.Empty(whitespaceResult);
-        Assert.Throws<ArgumentNullException>(
-            () => MySqlSafeMigrationCastTypeRenderer.TryRender(null!, out _));
+        Assert.Throws<ArgumentNullException>(() => MySqlSafeMigrationCastTypeRenderer.TryRender(null!, out _));
     }
 
     [Fact]
@@ -154,6 +155,7 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
         Assert.Equal(
             "schema_qualified_expression_collation",
             renderer.GetUnsupportedFeature(qualifiedCollation));
+
         Assert.Null(renderer.GetUnsupportedFeature(matchingProviderFragment));
         Assert.Equal("provider_fragment_mismatch", renderer.GetUnsupportedFeature(foreignProviderFragment));
     }
@@ -165,12 +167,18 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
         var renderer = CreateRenderer(context);
         var operators = new[]
         {
-            SafeMigrationSqlBinaryOperator.And, SafeMigrationSqlBinaryOperator.Or,
-            SafeMigrationSqlBinaryOperator.Equal, SafeMigrationSqlBinaryOperator.NotEqual,
-            SafeMigrationSqlBinaryOperator.LessThan, SafeMigrationSqlBinaryOperator.LessThanOrEqual,
-            SafeMigrationSqlBinaryOperator.GreaterThan, SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
-            SafeMigrationSqlBinaryOperator.Add, SafeMigrationSqlBinaryOperator.Subtract,
-            SafeMigrationSqlBinaryOperator.Multiply, SafeMigrationSqlBinaryOperator.Divide,
+            SafeMigrationSqlBinaryOperator.And,
+            SafeMigrationSqlBinaryOperator.Or,
+            SafeMigrationSqlBinaryOperator.Equal,
+            SafeMigrationSqlBinaryOperator.NotEqual,
+            SafeMigrationSqlBinaryOperator.LessThan,
+            SafeMigrationSqlBinaryOperator.LessThanOrEqual,
+            SafeMigrationSqlBinaryOperator.GreaterThan,
+            SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+            SafeMigrationSqlBinaryOperator.Add,
+            SafeMigrationSqlBinaryOperator.Subtract,
+            SafeMigrationSqlBinaryOperator.Multiply,
+            SafeMigrationSqlBinaryOperator.Divide,
             SafeMigrationSqlBinaryOperator.Modulo,
         };
 
@@ -193,7 +201,7 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
                 "(1 - 2)",
                 "(1 * 2)",
                 "(1 / 2)",
-                "(1 % 2)"
+                "(1 % 2)",
             ],
             rendered);
     }
@@ -208,8 +216,10 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
         Assert.Throws<NotSupportedException>(() => renderer.Render(SafeMigrationSql.Literal(new object())));
         Assert.Throws<NotSupportedException>(() => renderer.Render(
             SafeMigrationSql.Cast(SafeMigrationSql.Literal(1), "int); DROP TABLE items; --")));
+
         Assert.Throws<NotSupportedException>(() => renderer.Render(
             SafeMigrationSql.ProviderFragment("other", "CURRENT_USER()")));
+
         Assert.Throws<NotSupportedException>(() => renderer.Render(
             SafeMigrationSql.Collate(SafeMigrationSql.Identifier("value"), "utf8mb4_bin", "schema")));
     }
@@ -271,7 +281,7 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
     [Fact]
     public void RenderBinaryDefaultAcceptsStackBackedBytes()
     {
-        ReadOnlySpan<byte> bytes = stackalloc byte[] { 0, 255, 10, 92, };
+        ReadOnlySpan<byte> bytes = stackalloc byte[] { 0, 255, 10, 92 };
 
         var sql = MySqlSafeMigrationSqlExpressionRenderer.RenderBinaryDefault(bytes);
 
@@ -298,14 +308,16 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
             backing[index + 2] = (byte)(index & byte.MaxValue);
         }
 
-        var expected = backing.AsSpan(2, length).ToArray();
+        var expected = backing
+            .AsSpan(2, length)
+            .ToArray();
 
         var sql = MySqlSafeMigrationSqlExpressionRenderer.RenderBinaryDefault(backing.AsSpan(2, length));
         var decoded = Convert.FromHexString(sql.AsSpan(prefix.Length, sql.Length - prefix.Length - suffix.Length));
 
         Assert.StartsWith(prefix, sql, StringComparison.Ordinal);
         Assert.EndsWith(suffix, sql, StringComparison.Ordinal);
-        Assert.Equal(prefix.Length + (length * 2) + suffix.Length, sql.Length);
+        Assert.Equal(prefix.Length + length * 2 + suffix.Length, sql.Length);
         Assert.Equal(expected, decoded);
         Assert.Equal(sql.ToLowerInvariant(), sql);
         Assert.Equal((byte)0xee, backing[0]);
@@ -316,7 +328,14 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
     [Fact]
     public void RenderBinaryDefaultSnapshotsCallerOwnedBytes()
     {
-        var bytes = new byte[] { 0, 10, 92, 110, 255, };
+        var bytes = new byte[]
+        {
+            0,
+            10,
+            92,
+            110,
+            255,
+        };
 
         var sql = MySqlSafeMigrationSqlExpressionRenderer.RenderBinaryDefault(bytes);
         Array.Fill(bytes, (byte)0x42);
@@ -330,7 +349,7 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
     {
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
-        var binary = SafeMigrationSql.Literal(new byte[] { 0, 10, 92, 255, });
+        var binary = SafeMigrationSql.Literal(new byte[] { 0, 10, 92, 255 });
         var expression = SafeMigrationSql.Function("COALESCE", binary, SafeMigrationSql.Literal(null));
         var expectedLiteral = renderer.Render(binary);
 
@@ -358,7 +377,8 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
         var expression = SafeMigrationSql.Literal(value);
-        var ordinaryExpected = context.GetService<IRelationalTypeMappingSource>()
+        var ordinaryExpected = context
+            .GetService<IRelationalTypeMappingSource>()
             .FindMapping(typeof(char))!.GenerateSqlLiteral(value);
 
         var defaultSql = renderer.RenderDefault(expression);
@@ -425,12 +445,13 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
         var value = new string('\u20ac', euroCount) + new string('x', asciiCount);
 
         var sql = MySqlSafeMigrationSqlExpressionRenderer.RenderStringDefault(value);
-        var decoded = Encoding.UTF8.GetString(Convert.FromHexString(
-            sql.AsSpan(prefix.Length, sql.Length - prefix.Length - suffix.Length)));
+        var decoded = Encoding.UTF8.GetString(
+            Convert.FromHexString(
+                sql.AsSpan(prefix.Length, sql.Length - prefix.Length - suffix.Length)));
 
         Assert.StartsWith(prefix, sql, StringComparison.Ordinal);
         Assert.EndsWith(suffix, sql, StringComparison.Ordinal);
-        Assert.Equal(prefix.Length + (2 * expectedBytes) + suffix.Length, sql.Length);
+        Assert.Equal(prefix.Length + 2 * expectedBytes + suffix.Length, sql.Length);
         Assert.Equal(value, decoded);
         Assert.Equal(sql.ToLowerInvariant(), sql);
     }
@@ -464,7 +485,10 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
         bool prependText
     )
     {
-        var value = (prependText ? "a" : "") + (char)codeUnit;
+        var value = (prependText
+                ? "a"
+                : "")
+            + (char)codeUnit;
 
         var exception = Record.Exception(() => MySqlSafeMigrationSqlExpressionRenderer.RenderStringDefault(value));
 
@@ -501,34 +525,86 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
         yield return [SafeMigrationSql.Literal(null), "NULL"];
         yield return [SafeMigrationSql.Literal(null, "int"), "CAST(NULL AS SIGNED)"];
         yield return [SafeMigrationSql.Literal(""), "''"];
-        yield return [SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Not, SafeMigrationSql.Literal("a")),
-            "(NOT " + a + ")"];
-        yield return [SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Negate, SafeMigrationSql.Literal("a")),
-            "(-" + a + ")"];
-        yield return [SafeMigrationSql.Binary(SafeMigrationSql.Literal("a"), SafeMigrationSqlBinaryOperator.Equal,
+        yield return
+        [
+            SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Not, SafeMigrationSql.Literal("a")),
+            "(NOT " + a + ")",
+        ];
+
+        yield return
+        [
+            SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Negate, SafeMigrationSql.Literal("a")),
+            "(-" + a + ")",
+        ];
+
+        yield return
+        [
+            SafeMigrationSql.Binary(
+                SafeMigrationSql.Literal("a"),
+                SafeMigrationSqlBinaryOperator.Equal,
                 SafeMigrationSql.Literal("b")),
-            "(" + a + " = " + b + ")"];
+            "(" + a + " = " + b + ")",
+        ];
+
         yield return [SafeMigrationSql.IsNull(SafeMigrationSql.Literal("a")), "(" + a + " IS NULL)"];
         yield return [SafeMigrationSql.IsNotNull(SafeMigrationSql.Literal("a")), "(" + a + " IS NOT NULL)"];
-        yield return [SafeMigrationSql.Between(SafeMigrationSql.Literal("a"), SafeMigrationSql.Literal("b"),
+        yield return
+        [
+            SafeMigrationSql.Between(
+                SafeMigrationSql.Literal("a"),
+                SafeMigrationSql.Literal("b"),
                 SafeMigrationSql.Literal("c")),
-            "(" + a + " BETWEEN " + b + " AND " + c + ")"];
-        yield return [SafeMigrationSql.Between(SafeMigrationSql.Literal("a"), SafeMigrationSql.Literal("b"),
-                SafeMigrationSql.Literal("c"), negated: true),
-            "(" + a + " NOT BETWEEN " + b + " AND " + c + ")"];
-        yield return [SafeMigrationSql.In(SafeMigrationSql.Literal("a"),
+            "(" + a + " BETWEEN " + b + " AND " + c + ")",
+        ];
+
+        yield return
+        [
+            SafeMigrationSql.Between(
+                SafeMigrationSql.Literal("a"),
+                SafeMigrationSql.Literal("b"),
+                SafeMigrationSql.Literal("c"),
+                negated: true),
+            "(" + a + " NOT BETWEEN " + b + " AND " + c + ")",
+        ];
+
+        yield return
+        [
+            SafeMigrationSql.In(
+                SafeMigrationSql.Literal("a"),
                 [SafeMigrationSql.Literal("b"), SafeMigrationSql.Literal("c")]),
-            "(" + a + " IN (" + b + "," + c + "))"];
-        yield return [SafeMigrationSql.In(SafeMigrationSql.Literal("a"),
-                [SafeMigrationSql.Literal("b"), SafeMigrationSql.Literal("c")], negated: true),
-            "(" + a + " NOT IN (" + b + "," + c + "))"];
-        yield return [SafeMigrationSql.Function("COALESCE", SafeMigrationSql.Literal("a"),
+            "(" + a + " IN (" + b + "," + c + "))",
+        ];
+
+        yield return
+        [
+            SafeMigrationSql.In(
+                SafeMigrationSql.Literal("a"),
+                [SafeMigrationSql.Literal("b"), SafeMigrationSql.Literal("c")],
+                negated: true),
+            "(" + a + " NOT IN (" + b + "," + c + "))",
+        ];
+
+        yield return
+        [
+            SafeMigrationSql.Function(
+                "COALESCE",
+                SafeMigrationSql.Literal("a"),
                 SafeMigrationSql.Function("CONCAT", SafeMigrationSql.Literal("b"), SafeMigrationSql.Literal("c"))),
-            "coalesce(" + a + ",concat(" + b + "," + c + "))"];
-        yield return [SafeMigrationSql.Cast(SafeMigrationSql.Literal("a"), "varchar(20)"),
-            "CAST(" + a + " AS CHAR(20))"];
-        yield return [SafeMigrationSql.Collate(SafeMigrationSql.Literal("a"), "utf8mb4_bin"),
-            "(" + a + " COLLATE `utf8mb4_bin`)"];
+            "coalesce(" + a + ",concat(" + b + "," + c + "))",
+        ];
+
+        yield return
+        [
+            SafeMigrationSql.Cast(SafeMigrationSql.Literal("a"), "varchar(20)"),
+            "CAST(" + a + " AS CHAR(20))",
+        ];
+
+        yield return
+        [
+            SafeMigrationSql.Collate(SafeMigrationSql.Literal("a"), "utf8mb4_bin"),
+            "(" + a + " COLLATE `utf8mb4_bin`)",
+        ];
+
         yield return [SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Date), "CURRENT_DATE"];
         yield return [SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Time, precision: 3), "CURRENT_TIME(3)"];
         yield return [SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Timestamp), "CURRENT_TIMESTAMP"];
@@ -584,8 +660,19 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
         yield return [1.25m];
         yield return [1.25d];
         yield return [Guid.Parse("00112233-4455-6677-8899-aabbccddeeff")];
-        yield return [new byte[] { 0, 10, 39, 255, }];
-        yield return [new DateTime(2026, 10, 15, 12, 34, 56, DateTimeKind.Utc)];
+        yield return [new byte[] { 0, 10, 39, 255 }];
+        yield return
+        [
+            new DateTime(
+                2026,
+                10,
+                15,
+                12,
+                34,
+                56,
+                DateTimeKind.Utc),
+        ];
+
         yield return [new DateOnly(2026, 10, 15)];
         yield return [new TimeOnly(12, 34, 56)];
         yield return [new TimeSpan(1, 2, 3)];
@@ -608,7 +695,8 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
         var expression = SafeMigrationSql.Literal(value);
-        var expected = context.GetService<IRelationalTypeMappingSource>()
+        var expected = context
+            .GetService<IRelationalTypeMappingSource>()
             .FindMapping(typeof(string))!.GenerateSqlLiteral(value);
 
         var sql = renderer.Render(expression);
@@ -652,8 +740,14 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
     {
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
-        var value = (prependText ? "a" : "") + (char)codeUnit;
-        var expression = SafeMigrationSql.Function("COALESCE", SafeMigrationSql.Literal(null),
+        var value = (prependText
+                ? "a"
+                : "")
+            + (char)codeUnit;
+
+        var expression = SafeMigrationSql.Function(
+            "COALESCE",
+            SafeMigrationSql.Literal(null),
             SafeMigrationSql.Literal(value));
 
         var exception = Record.Exception(() => renderer.RenderDefault(expression));
@@ -720,8 +814,11 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
         yield return [null, typeof(ArgumentNullException)];
         yield return [SafeMigrationSql.Literal(new object()), typeof(NotSupportedException)];
         yield return [SafeMigrationSql.ProviderFragment("other", "CURRENT_USER()"), typeof(NotSupportedException)];
-        yield return [SafeMigrationSql.Collate(SafeMigrationSql.Literal("a"), "utf8mb4_bin", "schema"),
-            typeof(NotSupportedException)];
+        yield return
+        [
+            SafeMigrationSql.Collate(SafeMigrationSql.Literal("a"), "utf8mb4_bin", "schema"),
+            typeof(NotSupportedException),
+        ];
     }
 
     /// <summary>A missing default string remains an argument error, not an encoded empty value.</summary>

@@ -14,15 +14,27 @@ public sealed class SqlServerFullCatalogCaptureTests
 
         var migration = new MigrationBuilder(context.Database.ProviderName!);
         LargeMigrationStressContract.Populate(migration, LargeMigrationStressDialect.SqlServer);
-        var operations = migration.Operations.OfType<SafeMigrationOperation>().ToArray();
-        var results = new SafeMigrationProviderAnalysis[SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture];
+        var operations = migration
+            .Operations
+            .OfType<SafeMigrationOperation>()
+            .ToArray();
+
+        var results =
+            new SafeMigrationProviderAnalysis[SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture];
+
         var plans = BuildPlans(context, operations, results);
         await using var connection = new SqlServerCatalogTestConnection();
         var diagnosticRoot = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_SQLSERVER_DIAGNOSTIC_CONNECTION");
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, 180, plans, 0, results, CancellationToken.None);
+            connection,
+            null,
+            180,
+            plans,
+            0,
+            results,
+            CancellationToken.None);
 
         var standalone = BuildStandaloneStatements(plans, connection);
         if (!string.IsNullOrWhiteSpace(diagnosticRoot))
@@ -30,7 +42,11 @@ public sealed class SqlServerFullCatalogCaptureTests
             // WHY: Local emulation is useful for SQL correctness and relative experiments, not native
             // qualification. Ordinary test runs stay offline; only this explicit opt-in creates databases.
             await SqlServerLocalCatalogDiagnostics.RunAsync(
-                diagnosticRoot, connection.RecordedStatements, standalone, connection.RecordedParameters);
+                diagnosticRoot,
+                connection.RecordedStatements,
+                standalone,
+                connection.RecordedParameters,
+                cancellationToken: CancellationToken.None);
         }
 
         // Assert
@@ -40,14 +56,25 @@ public sealed class SqlServerFullCatalogCaptureTests
         Assert.Equal(SafeMigrationObservedState.Unsupported, results[3].ObservedState);
         Assert.True(results[3].IsInvariantUnsupported);
         Assert.Equal(1, connection.BatchExecutions);
-        Assert.InRange(connection.RecordedStatements.Count, 1,
+        Assert.InRange(
+            connection.RecordedStatements.Count,
+            1,
             SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch);
-        Assert.True(connection.RecordedStatements.Sum(statement => statement.Length)
+
+        Assert.True(
+            connection.RecordedStatements.Sum(statement => statement.Length)
             < standalone.Sum(statement => statement.Length));
-        Assert.Contains(connection.RecordedStatements,
+
+        Assert.Contains(
+            connection.RecordedStatements,
             statement => statement.StartsWith("DECLARE @doka_template", StringComparison.Ordinal));
-        Assert.All(connection.RecordedStatements, statement => Assert.InRange(
-            Encoding.UTF8.GetByteCount(statement), 1, SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes));
+
+        Assert.All(
+            connection.RecordedStatements,
+            statement => Assert.InRange(
+                Encoding.UTF8.GetByteCount(statement),
+                1,
+                SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes));
     }
 
     /// <summary>Mirrors the real analyzer's source binding, transition catalog and known fixture occupancy.</summary>
@@ -60,25 +87,35 @@ public sealed class SqlServerFullCatalogCaptureTests
         var mappings = context.GetService<IRelationalTypeMappingSource>();
         var helper = context.GetService<ISqlGenerationHelper>();
         var expectedTables = SafeMigrationExpectedTableConstraints.FromOperations(
-            operations, static schema => schema ?? "dbo");
+            operations,
+            static schema => schema ?? "dbo");
 
-        var plans = new SqlServerSafeMigrationRuntimePlan?[SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture];
+        var plans =
+            new SqlServerSafeMigrationRuntimePlan?[SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture];
+
         for (var ordinal = 0; ordinal < plans.Length; ordinal++)
         {
             var operation = operations[ordinal];
             var bindings = operation.Intent is ModelManagedDataIntent
-                ? new SqlServerCatalogParameterBindings(mappings, ordinal) : null;
+                ? new SqlServerCatalogParameterBindings(mappings, ordinal)
+                : null;
 
-            var builder = new SqlServerSafeMigrationCatalogSqlBuilder(mappings, helper,
-                sourceParameter: bindings is null ? null : (value, _) => bindings.Add(value));
+            var builder = new SqlServerSafeMigrationCatalogSqlBuilder(
+                mappings,
+                helper,
+                sourceParameter: bindings is null
+                    ? null
+                    : (value, _) => bindings.Add(value));
 
             var expected = operation.Intent is EnsureTableIntent table
-                ? expectedTables.GetValueOrDefault((table.Definition.Schema, table.Definition.Table)) : null;
+                ? expectedTables.GetValueOrDefault((table.Definition.Schema, table.Definition.Table))
+                : null;
 
             // WHY: The diagnostic fixture initially owns exactly these three tables. Production reads
             // occupancy first; generating full absent-table matchers here would measure a different path.
             var absent = operation.Intent is EnsureTableIntent target
-                && target.Definition.Table is not ("sqlserver_stress_target" or "sqlserver_stress_alter"
+                && target.Definition.Table is not ("sqlserver_stress_target"
+                    or "sqlserver_stress_alter"
                     or "sqlserver_stress_managed");
 
             var plan = builder.Build(operation, expected, absent);
@@ -86,8 +123,11 @@ public sealed class SqlServerFullCatalogCaptureTests
             {
                 // WHY: Production classifies these operations without SQL. The diagnostic must keep
                 // their result ordinals but must not introduce an extra cheap classifier into timing.
-                results[ordinal] = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
-                    SafeMigrationRepairCapability.None, false, plan.UnsupportedCode ?? "classified_unsupported")
+                results[ordinal] = new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.Unsupported,
+                    SafeMigrationRepairCapability.None,
+                    false,
+                    plan.UnsupportedCode ?? "classified_unsupported")
                 {
                     IsInvariantUnsupported = true,
                 };
@@ -95,7 +135,8 @@ public sealed class SqlServerFullCatalogCaptureTests
                 continue;
             }
 
-            if (bindings is not null && bindings.Values.Count > 0)
+            if (bindings is not null
+                && bindings.Values.Count > 0)
             {
                 var guard = builder.BuildModelManagedDataAnalysisGuard((ModelManagedDataIntent)operation.Intent);
                 plan = plan with
@@ -121,19 +162,26 @@ public sealed class SqlServerFullCatalogCaptureTests
         var statements = connection.RecordedStatements.ToArray();
         for (var index = 0; index < statements.Length; index++)
         {
-            if (!statements[index].StartsWith("DECLARE @doka_template", StringComparison.Ordinal))
+            if (!statements[index]
+                .StartsWith("DECLARE @doka_template", StringComparison.Ordinal))
             {
                 continue;
             }
 
-            var slots = connection.RecordedParameters[index]
+            var slots = connection
+                .RecordedParameters[index]
                 .Where(parameter => parameter.ParameterName.StartsWith("@doka_ordinal", StringComparison.Ordinal))
-                .Select(parameter => Convert.ToInt32(parameter.Value, CultureInfo.InvariantCulture)).ToArray();
+                .Select(parameter => Convert.ToInt32(parameter.Value, CultureInfo.InvariantCulture))
+                .ToArray();
 
             // WHY: This fixture uses fewer than 2,000 source bindings per classifier. The captured
             // ordinal parameters therefore identify every dispatcher and retain its original slot order.
-            statements[index] = string.Join("\n", slots.Select((ordinal, slot) =>
-                SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogSelection(ordinal, plans[ordinal]!, slot)));
+            statements[index] = string.Join(
+                "\n",
+                slots.Select((ordinal, slot) =>
+                    SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogSelection(ordinal,
+                        plans[ordinal]!,
+                        slot)));
         }
 
         return statements;

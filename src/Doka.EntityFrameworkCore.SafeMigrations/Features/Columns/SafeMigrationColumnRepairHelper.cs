@@ -19,7 +19,7 @@ internal static class SafeMigrationColumnRepairHelper
                 && !(expected.DefaultValue is
                 {
                     Kind: SafeMigrationDefaultValueKind.Sql,
-                    StructuredExpression: SafeMigrationSqlLiteralExpression { Value: null }
+                    StructuredExpression: SafeMigrationSqlLiteralExpression { Value: null },
                 }))
             || expected.ComputedColumnSql is not null
             || expected.ComputedExpression is not null;
@@ -119,6 +119,7 @@ internal static class SafeMigrationColumnRepairHelper
 
                 var any = current is SafeMigrationSqlFunctionExpression function
                     && StringComparer.OrdinalIgnoreCase.Equals(function.Name, "COALESCE");
+
                 if (current is SafeMigrationSqlBetweenExpression or SafeMigrationSqlInExpression || any)
                 {
                     var first = NonNullProofChild(current, 0);
@@ -137,9 +138,11 @@ internal static class SafeMigrationColumnRepairHelper
                 var result = current switch
                 {
                     SafeMigrationSqlLiteralExpression value => value.Value is not null,
+
                     // WHY: Even non-null operands can yield NULL for division by zero.
                     SafeMigrationSqlBinaryExpression => false,
                     SafeMigrationSqlNullTestExpression => true,
+
                     // WHY: Conversion and CASE result rules are provider contracts,
                     // not a provider-neutral proof that authorizes backfilling rows.
                     SafeMigrationSqlCastExpression or SafeMigrationSqlCaseExpression => false,
@@ -196,13 +199,6 @@ internal static class SafeMigrationColumnRepairHelper
         _ => null,
     };
 
-    /// <summary>Resumes an ordered conjunction or disjunction without materializing all its pending siblings.</summary>
-    private readonly record struct NonNullProofFrame(
-        SafeMigrationSqlExpression Expression,
-        long Ordinal,
-        bool Any
-    );
-
     /// <summary>
     /// Determines whether provider-neutral column facets can be converged after
     /// the active provider has independently validated its own metadata.
@@ -222,4 +218,11 @@ internal static class SafeMigrationColumnRepairHelper
             IsRowVersion: false, ComputedColumnSql: null, ComputedExpression: null, IsStored: null,
         };
     }
+
+    /// <summary>Resumes an ordered conjunction or disjunction without materializing all its pending siblings.</summary>
+    private readonly record struct NonNullProofFrame(
+        SafeMigrationSqlExpression Expression,
+        long Ordinal,
+        bool Any
+    );
 }

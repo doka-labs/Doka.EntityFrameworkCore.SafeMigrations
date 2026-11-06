@@ -23,7 +23,8 @@ public sealed class SqlServerUniqueKeySemanticsTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         SafeMigrationIntent intent = family switch
         {
@@ -31,9 +32,12 @@ public sealed class SqlServerUniqueKeySemanticsTests
                 new ExpectedPrimaryKeyDefinition("PK_unique_key_semantics", "unique_key_semantics", ["Id"])),
             "unique" => new EnsureUniqueConstraintIntent(
                 new ExpectedUniqueConstraintDefinition("UQ_unique_key_semantics", "unique_key_semantics", ["Id"])),
-            "index" => new EnsureIndexIntent(new ExpectedIndexDefinition(
-                "IX_unique_key_semantics", "unique_key_semantics",
-                [new ExpectedIndexKeyDefinition("Id")], unique: true)),
+            "index" => new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "IX_unique_key_semantics",
+                    "unique_key_semantics",
+                    [new ExpectedIndexKeyDefinition("Id")],
+                    unique: true)),
             _ => throw new ArgumentOutOfRangeException(nameof(family)),
         };
 

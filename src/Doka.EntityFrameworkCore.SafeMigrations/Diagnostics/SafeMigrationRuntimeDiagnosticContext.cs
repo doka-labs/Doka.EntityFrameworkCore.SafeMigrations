@@ -33,7 +33,9 @@ internal readonly struct SafeMigrationRuntimeDiagnosticContext
     /// <summary>Captures bounded structural facts without retaining operation or row payloads.</summary>
     /// <param name="operation">The actual operation associated with the runtime command.</param>
     /// <returns>A payload-free immutable context for later failure-only formatting.</returns>
-    internal static SafeMigrationRuntimeDiagnosticContext Create(SafeMigrationOperation operation)
+    internal static SafeMigrationRuntimeDiagnosticContext Create(
+        SafeMigrationOperation operation
+    )
     {
         ArgumentNullException.ThrowIfNull(operation);
 
@@ -43,6 +45,6 @@ internal readonly struct SafeMigrationRuntimeDiagnosticContext
             SafeMigrationOperationIdentity.Create(operation.Intent),
             operation.Policy,
             operation.Intent is EnsureColumnIntent column
-                && !SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(column.Definition));
+            && !SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(column.Definition));
     }
 }

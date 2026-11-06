@@ -1,15 +1,19 @@
+using System.Runtime.InteropServices;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the RuntimePerformance migration contracts in an independent class collection.</summary>
 public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    private const int MeasuredRuntimeSampleCount = 3;
+    private const int RuntimeOperationCount = MySqlRuntimeConvergenceMigration.TableCount * 18 - 1;
+    private static readonly JsonSerializerOptions s_runtimeSerializerOptions = new() { WriteIndented = true };
+
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlRuntimePerformanceIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
-
-    private const int MeasuredRuntimeSampleCount = 3;
-    private const int RuntimeOperationCount = (MySqlRuntimeConvergenceMigration.TableCount * 18) - 1;
-    private static readonly JsonSerializerOptions s_runtimeSerializerOptions = new() { WriteIndented = true };
+    public MySqlRuntimePerformanceIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>Measures real migration application and replay against generic legacy starting states.</summary>
     /// <param name="initialState">The catalog shape prepared before the measured migration.</param>
@@ -25,33 +29,46 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
         var sampleCount = RuntimeSampleCount();
         var samples = new List<RuntimeSample>(sampleCount);
 
-        var results = await MeasureRuntimeSamplesAsync(initialState, samples);
+        var results = await MeasureRuntimeSamplesAsync(
+            initialState,
+            samples,
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(sampleCount, results.Count);
-        // WHY: Reject unbatched transport without fixing packing details or dumping full schema records on failure.
-        Assert.All(results.Select(static result => result.ExecutedCommands), commandCount =>
-            Assert.InRange(commandCount, 1, (RuntimeOperationCount * 14) + 5));
 
-        Assert.All(results, result =>
-        {
-            Assert.Equal(30, result.Tables);
-            Assert.Equal(390, result.Columns);
-            Assert.Equal(0, result.InvalidColumnContracts);
-            Assert.Equal(30, result.PrimaryKeys);
-            Assert.Equal(30, result.UniqueConstraints);
-            Assert.Equal(30, result.ParentIndexes);
-            Assert.Equal(29, result.ForeignKeys);
-            Assert.Equal(2, result.HistoryRows);
-            Assert.Equal(initialState == "empty" ? 0 : 30, result.Rows);
-            Assert.Equal(result.Rows, result.TotalRows);
-            Assert.Equal(0, result.ReplayBodies);
-            Assert.Equal(result.Rows, result.ReplayRows);
-            Assert.Equal(result.TotalRows, result.ReplayTotalRows);
-            Assert.Equal(result.HistoryRows, result.ReplayHistoryRows);
-            Assert.Equal(result.SchemaBeforeReplay, result.SchemaAfterReplay);
-            Assert.True(result.ExecutedCommands > 0);
-            Assert.Equal(RuntimeOperationCount, result.AppliedBodies);
-        });
+        // WHY: Reject unbatched transport without fixing packing details or dumping full schema records on failure.
+        Assert.All(
+            results.Select(static result => result.ExecutedCommands),
+            commandCount =>
+                Assert.InRange(commandCount, 1, RuntimeOperationCount * 14 + 5));
+
+        Assert.All(
+            results,
+            result =>
+            {
+                Assert.Equal(30, result.Tables);
+                Assert.Equal(390, result.Columns);
+                Assert.Equal(0, result.InvalidColumnContracts);
+                Assert.Equal(30, result.PrimaryKeys);
+                Assert.Equal(30, result.UniqueConstraints);
+                Assert.Equal(30, result.ParentIndexes);
+                Assert.Equal(29, result.ForeignKeys);
+                Assert.Equal(2, result.HistoryRows);
+                Assert.Equal(
+                    initialState == "empty"
+                        ? 0
+                        : 30,
+                    result.Rows);
+
+                Assert.Equal(result.Rows, result.TotalRows);
+                Assert.Equal(0, result.ReplayBodies);
+                Assert.Equal(result.Rows, result.ReplayRows);
+                Assert.Equal(result.TotalRows, result.ReplayTotalRows);
+                Assert.Equal(result.HistoryRows, result.ReplayHistoryRows);
+                Assert.Equal(result.SchemaBeforeReplay, result.SchemaAfterReplay);
+                Assert.True(result.ExecutedCommands > 0);
+                Assert.Equal(RuntimeOperationCount, result.AppliedBodies);
+            });
     }
 
     /// <summary>Verifies setup failure prevents the guarded body and leaves the same session reusable.</summary>
@@ -87,7 +104,10 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     public async Task RuntimeSetupCancellation_CleansStateAndRecoversSameSession()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await using var blocker = await AcquireRuntimeSetupLockAsync(connectionString);
+        await using var blocker = await AcquireRuntimeSetupLockAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
+
         var observer = new MySqlRuntimeCommandInterceptor();
         using var cancellation = new CancellationTokenSource();
         observer.InjectFirstSetup(
@@ -116,7 +136,10 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     public async Task RuntimeSetupTimeout_CleansStateAndRecoversSameSession()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await using var blocker = await AcquireRuntimeSetupLockAsync(connectionString);
+        await using var blocker = await AcquireRuntimeSetupLockAsync(
+            connectionString,
+            cancellationToken: CancellationToken.None);
+
         var observer = new MySqlRuntimeCommandInterceptor();
 
         // WHY: A blocked locking query errors when cancelled; interrupted SLEEP can instead return normally on MariaDB.
@@ -153,25 +176,39 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     )
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await PrepareRuntimeCatalogAsync(connectionString, "partial");
-        var table = MySqlRuntimeConvergenceMigration.TableName(violation == "duplicate" ? 0 : 1);
+        await PrepareRuntimeCatalogAsync(connectionString, "partial", cancellationToken: CancellationToken.None);
+        var table = MySqlRuntimeConvergenceMigration.TableName(
+            violation == "duplicate"
+                ? 0
+                : 1);
+
         var offendingSql = violation == "duplicate"
             ? $"INSERT INTO `{table}` (`Id`, `Code`, `Value01`) VALUES (2, 'preserved', 'original');"
             : $"UPDATE `{table}` SET `ParentId` = 999;";
 
-        await ExecuteSqlAsync(connectionString, offendingSql);
+        await ExecuteSqlAsync(connectionString, offendingSql, cancellationToken: CancellationToken.None);
         var observer = new MySqlRuntimeCommandInterceptor();
         await using var context = CreateRuntimeContext(connectionString, observer);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
 
-        var result = await RejectAndRecoverRuntimeDataAsync(context, connectionString, table, violation);
+        var result = await RejectAndRecoverRuntimeDataAsync(
+            context,
+            connectionString,
+            table,
+            violation,
+            cancellationToken: CancellationToken.None);
 
         var exception = AssertOwnedGuardFailure(result.Exception);
         Assert.Equal(1062, exception.Number);
         Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.Ordinal);
         Assert.Equal(0, result.TargetConstraintBeforeRecovery);
         Assert.Equal(0, result.HistoryBeforeRecovery);
-        Assert.Equal(violation == "duplicate" ? 2 : 1, result.RowsBeforeRecovery);
+        Assert.Equal(
+            violation == "duplicate"
+                ? 2
+                : 1,
+            result.RowsBeforeRecovery);
+
         Assert.Equal(1, result.CleanedSessionState);
         Assert.Equal(1146, result.Cleanup.TemporaryTableError);
         Assert.Equal(1243, result.Cleanup.PreparedStatementError);
@@ -198,12 +235,13 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
         await using var context = new MySqlRuntimeFreshStateDbContext(options);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
 
-        var result = await RejectAndRecoverFreshRuntimeDataAsync(context);
+        var result = await RejectAndRecoverFreshRuntimeDataAsync(context, cancellationToken: CancellationToken.None);
 
         var exception = AssertOwnedGuardFailure(result.Exception);
         Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.Ordinal);
         Assert.Equal(0, result.TargetConstraintBeforeRecovery);
         Assert.Equal(1, result.HistoryBeforeRecovery);
+
         // WHY: Rejection precedes DDL; EF rolls back later raw DML while preserving the earlier migration's history.
         Assert.Equal(1, result.RowsBeforeRecovery);
         Assert.Equal(1, result.CleanedSessionState);
@@ -217,26 +255,30 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-
     /// <summary>Acquires a real held row lock whose interrupted wait cannot complete like the SLEEP function.</summary>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     protected static async Task<RuntimeSetupLock> AcquireRuntimeSetupLockAsync(
-        string connectionString
+        string connectionString,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `runtime_setup_lock` (`Id` int NOT NULL, PRIMARY KEY (`Id`)); "
-            + "INSERT INTO `runtime_setup_lock` VALUES (1);");
+            + "INSERT INTO `runtime_setup_lock` VALUES (1);",
+            cancellationToken: cancellationToken);
 
         var connection = new MySqlConnection(connectionString);
         try
         {
-            await connection.OpenAsync(CancellationToken.None);
-            var transaction = await connection.BeginTransactionAsync(CancellationToken.None);
+            await connection.OpenAsync(cancellationToken);
+            var transaction = await connection.BeginTransactionAsync(cancellationToken);
             await using var command = connection.CreateCommand();
             command.Transaction = transaction;
             command.CommandText = "SELECT `Id` FROM `runtime_setup_lock` WHERE `Id` = 1 FOR UPDATE;";
-            _ = await command.ExecuteScalarAsync(CancellationToken.None);
+            _ = await command.ExecuteScalarAsync(cancellationToken);
 
             return new RuntimeSetupLock(connection, transaction);
         }
@@ -271,7 +313,6 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
 public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
-
     /// <summary>Configures a discovered one-operation migration for actual scope-failure and retry probes.</summary>
     private MySqlRuntimeScopeProbeDbContext CreateRuntimeScopeProbeContext(
         string connectionString,
@@ -293,55 +334,68 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     }
 
     /// <summary>Runs isolated databases repeatedly while preserving one execution measurement per sample.</summary>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private async Task<List<RuntimeVerification>> MeasureRuntimeSamplesAsync(
         string initialState,
-        List<RuntimeSample> samples
+        List<RuntimeSample> samples,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var sampleCount = RuntimeSampleCount();
         var results = new List<RuntimeVerification>(sampleCount);
-        var generationAllocationBytes = await WarmRuntimeGenerationAsync();
+        var generationAllocationBytes = await WarmRuntimeGenerationAsync(cancellationToken: cancellationToken);
         object? engineSettings = null;
         for (var sample = 0; sample < sampleCount; sample++)
         {
-            var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-            await PrepareRuntimeCatalogAsync(connectionString, initialState);
-            engineSettings ??= await ReadRuntimeEngineSettingsAsync(connectionString);
+            var connectionString = await CreateDatabaseAsync(cancellationToken);
+            await PrepareRuntimeCatalogAsync(connectionString, initialState, cancellationToken: cancellationToken);
+            engineSettings ??= await ReadRuntimeEngineSettingsAsync(
+                connectionString,
+                cancellationToken: cancellationToken);
+
             var observer = new MySqlRuntimeCommandInterceptor();
             await using var context = CreateRuntimeContext(connectionString, observer);
-            await context.Database.OpenConnectionAsync(CancellationToken.None);
+            await context.Database.OpenConnectionAsync(cancellationToken);
             var started = Stopwatch.GetTimestamp();
 
             // WHY: The measured path is the actual application workflow; no runner or explicit preflight is invoked.
-            await context.Database.MigrateAsync(CancellationToken.None);
-            var elapsedMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            await context.Database.MigrateAsync(cancellationToken);
+            var elapsedMilliseconds = Stopwatch.GetElapsedTime(started)
+                .TotalMilliseconds;
+
             var applicationCommands = observer.Snapshot();
             var executedCommands = observer.CommandCount;
             var appliedBodies = observer.GuardedBodyCount;
-            var before = await ReadRuntimeVerificationAsync(connectionString);
+            var before = await ReadRuntimeVerificationAsync(connectionString, cancellationToken: cancellationToken);
             observer.Reset();
             var replayStarted = Stopwatch.GetTimestamp();
-            await context.Database.MigrateAsync(CancellationToken.None);
-            var replayMilliseconds = Stopwatch.GetElapsedTime(replayStarted).TotalMilliseconds;
-            var after = await ReadRuntimeVerificationAsync(connectionString);
+            await context.Database.MigrateAsync(cancellationToken);
+            var replayMilliseconds = Stopwatch.GetElapsedTime(replayStarted)
+                .TotalMilliseconds;
 
-            results.Add(before with
-            {
-                ReplayBodies = observer.GuardedBodyCount,
-                ReplayRows = after.Rows,
-                ReplayTotalRows = after.TotalRows,
-                ReplayHistoryRows = after.HistoryRows,
-                SchemaAfterReplay = after.SchemaBeforeReplay,
-                ExecutedCommands = executedCommands,
-                AppliedBodies = appliedBodies,
-            });
+            var after = await ReadRuntimeVerificationAsync(connectionString, cancellationToken: cancellationToken);
 
-            samples.Add(new RuntimeSample(
-                sample,
-                elapsedMilliseconds,
-                replayMilliseconds,
-                applicationCommands,
-                observer.Snapshot()));
+            results.Add(
+                before with
+                {
+                    ReplayBodies = observer.GuardedBodyCount,
+                    ReplayRows = after.Rows,
+                    ReplayTotalRows = after.TotalRows,
+                    ReplayHistoryRows = after.HistoryRows,
+                    SchemaAfterReplay = after.SchemaBeforeReplay,
+                    ExecutedCommands = executedCommands,
+                    AppliedBodies = appliedBodies,
+                });
+
+            samples.Add(
+                new RuntimeSample(
+                    sample,
+                    elapsedMilliseconds,
+                    replayMilliseconds,
+                    applicationCommands,
+                    observer.Snapshot()));
         }
 
         WriteRuntimeEvidence(initialState, generationAllocationBytes, engineSettings!, samples);
@@ -350,9 +404,14 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     }
 
     /// <summary>Warms model and generator caches before measuring synchronous SQL-generation allocation.</summary>
-    private async Task<long> WarmRuntimeGenerationAsync()
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private async Task<long> WarmRuntimeGenerationAsync(
+        CancellationToken cancellationToken
+    )
     {
-        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var connectionString = await CreateDatabaseAsync(cancellationToken);
         await using var context = CreateRuntimeContext(connectionString, new MySqlRuntimeCommandInterceptor());
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var migration = new MySqlRuntimeConvergenceMigration { ActiveProvider = context.Database.ProviderName! };
@@ -365,11 +424,15 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     }
 
     /// <summary>Creates generic legacy tables without altering default engine durability settings.</summary>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task PrepareRuntimeCatalogAsync(
         string connectionString,
-        string initialState
+        string initialState,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (initialState == "empty")
         {
             return;
@@ -378,8 +441,14 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
         for (var ordinal = 0; ordinal < MySqlRuntimeConvergenceMigration.TableCount; ordinal++)
         {
             var table = MySqlRuntimeConvergenceMigration.TableName(ordinal);
-            var width = initialState == "widening" ? 20 : 80;
-            var columnCount = initialState == "partial" ? 3 : 9;
+            var width = initialState == "widening"
+                ? 20
+                : 80;
+
+            var columnCount = initialState == "partial"
+                ? 3
+                : 9;
+
             var sql = new StringBuilder($"CREATE TABLE `{table}` (`Id` int NOT NULL, ");
             sql.Append(CultureInfo.InvariantCulture, $"`Code` varchar({width}) NOT NULL, `ParentId` int NULL");
             for (var column = 1; column <= columnCount; column++)
@@ -389,14 +458,16 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
 
             if (initialState == "matching")
             {
-                sql.Append(CultureInfo.InvariantCulture,
+                sql.Append(
+                    CultureInfo.InvariantCulture,
                     $", PRIMARY KEY (`Id`), CONSTRAINT `UQ_{table}_Code` UNIQUE (`Code`), ");
 
                 sql.Append(CultureInfo.InvariantCulture, $"KEY `IX_{table}_ParentId` (`ParentId`)");
                 if (ordinal > 0)
                 {
                     var parent = MySqlRuntimeConvergenceMigration.TableName(ordinal - 1);
-                    sql.Append(CultureInfo.InvariantCulture,
+                    sql.Append(
+                        CultureInfo.InvariantCulture,
                         $", CONSTRAINT `FK_{table}_Parent` FOREIGN KEY (`ParentId`) ");
 
                     sql.Append(CultureInfo.InvariantCulture, $"REFERENCES `{parent}` (`Id`) ON DELETE RESTRICT");
@@ -405,41 +476,75 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
 
             sql.Append("); ");
             sql.Append(CultureInfo.InvariantCulture, $"INSERT INTO `{table}` (`Id`, `Code`, `ParentId`, `Value01`) ");
-            sql.Append(CultureInfo.InvariantCulture,
+            sql.Append(
+                CultureInfo.InvariantCulture,
                 $"VALUES (1, 'preserved', {(ordinal == 0 ? "NULL" : "1")}, 'original');");
 
-            await ExecuteSqlAsync(connectionString, sql.ToString());
+            await ExecuteSqlAsync(connectionString, sql.ToString(), cancellationToken: cancellationToken);
         }
     }
 
     /// <summary>Checks catalog, history, and preserved-row totals outside the timed pipeline.</summary>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<RuntimeVerification> ReadRuntimeVerificationAsync(
-        string connectionString
+        string connectionString,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         const string tables = "TABLE_SCHEMA = DATABASE() AND TABLE_NAME LIKE 'runtime_records_%'";
         const string constraints = "CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME LIKE 'runtime_records_%'";
-        var schema = await ReadRuntimeSchemaAsync(connectionString);
-        var rows = await ReadRuntimeRowsAsync(connectionString);
+        var schema = await ReadRuntimeSchemaAsync(connectionString, cancellationToken: cancellationToken);
+        var rows = await ReadRuntimeRowsAsync(connectionString, cancellationToken: cancellationToken);
 
         return new RuntimeVerification(
-            await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE " + tables),
-            await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE " + tables),
-            await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE "
-                + constraints + " AND CONSTRAINT_TYPE = 'PRIMARY KEY'"),
-            await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE "
-                + constraints + " AND CONSTRAINT_TYPE = 'UNIQUE'"),
-            await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE "
-                + tables + " AND INDEX_NAME LIKE 'IX_runtime_records_%_ParentId'"),
-            await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE "
-                + constraints + " AND CONSTRAINT_TYPE = 'FOREIGN KEY'"),
-            await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `__RuntimeWorkloadHistory`"),
-            await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE "
-                + tables + " AND NOT ((COLUMN_NAME = 'Id' AND COLUMN_TYPE IN ('int','int(11)') AND IS_NULLABLE = 'NO') "
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE " + tables,
+                cancellationToken: cancellationToken),
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE " + tables,
+                cancellationToken: cancellationToken),
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE "
+                + constraints
+                + " AND CONSTRAINT_TYPE = 'PRIMARY KEY'",
+                cancellationToken: cancellationToken),
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE "
+                + constraints
+                + " AND CONSTRAINT_TYPE = 'UNIQUE'",
+                cancellationToken: cancellationToken),
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE "
+                + tables
+                + " AND INDEX_NAME LIKE 'IX_runtime_records_%_ParentId'",
+                cancellationToken: cancellationToken),
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE "
+                + constraints
+                + " AND CONSTRAINT_TYPE = 'FOREIGN KEY'",
+                cancellationToken: cancellationToken),
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `__RuntimeWorkloadHistory`",
+                cancellationToken: cancellationToken),
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE "
+                + tables
+                + " AND NOT ((COLUMN_NAME = 'Id' AND COLUMN_TYPE IN ('int','int(11)') AND IS_NULLABLE = 'NO') "
                 + "OR (COLUMN_NAME = 'ParentId' AND COLUMN_TYPE IN ('int','int(11)') AND IS_NULLABLE = 'YES') "
                 + "OR (COLUMN_NAME = 'Code' AND COLUMN_TYPE = 'varchar(80)' AND IS_NULLABLE = 'NO') "
                 + "OR (COLUMN_NAME LIKE 'Value%' AND COLUMN_TYPE = 'varchar(40)' AND IS_NULLABLE = 'YES') "
-                + "OR (COLUMN_NAME = 'Marker' AND COLUMN_TYPE = 'varchar(32)' AND IS_NULLABLE = 'YES'))"),
+                + "OR (COLUMN_NAME = 'Marker' AND COLUMN_TYPE = 'varchar(32)' AND IS_NULLABLE = 'YES'))",
+                cancellationToken: cancellationToken),
             rows.Preserved,
             rows.Total,
             schema,
@@ -447,12 +552,16 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     }
 
     /// <summary>Counts all rows and exact original values through one bounded verification connection.</summary>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<(int Total, int Preserved)> ReadRuntimeRowsAsync(
-        string connectionString
+        string connectionString,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync(CancellationToken.None);
+        await connection.OpenAsync(cancellationToken);
         var total = 0;
         var preserved = 0;
         for (var ordinal = 0; ordinal < MySqlRuntimeConvergenceMigration.TableCount; ordinal++)
@@ -461,8 +570,9 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
             await using var command = connection.CreateCommand();
             command.CommandText = "SELECT COUNT(*), COALESCE(SUM(`Id` = 1 AND `Code` = 'preserved' "
                 + $"AND `Value01` = 'original' AND `Marker` IS NULL), 0) FROM `{table}`;";
-            await using var reader = await command.ExecuteReaderAsync(CancellationToken.None);
-            if (!await reader.ReadAsync(CancellationToken.None))
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken))
             {
                 throw new InvalidOperationException("The row verification returned no aggregate result.");
             }
@@ -477,7 +587,6 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-
     /// <summary>Observes the failed operation, independent cleanup, and retry through the same open session.</summary>
     private protected static async Task<RuntimeRecovery> FailAndRecoverRuntimeAsync(
         DbContext context,
@@ -485,34 +594,76 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         CancellationToken cancellationToken
     )
     {
-        var sessionBefore = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();");
+        var sessionBefore = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
+            cancellationToken: cancellationToken);
+
         var exception = await Record.ExceptionAsync(() => context.Database.MigrateAsync(cancellationToken));
+
+        // WHY: The attempted operation may have canceled its token. Recovery observations and retry
+        // remain independent so cancellation cannot hide failed cleanup or poison the same-session retry.
         var bodies = observer.GuardedBodyCount;
         var tables = await ContextScalarIntAsync(
             context,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME LIKE 'runtime_records_%';");
-        var historyBefore = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `__RuntimeWorkloadHistory`;");
-        var cleanup = await ReadRuntimeCleanupProofAsync(context.Database.GetDbConnection());
-        var sentinel = await ContextScalarIntAsync(context, "SELECT @runtime_setup_after_error IS NOT NULL;");
+            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME LIKE 'runtime_records_%';",
+            cancellationToken: CancellationToken.None);
+
+        var historyBefore = await ContextScalarIntAsync(
+            context,
+            "SELECT COUNT(*) FROM `__RuntimeWorkloadHistory`;",
+            cancellationToken: CancellationToken.None);
+
+        var cleanup = await ReadRuntimeCleanupProofAsync(
+            context.Database.GetDbConnection(),
+            cancellationToken: CancellationToken.None);
+
+        var sentinel = await ContextScalarIntAsync(
+            context,
+            "SELECT @runtime_setup_after_error IS NOT NULL;",
+            cancellationToken: CancellationToken.None);
+
         var acquired = await ContextScalarIntAsync(
             context,
-            "SELECT COALESCE(@runtime_prepared_setup_acquired = 1, FALSE);");
-        var columnsBefore = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'runtime_records_probe' AND COLUMN_NAME = 'Code';");
+            "SELECT COALESCE(@runtime_prepared_setup_acquired = 1, FALSE);",
+            cancellationToken: CancellationToken.None);
+
+        var columnsBefore = await ContextScalarIntAsync(
+            context,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'runtime_records_probe' AND COLUMN_NAME = 'Code';",
+            cancellationToken: CancellationToken.None);
+
         var rowsBefore = tables == 0
             ? 0
-            : await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `runtime_records_probe` WHERE `Id` = 1;");
+            : await ContextScalarIntAsync(
+                context,
+                "SELECT COUNT(*) FROM `runtime_records_probe` WHERE `Id` = 1;",
+                cancellationToken: CancellationToken.None);
 
         context.Database.SetCommandTimeout(60);
         await context.Database.MigrateAsync(CancellationToken.None);
-        var sessionAfter = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();");
-        var historyAfter = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `__RuntimeWorkloadHistory`;");
-        var columnsAfter = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'runtime_records_probe' AND COLUMN_NAME = 'Code';");
+        var sessionAfter = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
+            cancellationToken: CancellationToken.None);
+
+        var historyAfter = await ContextScalarIntAsync(
+            context,
+            "SELECT COUNT(*) FROM `__RuntimeWorkloadHistory`;",
+            cancellationToken: CancellationToken.None);
+
+        var columnsAfter = await ContextScalarIntAsync(
+            context,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'runtime_records_probe' AND COLUMN_NAME = 'Code';",
+            cancellationToken: CancellationToken.None);
+
         var rowsAfter = await ContextScalarIntAsync(
             context,
-            "SELECT COUNT(*) FROM `runtime_records_probe` WHERE `Id` = 1;");
+            "SELECT COUNT(*) FROM `runtime_records_probe` WHERE `Id` = 1;",
+            cancellationToken: CancellationToken.None);
 
         return new RuntimeRecovery(
             exception,
@@ -536,19 +687,23 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
 public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
-
     /// <summary>Captures default server durability settings separately from the timed migration workflow.</summary>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<object> ReadRuntimeEngineSettingsAsync(
-        string connectionString
+        string connectionString,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync(CancellationToken.None);
+        await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT VERSION(), @@innodb_flush_log_at_trx_commit, @@innodb_doublewrite, "
             + "@@innodb_buffer_pool_size, @@log_bin;";
-        await using var reader = await command.ExecuteReaderAsync(CancellationToken.None);
-        if (!await reader.ReadAsync(CancellationToken.None))
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
         {
             throw new InvalidOperationException("The server returned no durability settings.");
         }
@@ -556,6 +711,7 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
         return new
         {
             actualVersion = reader.GetString(0),
+
             // WHY: MariaDB exposes some settings as ON strings; retain native values without coercing their meaning.
             flushLogAtTransactionCommit = reader.GetValue(1),
             doublewrite = reader.GetValue(2),
@@ -565,66 +721,158 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     }
 
     /// <summary>Observes authoritative row rejection and same-session retry after test-owned repair.</summary>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<RuntimeDataRecovery> RejectAndRecoverRuntimeDataAsync(
         MySqlRuntimePerformanceDbContext context,
         string connectionString,
         string table,
-        string violation
+        string violation,
+        CancellationToken cancellationToken
     )
     {
-        var sessionBefore = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();");
-        var exception = await Record.ExceptionAsync(() => context.Database.MigrateAsync(CancellationToken.None));
-        var name = (violation == "duplicate" ? "UQ_" + table + "_Code" : "FK_" + table + "_Parent");
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var sessionBefore = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
+            cancellationToken: cancellationToken);
+
+        var exception = await Record.ExceptionAsync(() => context.Database.MigrateAsync(cancellationToken));
+
+        // WHY: The attempted operation may have canceled its token. Recovery observations and retry
+        // remain independent so cancellation cannot hide failed cleanup or poison the same-session retry.
+        var name = violation == "duplicate"
+            ? "UQ_" + table + "_Code"
+            : "FK_" + table + "_Parent";
+
         var constraintQuery = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
             + $"WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = '{table}' AND CONSTRAINT_NAME = '{name}';";
 
-        var targetBefore = await ContextScalarIntAsync(context, constraintQuery);
-        var rowsBefore = await ContextScalarIntAsync(context, $"SELECT COUNT(*) FROM `{table}`;");
-        var historyBefore = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `__RuntimeWorkloadHistory`;");
-        var cleanup = await ReadRuntimeCleanupProofAsync(context.Database.GetDbConnection());
+        var targetBefore = await ContextScalarIntAsync(
+            context,
+            constraintQuery,
+            cancellationToken: CancellationToken.None);
+
+        var rowsBefore = await ContextScalarIntAsync(
+            context,
+            $"SELECT COUNT(*) FROM `{table}`;",
+            cancellationToken: CancellationToken.None);
+
+        var historyBefore = await ContextScalarIntAsync(
+            context,
+            "SELECT COUNT(*) FROM `__RuntimeWorkloadHistory`;",
+            cancellationToken: CancellationToken.None);
+
+        var cleanup = await ReadRuntimeCleanupProofAsync(
+            context.Database.GetDbConnection(),
+            cancellationToken: CancellationToken.None);
+
         var repair = violation == "duplicate"
             ? $"UPDATE `{table}` SET `Code` = 'repaired' WHERE `Id` = 2;"
             : $"UPDATE `{table}` SET `ParentId` = 1;";
 
-        await ExecuteSqlAsync(connectionString, repair);
+        await ExecuteSqlAsync(connectionString, repair, cancellationToken: CancellationToken.None);
         await context.Database.MigrateAsync(CancellationToken.None);
-        var sessionAfter = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();");
-        var historyAfter = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `__RuntimeWorkloadHistory`;");
-        var targetAfter = await ContextScalarIntAsync(context, constraintQuery);
+        var sessionAfter = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
+            cancellationToken: CancellationToken.None);
+
+        var historyAfter = await ContextScalarIntAsync(
+            context,
+            "SELECT COUNT(*) FROM `__RuntimeWorkloadHistory`;",
+            cancellationToken: CancellationToken.None);
+
+        var targetAfter = await ContextScalarIntAsync(
+            context,
+            constraintQuery,
+            cancellationToken: CancellationToken.None);
 
         return new RuntimeDataRecovery(
-            exception, targetBefore, historyBefore, rowsBefore, cleanup.VariablesCleared,
-            sessionBefore, sessionAfter, historyAfter, targetAfter, cleanup);
+            exception,
+            targetBefore,
+            historyBefore,
+            rowsBefore,
+            cleanup.VariablesCleared,
+            sessionBefore,
+            sessionAfter,
+            historyAfter,
+            targetAfter,
+            cleanup);
     }
 
     /// <summary>Captures live rejection after raw DML, then retries only the remaining pending migration.</summary>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<RuntimeDataRecovery> RejectAndRecoverFreshRuntimeDataAsync(
-        MySqlRuntimeFreshStateDbContext context
+        MySqlRuntimeFreshStateDbContext context,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         const string constraintQuery = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
             + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'runtime_fresh_rows' "
             + "AND CONSTRAINT_NAME = 'UQ_runtime_fresh_rows_Code';";
 
-        var sessionBefore = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();");
-        var exception = await Record.ExceptionAsync(() => context.Database.MigrateAsync(CancellationToken.None));
-        var targetBefore = await ContextScalarIntAsync(context, constraintQuery);
+        var sessionBefore = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
+            cancellationToken: cancellationToken);
+
+        var exception = await Record.ExceptionAsync(() => context.Database.MigrateAsync(cancellationToken));
+
+        // WHY: The attempted operation may have canceled its token. Recovery observations and retry
+        // remain independent so cancellation cannot hide failed cleanup or poison the same-session retry.
+        var targetBefore = await ContextScalarIntAsync(
+            context,
+            constraintQuery,
+            cancellationToken: CancellationToken.None);
+
         var rowsBefore = await ContextScalarIntAsync(
             context,
-            "SELECT COUNT(*) FROM `runtime_fresh_rows` WHERE `Code` = 'duplicate';");
-        var historyBefore = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `__RuntimeWorkloadHistory`;");
-        var cleanup = await ReadRuntimeCleanupProofAsync(context.Database.GetDbConnection());
+            "SELECT COUNT(*) FROM `runtime_fresh_rows` WHERE `Code` = 'duplicate';",
+            cancellationToken: CancellationToken.None);
+
+        var historyBefore = await ContextScalarIntAsync(
+            context,
+            "SELECT COUNT(*) FROM `__RuntimeWorkloadHistory`;",
+            cancellationToken: CancellationToken.None);
+
+        var cleanup = await ReadRuntimeCleanupProofAsync(
+            context.Database.GetDbConnection(),
+            cancellationToken: CancellationToken.None);
+
         await context.Database.ExecuteSqlRawAsync(
             "UPDATE `runtime_fresh_rows` SET `Code` = 'repaired' WHERE `Id` = 2;",
             CancellationToken.None);
+
         await context.Database.MigrateAsync(CancellationToken.None);
-        var sessionAfter = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();");
-        var historyAfter = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `__RuntimeWorkloadHistory`;");
-        var targetAfter = await ContextScalarIntAsync(context, constraintQuery);
+        var sessionAfter = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
+            cancellationToken: CancellationToken.None);
+
+        var historyAfter = await ContextScalarIntAsync(
+            context,
+            "SELECT COUNT(*) FROM `__RuntimeWorkloadHistory`;",
+            cancellationToken: CancellationToken.None);
+
+        var targetAfter = await ContextScalarIntAsync(
+            context,
+            constraintQuery,
+            cancellationToken: CancellationToken.None);
 
         return new RuntimeDataRecovery(
-            exception, targetBefore, historyBefore, rowsBefore, cleanup.VariablesCleared,
-            sessionBefore, sessionAfter, historyAfter, targetAfter, cleanup);
+            exception,
+            targetBefore,
+            historyBefore,
+            rowsBefore,
+            cleanup.VariablesCleared,
+            sessionBefore,
+            sessionAfter,
+            historyAfter,
+            targetAfter,
+            cleanup);
     }
 
     /// <summary>Persists generic aggregate counters, timings, and versions in ignored artifacts.</summary>
@@ -636,7 +884,8 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     )
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null && !File.Exists(Path.Combine(root.FullName, "global.json")))
+        while (root is not null
+            && !File.Exists(Path.Combine(root.FullName, "global.json")))
         {
             root = root.Parent;
         }
@@ -652,7 +901,9 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
         var payload = new
         {
             schemaVersion = 1,
-            provider = Fixture.IsMariaDb ? "mariadb" : "mysql",
+            provider = Fixture.IsMariaDb
+                ? "mariadb"
+                : "mysql",
             serverVersion = Fixture.ServerVersion.ToString(),
             runtime = Environment.Version.ToString(),
             phase,
@@ -663,8 +914,8 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
             measuredPath = "Database.MigrateAsync",
             generationAllocationBytes,
             engineSettings,
-            processArchitecture = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
-            processOperatingSystem = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
+            processArchitecture = RuntimeInformation.ProcessArchitecture.ToString(),
+            processOperatingSystem = RuntimeInformation.OSDescription,
             samples,
         };
 
@@ -674,12 +925,16 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     }
 
     /// <summary>Reads the entire ordered physical column contract without a server-side concatenation limit.</summary>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<string> ReadRuntimeSchemaAsync(
-        string connectionString
+        string connectionString,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync(CancellationToken.None);
+        await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT CONCAT(TABLE_NAME, ':', COLUMN_NAME, ':', ORDINAL_POSITION, ':', "
             + "COLUMN_TYPE, ':', IS_NULLABLE, "
@@ -695,9 +950,10 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
             + "UNION ALL SELECT CONCAT(TABLE_NAME, ':fk:', CONSTRAINT_NAME, ':', REFERENCED_TABLE_NAME, "
             + "':', UPDATE_RULE, ':', DELETE_RULE) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
             + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME LIKE 'runtime_records_%' ORDER BY 1;";
-        await using var reader = await command.ExecuteReaderAsync(CancellationToken.None);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var schema = new StringBuilder();
-        while (await reader.ReadAsync(CancellationToken.None))
+        while (await reader.ReadAsync(cancellationToken))
         {
             // WHY: Read every ordinal individually; server GROUP_CONCAT limits must not hide replay drift.
             schema.AppendLine(reader.GetString(0));
@@ -707,7 +963,9 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     }
 
     /// <summary>Selects repeat measurements only for deliberate baseline/optimized experiments.</summary>
-    private static int RuntimeSampleCount() => RuntimeMeasurementLabel() == "current" ? 1 : MeasuredRuntimeSampleCount;
+    private static int RuntimeSampleCount() => RuntimeMeasurementLabel() == "current"
+        ? 1
+        : MeasuredRuntimeSampleCount;
 
     /// <summary>Validates the artifact label without creating a product runtime configuration knob.</summary>
     private static string RuntimeMeasurementLabel()
@@ -724,7 +982,6 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-
     /// <summary>Carries one isolated application's timings and bounded transport counters.</summary>
     protected sealed record RuntimeSample(
         int Ordinal,

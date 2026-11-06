@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 internal abstract class ModelManagedDataIntent : SafeMigrationIntent
@@ -141,7 +143,11 @@ internal abstract class ModelManagedDataIntent : SafeMigrationIntent
     {
         foreach (var uniqueKey in uniqueKeys)
         {
-            var ordinals = uniqueKey.Columns.Select(column => ColumnOrdinal(columns, column)).ToArray();
+            var ordinals = uniqueKey
+                .Columns
+                .Select(column => ColumnOrdinal(columns, column))
+                .ToArray();
+
             // WHY: Compare each authored unique target only with later rows, not itself or earlier pairs.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
@@ -158,8 +164,8 @@ internal abstract class ModelManagedDataIntent : SafeMigrationIntent
                 for (var rightRow = leftRow + 1; rightRow < values.RowCount; rightRow++)
                 {
                     if (ordinals.All(ordinal => SafeMigrationModelManagedValue.AreEqual(
-                            values.GetUnsafeValue(leftRow, ordinal),
-                            values.GetUnsafeValue(rightRow, ordinal))))
+                        values.GetUnsafeValue(leftRow, ordinal),
+                        values.GetUnsafeValue(rightRow, ordinal))))
                     {
                         throw new ArgumentException(
                             "A model-managed-data operation contains duplicate non-null candidate-key values.",
@@ -194,7 +200,7 @@ internal abstract class ModelManagedDataIntent : SafeMigrationIntent
         string parameterName
     ) => SafeMigrationDefinitionValidator.Identifiers(values, parameterName);
 
-    private static System.Collections.ObjectModel.ReadOnlyCollection<string> SnapshotTypes(
+    private static ReadOnlyCollection<string> SnapshotTypes(
         string[] values,
         int expectedCount,
         string parameterName
@@ -226,6 +232,7 @@ internal abstract class ModelManagedDataIntent : SafeMigrationIntent
         for (var keyOrdinal = 0; keyOrdinal < KeyColumns.Count; keyOrdinal++)
         {
             var columnOrdinal = -1;
+
             // WHY: Retain the matching value-column ordinal for the subsequent type comparison.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
@@ -285,14 +292,15 @@ internal abstract class ModelManagedDataIntent : SafeMigrationIntent
             for (var rightRow = leftRow + 1; rightRow < KeyValues.RowCount; rightRow++)
             {
                 var equal = true;
+
                 // WHY: Compare corresponding key cells while retaining both source row ordinals.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var column = 0; column < KeyValues.ColumnCount; column++)
                 {
                     if (SafeMigrationModelManagedValue.AreEqual(
-                            KeyValues.GetUnsafeValue(leftRow, column),
-                            KeyValues.GetUnsafeValue(rightRow, column)))
+                        KeyValues.GetUnsafeValue(leftRow, column),
+                        KeyValues.GetUnsafeValue(rightRow, column)))
                     {
                         continue;
                     }
@@ -378,6 +386,7 @@ internal sealed class EnsureModelManagedDataIntent : ModelManagedDataIntent
         }
 
         var result = new object?[values.GetLength(0), keyColumns.Length];
+
         // WHY: Retain the source row coordinate while projecting only the requested key columns.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -546,7 +555,7 @@ internal sealed class ModelManagedDataMatrix
             // ReSharper disable once LoopCanBeConvertedToQuery
             for (var column = 0; column < ColumnCount; column++)
             {
-                _values[(row * ColumnCount) + column] = SafeMigrationModelManagedValue.Clone(values[row, column]);
+                _values[row * ColumnCount + column] = SafeMigrationModelManagedValue.Clone(values[row, column]);
             }
         }
     }
@@ -560,10 +569,10 @@ internal sealed class ModelManagedDataMatrix
     public object? GetValue(
         int row,
         int column
-    ) => SafeMigrationModelManagedValue.Clone(_values[checked((row * ColumnCount) + column)]);
+    ) => SafeMigrationModelManagedValue.Clone(_values[checked(row * ColumnCount + column)]);
 
     public object? GetUnsafeValue(
         int row,
         int column
-    ) => _values[checked((row * ColumnCount) + column)];
+    ) => _values[checked(row * ColumnCount + column)];
 }

@@ -1,4 +1,4 @@
-[assembly: Microsoft.EntityFrameworkCore.Design.DesignTimeServicesReference(
+[assembly: DesignTimeServicesReference(
     "Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDesignTimeServices, Doka.EntityFrameworkCore.SafeMigrations",
     "Npgsql.EntityFrameworkCore.PostgreSQL")]
 [assembly: CollectionBehavior(CollectionBehavior.CollectionPerClass, MaxParallelThreads = 4)]

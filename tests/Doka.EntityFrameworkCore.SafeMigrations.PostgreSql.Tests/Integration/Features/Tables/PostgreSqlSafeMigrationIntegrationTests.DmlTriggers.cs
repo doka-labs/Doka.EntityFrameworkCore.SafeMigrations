@@ -19,20 +19,30 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
     [InlineData(true, "UPDATE")]
     [InlineData(false, "DELETE")]
     [InlineData(true, "DELETE")]
-    public async Task EventTriggers_DmlTriggerDdlDefersStructuralMatch(bool typedWrite, string writeKind)
+    public async Task EventTriggers_DmlTriggerDdlDefersStructuralMatch(
+        bool typedWrite,
+        string writeKind
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
             + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
             + "CREATE TABLE side_effect_writes(id integer NOT NULL PRIMARY KEY, "
             + "managed_value character varying(64) NOT NULL); "
-            + (writeKind == "INSERT" ? string.Empty : "INSERT INTO side_effect_writes VALUES (1,'source'); ")
+            + (writeKind == "INSERT"
+                ? string.Empty
+                : "INSERT INTO side_effect_writes VALUES (1,'source'); ")
             + "CREATE FUNCTION event_dml_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
             + "BEGIN DROP INDEX ix_event_existing; CREATE INDEX ix_event_existing ON event_existing_values(value); "
-            + "RETURN NULL; END; $$; CREATE TRIGGER event_dml_fixture AFTER " + writeKind + " ON side_effect_writes "
-            + "FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture();");
+            + "RETURN NULL; END; $$; CREATE TRIGGER event_dml_fixture AFTER "
+            + writeKind
+            + " ON side_effect_writes "
+            + "FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture();",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (typedWrite)
@@ -47,12 +57,25 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
         builder.CreateIndexIfNotExists("ix_event_existing", "event_existing_values", ["id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-dml-trigger-structure"));
-        await ExecuteOperationsAsync(context, [builder.Operations[0]]);
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [builder.Operations[1]]));
-        var changed = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM pg_catalog.pg_indexes "
-            + "WHERE indexname='ix_event_existing' AND indexdef LIKE '%(value)%';");
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("postgresql-dml-trigger-structure"),
+                CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, [builder.Operations[0]], CancellationToken.None);
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [builder.Operations[1]],
+            CancellationToken.None));
+
+        var changed = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM pg_catalog.pg_indexes "
+            + "WHERE indexname='ix_event_existing' AND indexdef LIKE '%(value)%';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
@@ -61,7 +84,10 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
         var origin = Assert.IsType<SafeMigrationDeferredOrigin>(report.Assessments[1].DeferredOrigin);
 
         Assert.Equal(0, origin.OperationOrdinal);
-        Assert.Equal("P1001", Assert.IsType<PostgresException>(exception).SqlState);
+        Assert.Equal("P1001",
+            Assert.IsType<PostgresException>(exception)
+                .SqlState);
+
         Assert.Equal(1, changed);
     }
 
@@ -71,7 +97,8 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
             + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
             + "CREATE TABLE event_dml_parents(id integer NOT NULL PRIMARY KEY); "
@@ -81,25 +108,41 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
             + "CREATE FUNCTION event_dml_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
             + "BEGIN DROP INDEX ix_event_existing; CREATE INDEX ix_event_existing ON event_existing_values(value); "
             + "RETURN NULL; END; $$; CREATE TRIGGER event_dml_fixture AFTER DELETE ON event_dml_children "
-            + "FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture();");
+            + "FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture();",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.Operations.Add(new DeleteDataOperation
-        {
-            Table = "event_dml_parents",
-            KeyColumns = ["id"],
-            KeyColumnTypes = ["integer"],
-            KeyValues = new object[,] { { 1 } },
-        });
+        builder.Operations.Add(
+            new DeleteDataOperation
+            {
+                Table = "event_dml_parents",
+                KeyColumns = ["id"],
+                KeyColumnTypes = ["integer"],
+                KeyValues = new object[,] { { 1 } },
+            });
 
         builder.CreateIndexIfNotExists("ix_event_existing", "event_existing_values", ["id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-cascade-dml-trigger-structure"));
-        await ExecuteOperationsAsync(context, [builder.Operations[0]]);
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [builder.Operations[1]]));
-        var remaining = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM event_dml_children;");
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("postgresql-cascade-dml-trigger-structure"),
+                CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, [builder.Operations[0]], CancellationToken.None);
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [builder.Operations[1]],
+            CancellationToken.None));
+
+        var remaining = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM event_dml_children;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
@@ -108,7 +151,10 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
         var origin = Assert.IsType<SafeMigrationDeferredOrigin>(report.Assessments[1].DeferredOrigin);
 
         Assert.Equal(0, origin.OperationOrdinal);
-        Assert.Equal("P1001", Assert.IsType<PostgresException>(exception).SqlState);
+        Assert.Equal("P1001",
+            Assert.IsType<PostgresException>(exception)
+                .SqlState);
+
         Assert.Equal(0, remaining);
     }
 
@@ -120,24 +166,33 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
     [InlineData(null)]
     [InlineData("DISABLE")]
     [InlineData("ENABLE REPLICA")]
-    public async Task EventTriggers_InactiveDmlRetainsStructuralMatch(string? activation)
+    public async Task EventTriggers_InactiveDmlRetainsStructuralMatch(
+        string? activation
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL PRIMARY KEY, value integer); "
             + "INSERT INTO event_existing_values VALUES (1,0); "
             + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
             + "CREATE TABLE side_effect_writes(id integer NOT NULL PRIMARY KEY "
-            + "REFERENCES event_existing_values(id), managed_value character varying(64) NOT NULL);");
+            + "REFERENCES event_existing_values(id), managed_value character varying(64) NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         if (activation is not null)
         {
-            await ExecuteSqlAsync(connectionString,
+            await ExecuteSqlAsync(
+                connectionString,
                 "CREATE FUNCTION event_dml_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
                 + "BEGIN DROP INDEX ix_event_existing; RETURN NULL; END; $$; "
                 + "CREATE TRIGGER event_dml_fixture AFTER INSERT ON side_effect_writes "
                 + "FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture(); "
-                + "ALTER TABLE side_effect_writes " + activation + " TRIGGER event_dml_fixture;");
+                + "ALTER TABLE side_effect_writes "
+                + activation
+                + " TRIGGER event_dml_fixture;",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -146,10 +201,19 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
         builder.CreateIndexIfNotExists("ix_event_existing", "event_existing_values", ["id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-inactive-dml-trigger-structure"));
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM side_effect_writes;");
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("postgresql-inactive-dml-trigger-structure"),
+                CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM side_effect_writes;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, report.Status);
@@ -164,7 +228,8 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
             + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
             + "CREATE TABLE side_effect_writes(id integer NOT NULL PRIMARY KEY, "
@@ -172,18 +237,28 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
             + "CREATE FUNCTION event_dml_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
             + "BEGIN DROP INDEX ix_event_existing; RETURN NULL; END; $$; "
             + "CREATE TRIGGER event_dml_fixture AFTER INSERT ON side_effect_writes "
-            + "FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture();");
+            + "FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture();",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AppendSideEffectWrite(builder, "INSERT");
         builder.CreateIndexIfNotExists("ix_event_existing", "event_existing_values", ["id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-noop-dml-trigger-structure"));
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var indexes = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE indexname='ix_event_existing';");
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("postgresql-noop-dml-trigger-structure"),
+                CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var indexes = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE indexname='ix_event_existing';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -210,7 +285,8 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
             + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
             + "CREATE TABLE side_effect_writes(id integer NOT NULL PRIMARY KEY, "
@@ -219,29 +295,52 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
             + "BEGIN DROP INDEX ix_event_existing; CREATE INDEX ix_event_existing ON event_existing_values(value); "
             + "RETURN NULL; END; $$; CREATE TRIGGER event_dml_fixture AFTER INSERT ON side_effect_writes "
             + "FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture(); ALTER TABLE side_effect_writes "
-            + activation + " TRIGGER event_dml_fixture;");
+            + activation
+            + " TRIGGER event_dml_fixture;",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync();
         await context.Database.ExecuteSqlAsync(
             $"SELECT pg_catalog.set_config('session_replication_role', {replicationRole}, false);");
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AppendEventTriggerTypedWrite(builder, "INSERT");
         builder.CreateIndexIfNotExists("ix_event_existing", "event_existing_values", ["id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-dml-trigger-session-role"));
-        await ExecuteOperationsAsync(context, [builder.Operations[0]]);
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [builder.Operations[1]]));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("postgresql-dml-trigger-session-role"),
+                CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, [builder.Operations[0]], CancellationToken.None);
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [builder.Operations[1]],
+            CancellationToken.None));
 
         // Assert
-        Assert.Equal(fires ? SafeMigrationReportStatus.RuntimeValidationRequired
-            : SafeMigrationReportStatus.ReadyWithProviderOperations, report.Status);
-        Assert.Equal(fires ? SafeMigrationAction.ValidateAtRuntime : SafeMigrationAction.NoOp,
+        Assert.Equal(
+            fires
+                ? SafeMigrationReportStatus.RuntimeValidationRequired
+                : SafeMigrationReportStatus.ReadyWithProviderOperations,
+            report.Status);
+
+        Assert.Equal(
+            fires
+                ? SafeMigrationAction.ValidateAtRuntime
+                : SafeMigrationAction.NoOp,
             report.Assessments[1].Action);
+
         if (fires)
         {
-            Assert.Equal("P1001", Assert.IsType<PostgresException>(exception).SqlState);
+            Assert.Equal("P1001",
+                Assert.IsType<PostgresException>(exception)
+                    .SqlState);
         }
         else
         {
@@ -256,16 +355,30 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var role = "dml_reader_" + Guid.NewGuid().ToString("N");
-        await ExecuteSqlAsync(connectionString,
+        var role = "dml_reader_"
+            + Guid
+                .NewGuid()
+                .ToString("N");
+
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
             + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
             + "CREATE TABLE side_effect_writes(id integer NOT NULL PRIMARY KEY, "
-            + "managed_value character varying(64) NOT NULL); CREATE ROLE " + role
-            + " LOGIN PASSWORD 'dml-reader-fixture'; GRANT USAGE ON SCHEMA public TO " + role + "; "
-            + "GRANT SELECT, INSERT ON side_effect_writes TO " + role + "; "
-            + "GRANT SELECT ON event_existing_values TO " + role + "; "
-            + "REVOKE SELECT ON pg_catalog.pg_trigger FROM PUBLIC;");
+            + "managed_value character varying(64) NOT NULL); CREATE ROLE "
+            + role
+            + " LOGIN PASSWORD 'dml-reader-fixture'; GRANT USAGE ON SCHEMA public TO "
+            + role
+            + "; "
+            + "GRANT SELECT, INSERT ON side_effect_writes TO "
+            + role
+            + "; "
+            + "GRANT SELECT ON event_existing_values TO "
+            + role
+            + "; "
+            + "REVOKE SELECT ON pg_catalog.pg_trigger FROM PUBLIC;",
+            cancellationToken: CancellationToken.None);
+
         var readerConnectionString = new NpgsqlConnectionStringBuilder(connectionString)
         {
             Username = role,
@@ -278,10 +391,19 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
         builder.CreateIndexIfNotExists("ix_event_existing", "event_existing_values", ["id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-dml-trigger-visibility"));
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM side_effect_writes;");
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("postgresql-dml-trigger-visibility"),
+                CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM side_effect_writes;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
@@ -299,11 +421,14 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
     [InlineData("INSERT")]
     [InlineData("UPDATE")]
     [InlineData("DELETE")]
-    public async Task EventTriggers_EmptyTypedDmlRetainsStructuralMatch(string writeKind)
+    public async Task EventTriggers_EmptyTypedDmlRetainsStructuralMatch(
+        string writeKind
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
             + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
             + "CREATE TABLE side_effect_writes(id integer NOT NULL PRIMARY KEY, "
@@ -311,21 +436,32 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
             + "CREATE FUNCTION event_dml_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
             + "BEGIN DROP INDEX ix_event_existing; RETURN NULL; END; $$; "
             + "CREATE TRIGGER event_dml_fixture AFTER INSERT OR UPDATE OR DELETE ON side_effect_writes "
-            + "FOR EACH STATEMENT EXECUTE FUNCTION event_dml_trigger_fixture();");
+            + "FOR EACH STATEMENT EXECUTE FUNCTION event_dml_trigger_fixture();",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AppendEventTriggerTypedWrite(builder, writeKind, empty: true);
         builder.CreateIndexIfNotExists("ix_event_existing", "event_existing_values", ["id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-empty-dml-trigger-structure"));
-        var sourceCommands = context.GetService<IMigrationsSqlGenerator>()
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("postgresql-empty-dml-trigger-structure"),
+                CancellationToken.None);
+
+        var sourceCommands = context
+            .GetService<IMigrationsSqlGenerator>()
             .Generate([builder.Operations[0]], context.Model);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var indexes = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE indexname='ix_event_existing';");
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var indexes = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE indexname='ix_event_existing';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, report.Status);
@@ -341,7 +477,8 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
             + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
             + "CREATE TABLE side_effect_writes(id integer NOT NULL PRIMARY KEY, "
@@ -349,7 +486,9 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
             + "CREATE FUNCTION event_dml_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
             + "BEGIN DROP INDEX ix_event_existing; RETURN NULL; END; $$; "
             + "CREATE TRIGGER event_dml_fixture AFTER INSERT ON side_effect_writes "
-            + "FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture();");
+            + "FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture();",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AppendEventTriggerTypedWrite(builder, "INSERT");
@@ -357,12 +496,24 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var enabled = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-dml-trigger-enabled"));
-        await ExecuteSqlAsync(connectionString, "ALTER TABLE side_effect_writes DISABLE TRIGGER event_dml_fixture;");
-        var disabled = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-dml-trigger-disabled"));
-        await ExecuteOperationsAsync(context, builder.Operations);
+        var enabled = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("postgresql-dml-trigger-enabled"),
+            CancellationToken.None);
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "ALTER TABLE side_effect_writes DISABLE TRIGGER event_dml_fixture;",
+            cancellationToken: CancellationToken.None);
+
+        var disabled = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("postgresql-dml-trigger-disabled"),
+            CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, enabled.Status);
@@ -376,46 +527,60 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
     /// <param name="builder">The ordered operation stream.</param>
     /// <param name="writeKind">The source DML form.</param>
     /// <param name="empty">Whether the provider's certified zero-row baseline is requested.</param>
-    private static void AppendEventTriggerTypedWrite(MigrationBuilder builder, string writeKind, bool empty = false)
+    private static void AppendEventTriggerTypedWrite(
+        MigrationBuilder builder,
+        string writeKind,
+        bool empty = false
+    )
     {
         switch (writeKind)
         {
             case "INSERT":
-                builder.Operations.Add(new InsertDataOperation
-                {
-                    Table = "side_effect_writes",
-                    Columns = ["id", "managed_value"],
-                    ColumnTypes = ["integer", "character varying(64)"],
-                    Values = empty ? new object[0, 2] : new object[,] { { 1, "target" } },
-                });
+                builder.Operations.Add(
+                    new InsertDataOperation
+                    {
+                        Table = "side_effect_writes",
+                        Columns = ["id", "managed_value"],
+                        ColumnTypes = ["integer", "character varying(64)"],
+                        Values = empty
+                            ? new object[0, 2]
+                            : new object[,] { { 1, "target" } },
+                    });
 
                 break;
             case "UPDATE":
-                builder.Operations.Add(new UpdateDataOperation
-                {
-                    Table = "side_effect_writes",
-                    KeyColumns = ["id"],
-                    KeyColumnTypes = ["integer"],
-                    KeyValues = empty ? new object[0, 1] : new object[,] { { 1 } },
-                    Columns = ["managed_value"],
-                    ColumnTypes = ["character varying(64)"],
-                    Values = empty ? new object[0, 1] : new object[,] { { "target" } },
-                });
+                builder.Operations.Add(
+                    new UpdateDataOperation
+                    {
+                        Table = "side_effect_writes",
+                        KeyColumns = ["id"],
+                        KeyColumnTypes = ["integer"],
+                        KeyValues = empty
+                            ? new object[0, 1]
+                            : new object[,] { { 1 } },
+                        Columns = ["managed_value"],
+                        ColumnTypes = ["character varying(64)"],
+                        Values = empty
+                            ? new object[0, 1]
+                            : new object[,] { { "target" } },
+                    });
 
                 break;
             case "DELETE":
-                builder.Operations.Add(new DeleteDataOperation
-                {
-                    Table = "side_effect_writes",
-                    KeyColumns = ["id"],
-                    KeyColumnTypes = ["integer"],
-                    KeyValues = empty ? new object[0, 1] : new object[,] { { 1 } },
-                });
+                builder.Operations.Add(
+                    new DeleteDataOperation
+                    {
+                        Table = "side_effect_writes",
+                        KeyColumns = ["id"],
+                        KeyColumnTypes = ["integer"],
+                        KeyValues = empty
+                            ? new object[0, 1]
+                            : new object[,] { { 1 } },
+                    });
 
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(writeKind));
         }
     }
-
 }

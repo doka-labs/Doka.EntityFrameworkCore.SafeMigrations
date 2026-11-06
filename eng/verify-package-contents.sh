@@ -108,6 +108,12 @@ for package_id in "${package_ids[@]}"; do
         exit 1
     fi
 
+    if grep -Eiq '<dependency id="BenchmarkDotNet(\.[^"]+)?"' \
+        <<<"$nuspec_content"; then
+        echo "Benchmark-only dependency leaked into $nupkg." >&2
+        exit 1
+    fi
+
     if [[ "$package_id" != Doka.EntityFrameworkCore.SafeMigrations.SqlServer ]] \
         && grep -Fq '<dependency id="System.Security.Cryptography.Pkcs"' <<<"$nuspec_content"; then
         echo "SQL Server-only PKCS dependency leaked into $nupkg." >&2

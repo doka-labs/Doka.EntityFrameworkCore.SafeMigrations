@@ -6,12 +6,13 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
     [Fact]
     public async Task RawSqlRemovingDependentTable_DefersStaleIncomingForeignKeyEvidence()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE raw_drop_parent (Id INTEGER NOT NULL PRIMARY KEY); "
             + "CREATE TABLE raw_drop_child (Id INTEGER NOT NULL PRIMARY KEY, ParentId INTEGER NULL, "
-            + "FOREIGN KEY (ParentId) REFERENCES raw_drop_parent (Id));");
+            + "FOREIGN KEY (ParentId) REFERENCES raw_drop_parent (Id));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -22,14 +23,16 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-raw-dependent-drop"));
+            new SafeMigrationRunOptions("sqlite-raw-dependent-drop"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var remainingTables = await ScalarIntAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' "
-            + "AND name IN ('raw_drop_parent', 'raw_drop_child');");
+            + "AND name IN ('raw_drop_parent', 'raw_drop_child');",
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
@@ -39,12 +42,13 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
     [Fact]
     public async Task RawSqlAfterSafeRename_DefersStaleIncomingForeignKeyEvidence()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE renamed_drop_parent (Id INTEGER NOT NULL PRIMARY KEY); "
             + "CREATE TABLE renamed_drop_child (Id INTEGER NOT NULL PRIMARY KEY, ParentId INTEGER NULL, "
-            + "FOREIGN KEY (ParentId) REFERENCES renamed_drop_parent (Id));");
+            + "FOREIGN KEY (ParentId) REFERENCES renamed_drop_parent (Id));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -56,14 +60,16 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-rename-raw-dependent-drop"));
+            new SafeMigrationRunOptions("sqlite-rename-raw-dependent-drop"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var remainingTables = await ScalarIntAsync(
             connection,
             "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' "
-            + "AND name IN ('renamed_drop_parent', 'renamed_drop_target', 'renamed_drop_child');");
+            + "AND name IN ('renamed_drop_parent', 'renamed_drop_target', 'renamed_drop_child');",
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[2].Action);
@@ -74,7 +80,7 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
     [Fact]
     public async Task RawSql_DoesNotDeferUnsupportedSchemaDrop()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.Sql("SELECT 1;");
@@ -84,7 +90,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-raw-unsupported-schema-drop"));
+            new SafeMigrationRunOptions("sqlite-raw-unsupported-schema-drop"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[1].Action);
@@ -95,7 +102,7 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
     [Fact]
     public async Task RawSql_DoesNotDeferUnsupportedIndexContract()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.Sql("SELECT 1;");
@@ -104,12 +111,14 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             "missing_table",
             ["code"],
             nullOrders: [SafeMigrationIndexNullOrder.First]);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-raw-unsupported-index-option"));
+            new SafeMigrationRunOptions("sqlite-raw-unsupported-index-option"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[1].Action);
@@ -120,8 +129,12 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
     [Fact]
     public async Task RawSql_DoesNotLetVirtualTableMaskUnsupportedIndexContract()
     {
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, "CREATE VIRTUAL TABLE search_documents USING fts5(content);");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE VIRTUAL TABLE search_documents USING fts5(content);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.Sql("SELECT 1;");
@@ -130,12 +143,14 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             "search_documents",
             ["content"],
             nullOrders: [SafeMigrationIndexNullOrder.First]);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-raw-virtual-unsupported-index"));
+            new SafeMigrationRunOptions("sqlite-raw-virtual-unsupported-index"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[1].Action);
@@ -146,8 +161,12 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
     [Fact]
     public async Task RawSql_DefersVirtualTableBoundaryWhenIndexContractIsSupported()
     {
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, "CREATE VIRTUAL TABLE search_documents USING fts5(content);");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE VIRTUAL TABLE search_documents USING fts5(content);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.Sql("SELECT 1;");
@@ -157,7 +176,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-raw-virtual-supported-index"));
+            new SafeMigrationRunOptions("sqlite-raw-virtual-supported-index"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
@@ -167,8 +187,12 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
     [Fact]
     public async Task RawSql_DoesNotDeferUnsupportedCheckExpression()
     {
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, "CREATE TABLE check_target (Id INTEGER NOT NULL PRIMARY KEY);");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE check_target (Id INTEGER NOT NULL PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.Sql("SELECT 1;");
@@ -178,12 +202,14 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
                 "check_target",
                 SafeMigrationSql.ProviderFragment("foreign_provider", "Id > 0")),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-raw-unsupported-check-expression"));
+            new SafeMigrationRunOptions("sqlite-raw-unsupported-check-expression"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[1].Action);
@@ -194,8 +220,12 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
     [Fact]
     public async Task RawSql_DefersCatalogDependentStoredGeneratedColumnRejection()
     {
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, "CREATE TABLE generated_values (a INTEGER NOT NULL, b INTEGER NOT NULL);");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE generated_values (a INTEGER NOT NULL, b INTEGER NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.Sql("SELECT 1;");
@@ -212,12 +242,14 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
                     SafeMigrationSql.Identifier("b")),
                 isStored: true),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-raw-stored-generated-column"));
+            new SafeMigrationRunOptions("sqlite-raw-stored-generated-column"),
+            cancellationToken: CancellationToken.None);
 
         // WHY: Raw SQL could rebuild the table with the target column before
         // the guarded ensure, so this live-only rejection is not invariant.
@@ -236,10 +268,10 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         bool foreignKeysEnabled
     )
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         if (!foreignKeysEnabled)
         {
-            await ExecuteSqlAsync(connection, "PRAGMA foreign_keys = OFF;");
+            await ExecuteSqlAsync(connection, "PRAGMA foreign_keys = OFF;", cancellationToken: CancellationToken.None);
         }
 
         await ExecuteSqlAsync(
@@ -248,7 +280,9 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             + "CREATE TABLE drop_child (Id INTEGER NOT NULL PRIMARY KEY, ParentId INTEGER NULL, "
             + $"CONSTRAINT fk_drop_child_parent FOREIGN KEY (ParentId) REFERENCES drop_parent (Id) ON DELETE {deleteAction}); "
             + "INSERT INTO drop_parent (Id) VALUES (1); "
-            + "INSERT INTO drop_child (Id, ParentId) VALUES (11, 1);");
+            + "INSERT INTO drop_child (Id, ParentId) VALUES (11, 1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTableIfExists("drop_parent");
@@ -258,23 +292,31 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-drop-incoming-foreign-key"));
+                new SafeMigrationRunOptions("sqlite-drop-incoming-foreign-key"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
         Assert.Equal("table_drop_foreign_key_dependency", assessment.AnalysisCode);
-        Assert.Equal(1, await ScalarIntAsync(connection, "SELECT COUNT(*) FROM drop_parent;"));
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM drop_child WHERE Id = 11 AND ParentId = 1;"));
+                "SELECT COUNT(*) FROM drop_parent;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM drop_child WHERE Id = 11 AND ParentId = 1;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task OrderedDependentAndPrincipalDrops_ConvergeWithoutForeignKeySideEffects()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE ordered_drop_parent (Id INTEGER NOT NULL PRIMARY KEY); "
@@ -282,7 +324,9 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             + "CONSTRAINT fk_ordered_drop_child_parent FOREIGN KEY (ParentId) "
             + "REFERENCES ordered_drop_parent (Id) ON DELETE CASCADE); "
             + "INSERT INTO ordered_drop_parent (Id) VALUES (1); "
-            + "INSERT INTO ordered_drop_child (Id, ParentId) VALUES (11, 1);");
+            + "INSERT INTO ordered_drop_child (Id, ParentId) VALUES (11, 1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTableIfExists("ordered_drop_child");
@@ -293,9 +337,10 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-ordered-dependent-drop"));
+                new SafeMigrationRunOptions("sqlite-ordered-dependent-drop"),
+                cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(report.Assessments, assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
@@ -304,16 +349,19 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM main.sqlite_schema "
-                + "WHERE type = 'table' AND name IN ('ordered_drop_parent', 'ordered_drop_child');"));
+                + "WHERE type = 'table' AND name IN ('ordered_drop_parent', 'ordered_drop_child');",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task ProjectedChildTable_BlocksLaterPrincipalDrop()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE projected_parent (Id INTEGER NOT NULL PRIMARY KEY);");
+            "CREATE TABLE projected_parent (Id INTEGER NOT NULL PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -332,6 +380,7 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
                     "projected_parent",
                     "Id");
             });
+
         builder.DropTableIfExists("projected_parent");
 
         var report = await context
@@ -339,7 +388,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-projected-child-drop"));
+                new SafeMigrationRunOptions("sqlite-projected-child-drop"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(
             report.Assessments,
@@ -352,13 +402,14 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM main.sqlite_schema "
-                + "WHERE type = 'table' AND name = 'projected_parent';"));
+                + "WHERE type = 'table' AND name = 'projected_parent';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task ProjectedForeignKeyAndRename_BlockRenamedPrincipalDrop()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE collation_parents (Id INTEGER NOT NULL, Code TEXT COLLATE NOCASE NOT NULL, "
@@ -366,7 +417,9 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             + "CONSTRAINT uq_collation_parents_code UNIQUE (Code)); "
             + "CREATE TABLE collation_children (Id INTEGER NOT NULL, ParentCode TEXT NOT NULL, "
             + "CONSTRAINT pk_collation_children PRIMARY KEY (Id)); "
-            + "CREATE INDEX ix_collation_children_parent_code ON collation_children (ParentCode);");
+            + "CREATE INDEX ix_collation_children_parent_code ON collation_children (ParentCode);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteForeignKeyCollationTestContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddForeignKeyIfNotExists(
@@ -375,6 +428,7 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             ["ParentCode"],
             "collation_parents",
             ["Code"]);
+
         builder.RenameTableIfExists("collation_parents", "renamed_collation_parents");
         builder.DropTableIfExists("renamed_collation_parents");
 
@@ -383,7 +437,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-projected-foreign-key-rename"));
+                new SafeMigrationRunOptions("sqlite-projected-foreign-key-rename"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(
             report.Assessments,
@@ -396,16 +451,19 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM main.sqlite_schema "
-                + "WHERE type = 'table' AND name = 'collation_parents';"));
+                + "WHERE type = 'table' AND name = 'collation_parents';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task ProjectedDependentDrop_AllowsLaterPrincipalDrop()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE projected_drop_parent (Id INTEGER NOT NULL PRIMARY KEY);");
+            "CREATE TABLE projected_drop_parent (Id INTEGER NOT NULL PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -424,6 +482,7 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
                     "projected_drop_parent",
                     "Id");
             });
+
         builder.DropTableIfExists("projected_drop_child");
         builder.DropTableIfExists("projected_drop_parent");
 
@@ -432,7 +491,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-projected-dependent-drop"));
+                new SafeMigrationRunOptions("sqlite-projected-dependent-drop"),
+                cancellationToken: CancellationToken.None);
 
         var principalDrop = Assert.Single(
             report.Assessments,
@@ -445,13 +505,15 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
     [Fact]
     public async Task SelfReferencingTableDrop_DoesNotReportAnExternalDependency()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE self_drop_tree (Id INTEGER NOT NULL PRIMARY KEY, ParentId INTEGER NULL, "
             + "CONSTRAINT fk_self_drop_tree_parent FOREIGN KEY (ParentId) "
             + "REFERENCES self_drop_tree (Id) ON DELETE CASCADE); "
-            + "INSERT INTO self_drop_tree (Id, ParentId) VALUES (1, NULL), (2, 1);");
+            + "INSERT INTO self_drop_tree (Id, ParentId) VALUES (1, NULL), (2, 1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTableIfExists("self_drop_tree");
@@ -461,9 +523,10 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-self-referencing-drop"));
+                new SafeMigrationRunOptions("sqlite-self-referencing-drop"),
+                cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationAction.Apply, assessment.Action);
@@ -472,18 +535,21 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM main.sqlite_schema "
-                + "WHERE type = 'table' AND name = 'self_drop_tree';"));
+                + "WHERE type = 'table' AND name = 'self_drop_tree';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task RenameWithLegacyAlterTableEnabled_IsRejectedBeforeReferenceDrift()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE legacy_rename_source (Id INTEGER NOT NULL PRIMARY KEY); "
             + "CREATE VIEW legacy_rename_view AS SELECT Id FROM legacy_rename_source; "
-            + "PRAGMA legacy_alter_table = ON;");
+            + "PRAGMA legacy_alter_table = ON;",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("legacy_rename_source", "legacy_rename_target");
@@ -493,7 +559,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-legacy-alter-table"));
+                new SafeMigrationRunOptions("sqlite-legacy-alter-table"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
@@ -503,20 +570,23 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM main.sqlite_schema "
-                + "WHERE type = 'table' AND name = 'legacy_rename_source';"));
+                + "WHERE type = 'table' AND name = 'legacy_rename_source';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM main.sqlite_schema "
                 + "WHERE type = 'view' AND name = 'legacy_rename_view' "
-                + "AND sql LIKE '%legacy_rename_source%';"));
+                + "AND sql LIKE '%legacy_rename_source%';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task CrossTableSqlitePrefixedTrigger_BlocksReferencedTableRebuild()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE structural_blogs (Id INTEGER NOT NULL PRIMARY KEY); "
@@ -525,7 +595,9 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             + "CONSTRAINT fk_structural_posts_blog FOREIGN KEY (BlogId) REFERENCES structural_blogs (Id)); "
             + "CREATE TABLE structural_post_source (Id INTEGER NOT NULL PRIMARY KEY); "
             + "CREATE TRIGGER SqliteAudit_StructuralPosts AFTER INSERT ON structural_post_source "
-            + "BEGIN INSERT INTO structural_posts (Id, Title, BlogId) VALUES (NEW.Id, 'trigger', NULL); END;");
+            + "BEGIN INSERT INTO structural_posts (Id, Title, BlogId) VALUES (NEW.Id, 'trigger', NULL); END;",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteStructuralSequenceTestContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_structural_posts_blog", "structural_posts");
@@ -535,7 +607,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-cross-table-trigger"));
+                new SafeMigrationRunOptions("sqlite-cross-table-trigger"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
@@ -544,7 +617,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             1,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM main.sqlite_schema WHERE name = 'SqliteAudit_StructuralPosts';"));
+                "SELECT COUNT(*) FROM main.sqlite_schema WHERE name = 'SqliteAudit_StructuralPosts';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -552,11 +626,13 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
     {
         const string uppercase = "\u00C9";
         const string lowercase = "\u00E9";
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             $"CREATE TABLE \"{uppercase}\" (Id INTEGER NOT NULL); "
-            + $"CREATE TABLE \"{lowercase}\" (Id INTEGER NOT NULL);");
+            + $"CREATE TABLE \"{lowercase}\" (Id INTEGER NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTableIfExists(uppercase);
@@ -566,28 +642,39 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-non-ascii-identifiers"));
+                new SafeMigrationRunOptions("sqlite-non-ascii-identifiers"),
+                cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(report.Assessments)
+                .Action);
+
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connection,
-                $"SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'table' AND name = '{uppercase}';"));
+                $"SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'table' AND name = '{uppercase}';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connection,
-                $"SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'table' AND name = '{lowercase}';"));
+                $"SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'table' AND name = '{lowercase}';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task SqlitePrefixedUserTable_RemainsVisibleToLifecycleAnalysis()
     {
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, "CREATE TABLE SqliteCache (Id INTEGER NOT NULL PRIMARY KEY);");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE SqliteCache (Id INTEGER NOT NULL PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTableIfExists("SqliteCache");
@@ -597,16 +684,21 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-user-prefix"));
+                new SafeMigrationRunOptions("sqlite-user-prefix"),
+                cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(report.Assessments)
+                .Action);
+
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM main.sqlite_schema WHERE name = 'SqliteCache';"));
+                "SELECT COUNT(*) FROM main.sqlite_schema WHERE name = 'SqliteCache';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -617,11 +709,13 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         string tableOption
     )
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE newline_without_rowid (Id INTEGER NOT NULL PRIMARY KEY, Value TEXT NULL) "
-            + $"{tableOption};");
+            + $"{tableOption};",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists("ck_newline_without_rowid", "newline_without_rowid", "Id > 0");
@@ -631,7 +725,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-newline-without-rowid"));
+                new SafeMigrationRunOptions("sqlite-newline-without-rowid"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
@@ -642,11 +737,13 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
     public async Task HighByteUnquotedIdentifierView_BlocksReferencedTableRebuild()
     {
         const string table = "\u20AC";
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             $"CREATE TABLE {table} (Id INTEGER NOT NULL, CONSTRAINT pk_high_byte_identifier PRIMARY KEY (Id)); "
-            + $"CREATE VIEW high_byte_identifier_view AS SELECT Id FROM {table};");
+            + $"CREATE VIEW high_byte_identifier_view AS SELECT Id FROM {table};",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteHighByteIdentifierRebuildTestContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists("ck_high_byte_identifier_id", table, "Id > 0");
@@ -656,7 +753,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-high-byte-identifier"));
+                new SafeMigrationRunOptions("sqlite-high-byte-identifier"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
@@ -666,11 +764,13 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
     [Fact]
     public async Task IndexWithoutExplicitCollation_UsesColumnCollationForMatching()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE inherited_collation (Id INTEGER NOT NULL PRIMARY KEY, Code TEXT COLLATE NOCASE NOT NULL); "
-            + "CREATE INDEX ix_inherited_collation_code ON inherited_collation (Code);");
+            + "CREATE INDEX ix_inherited_collation_code ON inherited_collation (Code);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexIfNotExists("ix_inherited_collation_code", "inherited_collation", ["Code"]);
@@ -679,19 +779,28 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         var matching = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-inherited-index-collation"));
+            new SafeMigrationRunOptions("sqlite-inherited-index-collation"),
+            cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connection,
             "DROP INDEX ix_inherited_collation_code; "
-            + "CREATE INDEX ix_inherited_collation_code ON inherited_collation (Code COLLATE RTRIM);");
+            + "CREATE INDEX ix_inherited_collation_code ON inherited_collation (Code COLLATE RTRIM);",
+            cancellationToken: CancellationToken.None);
+
         var different = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-different-index-collation"));
+            new SafeMigrationRunOptions("sqlite-different-index-collation"),
+            cancellationToken: CancellationToken.None);
 
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(matching.Assessments).Action);
-        Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(different.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(matching.Assessments)
+                .Action);
+
+        Assert.Equal(SafeMigrationObservedState.Different,
+            Assert.Single(different.Assessments)
+                .ObservedState);
     }
 
     [Theory]
@@ -702,12 +811,14 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         SafeMigrationReportStatus expectedStatus
     )
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE backfill_default_entities (Id INTEGER NOT NULL, "
             + "CONSTRAINT pk_backfill_default_entities PRIMARY KEY (Id)); "
-            + "INSERT INTO backfill_default_entities (Id) VALUES (1);");
+            + "INSERT INTO backfill_default_entities (Id) VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteBackfillDefaultRebuildTestContext(connection);
         var addColumn = new MigrationBuilder(context.Database.ProviderName!);
         addColumn.AddColumn<int>(
@@ -716,7 +827,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             type: "INTEGER",
             nullable: false,
             defaultValue: backfillDefault);
-        await ExecuteOperationsAsync(context, addColumn.Operations);
+
+        await ExecuteOperationsAsync(context, addColumn.Operations, cancellationToken: CancellationToken.None);
         var addCheck = new MigrationBuilder(context.Database.ProviderName!);
         addCheck.AddCheckConstraintIfNotExists(
             "ck_backfill_default_entities_priority",
@@ -728,7 +840,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 addCheck.Operations,
-                new SafeMigrationRunOptions("sqlite-ef-backfill-default"));
+                new SafeMigrationRunOptions("sqlite-ef-backfill-default"),
+                cancellationToken: CancellationToken.None);
 
         Assert.True(
             report.Status == expectedStatus,
@@ -737,21 +850,25 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
                 ", ",
                 report.Assessments.Select(static value =>
                     $"{value.ObservedState}/{value.AnalysisCode}")));
+
         if (expectedStatus == SafeMigrationReportStatus.Ready)
         {
-            await ExecuteOperationsAsync(context, addCheck.Operations);
+            await ExecuteOperationsAsync(context, addCheck.Operations, cancellationToken: CancellationToken.None);
 
             Assert.Equal(
                 1,
                 await ScalarIntAsync(
                     connection,
-                    "SELECT COUNT(*) FROM backfill_default_entities WHERE Id = 1 AND Priority = 0;"));
+                    "SELECT COUNT(*) FROM backfill_default_entities WHERE Id = 1 AND Priority = 0;",
+                    cancellationToken: CancellationToken.None));
+
             Assert.Equal(
                 1,
                 await ScalarIntAsync(
                     connection,
                     "SELECT COUNT(*) FROM pragma_table_xinfo('backfill_default_entities') "
-                    + "WHERE name = 'Priority' AND dflt_value IS NULL;"));
+                    + "WHERE name = 'Priority' AND dflt_value IS NULL;",
+                    cancellationToken: CancellationToken.None));
         }
         else
         {
@@ -764,12 +881,14 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
     [Fact]
     public async Task ConvertedRequiredColumnBackfill_UsesTheEfProviderDefault()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE converted_backfill_entities (Id INTEGER NOT NULL, "
             + "CONSTRAINT pk_converted_backfill_entities PRIMARY KEY (Id)); "
-            + "INSERT INTO converted_backfill_entities (Id) VALUES (1);");
+            + "INSERT INTO converted_backfill_entities (Id) VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteConvertedBackfillDefaultRebuildTestContext(connection);
         var addColumn = new MigrationBuilder(context.Database.ProviderName!);
         addColumn.AddColumn<string>(
@@ -778,7 +897,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             type: "TEXT",
             nullable: false,
             defaultValue: string.Empty);
-        await ExecuteOperationsAsync(context, addColumn.Operations);
+
+        await ExecuteOperationsAsync(context, addColumn.Operations, cancellationToken: CancellationToken.None);
         var addCheck = new MigrationBuilder(context.Database.ProviderName!);
         addCheck.AddCheckConstraintIfNotExists(
             "ck_converted_backfill_entities_state",
@@ -790,9 +910,10 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 addCheck.Operations,
-                new SafeMigrationRunOptions("sqlite-converted-backfill-default"));
+                new SafeMigrationRunOptions("sqlite-converted-backfill-default"),
+                cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, addCheck.Operations);
+        await ExecuteOperationsAsync(context, addCheck.Operations, cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(
@@ -800,13 +921,16 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM converted_backfill_entities "
-                + "WHERE Id = 1 AND State = '';"));
+                + "WHERE Id = 1 AND State = '';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM pragma_table_xinfo('converted_backfill_entities') "
-                + "WHERE name = 'State' AND dflt_value IS NULL;"));
+                + "WHERE name = 'State' AND dflt_value IS NULL;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -817,7 +941,7 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         SafeMigrationReportStatus expectedStatus
     )
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "PRAGMA foreign_keys = OFF; "
@@ -827,9 +951,13 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             + "REFERENCES missing_principals (Id)); "
             + "CREATE INDEX ix_missing_principal_children_parent_id "
             + "ON missing_principal_children (ParentId); "
-            + $"INSERT INTO missing_principal_children (Id, ParentId) VALUES (1, "
-            + (parentId.HasValue ? parentId.Value.ToString(CultureInfo.InvariantCulture) : "NULL")
-            + "); PRAGMA foreign_keys = ON;");
+            + "INSERT INTO missing_principal_children (Id, ParentId) VALUES (1, "
+            + (parentId.HasValue
+                ? parentId.Value.ToString(CultureInfo.InvariantCulture)
+                : "NULL")
+            + "); PRAGMA foreign_keys = ON;",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteMissingPrincipalForeignKeyTestContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists(
@@ -842,7 +970,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-missing-foreign-key-principal"));
+                new SafeMigrationRunOptions("sqlite-missing-foreign-key-principal"),
+                cancellationToken: CancellationToken.None);
 
         Assert.True(
             report.Status == expectedStatus,
@@ -851,16 +980,18 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
                 ", ",
                 report.Assessments.Select(static value =>
                     $"{value.ObservedState}/{value.AnalysisCode}")));
+
         if (expectedStatus == SafeMigrationReportStatus.Ready)
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
             Assert.Equal(
                 1,
                 await ScalarIntAsync(
                     connection,
                     "SELECT COUNT(*) FROM missing_principal_children "
-                    + "WHERE Id = 1 AND ParentId IS NULL;"));
+                    + "WHERE Id = 1 AND ParentId IS NULL;",
+                    cancellationToken: CancellationToken.None));
         }
         else
         {
@@ -873,13 +1004,15 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
     [Fact]
     public async Task CheckLikeTextInDefaultLiteral_DoesNotCreateAPhantomConstraint()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE check_literal_entities (Id INTEGER NOT NULL, "
             + "Note TEXT NULL DEFAULT 'mycheck(', "
             + "CONSTRAINT pk_check_literal_entities PRIMARY KEY (Id)); "
-            + "INSERT INTO check_literal_entities (Id) VALUES (1);");
+            + "INSERT INTO check_literal_entities (Id) VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteCheckLiteralRebuildTestContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists(
@@ -892,9 +1025,10 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-check-like-default-literal"));
+                new SafeMigrationRunOptions("sqlite-check-like-default-literal"),
+                cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(
@@ -902,13 +1036,14 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM check_literal_entities "
-                + "WHERE Id = 1 AND Note = 'mycheck(';"));
+                + "WHERE Id = 1 AND Note = 'mycheck(';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task ForeignKeyProbe_UsesParentColumnCollation()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE collation_parents (Id INTEGER NOT NULL, Code TEXT COLLATE NOCASE NOT NULL, "
@@ -918,7 +1053,9 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             + "CONSTRAINT pk_collation_children PRIMARY KEY (Id)); "
             + "CREATE INDEX ix_collation_children_parent_code ON collation_children (ParentCode); "
             + "INSERT INTO collation_parents (Id, Code) VALUES (1, 'parent'); "
-            + "INSERT INTO collation_children (Id, ParentCode) VALUES (11, 'PARENT');");
+            + "INSERT INTO collation_children (Id, ParentCode) VALUES (11, 'PARENT');",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteForeignKeyCollationTestContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddForeignKeyIfNotExists(
@@ -933,20 +1070,24 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-parent-collation"));
+                new SafeMigrationRunOptions("sqlite-parent-collation"),
+                cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(
             0,
-            await ScalarIntAsync(connection, "SELECT COUNT(*) FROM pragma_foreign_key_check;"));
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM pragma_foreign_key_check;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task RebuildWithRetainedPreExistingOrphan_IsDataBlockedDuringPreflight()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "PRAGMA foreign_keys = OFF; "
@@ -959,7 +1100,9 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             + "REFERENCES collation_parents (Code)); "
             + "CREATE INDEX ix_collation_children_parent_code ON collation_children (ParentCode); "
             + "INSERT INTO collation_children (Id, ParentCode) VALUES (11, 'missing'); "
-            + "PRAGMA foreign_keys = ON;");
+            + "PRAGMA foreign_keys = ON;",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteForeignKeyCollationTestContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists("ck_collation_parents_id", "collation_parents", "Id > 0");
@@ -969,7 +1112,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-retained-orphan"));
+                new SafeMigrationRunOptions("sqlite-retained-orphan"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState);
@@ -978,13 +1122,14 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             0,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM main.sqlite_schema WHERE name = 'ck_collation_parents_id';"));
+                "SELECT COUNT(*) FROM main.sqlite_schema WHERE name = 'ck_collation_parents_id';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task SafeRebuildAndFollowingProviderColumns_ExecuteAsOneOrderedStructuralSegment()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE structural_blogs (Id INTEGER NOT NULL PRIMARY KEY); "
@@ -992,7 +1137,9 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             + "CONSTRAINT pk_structural_posts PRIMARY KEY (Id), "
             + "CONSTRAINT fk_structural_posts_blog FOREIGN KEY (BlogId) REFERENCES structural_blogs (Id)); "
             + "INSERT INTO structural_blogs (Id) VALUES (1); "
-            + "INSERT INTO structural_posts (Id, Title, BlogId) VALUES (11, 'preserve', 1);");
+            + "INSERT INTO structural_posts (Id, Title, BlogId) VALUES (11, 'preserve', 1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteStructuralSequenceTestContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_structural_posts_blog", "structural_posts");
@@ -1002,18 +1149,21 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             "structural_posts",
             type: "INTEGER",
             nullable: true);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-ordered-structural-segment"));
+            new SafeMigrationRunOptions("sqlite-ordered-structural-segment"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-ordered-structural-segment"));
+            new SafeMigrationRunOptions("sqlite-ordered-structural-segment"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, preflight.Status);
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, postflight.Status);
@@ -1022,24 +1172,29 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM structural_posts "
-                + "WHERE Id = 11 AND Title = 'preserve' AND AuthorId IS NULL;"));
+                + "WHERE Id = 11 AND Title = 'preserve' AND AuthorId IS NULL;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('structural_posts') WHERE name = 'BlogId';"));
+                "SELECT COUNT(*) FROM pragma_table_xinfo('structural_posts') WHERE name = 'BlogId';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task LaterStructuralOperationsAcrossDataBarrier_DoNotAuthorizeEarlierRebuild()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE structural_blogs (Id INTEGER NOT NULL PRIMARY KEY); "
             + "CREATE TABLE structural_posts (Id INTEGER NOT NULL, Title TEXT NOT NULL, BlogId INTEGER NULL, "
             + "CONSTRAINT pk_structural_posts PRIMARY KEY (Id), "
-            + "CONSTRAINT fk_structural_posts_blog FOREIGN KEY (BlogId) REFERENCES structural_blogs (Id));");
+            + "CONSTRAINT fk_structural_posts_blog FOREIGN KEY (BlogId) REFERENCES structural_blogs (Id));",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteStructuralSequenceTestContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_structural_posts_blog", "structural_posts");
@@ -1047,6 +1202,7 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             "structural_posts",
             ["Id", "Title", "BlogId"],
             [11, "barrier", 1]);
+
         builder.DropColumn("BlogId", "structural_posts");
         builder.AddColumn<int>(
             "AuthorId",
@@ -1059,7 +1215,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-future-operation-barrier"));
+                new SafeMigrationRunOptions("sqlite-future-operation-barrier"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = report.Assessments[0];
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
@@ -1067,11 +1224,13 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             assessment.AnalysisCode is "table_rebuild_unmanaged_column"
                 or "table_rebuild_unmodeled_target_column",
             $"Unexpected analysis code '{assessment.AnalysisCode}'.");
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM pragma_foreign_key_list('structural_posts');"));
+                "SELECT COUNT(*) FROM pragma_foreign_key_list('structural_posts');",
+                cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -1082,15 +1241,23 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         string expectedCode
     )
     {
-        await using var connection = await OpenConnectionAsync();
-        var codeStoreType = drift == "column" ? "INTEGER" : "TEXT";
-        var indexKind = drift == "index" ? "UNIQUE " : string.Empty;
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        var codeStoreType = drift == "column"
+            ? "INTEGER"
+            : "TEXT";
+
+        var indexKind = drift == "index"
+            ? "UNIQUE "
+            : string.Empty;
+
         await ExecuteSqlAsync(
             connection,
             $"CREATE TABLE rebuild_shape_entities (Id INTEGER NOT NULL, Code {codeStoreType} NOT NULL, "
             + "CONSTRAINT pk_rebuild_shape_entities PRIMARY KEY (Id)); "
             + $"CREATE {indexKind}INDEX ix_rebuild_shape_entities_code ON rebuild_shape_entities (Code); "
-            + "INSERT INTO rebuild_shape_entities (Id, Code) VALUES (1, 'preserve');");
+            + "INSERT INTO rebuild_shape_entities (Id, Code) VALUES (1, 'preserve');",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteRebuildShapeTestContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists(
@@ -1103,7 +1270,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-rebuild-shape-drift"));
+                new SafeMigrationRunOptions("sqlite-rebuild-shape-drift"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
@@ -1112,19 +1280,22 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             1,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM rebuild_shape_entities WHERE Id = 1;"));
+                "SELECT COUNT(*) FROM rebuild_shape_entities WHERE Id = 1;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task RebuildWithUnmodeledConstraintOption_IsRejectedWithoutMutation()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE rebuild_entities (Id INTEGER NOT NULL, Code TEXT NOT NULL, "
             + "CONSTRAINT pk_rebuild_entities PRIMARY KEY (Id) ON CONFLICT REPLACE, "
             + "CONSTRAINT uq_rebuild_entities_code UNIQUE (Code)); "
-            + "INSERT INTO rebuild_entities (Id, Code) VALUES (1, 'existing');");
+            + "INSERT INTO rebuild_entities (Id, Code) VALUES (1, 'existing');",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists(
@@ -1137,7 +1308,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-provider-constraint-option"));
+                new SafeMigrationRunOptions("sqlite-provider-constraint-option"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -1147,18 +1319,21 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             1,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM rebuild_entities WHERE Id = 1 AND Code = 'existing';"));
+                "SELECT COUNT(*) FROM rebuild_entities WHERE Id = 1 AND Code = 'existing';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task ProviderAddColumnAndSafeCheckOnExistingColumn_ConvergeOnPopulatedTable()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE add_column_check_entities (Id INTEGER NOT NULL, "
             + "CONSTRAINT pk_add_column_check_entities PRIMARY KEY (Id)); "
-            + "INSERT INTO add_column_check_entities (Id) VALUES (1);");
+            + "INSERT INTO add_column_check_entities (Id) VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteAddColumnCheckTestContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumn<string>(
@@ -1166,6 +1341,7 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             "add_column_check_entities",
             type: "TEXT",
             nullable: true);
+
         builder.AddCheckConstraintIfNotExists(
             "ck_add_column_check_entities_id",
             "add_column_check_entities",
@@ -1176,9 +1352,10 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-add-column-check"));
+                new SafeMigrationRunOptions("sqlite-add-column-check"),
+                cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, report.Status);
         Assert.Equal(
@@ -1186,18 +1363,21 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM add_column_check_entities "
-                + "WHERE Id = 1 AND Description IS NULL;"));
+                + "WHERE Id = 1 AND Description IS NULL;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task SafeCheckOnColumnAddedInSameSegment_IsPrerequisiteMissingWithoutMutation()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE add_column_referenced_check_entities (Id INTEGER NOT NULL, "
             + "CONSTRAINT pk_add_column_referenced_check_entities PRIMARY KEY (Id)); "
-            + "INSERT INTO add_column_referenced_check_entities (Id) VALUES (1);");
+            + "INSERT INTO add_column_referenced_check_entities (Id) VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteAddColumnReferencedCheckTestContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumn<string>(
@@ -1206,6 +1386,7 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             type: "TEXT",
             nullable: false,
             defaultValue: "pending");
+
         builder.AddCheckConstraintIfNotExists(
             "ck_add_column_referenced_check_entities_description",
             "add_column_referenced_check_entities",
@@ -1216,7 +1397,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-add-column-referenced-check"));
+                new SafeMigrationRunOptions("sqlite-add-column-referenced-check"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(
             report.Assessments,
@@ -1230,18 +1412,21 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM pragma_table_xinfo('add_column_referenced_check_entities') "
-                + "WHERE name = 'Description';"));
+                + "WHERE name = 'Description';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task PrimaryKeyDropWithDifferentPhysicalName_IsRejectedWithoutMutation()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE primary_key_drop_entities (Id INTEGER NOT NULL, Value TEXT NOT NULL, "
             + "CONSTRAINT actual_primary_key PRIMARY KEY (Id)); "
-            + "INSERT INTO primary_key_drop_entities (Id, Value) VALUES (1, 'preserve');");
+            + "INSERT INTO primary_key_drop_entities (Id, Value) VALUES (1, 'preserve');",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqlitePrimaryKeyDropTestContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropPrimaryKeyIfExists("expected_primary_key", "primary_key_drop_entities");
@@ -1251,7 +1436,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-primary-key-name"));
+                new SafeMigrationRunOptions("sqlite-primary-key-name"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
@@ -1260,17 +1446,20 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             1,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM primary_key_drop_entities WHERE Id = 1 AND Value = 'preserve';"));
+                "SELECT COUNT(*) FROM primary_key_drop_entities WHERE Id = 1 AND Value = 'preserve';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task NamedPrimaryKeyDropDoesNotClaimAnonymousPrimaryKey()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE primary_key_drop_entities (Id INTEGER NOT NULL PRIMARY KEY, Value TEXT NOT NULL); "
-            + "INSERT INTO primary_key_drop_entities (Id, Value) VALUES (1, 'preserve');");
+            + "INSERT INTO primary_key_drop_entities (Id, Value) VALUES (1, 'preserve');",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqlitePrimaryKeyDropTestContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropPrimaryKeyIfExists("expected_primary_key", "primary_key_drop_entities");
@@ -1280,7 +1469,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-anonymous-primary-key"));
+                new SafeMigrationRunOptions("sqlite-anonymous-primary-key"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
@@ -1289,18 +1479,21 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             1,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM primary_key_drop_entities WHERE Id = 1 AND Value = 'preserve';"));
+                "SELECT COUNT(*) FROM primary_key_drop_entities WHERE Id = 1 AND Value = 'preserve';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task EscapedIdentifierViewDependency_BlocksRebuild()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE \"order\"\"items\" (Id INTEGER NOT NULL, "
             + "CONSTRAINT pk_order_items PRIMARY KEY (Id)); "
-            + "CREATE VIEW order_item_view AS SELECT Id FROM main.\"order\"\"items\";");
+            + "CREATE VIEW order_item_view AS SELECT Id FROM main.\"order\"\"items\";",
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteEscapedIdentifierRebuildTestContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists("ck_order_items_id", "order\"items", "Id > 0");
@@ -1310,7 +1503,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-escaped-view-dependency"));
+                new SafeMigrationRunOptions("sqlite-escaped-view-dependency"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
@@ -1320,11 +1514,13 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
     [Fact]
     public async Task CaseVariantIndexDropAndEnsure_UseOneProjectedPhysicalIdentity()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE case_identity_entities (Id INTEGER NOT NULL, Code TEXT NULL); "
-            + "CREATE INDEX IX_Case_Identity_Code ON case_identity_entities (Code);");
+            + "CREATE INDEX IX_Case_Identity_Code ON case_identity_entities (Code);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropIndexIfExists("IX_Case_Identity_Code", "case_identity_entities");
@@ -1332,18 +1528,21 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             "ix_case_identity_code",
             "case_identity_entities",
             ["Code"]);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-case-identity"));
+            new SafeMigrationRunOptions("sqlite-case-identity"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-case-identity"));
+            new SafeMigrationRunOptions("sqlite-case-identity"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[0].Action);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[1].Action);
@@ -1353,13 +1552,14 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM main.sqlite_schema "
-                + "WHERE type = 'index' AND name = 'ix_case_identity_code';"));
+                + "WHERE type = 'index' AND name = 'ix_case_identity_code';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task EnsureTableWithAttachedPrincipalQualifier_IsRejectedBeforeDdl()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var foreignKey = new ExpectedForeignKeyDefinition(
@@ -1386,7 +1586,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-nested-qualifier"));
+                new SafeMigrationRunOptions("sqlite-nested-qualifier"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
@@ -1395,13 +1596,14 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             0,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM main.sqlite_schema WHERE name = 'qualified_child';"));
+                "SELECT COUNT(*) FROM main.sqlite_schema WHERE name = 'qualified_child';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task AttachedDatabaseDrop_IsClassifiedAsQualifierMismatch()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropSchemaIfExists("attached");
@@ -1411,7 +1613,8 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-drop-attached"));
+                new SafeMigrationRunOptions("sqlite-drop-attached"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);

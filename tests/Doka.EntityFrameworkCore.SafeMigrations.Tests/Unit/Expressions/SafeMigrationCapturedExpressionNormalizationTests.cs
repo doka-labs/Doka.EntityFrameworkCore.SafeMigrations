@@ -13,23 +13,36 @@ public sealed class SafeMigrationCapturedExpressionNormalizationTests
         const string sql = "CASE WHEN VALUE > 0 THEN \"QuotedValue\" ELSE VALUE + 2147483648 END";
         var operation = new AddColumnOperation
         {
-            Name = "computed_value", ClrType = typeof(string), ColumnType = "varchar(80)", IsNullable = true,
-            IsUnicode = false, MaxLength = 80, IsFixedLength = true, IsRowVersion = true, Precision = 15,
-            Scale = 3, Collation = "C", Comment = "keep", ComputedColumnSql = sql, IsStored = true,
+            Name = "computed_value",
+            ClrType = typeof(string),
+            ColumnType = "varchar(80)",
+            IsNullable = true,
+            IsUnicode = false,
+            MaxLength = 80,
+            IsFixedLength = true,
+            IsRowVersion = true,
+            Precision = 15,
+            Scale = 3,
+            Collation = "C",
+            Comment = "keep",
+            ComputedColumnSql = sql,
+            IsStored = true,
         };
 
         operation.AddAnnotation("Provider:Facet", 1);
         var original = SafeMigrationExpectedDefinitionFactory.From(operation);
 
         // Act
-        var normalized = SafeMigrationCapturedExpressionNormalization.NormalizeColumn(original,
+        var normalized = SafeMigrationCapturedExpressionNormalization.NormalizeColumn(
+            original,
             foldUnquotedIdentifiers: true);
 
         // Assert
         Assert.NotSame(original, normalized);
         Assert.Same(sql, normalized.CapturedComputedSql);
         Assert.Same(original.ProviderAnnotations, normalized.ProviderAnnotations);
-        Assert.Equal((original.Name, original.ClrType, original.IsNullable, original.StoreType, original.IsUnicode,
+        Assert.Equal(
+            (original.Name, original.ClrType, original.IsNullable, original.StoreType, original.IsUnicode,
                 original.MaxLength, original.IsFixedLength, original.IsRowVersion, original.Precision, original.Scale,
                 original.Collation, original.Comment, original.DefaultValue, original.ComputedColumnSql,
                 original.IsStored),
@@ -38,12 +51,23 @@ public sealed class SafeMigrationCapturedExpressionNormalizationTests
                 normalized.Scale, normalized.Collation, normalized.Comment, normalized.DefaultValue,
                 normalized.ComputedColumnSql, normalized.IsStored));
 
-        Assert.True(SafeMigrationSqlExpressionInspector.ReferencesColumnIdentifier(
-            normalized.ComputedExpression!, "value", StringComparer.Ordinal));
-        Assert.True(SafeMigrationSqlExpressionInspector.ReferencesColumnIdentifier(
-            normalized.ComputedExpression!, "QuotedValue", StringComparer.Ordinal));
-        Assert.True(SafeMigrationSqlExpressionInspector.ReferencesColumnIdentifier(
-            original.ComputedExpression!, "VALUE", StringComparer.Ordinal));
+        Assert.True(
+            SafeMigrationSqlExpressionInspector.ReferencesColumnIdentifier(
+                normalized.ComputedExpression!,
+                "value",
+                StringComparer.Ordinal));
+
+        Assert.True(
+            SafeMigrationSqlExpressionInspector.ReferencesColumnIdentifier(
+                normalized.ComputedExpression!,
+                "QuotedValue",
+                StringComparer.Ordinal));
+
+        Assert.True(
+            SafeMigrationSqlExpressionInspector.ReferencesColumnIdentifier(
+                original.ComputedExpression!,
+                "VALUE",
+                StringComparer.Ordinal));
     }
 
     /// <summary>CHECK normalization retains source identity, ownership, and source token precision.</summary>
@@ -55,19 +79,30 @@ public sealed class SafeMigrationCapturedExpressionNormalizationTests
         var original = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_items", "items", sql, "app");
 
         // Act
-        var normalized = SafeMigrationCapturedExpressionNormalization.NormalizeCheck(original,
+        var normalized = SafeMigrationCapturedExpressionNormalization.NormalizeCheck(
+            original,
             foldUnquotedIdentifiers: true);
 
         // Assert
         Assert.NotSame(original, normalized);
         Assert.Same(sql, normalized.CapturedSql);
-        Assert.Equal((original.Name, original.Table, original.Schema),
+        Assert.Equal(
+            (original.Name, original.Table, original.Schema),
             (normalized.Name, normalized.Table, normalized.Schema));
 
         var binary = Assert.IsType<SafeMigrationSqlBinaryExpression>(normalized.Expression);
-        Assert.Equal("value", Assert.IsType<SafeMigrationSqlIdentifierExpression>(binary.Left).Parts[0]);
-        Assert.Equal("2147483648", Assert.IsType<SafeMigrationSqlLiteralExpression>(binary.Right)
-            .NumericSourceToken.Span.ToString());
+        Assert.Equal("value",
+            Assert
+                .IsType<SafeMigrationSqlIdentifierExpression>(binary.Left)
+                .Parts[0]);
+
+        Assert.Equal(
+            "2147483648",
+            Assert
+                .IsType<SafeMigrationSqlLiteralExpression>(binary.Right)
+                .NumericSourceToken
+                .Span
+                .ToString());
     }
 
     /// <summary>Unchanged or explicitly non-captured contracts retain their original reference and semantics.</summary>
@@ -75,13 +110,19 @@ public sealed class SafeMigrationCapturedExpressionNormalizationTests
     public void NormalizationFastPathsDoNotCopyUnaffectedContracts()
     {
         // Arrange
-        var captured = SafeMigrationExpectedDefinitionFactory.From(new AddColumnOperation
-        {
-            Name = "computed_value", ClrType = typeof(int), ComputedColumnSql = "value + 1",
-        });
+        var captured = SafeMigrationExpectedDefinitionFactory.From(
+            new AddColumnOperation
+            {
+                Name = "computed_value",
+                ClrType = typeof(int),
+                ComputedColumnSql = "value + 1",
+            });
 
         var rawCheck = new ExpectedCheckConstraintDefinition("ck_items", "items", "VALUE > 0");
-        var rawColumn = new ExpectedColumnDefinition("computed_value", typeof(int), true,
+        var rawColumn = new ExpectedColumnDefinition(
+            "computed_value",
+            typeof(int),
+            true,
             computedColumnSql: "VALUE + 1");
 
         // Act

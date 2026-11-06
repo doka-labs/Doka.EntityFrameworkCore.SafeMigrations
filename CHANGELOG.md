@@ -6,6 +6,51 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [10.7.0] - 2026-11-06
+
+Version 10.7.0 requires explicit cancellation tokens on owned asynchronous
+APIs, adopts BenchmarkDotNet for engineering measurements and updates the
+MySQL/MariaDB adapter to Doka 10.6.4. All five packages retain .NET/EF Core 10.
+Removing public optional-token defaults is source-breaking. Retaining the
+10.x package major is an intentional exception to strict SemVer; review the
+[upgrade notes](docs/support-and-qualification.md#upgrade-to-1070) before
+recompiling or invoking these APIs through late binding. Migration policies,
+SQL, report/fingerprint formats and historical migrations are unchanged;
+no database schema migration is required solely for this upgrade.
+
+### Changed
+
+- Raise the MySQL/MariaDB provider's Doka dependency to `[10.6.4,10.7.0)`
+  and refresh its lockfile to the published bug-fix package. Retain existing
+  transport minimums, provider isolation, GUID storage and migration history.
+- Require an explicit `CancellationToken` on repository-owned asynchronous
+  methods, including the public runner and provider-analyzer contracts.
+  Extend explicit propagation to ordinary asynchronous helpers and owned action
+  delegates that previously had no token parameter.
+  Allow same-operation local functions to capture the enclosing cancellation
+  scope; retain explicit callback and independent-operation token contracts.
+  Existing source callers that omitted the argument must pass their operation
+  token or deliberately select `CancellationToken.None`. This is a source
+  compatibility break; existing binary signatures, policies, SQL, reports and
+  migration history are unchanged. Framework-owned EF/ADO.NET overrides retain
+  their external signatures, as do framework-controlled test/benchmark entry
+  points. Deliberately uninterruptible cleanup/recovery helpers remain tokenless
+  where required and retain their independent completion boundaries.
+- Replace the handwritten benchmark timers, samplers and comparison budgets
+  with BenchmarkDotNet 0.15.8 across Core and the four isolated providers.
+  Preserve default workload coverage, maintenance/column attribution and
+  optional native SQL Server diagnostics with native full JSON export.
+  CI and release qualification use complete `Dry` execution/export smoke,
+  not statistical performance gates. Configuration, build, execution and
+  missing/invalid evidence failures remain fatal; numeric duration/allocation
+  values never determine success. Historical thread-local allocation reports
+  are not directly comparable with the new process-wide managed allocation
+  measurements on .NET 10. This benchmark-only change adds no published
+  runtime dependency or public API.
+- Align repository C# and EditorConfig formatting with the shared Rider
+  conventions, retaining linked-source compilation through central imports.
+  This cleanup does not change migration policies or SQL payloads.
+
 ### Fixed
 
 - Keep newly dispatched maintenance children observable while their initial
@@ -2381,7 +2426,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.6.1...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.0...HEAD
+[10.7.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.6.1...v10.7.0
 [10.6.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.6.0...v10.6.1
 [10.6.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.5.0...v10.6.0
 [10.5.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.11...v10.5.0

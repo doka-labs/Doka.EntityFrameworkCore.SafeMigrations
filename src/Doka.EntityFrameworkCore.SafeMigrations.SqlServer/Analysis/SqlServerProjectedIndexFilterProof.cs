@@ -18,9 +18,12 @@ internal sealed record SqlServerProjectedIndexFilterProof(
     /// <summary>Rejects a cached proof after any represented column changes.</summary>
     /// <param name="columns">The currently authored column references.</param>
     /// <returns>True only for the same ordered immutable definition references.</returns>
-    internal bool Matches(IReadOnlyList<ExpectedColumnDefinition> columns)
+    internal bool Matches(
+        IReadOnlyList<ExpectedColumnDefinition> columns
+    )
         => Columns.Length == columns.Count
-            && Columns.Select((column, ordinal) => ReferenceEquals(column, columns[ordinal]))
+            && Columns
+                .Select((column, ordinal) => ReferenceEquals(column, columns[ordinal]))
                 .All(static equal => equal);
 }
 
@@ -47,15 +50,21 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             {
                 var identity = _catalogSqlBuilder.ProjectedSeedFilterIdentity(filter);
                 if (identity is not null
-                    && authored.TryGetValue((index.Definition.Schema ?? "dbo", index.Definition.Table),
+                    && authored.TryGetValue(
+                        (index.Definition.Schema ?? "dbo", index.Definition.Table),
                         out var definitions))
                 {
-                    var captured = SqlServerSafeMigrationCatalogSqlBuilder.GetIndexFilterComparisons(filter)
-                        .Select(static comparison => comparison.Column).Distinct(StringComparer.Ordinal)
-                        .Where(definitions.ContainsKey).Select(name => definitions[name]).ToArray();
+                    var captured = SqlServerSafeMigrationCatalogSqlBuilder
+                        .GetIndexFilterComparisons(filter)
+                        .Select(static comparison => comparison.Column)
+                        .Distinct(StringComparer.Ordinal)
+                        .Where(definitions.ContainsKey)
+                        .Select(name => definitions[name])
+                        .ToArray();
 
                     var allMutated = captured.Length != 0
-                        && mutations.TryGetValue((index.Definition.Schema ?? "dbo", index.Definition.Table),
+                        && mutations.TryGetValue(
+                            (index.Definition.Schema ?? "dbo", index.Definition.Table),
                             out var changed)
                         && captured.All(column => changed.Contains(column.Name));
 
@@ -69,7 +78,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     if (proof is null)
                     {
                         var sql = _catalogSqlBuilder.BuildProjectedIndexFilterProofSql(filter, captured);
-                        var value = sql is null ? -1 : await execute(sql, cancellationToken);
+                        var value = sql is null
+                            ? -1
+                            : await execute(sql, cancellationToken);
+
                         cancellationToken.ThrowIfCancellationRequested();
                         if (value is < -1 or > 1)
                         {
@@ -104,8 +116,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 case EnsureTableIntent table:
                     authored[(table.Definition.Schema ?? "dbo", table.Definition.Table)]
                         = table.Definition.Columns.ToDictionary(static column => column.Name, StringComparer.Ordinal);
+
                     mutations[(table.Definition.Schema ?? "dbo", table.Definition.Table)]
                         = new HashSet<string>(StringComparer.Ordinal);
+
                     break;
                 case EnsureColumnIntent column:
                     SetColumn(column.Table, column.Schema, column.Definition);
@@ -187,12 +201,15 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
         var captured = new List<ExpectedColumnDefinition>();
         var hasUntouchedColumn = false;
-        foreach (var name in SqlServerSafeMigrationCatalogSqlBuilder.GetIndexFilterComparisons(filter)
-            .Select(static comparison => comparison.Column).Distinct(StringComparer.Ordinal))
+        foreach (var name in SqlServerSafeMigrationCatalogSqlBuilder
+            .GetIndexFilterComparisons(filter)
+            .Select(static comparison => comparison.Column)
+            .Distinct(StringComparer.Ordinal))
         {
             if (source.TryGetProjectedColumn(index.Definition.Table, index.Definition.Schema, name, out var column))
             {
-                if (column.ComputedExpression is not null || column.ComputedColumnSql is not null)
+                if (column.ComputedExpression is not null
+                    || column.ComputedColumnSql is not null)
                 {
                     return FilterUnsupported();
                 }
@@ -201,8 +218,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             }
             else if (snapshot?.Columns.ContainsKey(name) != true)
             {
-                return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
-                    SafeMigrationRepairCapability.None, false, "projected_index_filter_column_unknown");
+                return new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.PrerequisiteMissing,
+                    SafeMigrationRepairCapability.None,
+                    false,
+                    "projected_index_filter_column_unknown");
             }
             else
             {
@@ -226,7 +246,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         }
 
         var proof = _projectedIndexFilters.TryGetValue(index, out var proofs)
-            ? proofs.FirstOrDefault(candidate => candidate.Matches(captured)) : null;
+            ? proofs.FirstOrDefault(candidate => candidate.Matches(captured))
+            : null;
 
         // WHY: The original catalog can report a missing table, not the target
         // column's filter conversion. Exact provider-qualified constants must
@@ -242,11 +263,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         {
             var recreated = source is ISafeMigrationProjectedTableSource tables
                 && tables.TryGetProjectedTableState(index.Definition.Table, index.Definition.Schema, out var state)
-                && state.IsNewlyCreated && !state.HasUnknownStructure;
+                && state.IsNewlyCreated
+                && !state.HasUnknownStructure;
 
             return proof.AllColumnsMutated || recreated
-                ? new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-                    SafeMigrationRepairCapability.None, false,
+                ? new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.Missing,
+                    SafeMigrationRepairCapability.None,
+                    false,
                     SqlServerProjectedIndexFilterProof.SupportedReplacementCode)
                 : live;
         }
@@ -255,6 +279,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     }
 
     private static SafeMigrationProviderAnalysis FilterUnsupported()
-        => new(SafeMigrationObservedState.Unsupported, SafeMigrationRepairCapability.None,
-            false, "index_filter_value_unproven");
+        => new(
+            SafeMigrationObservedState.Unsupported,
+            SafeMigrationRepairCapability.None,
+            false,
+            "index_filter_value_unproven");
 }

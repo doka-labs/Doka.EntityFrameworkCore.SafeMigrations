@@ -78,6 +78,10 @@ public sealed class PostgreSqlModelFingerprintFacetTests
             .Model,
         ProviderContract);
 
+    private static int FingerprintFunction(
+        int value
+    ) => throw new NotSupportedException(value.ToString(CultureInfo.InvariantCulture));
+
     private sealed class FacetContext<TMarker> : DbContext
     {
         protected override void OnConfiguring(
@@ -92,73 +96,140 @@ public sealed class PostgreSqlModelFingerprintFacetTests
             modelBuilder
                 .HasSequence<long>("document_sequence", "review")
                 .StartsAt(10)
-                .IncrementsBy(typeof(TMarker) == typeof(SequenceIncrement) ? 7 : 5)
+                .IncrementsBy(
+                    typeof(TMarker) == typeof(SequenceIncrement)
+                        ? 7
+                        : 5)
                 .HasMin(10)
                 .HasMax(10_000)
                 .IsCyclic(false);
 
             var parent = modelBuilder.Entity<Parent>();
             parent.ToTable(
-                typeof(TMarker) == typeof(TableName) ? "parents_changed" : "parents",
-                typeof(TMarker) == typeof(TableSchema) ? "other" : "review",
+                typeof(TMarker) == typeof(TableName)
+                    ? "parents_changed"
+                    : "parents",
+                typeof(TMarker) == typeof(TableSchema)
+                    ? "other"
+                    : "review",
                 table =>
                 {
-                    table.HasComment(typeof(TMarker) == typeof(TableComment) ? "changed" : "parent table");
-                    table.HasTrigger(typeof(TMarker) == typeof(TriggerName) ? "trg_changed" : "trg_parent");
+                    table.HasComment(
+                        typeof(TMarker) == typeof(TableComment)
+                            ? "changed"
+                            : "parent table");
+
+                    table.HasTrigger(
+                        typeof(TMarker) == typeof(TriggerName)
+                            ? "trg_changed"
+                            : "trg_parent");
+
                     if (typeof(TMarker) == typeof(TableExcluded))
                     {
                         table.ExcludeFromMigrations();
                     }
                 });
+
             parent
                 .HasKey(static value => value.Id)
-                .HasName(typeof(TMarker) == typeof(PrimaryKeyName) ? "pk_changed" : "pk_parents");
+                .HasName(
+                    typeof(TMarker) == typeof(PrimaryKeyName)
+                        ? "pk_changed"
+                        : "pk_parents");
+
             parent
                 .HasAlternateKey(static value => value.Code)
-                .HasName(typeof(TMarker) == typeof(UniqueConstraintName) ? "uq_changed" : "uq_parents_code");
+                .HasName(
+                    typeof(TMarker) == typeof(UniqueConstraintName)
+                        ? "uq_changed"
+                        : "uq_parents_code");
+
             parent
                 .Property(static value => value.Id)
                 .HasColumnOrder(0);
+
             parent
                 .Property(static value => value.Code)
-                .HasColumnName(typeof(TMarker) == typeof(ColumnName) ? "code_changed" : "code")
+                .HasColumnName(
+                    typeof(TMarker) == typeof(ColumnName)
+                        ? "code_changed"
+                        : "code")
                 .HasColumnType(
-                    typeof(TMarker) == typeof(ColumnType) ? "character varying(65)" : "character varying(64)")
-                .HasMaxLength(typeof(TMarker) == typeof(ColumnLength) ? 63 : 64)
+                    typeof(TMarker) == typeof(ColumnType)
+                        ? "character varying(65)"
+                        : "character varying(64)")
+                .HasMaxLength(
+                    typeof(TMarker) == typeof(ColumnLength)
+                        ? 63
+                        : 64)
                 .IsUnicode(typeof(TMarker) != typeof(ColumnUnicode))
                 .IsFixedLength(typeof(TMarker) == typeof(ColumnFixedLength))
-                .UseCollation(typeof(TMarker) == typeof(ColumnCollation) ? "POSIX" : "C")
-                .HasComment(typeof(TMarker) == typeof(ColumnComment) ? "changed" : "parent code")
-                .HasColumnOrder(typeof(TMarker) == typeof(ColumnOrder) ? 3 : 1)
+                .UseCollation(
+                    typeof(TMarker) == typeof(ColumnCollation)
+                        ? "POSIX"
+                        : "C")
+                .HasComment(
+                    typeof(TMarker) == typeof(ColumnComment)
+                        ? "changed"
+                        : "parent code")
+                .HasColumnOrder(
+                    typeof(TMarker) == typeof(ColumnOrder)
+                        ? 3
+                        : 1)
                 .IsRequired();
+
             parent
                 .Property(static value => value.Description)
                 .HasColumnType("text")
                 .IsRequired(typeof(TMarker) != typeof(ColumnNullability));
+
             parent
                 .Property(static value => value.Amount)
                 .HasPrecision(
-                    typeof(TMarker) == typeof(ColumnPrecision) ? 11 : 10,
-                    typeof(TMarker) == typeof(ColumnScale) ? 3 : 2)
-                .HasDefaultValue(typeof(TMarker) == typeof(ColumnDefaultLiteral) ? 2.5m : 1.5m);
+                    typeof(TMarker) == typeof(ColumnPrecision)
+                        ? 11
+                        : 10,
+                    typeof(TMarker) == typeof(ColumnScale)
+                        ? 3
+                        : 2)
+                .HasDefaultValue(
+                    typeof(TMarker) == typeof(ColumnDefaultLiteral)
+                        ? 2.5m
+                        : 1.5m);
+
             parent
                 .Property(static value => value.NormalizedCode)
                 .HasComputedColumnSql(
-                    typeof(TMarker) == typeof(ColumnComputed) ? "lower(code) || 'x'" : "lower(code)",
+                    typeof(TMarker) == typeof(ColumnComputed)
+                        ? "lower(code) || 'x'"
+                        : "lower(code)",
                     stored: true);
+
             parent
                 .Property(static value => value.CreatedAt)
                 .HasDefaultValueSql(
-                    typeof(TMarker) == typeof(ColumnDefaultSql) ? "CURRENT_TIMESTAMP(3)" : "CURRENT_TIMESTAMP");
+                    typeof(TMarker) == typeof(ColumnDefaultSql)
+                        ? "CURRENT_TIMESTAMP(3)"
+                        : "CURRENT_TIMESTAMP");
+
             parent
                 .HasIndex(static value => value.Code)
-                .HasDatabaseName(typeof(TMarker) == typeof(IndexName) ? "ix_changed" : "ix_parents_code")
+                .HasDatabaseName(
+                    typeof(TMarker) == typeof(IndexName)
+                        ? "ix_changed"
+                        : "ix_parents_code")
                 .IsUnique(typeof(TMarker) == typeof(IndexUnique))
-                .HasFilter(typeof(TMarker) == typeof(IndexFilter) ? "code <> 'changed'" : "code <> ''")
+                .HasFilter(
+                    typeof(TMarker) == typeof(IndexFilter)
+                        ? "code <> 'changed'"
+                        : "code <> ''")
                 .IsDescending(typeof(TMarker) == typeof(IndexDescending));
+
             parent.ToTable(table => table.HasCheckConstraint(
                 "ck_parents_amount",
-                typeof(TMarker) == typeof(CheckSql) ? "amount > 1" : "amount >= 0"));
+                typeof(TMarker) == typeof(CheckSql)
+                    ? "amount > 1"
+                    : "amount >= 0"));
 
             var child = modelBuilder.Entity<Child>();
             child.ToTable("children", "review");
@@ -166,15 +237,24 @@ public sealed class PostgreSqlModelFingerprintFacetTests
             child
                 .Property(static value => value.Id)
                 .ValueGeneratedNever();
+
             child
                 .HasOne<Parent>()
                 .WithMany()
                 .HasForeignKey(static value => value.ParentId)
                 .OnDelete(
-                    typeof(TMarker) == typeof(ForeignKeyDelete) ? DeleteBehavior.Restrict : DeleteBehavior.Cascade)
-                .HasConstraintName(typeof(TMarker) == typeof(ForeignKeyName) ? "fk_changed" : "fk_children_parents");
+                    typeof(TMarker) == typeof(ForeignKeyDelete)
+                        ? DeleteBehavior.Restrict
+                        : DeleteBehavior.Cascade)
+                .HasConstraintName(
+                    typeof(TMarker) == typeof(ForeignKeyName)
+                        ? "fk_changed"
+                        : "fk_children_parents");
+
             child.InsertUsingStoredProcedure(
-                typeof(TMarker) == typeof(StoredProcedureName) ? "insert_child_changed" : "insert_child",
+                typeof(TMarker) == typeof(StoredProcedureName)
+                    ? "insert_child_changed"
+                    : "insert_child",
                 "review",
                 procedure =>
                 {
@@ -185,30 +265,39 @@ public sealed class PostgreSqlModelFingerprintFacetTests
             modelBuilder.Entity<ViewRow>(entity =>
             {
                 entity.HasNoKey();
-                entity.ToView(typeof(TMarker) == typeof(ViewName) ? "parent_view_changed" : "parent_view", "review");
+                entity.ToView(
+                    typeof(TMarker) == typeof(ViewName)
+                        ? "parent_view_changed"
+                        : "parent_view",
+                    "review");
+
                 entity
                     .Property(static value => value.Code)
                     .HasColumnName("code");
             });
+
             modelBuilder.Entity<QueryRow>(entity =>
             {
                 entity.HasNoKey();
-                entity.ToSqlQuery(typeof(TMarker) == typeof(QuerySql) ? "SELECT 2 AS value" : "SELECT 1 AS value");
+                entity.ToSqlQuery(
+                    typeof(TMarker) == typeof(QuerySql)
+                        ? "SELECT 2 AS value"
+                        : "SELECT 1 AS value");
             });
 
             var method = typeof(PostgreSqlModelFingerprintFacetTests).GetMethod(
                 nameof(FingerprintFunction),
                 BindingFlags.NonPublic | BindingFlags.Static)!;
+
             modelBuilder
                 .HasDbFunction(method)
-                .HasName(typeof(TMarker) == typeof(FunctionName) ? "fingerprint_changed" : "fingerprint")
+                .HasName(
+                    typeof(TMarker) == typeof(FunctionName)
+                        ? "fingerprint_changed"
+                        : "fingerprint")
                 .HasSchema("review");
         }
     }
-
-    private static int FingerprintFunction(
-        int value
-    ) => throw new NotSupportedException(value.ToString(CultureInfo.InvariantCulture));
 
     private sealed class Parent
     {

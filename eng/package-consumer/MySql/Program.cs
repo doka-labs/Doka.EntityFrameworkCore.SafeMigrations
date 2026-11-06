@@ -27,12 +27,17 @@ if (migrationBuilder.Operations is not [SafeMigrationOperation operation])
 // WHY: Exercise the public diagnostic surface through the isolated NuGet
 // consumer, not just repository ProjectReferences or packaged-file checks.
 var rejection = new SafeMigrationExecutionException(
-    operation, "doka_sm_unsupported", 0, new InvalidOperationException("synthetic native guard"));
+    operation,
+    "doka_sm_unsupported",
+    0,
+    new InvalidOperationException("synthetic native guard"));
 
 if (rejection.GuardCode != "doka_sm_unsupported"
     || rejection.Identity.Schema != "consumer_schema"
     || !rejection.Message.Contains("consumer_schema", StringComparison.Ordinal)
-    || SafeMigrationDiagnosticMessages.FormatIdentity(rejection.Identity).Length == 0)
+    || SafeMigrationDiagnosticMessages.FormatIdentity(rejection.Identity)
+        .Length
+    == 0)
 {
     Console.Error.WriteLine("The package consumer diagnostic identity contract is unavailable.");
 
@@ -48,8 +53,10 @@ var designTimeReferences = Assembly
     .ToArray();
 
 var hasExpectedDesignTimeReference = designTimeReferences is [{ ConstructorArguments.Count: 2 }]
-    && designTimeReferences[0].ConstructorArguments[0].Value is string typeName
-    && designTimeReferences[0].ConstructorArguments[1].Value is string referencedProvider
+    && designTimeReferences[0]
+        .ConstructorArguments[0].Value is string typeName
+    && designTimeReferences[0]
+        .ConstructorArguments[1].Value is string referencedProvider
     && typeName == designTimeServicesTypeName
     && referencedProvider == providerName;
 
@@ -85,6 +92,7 @@ internal sealed class PackageScaffoldingDbContext : DbContext
         optionsBuilder.UseMySql(
             "Server=127.0.0.1;User ID=package;Password=package;Database=package;Allow User Variables=true",
             MySqlServerVersion.MySql(new Version(8, 4, 0)));
+
         optionsBuilder.UseMySqlSafeMigrations(options => options
             .UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence)
             .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe));
@@ -94,13 +102,15 @@ internal sealed class PackageScaffoldingDbContext : DbContext
         ModelBuilder modelBuilder
     )
     {
-        modelBuilder.Entity<PackageScaffoldingEntity>().HasData(
-            new PackageScaffoldingEntity
-            {
-                Id = 1,
-                IsActive = true,
-                Name = "package-consumer",
-            });
+        modelBuilder
+            .Entity<PackageScaffoldingEntity>()
+            .HasData(
+                new PackageScaffoldingEntity
+                {
+                    Id = 1,
+                    IsActive = true,
+                    Name = "package-consumer",
+                });
     }
 }
 

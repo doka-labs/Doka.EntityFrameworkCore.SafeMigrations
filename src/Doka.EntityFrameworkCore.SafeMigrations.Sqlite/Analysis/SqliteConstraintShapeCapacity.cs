@@ -1,3 +1,5 @@
+using System.Buffers;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 
 /// <summary>Matches native constraint vectors without reusing an authored or required physical slot.</summary>
@@ -15,9 +17,11 @@ internal static class SqliteConstraintShapeCapacity
         IReadOnlyList<TExpected> allowed,
         IReadOnlyList<TExpected> required,
         Func<TActual, TExpected, bool> matches,
-        bool coalesceRequiredShapes = false)
+        bool coalesceRequiredShapes = false
+    )
     {
-        if (actual.Count > allowed.Count || (!coalesceRequiredShapes && required.Count > actual.Count))
+        if (actual.Count > allowed.Count
+            || (!coalesceRequiredShapes && required.Count > actual.Count))
         {
             return false;
         }
@@ -31,7 +35,7 @@ internal static class SqliteConstraintShapeCapacity
         byte[]? rented = null;
         var consumed = length <= 256
             ? stackalloc byte[length]
-            : (rented = System.Buffers.ArrayPool<byte>.Shared.Rent(length)).AsSpan(0, length);
+            : (rented = ArrayPool<byte>.Shared.Rent(length)).AsSpan(0, length);
 
         consumed.Clear();
         try
@@ -45,12 +49,14 @@ internal static class SqliteConstraintShapeCapacity
             for (var ordinal = 0; ordinal < actual.Count; ordinal++)
             {
                 var witness = -1;
+
                 // WHY: Retain candidate positions so witness reuse follows the constraint-capacity policy.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var candidate = 0; candidate < allowed.Count; candidate++)
                 {
-                    if (consumed[candidate] == 0 && matches(actual[ordinal], allowed[candidate]))
+                    if (consumed[candidate] == 0
+                        && matches(actual[ordinal], allowed[candidate]))
                     {
                         witness = candidate;
                         break;
@@ -73,6 +79,7 @@ internal static class SqliteConstraintShapeCapacity
             for (var ordinal = 0; ordinal < required.Count; ordinal++)
             {
                 var witness = -1;
+
                 // WHY: Retain candidate positions so witness reuse follows the constraint-capacity policy.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
@@ -99,7 +106,6 @@ internal static class SqliteConstraintShapeCapacity
                 {
                     consumed[witness] = 1;
                 }
-
             }
 
             return true;
@@ -108,7 +114,7 @@ internal static class SqliteConstraintShapeCapacity
         {
             if (rented is not null)
             {
-                System.Buffers.ArrayPool<byte>.Shared.Return(rented, clearArray: true);
+                ArrayPool<byte>.Shared.Return(rented, clearArray: true);
             }
         }
     }

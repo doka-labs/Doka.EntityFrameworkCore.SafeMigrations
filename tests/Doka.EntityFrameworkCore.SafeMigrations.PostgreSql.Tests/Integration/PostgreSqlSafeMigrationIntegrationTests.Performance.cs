@@ -3,15 +3,15 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 /// <summary>Runs the Performance PostgreSQL feature cases independently.</summary>
 public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    private const int ExpectedPerformanceTableCount = 100;
+
+    private const int ForeignPerformanceTableCount = 1000;
+
     /// <summary>Uses the assembly-owned container for this feature.</summary>
     /// <param name="fixture">The shared PostgreSQL container fixture.</param>
     public PostgreSqlPerformanceIntegrationTests(
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
-
-    private const int ExpectedPerformanceTableCount = 100;
-
-    private const int ForeignPerformanceTableCount = 1000;
 
     /// <summary>Checks managed-data deferral in several mixed-stream cycles before costly stress qualification.</summary>
     [Fact]
@@ -19,15 +19,26 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, BuildLargeMigrationStressCatalog());
+        await ExecuteSqlAsync(
+            connectionString,
+            BuildLargeMigrationStressCatalog(),
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var expectation = LargeMigrationStressContract.Populate(
-            builder, LargeMigrationStressDialect.PostgreSql, operationCount: 128);
+            builder,
+            LargeMigrationStressDialect.PostgreSql,
+            operationCount: 128);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("bounded-mixed-migration"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("bounded-mixed-migration"),
+                CancellationToken.None);
 
         // Assert
         expectation.AssertReport(report);
@@ -40,7 +51,8 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            BuildLargeMigrationStressCatalog());
+            BuildLargeMigrationStressCatalog(),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -64,7 +76,8 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE catalog_timeout (id integer NOT NULL); "
-            + "INSERT INTO catalog_timeout (id) VALUES (1);");
+            + "INSERT INTO catalog_timeout (id) VALUES (1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         context.Database.SetCommandTimeout(1);
@@ -105,19 +118,25 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
 
         await ExecuteSqlAsync(
             fixtureConnectionString,
-            BuildPostgreSqlPerformanceTables("expected_perf_", ExpectedPerformanceTableCount, includeIndex: false));
+            BuildPostgreSqlPerformanceTables("expected_perf_", ExpectedPerformanceTableCount, includeIndex: false),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operations = BuildPostgreSqlPerformanceOperations(context.Database.ProviderName!);
         var runner = context.GetService<ISafeMigrationRunner>();
         var options = new SafeMigrationRunOptions("live-performance");
-        var clean = await LivePerformanceEvidence.MeasureAsync(() => runner.AnalyzeAsync(context, operations, options));
+        var clean = await LivePerformanceEvidence.MeasureAsync(
+            token => runner.AnalyzeAsync(context, operations, options, token),
+            CancellationToken.None);
 
         await ExecuteSqlAsync(
             fixtureConnectionString,
-            BuildPostgreSqlPerformanceTables("foreign_perf_", ForeignPerformanceTableCount, includeIndex: true));
+            BuildPostgreSqlPerformanceTables("foreign_perf_", ForeignPerformanceTableCount, includeIndex: true),
+            cancellationToken: CancellationToken.None);
 
-        var noisy = await LivePerformanceEvidence.MeasureAsync(() => runner.AnalyzeAsync(context, operations, options));
+        var noisy = await LivePerformanceEvidence.MeasureAsync(
+            token => runner.AnalyzeAsync(context, operations, options, token),
+            CancellationToken.None);
 
         LivePerformanceEvidence.Write(
             "postgresql",
@@ -130,14 +149,17 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
         Assert.All(
             clean.LastReport.Assessments,
             static assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
+
         Assert.Empty(clean.LastReport.UnexpectedObjects);
         Assert.Equal(
             ForeignPerformanceTableCount,
             noisy.LastReport.UnexpectedObjects.Count(static value =>
                 value.ObjectKind == SafeMigrationDatabaseObjectKind.Table));
+
         Assert.DoesNotContain(
             noisy.LastReport.UnexpectedObjects,
             static value => value.ObjectKind != SafeMigrationDatabaseObjectKind.Table);
+
         Assert.Equal(
             clean.LastReport.Assessments.Select(static value => value.Code),
             noisy.LastReport.Assessments.Select(static value => value.Code));
@@ -233,12 +255,14 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
             .Select(index =>
             {
                 var table = $"{prefix}{index:D4}";
-                var payloadColumn = includeIndex ? ", \"payload\" integer NULL" : string.Empty;
+                var payloadColumn = includeIndex
+                    ? ", \"payload\" integer NULL"
+                    : string.Empty;
+
                 var indexDdl = includeIndex
                     ? $" CREATE INDEX \"ix_{table}_payload\" ON \"{table}\" (\"payload\");"
                     : string.Empty;
 
                 return $"CREATE TABLE \"{table}\" (\"id\" integer NOT NULL{payloadColumn});{indexDdl}";
             }));
-
 }

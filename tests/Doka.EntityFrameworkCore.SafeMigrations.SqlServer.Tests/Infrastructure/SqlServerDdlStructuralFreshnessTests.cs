@@ -14,31 +14,52 @@ public sealed class SqlServerDdlStructuralFreshnessTests
     [InlineData(1, false)]
     [InlineData(1, true)]
     [InlineData(2, true)]
-    public void DroppedCapturedIndex_RequiresCurrentStructuralProof(int riskValue, bool executes)
+    public void DroppedCapturedIndex_RequiresCurrentStructuralProof(
+        int riskValue,
+        bool executes
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         using var analyzer = Analyzer(context);
-        var widening = new SafeMigrationOperation(new AlterColumnIntent("values",
-            new ExpectedColumnDefinition("Value", typeof(long), false, "bigint"),
-            new ExpectedColumnDefinition("Value", typeof(int), false, "int")), SafeMigrationPolicy.RepairIfSafe);
+        var widening = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "values",
+                new ExpectedColumnDefinition("Value", typeof(long), false, "bigint"),
+                new ExpectedColumnDefinition("Value", typeof(int), false, "int")),
+            SafeMigrationPolicy.RepairIfSafe);
 
-        var safe = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.Safe, false, "captured_safe");
+        var safe = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            false,
+            "captured_safe");
 
-        analyzer.CaptureProjectedIntegerWidening(widening, safe,
+        analyzer.CaptureProjectedIntegerWidening(
+            widening,
+            safe,
             [new SqlServerSafeMigrationProviderAnalyzer.TransitionDependency("index", "dbo", "values", "IX_old")]);
+
         analyzer.CaptureProjectedDdlRowEffects((SqlServerDdlRowEffectRisk)riskValue);
         analyzer.SetCurrentOperationOrdinal(7);
-        var drop = new SafeMigrationOperation(new DropIndexIntent("IX_old", "values"),
+        var drop = new SafeMigrationOperation(
+            new DropIndexIntent("IX_old", "values"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var state = Analysis(executes ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Missing);
+        var state = Analysis(
+            executes
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Missing);
+
         var different = Analysis(SafeMigrationObservedState.Different);
 
         // Act
-        analyzer.ObserveAcceptedOperation(drop, state, state,
+        analyzer.ObserveAcceptedOperation(
+            drop,
+            state,
+            state,
             SafeMigrationDecisionPlanner.Plan(drop.Intent.Kind, state.ObservedState, drop.Policy));
+
         analyzer.SetCurrentOperationOrdinal(8);
         var result = analyzer.ValidateProjectedOperation(widening, different, new EmptyColumns());
 
@@ -48,13 +69,20 @@ public sealed class SqlServerDdlStructuralFreshnessTests
             Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, result.ObservedState);
             Assert.Equal(SafeMigrationRepairCapability.None, result.RepairCapability);
             Assert.Equal(7, result.ProviderDeferredOriginOrdinal);
-            Assert.Equal(riskValue == 1 ? "projected_ddl_trigger_structure_unknown"
-                : "projected_ddl_visibility_structure_unknown", result.Code);
+            Assert.Equal(
+                riskValue == 1
+                    ? "projected_ddl_trigger_structure_unknown"
+                    : "projected_ddl_visibility_structure_unknown",
+                result.Code);
         }
         else
         {
-            Assert.Equal(executes ? SafeMigrationRepairCapability.Safe : SafeMigrationRepairCapability.None,
+            Assert.Equal(
+                executes
+                    ? SafeMigrationRepairCapability.Safe
+                    : SafeMigrationRepairCapability.None,
                 result.RepairCapability);
+
             Assert.Null(result.ProviderDeferredOriginOrdinal);
         }
     }
@@ -67,21 +95,28 @@ public sealed class SqlServerDdlStructuralFreshnessTests
         using var context = new SafeMigrationDbContext(ConnectionString);
         using var analyzer = Analyzer(context);
         analyzer.CaptureProjectedDdlRowEffects(SqlServerDdlRowEffectRisk.EnabledTrigger);
-        var projection = new SafeMigrationPreflightProjection(providerOperationProjection: analyzer,
+        var projection = new SafeMigrationPreflightProjection(
+            providerOperationProjection: analyzer,
             projectedDependencyAnalyzer: analyzer) { CurrentOperationOrdinal = 3 };
 
-        var drop = new SafeMigrationOperation(new DropIndexIntent("IX_old", "source"),
+        var drop = new SafeMigrationOperation(
+            new DropIndexIntent("IX_old", "source"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var index = new SafeMigrationOperation(new EnsureIndexIntent(
-            new ExpectedIndexDefinition("IX_existing", "other", [new ExpectedIndexKeyDefinition("Value")])),
+        var index = new SafeMigrationOperation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition("IX_existing", "other", [new ExpectedIndexKeyDefinition("Value")])),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var matching = Analysis(SafeMigrationObservedState.Matching);
 
         // Act
-        projection.Observe(drop, matching, matching,
+        projection.Observe(
+            drop,
+            matching,
+            matching,
             SafeMigrationDecisionPlanner.Plan(drop.Intent.Kind, matching.ObservedState, drop.Policy));
+
         projection.CurrentOperationOrdinal = 4;
         var result = projection.Project(index, matching);
 
@@ -105,22 +140,33 @@ public sealed class SqlServerDdlStructuralFreshnessTests
             CurrentOperationOrdinal = 1,
         };
 
-        var drop = new SafeMigrationOperation(new DropIndexIntent("IX_old", "source"),
+        var drop = new SafeMigrationOperation(
+            new DropIndexIntent("IX_old", "source"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var matching = Analysis(SafeMigrationObservedState.Matching);
-        var target = new SafeMigrationOperation(new EnsureColumnIntent("other",
-            new ExpectedColumnDefinition("Value", typeof(int), false, "int")), SafeMigrationPolicy.ThrowIfDifferent);
+        var target = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "other",
+                new ExpectedColumnDefinition("Value", typeof(int), false, "int")),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
-        var rejected = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
-            SafeMigrationRepairCapability.None, false, "column_alter_write_permission")
+        var rejected = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Unsupported,
+            SafeMigrationRepairCapability.None,
+            false,
+            "column_alter_write_permission")
         {
             IsInvariantUnsupported = true,
         };
 
         // Act
-        projection.Observe(drop, matching, matching,
+        projection.Observe(
+            drop,
+            matching,
+            matching,
             SafeMigrationDecisionPlanner.Plan(drop.Intent.Kind, matching.ObservedState, drop.Policy));
+
         var result = projection.Project(target, rejected);
 
         // Assert
@@ -142,14 +188,21 @@ public sealed class SqlServerDdlStructuralFreshnessTests
         };
 
         var drop = new SafeMigrationOperation(new DropTableIntent("source"), SafeMigrationPolicy.ThrowIfDifferent);
-        var column = new SafeMigrationOperation(new EnsureColumnIntent("source",
-            new ExpectedColumnDefinition("Value", typeof(int), true, "int")), SafeMigrationPolicy.ThrowIfDifferent);
+        var column = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "source",
+                new ExpectedColumnDefinition("Value", typeof(int), true, "int")),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         var matching = Analysis(SafeMigrationObservedState.Matching);
 
         // Act
-        projection.Observe(drop, matching, matching,
+        projection.Observe(
+            drop,
+            matching,
+            matching,
             SafeMigrationDecisionPlanner.Plan(drop.Intent.Kind, matching.ObservedState, drop.Policy));
+
         projection.CurrentOperationOrdinal = 6;
         var result = projection.Project(column, matching);
 
@@ -166,24 +219,32 @@ public sealed class SqlServerDdlStructuralFreshnessTests
     [InlineData(SafeMigrationObservedState.PrerequisiteMissing)]
     [InlineData(SafeMigrationObservedState.Different)]
     [InlineData(SafeMigrationObservedState.DataBlocked)]
-    public void MutableMetadataRefusal_DoesNotPretendToPredictTriggerOutcome(SafeMigrationObservedState state)
+    public void MutableMetadataRefusal_DoesNotPretendToPredictTriggerOutcome(
+        SafeMigrationObservedState state
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         using var analyzer = Analyzer(context);
         analyzer.CaptureProjectedDdlRowEffects(SqlServerDdlRowEffectRisk.VisibilityUnproven);
         analyzer.SetCurrentOperationOrdinal(2);
-        var drop = new SafeMigrationOperation(new DropIndexIntent("IX_old", "source"),
+        var drop = new SafeMigrationOperation(
+            new DropIndexIntent("IX_old", "source"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var matching = Analysis(SafeMigrationObservedState.Matching);
-        var target = new SafeMigrationOperation(new EnsureIndexIntent(
-            new ExpectedIndexDefinition("IX_target", "other", [new ExpectedIndexKeyDefinition("Value")])),
+        var target = new SafeMigrationOperation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition("IX_target", "other", [new ExpectedIndexKeyDefinition("Value")])),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        analyzer.ObserveAcceptedOperation(drop, matching, matching,
+        analyzer.ObserveAcceptedOperation(
+            drop,
+            matching,
+            matching,
             SafeMigrationDecisionPlanner.Plan(drop.Intent.Kind, matching.ObservedState, drop.Policy));
+
         var result = analyzer.ValidateProjectedOperation(target, Analysis(state), new EmptyColumns());
 
         // Assert
@@ -193,19 +254,30 @@ public sealed class SqlServerDdlStructuralFreshnessTests
     }
 
     /// <summary>Creates an analyzer from the provider's registered mapping and identifier services.</summary>
-    private static SqlServerSafeMigrationProviderAnalyzer Analyzer(DbContext context)
+    private static SqlServerSafeMigrationProviderAnalyzer Analyzer(
+        DbContext context
+    )
         => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     /// <summary>Creates immutable matching, missing, or different live observations.</summary>
-    private static SafeMigrationProviderAnalysis Analysis(SafeMigrationObservedState state)
-        => new(state, SafeMigrationRepairCapability.None, state == SafeMigrationObservedState.Matching,
+    private static SafeMigrationProviderAnalysis Analysis(
+        SafeMigrationObservedState state
+    )
+        => new(
+            state,
+            SafeMigrationRepairCapability.None,
+            state == SafeMigrationObservedState.Matching,
             "classified_state");
 
     private sealed class EmptyColumns : ISafeMigrationProjectedColumnSource
     {
         /// <inheritdoc />
-        public bool TryGetProjectedColumn(string table, string? schema, string column,
-            [NotNullWhen(true)] out ExpectedColumnDefinition? definition)
+        public bool TryGetProjectedColumn(
+            string table,
+            string? schema,
+            string column,
+            [NotNullWhen(true)] out ExpectedColumnDefinition? definition
+        )
         {
             definition = null;
 

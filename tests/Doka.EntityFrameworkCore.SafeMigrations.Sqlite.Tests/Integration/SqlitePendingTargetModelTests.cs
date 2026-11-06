@@ -47,7 +47,10 @@ internal sealed class SqlitePendingTargetModelContext : DbContext
 
     public SqlitePendingTargetModelContext(
         DbConnection connection
-    ) => _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    )
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    }
 
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
@@ -56,6 +59,7 @@ internal sealed class SqlitePendingTargetModelContext : DbContext
         optionsBuilder.UseSqlite(
             _connection,
             provider => provider.MigrationsAssembly(typeof(SqlitePendingTargetModelContext).Assembly.FullName));
+
         optionsBuilder.UseSqliteSafeMigrations<SqlitePendingTargetModelContext>();
     }
 
@@ -71,22 +75,33 @@ internal static class SqlitePendingTargetModel
         bool includeSecondCheck
     )
     {
-        modelBuilder.Entity("SqlitePendingTargetModelEntity", entity =>
-        {
-            entity.ToTable(
-                "target_model_entities",
-                table =>
-                {
-                    table.HasCheckConstraint("ck_target_model_entities_code", "length(Code) > 0");
-                    if (includeSecondCheck)
+        modelBuilder.Entity(
+            "SqlitePendingTargetModelEntity",
+            entity =>
+            {
+                entity.ToTable(
+                    "target_model_entities",
+                    table =>
                     {
-                        table.HasCheckConstraint("ck_target_model_entities_id", "Id > 0");
-                    }
-                });
-            entity.Property<int>("Id").ValueGeneratedNever();
-            entity.Property<string>("Code").IsRequired();
-            entity.HasKey("Id").HasName("pk_target_model_entities");
-        });
+                        table.HasCheckConstraint("ck_target_model_entities_code", "length(Code) > 0");
+                        if (includeSecondCheck)
+                        {
+                            table.HasCheckConstraint("ck_target_model_entities_id", "Id > 0");
+                        }
+                    });
+
+                entity
+                    .Property<int>("Id")
+                    .ValueGeneratedNever();
+
+                entity
+                    .Property<string>("Code")
+                    .IsRequired();
+
+                entity
+                    .HasKey("Id")
+                    .HasName("pk_target_model_entities");
+            });
     }
 }
 

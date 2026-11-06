@@ -17,12 +17,19 @@ public sealed class SqlServerCheckDeclarationIdentityTests
         var captured = SqlServerIdentifierContract.IncludeCheckDeclarationReferences(builder.Operations, references);
 
         // Assert
-        Assert.Contains(captured, static reference => reference.Scope == SqlServerIdentifierScope.SchemaObject
-            && reference.Name == "Nodes");
-        Assert.Contains(captured, static reference => reference.Scope == SqlServerIdentifierScope.SchemaObject
-            && reference.Name == "nodes");
+        Assert.Contains(
+            captured,
+            static reference => reference.Scope == SqlServerIdentifierScope.SchemaObject
+                && reference.Name == "Nodes");
+
+        Assert.Contains(
+            captured,
+            static reference => reference.Scope == SqlServerIdentifierScope.SchemaObject
+                && reference.Name == "nodes");
+
         Assert.Contains(captured, static reference => reference.Name == "CK_source");
-        Assert.Contains(SqlServerIdentifierContract.BuildCollisionGuardCommands(captured, false),
+        Assert.Contains(
+            SqlServerIdentifierContract.BuildCollisionGuardCommands(captured, false),
             static sql => sql.Contains("COLLATE CATALOG_DEFAULT", StringComparison.Ordinal));
     }
 

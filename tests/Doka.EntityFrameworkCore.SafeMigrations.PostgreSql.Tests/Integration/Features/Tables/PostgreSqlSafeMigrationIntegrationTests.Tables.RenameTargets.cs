@@ -32,21 +32,38 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var targetSchema = explicitSchema ? "rename_scope" : null;
-        var qualifiedTarget = explicitSchema ? "rename_scope.target_rows" : "public.target_rows";
-        var decoy = explicitSchema ? "public.target_rows" : "rename_scope.target_rows";
-        await ExecuteSqlAsync(connectionString,
+        var targetSchema = explicitSchema
+            ? "rename_scope"
+            : null;
+
+        var qualifiedTarget = explicitSchema
+            ? "rename_scope.target_rows"
+            : "public.target_rows";
+
+        var decoy = explicitSchema
+            ? "public.target_rows"
+            : "rename_scope.target_rows";
+
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE SCHEMA rename_scope; "
-            + (!explicitSchema || intermediateExists ? $"CREATE TABLE {decoy} (value integer); " : string.Empty)
+            + (!explicitSchema || intermediateExists
+                ? $"CREATE TABLE {decoy} (value integer); "
+                : string.Empty)
             + (targetExists
                 ? $"CREATE TABLE {qualifiedTarget} (value integer); INSERT INTO {qualifiedTarget} VALUES (99);"
-                : string.Empty));
+                : string.Empty),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureTable(new ExpectedTableDefinition("source_rows",
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "source_rows",
                 [new ExpectedColumnDefinition("value", typeof(int), true, "integer")]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         if (dropTarget)
         {
             builder.DropTableIfExists("target_rows", targetSchema);
@@ -57,28 +74,60 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
         var blocked = (targetExists && !dropTarget) || intermediateExists;
 
         // Act
-        var evidence = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename]);
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("rename-target-projected-source"));
+        var evidence = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [rename],
+                CancellationToken.None);
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("rename-target-projected-source"),
+                CancellationToken.None);
 
         if (!blocked)
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         var targetRows = targetExists || !blocked
-            ? await ScalarIntAsync(connectionString, $"SELECT COUNT(*) FROM {qualifiedTarget};")
+            ? await ScalarIntAsync(
+                connectionString,
+                $"SELECT COUNT(*) FROM {qualifiedTarget};",
+                cancellationToken: CancellationToken.None)
             : 0;
 
         // Assert
         var analysis = Assert.Single(evidence);
         Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
         Assert.Equal(targetExists, analysis.RenameTargetExists);
-        Assert.Equal(explicitSchema ? intermediateExists : (bool?)null, analysis.RenameIntermediateTargetExists);
-        Assert.Equal(blocked ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(blocked ? SafeMigrationAction.RejectDifferent : SafeMigrationAction.Apply,
+        Assert.Equal(
+            explicitSchema
+                ? intermediateExists
+                : null,
+            analysis.RenameIntermediateTargetExists);
+
+        Assert.Equal(
+            blocked
+                ? SafeMigrationReportStatus.Blocked
+                : SafeMigrationReportStatus.Ready,
+            report.Status);
+
+        Assert.Equal(
+            blocked
+                ? SafeMigrationAction.RejectDifferent
+                : SafeMigrationAction.Apply,
             report.Assessments[^1].Action);
-        Assert.Equal(targetExists && blocked ? 1 : 0, targetRows);
+
+        Assert.Equal(
+            targetExists && blocked
+                ? 1
+                : 0,
+            targetRows);
     }
 
     /// <summary>Preserves idempotent missing-source behavior even when the destination exists.</summary>
@@ -92,25 +141,44 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE target_rows (value integer); INSERT INTO target_rows VALUES (99); "
-            + (crossSchema ? "CREATE SCHEMA rename_scope; CREATE TABLE rename_scope.target_rows (value integer);"
-                : string.Empty));
+            + (crossSchema
+                ? "CREATE SCHEMA rename_scope; CREATE TABLE rename_scope.target_rows (value integer);"
+                : string.Empty),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.RenameTableIfExists("source_rows", "target_rows", newSchema: crossSchema ? "rename_scope" : null);
+        builder.RenameTableIfExists(
+            "source_rows",
+            "target_rows",
+            newSchema: crossSchema
+                ? "rename_scope"
+                : null);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("rename-target-missing-replay"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("rename-target-missing-replay"),
+                CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM target_rows WHERE value = 99;");
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM target_rows WHERE value = 99;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(report.Assessments)
+                .Action);
+
         Assert.Equal(1, rows);
     }
 
@@ -120,27 +188,51 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE SCHEMA rename_scope; CREATE TABLE source_rows (value integer); "
             + "INSERT INTO source_rows VALUES (7); CREATE TABLE target_rows (value integer); "
-            + "INSERT INTO target_rows VALUES (99);");
+            + "INSERT INTO target_rows VALUES (99);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("source_rows", "target_rows", newSchema: "rename_scope");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("rename-target-intermediate-runtime"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("rename-target-intermediate-runtime"),
+                CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
-        var sourceRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM source_rows WHERE value = 7;");
-        var targetRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM target_rows WHERE value = 99;");
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            CancellationToken.None));
+
+        var sourceRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM source_rows WHERE value = 7;",
+            cancellationToken: CancellationToken.None);
+
+        var targetRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM target_rows WHERE value = 99;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(report.Assessments).Action);
-        Assert.Equal("P1001", Assert.IsType<PostgresException>(exception).SqlState);
+        Assert.Equal(SafeMigrationAction.RejectDifferent,
+            Assert.Single(report.Assessments)
+                .Action);
+
+        Assert.Equal("P1001",
+            Assert.IsType<PostgresException>(exception)
+                .SqlState);
+
         Assert.Equal(1, sourceRows);
         Assert.Equal(1, targetRows);
     }
@@ -151,23 +243,37 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
-            "CREATE SCHEMA rename_scope; CREATE TABLE target_rows (value integer);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE SCHEMA rename_scope; CREATE TABLE target_rows (value integer);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureTable(new ExpectedTableDefinition("source_rows",
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "source_rows",
                 [new ExpectedColumnDefinition("value", typeof(int), true, "integer")]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.DropTableIfExists("target_rows");
         builder.RenameTableIfExists("source_rows", "target_rows", newSchema: "rename_scope");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("rename-target-intermediate-drop"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("rename-target-intermediate-drop"),
+                CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var targetRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM rename_scope.target_rows;");
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var targetRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM rename_scope.target_rows;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -181,19 +287,35 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE VIEW target_rows AS SELECT 99 AS value;");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE VIEW target_rows AS SELECT 99 AS value;",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureTable(new ExpectedTableDefinition("source_rows",
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "source_rows",
                 [new ExpectedColumnDefinition("value", typeof(int), true, "integer")]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.RenameTableIfExists("source_rows", "target_rows");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("rename-target-view"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("rename-target-view"),
+                CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM target_rows WHERE value = 99;");
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM target_rows WHERE value = 99;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -212,33 +334,57 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE target_rows (value integer);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE target_rows (value integer);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(
-            new NpgsqlConnection(connectionString), nativeBatch: native);
+            new NpgsqlConnection(connectionString),
+            nativeBatch: native);
 
         context.Database.SetDbConnection(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         for (var index = 0; index < 65; index++)
         {
-            builder.RenameTableIfExists($"missing_source_{index}", index % 2 == 0 ? "target_rows" : "absent_rows");
-            builder.EnsureTable(new ExpectedTableDefinition($"missing_table_{index}",
+            builder.RenameTableIfExists(
+                $"missing_source_{index}",
+                index % 2 == 0
+                    ? "target_rows"
+                    : "absent_rows");
+
+            builder.EnsureTable(
+                new ExpectedTableDefinition(
+                    $"missing_table_{index}",
                     [new ExpectedColumnDefinition("value", typeof(int), true, "integer")]),
-                SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+                SafeMigrationTableMode.StrictDefinition,
+                SafeMigrationPolicy.ThrowIfDifferent);
         }
 
-        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        var operations = builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations);
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(130, analyses.Count);
         for (var ordinal = 0; ordinal < analyses.Count; ordinal++)
         {
             Assert.Equal(SafeMigrationObservedState.Missing, analyses[ordinal].ObservedState);
-            Assert.Equal(ordinal % 2 == 0 ? ordinal % 4 == 0 : (bool?)null, analyses[ordinal].RenameTargetExists);
+            Assert.Equal(
+                ordinal % 2 == 0
+                    ? ordinal % 4 == 0
+                    : null,
+                analyses[ordinal].RenameTargetExists);
         }
     }
-
 }

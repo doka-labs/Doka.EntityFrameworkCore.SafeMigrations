@@ -28,21 +28,30 @@ public sealed class SqlServerStableDelayedClassifierTests
 
         // Assert
         const string boundary = "', N'@doka_ordinal int'";
-        Assert.Equal(first[..first.LastIndexOf(boundary, StringComparison.Ordinal)],
+        Assert.Equal(
+            first[..first.LastIndexOf(boundary, StringComparison.Ordinal)],
             second[..second.LastIndexOf(boundary, StringComparison.Ordinal)]);
+
         Assert.StartsWith("EXEC sys.sp_executesql N'", first, StringComparison.Ordinal);
         Assert.DoesNotContain("INSERT INTO", first, StringComparison.Ordinal);
         Assert.DoesNotContain("@doka_analysis", first, StringComparison.Ordinal);
         Assert.DoesNotContain("@doka_layout_7", first, StringComparison.Ordinal);
         Assert.Contains("SELECT @doka_ordinal", first, StringComparison.Ordinal);
         Assert.Contains("DECLARE @doka_layout nvarchar(128)", first, StringComparison.Ordinal);
-        Assert.True(first.IndexOf("@physical", StringComparison.Ordinal)
+        Assert.True(
+            first.IndexOf("@physical", StringComparison.Ordinal)
             < first.IndexOf("@doka_layout", StringComparison.Ordinal));
-        Assert.True(first.IndexOf("@collation", StringComparison.Ordinal)
+
+        Assert.True(
+            first.IndexOf("@collation", StringComparison.Ordinal)
             < first.IndexOf("@default", StringComparison.Ordinal));
-        Assert.True(first.IndexOf("@filter", StringComparison.Ordinal)
+
+        Assert.True(
+            first.IndexOf("@filter", StringComparison.Ordinal)
             < first.IndexOf("@prerequisite", StringComparison.Ordinal));
-        Assert.True(first.IndexOf("@guard", StringComparison.Ordinal)
+
+        Assert.True(
+            first.IndexOf("@guard", StringComparison.Ordinal)
             < first.IndexOf("DECLARE @proof", StringComparison.Ordinal));
     }
 
@@ -62,7 +71,10 @@ public sealed class SqlServerStableDelayedClassifierTests
     [InlineData(false, "duplicate")]
     [InlineData(true, "reversed")]
     [InlineData(false, "reversed")]
-    public async Task DelayedResultOwnership_RejectsMalformedResultSets(bool nativeBatch, string corruption)
+    public async Task DelayedResultOwnership_RejectsMalformedResultSets(
+        bool nativeBatch,
+        string corruption
+    )
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch)
@@ -90,12 +102,28 @@ public sealed class SqlServerStableDelayedClassifierTests
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-                connection, null, null, [first, second], 0, results, CancellationToken.None));
+                connection,
+                null,
+                null,
+                [first, second],
+                0,
+                results,
+                CancellationToken.None));
 
         // Assert
         Assert.StartsWith("The SQL Server catalog batch returned", failure.Message, StringComparison.Ordinal);
-        Assert.Equal(nativeBatch ? 1 : 0, connection.BatchesDisposed);
-        Assert.Equal(nativeBatch ? 0 : 1, connection.CommandsDisposed);
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : 1,
+            connection.CommandsDisposed);
+
         if (corruption == "empty_then_two")
         {
             Assert.All(results, Assert.Null);
@@ -107,7 +135,9 @@ public sealed class SqlServerStableDelayedClassifierTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task DelayedOrdinals_UseStableStatementSlotsAndRetainOriginalResultOwnership(bool nativeBatch)
+    public async Task DelayedOrdinals_UseStableStatementSlotsAndRetainOriginalResultOwnership(
+        bool nativeBatch
+    )
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
@@ -121,7 +151,13 @@ public sealed class SqlServerStableDelayedClassifierTests
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, 71, [first, second], 517, results, CancellationToken.None);
+            connection,
+            null,
+            71,
+            [first, second],
+            517,
+            results,
+            CancellationToken.None);
 
         // Assert
         var statement = Assert.Single(connection.RecordedStatements);
@@ -136,7 +172,11 @@ public sealed class SqlServerStableDelayedClassifierTests
         Assert.Equal(SafeMigrationObservedState.Matching, results[517].ObservedState);
         Assert.Equal(SafeMigrationObservedState.Different, results[518].ObservedState);
         Assert.Equal(2, connection.RowsRead);
-        Assert.Equal(nativeBatch ? 1 : 0, connection.ParameterFactoriesDisposed);
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.ParameterFactoriesDisposed);
     }
 
     /// <summary>The classifier's metadata shape is verified before any returned row becomes evidence.</summary>
@@ -147,7 +187,10 @@ public sealed class SqlServerStableDelayedClassifierTests
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(false, false)]
-    public async Task DelayedMetadataShape_RejectsBeforeAcceptingRows(bool nativeBatch, bool extraField)
+    public async Task DelayedMetadataShape_RejectsBeforeAcceptingRows(
+        bool nativeBatch,
+        bool extraField
+    )
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch)
@@ -175,14 +218,29 @@ public sealed class SqlServerStableDelayedClassifierTests
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-                connection, null, null, [plan], 0, results, CancellationToken.None));
+                connection,
+                null,
+                null,
+                [plan],
+                0,
+                results,
+                CancellationToken.None));
 
         // Assert
         Assert.Equal("The SQL Server catalog batch returned an invalid result set.", failure.Message);
         Assert.Equal(0, connection.RowsRead);
         Assert.Null(results[0]);
-        Assert.Equal(nativeBatch ? 1 : 0, connection.BatchesDisposed);
-        Assert.Equal(nativeBatch ? 0 : 1, connection.CommandsDisposed);
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : 1,
+            connection.CommandsDisposed);
     }
 
     /// <summary>Cancellation between isolated classifier sets never consumes a later operation's evidence.</summary>
@@ -190,7 +248,9 @@ public sealed class SqlServerStableDelayedClassifierTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task DelayedResultTransition_CancellationPreservesOriginalOwnership(bool nativeBatch)
+    public async Task DelayedResultTransition_CancellationPreservesOriginalOwnership(
+        bool nativeBatch
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
@@ -210,7 +270,13 @@ public sealed class SqlServerStableDelayedClassifierTests
         // Act
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-                connection, null, null, [first, second], 0, results, cancellation.Token));
+                connection,
+                null,
+                null,
+                [first, second],
+                0,
+                results,
+                cancellation.Token));
 
         // Assert
         Assert.Equal(1, connection.RowsRead);
@@ -218,7 +284,16 @@ public sealed class SqlServerStableDelayedClassifierTests
         Assert.Null(results[1]);
         Assert.Equal(1, connection.BatchExecutions + connection.CommandExecutions);
         Assert.Equal(cancellation.Token, connection.CancellationTokenSeen);
-        Assert.Equal(nativeBatch ? 1 : 0, connection.BatchesDisposed);
-        Assert.Equal(nativeBatch ? 0 : 1, connection.CommandsDisposed);
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : 1,
+            connection.CommandsDisposed);
     }
 }

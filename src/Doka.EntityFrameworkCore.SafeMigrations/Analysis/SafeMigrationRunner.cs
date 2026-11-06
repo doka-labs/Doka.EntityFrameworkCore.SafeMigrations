@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Default provider-neutral preflight and postflight runner.</summary>
@@ -24,7 +26,7 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
     public async Task<SafeMigrationRunReport> AnalyzePendingMigrationsAsync(
         DbContext context,
         SafeMigrationRunOptions options,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -44,7 +46,8 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
             .ToArray();
 
         var targetMigrationId = options.TargetMigrationId
-            ?? migrations.LastOrDefault().Key;
+            ?? migrations.LastOrDefault()
+                .Key;
 
         if (targetMigrationId is not null
             && !migrations.Any(entry => StringComparer.Ordinal.Equals(entry.Key, targetMigrationId)))
@@ -103,16 +106,30 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,
         SafeMigrationRunOptions options,
-        CancellationToken cancellationToken = default
-    ) => RunAsync(context, operations, SafeMigrationReportMode.Preflight, options, null, null, cancellationToken);
+        CancellationToken cancellationToken
+    ) => RunAsync(
+        context,
+        operations,
+        SafeMigrationReportMode.Preflight,
+        options,
+        null,
+        null,
+        cancellationToken);
 
     /// <inheritdoc />
     public Task<SafeMigrationRunReport> VerifyAsync(
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,
         SafeMigrationRunOptions options,
-        CancellationToken cancellationToken = default
-    ) => RunAsync(context, operations, SafeMigrationReportMode.Postflight, options, null, null, cancellationToken);
+        CancellationToken cancellationToken
+    ) => RunAsync(
+        context,
+        operations,
+        SafeMigrationReportMode.Postflight,
+        options,
+        null,
+        null,
+        cancellationToken);
 
     private async Task<SafeMigrationRunReport> RunAsync(
         DbContext context,
@@ -163,7 +180,9 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
         var fingerprint = ValidateCanonicalMigrationModelAndCreateFingerprint(context, providerContract);
 
         SafeMigrationModelFingerprint.ValidateExpected(
-            fingerprint, options.ExpectedModelFingerprint, context.GetType());
+            fingerprint,
+            options.ExpectedModelFingerprint,
+            context.GetType());
 
         var contractFingerprint = SafeMigrationContractFingerprint.Create(operations);
         var generatedAtUtc = _timeProvider.GetUtcNow();
@@ -178,7 +197,7 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
         activity?.SetTag("safe_migrations.operation_count", operations.Count);
 
         var connection = context.Database.GetDbConnection();
-        var openedHere = connection.State != System.Data.ConnectionState.Open;
+        var openedHere = connection.State != ConnectionState.Open;
         if (openedHere)
         {
             await connection.OpenAsync(cancellationToken);
@@ -266,8 +285,8 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
             var modelDiffer = context.GetService<IMigrationsModelDiffer>();
 
             if (modelDiffer.HasDifferences(
-                    snapshotModel.GetRelationalModel(),
-                    runtimeDesignTimeModel.GetRelationalModel()))
+                snapshotModel.GetRelationalModel(),
+                runtimeDesignTimeModel.GetRelationalModel()))
             {
                 throw new SafeMigrationModelMismatchException(
                     SafeMigrationModelFingerprint.Create(snapshotModel, providerContract),
@@ -338,7 +357,12 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
         if (mode == SafeMigrationReportMode.Postflight)
         {
             var revalidated = await RevalidateRenamedContractsAsync(
-                context, operations, targetModels, liveAnalyses, postflightIdentityNormalizer, cancellationToken);
+                context,
+                operations,
+                targetModels,
+                liveAnalyses,
+                postflightIdentityNormalizer,
+                cancellationToken);
 
             liveAnalyses = revalidated.Analyses;
             renamedManagedIntents = revalidated.ManagedIntents;
@@ -368,6 +392,7 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
                 : null;
 
             var safeOperationOrdinal = 0;
+
             // WHY: Retain original operation ordinals for projection ownership and report evidence.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
@@ -389,8 +414,10 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
                     assessments.Add(
                         new SafeMigrationAssessment(
                             ordinal,
-                            operation.GetType().FullName
-                            ?? operation.GetType().Name,
+                            operation.GetType()
+                                .FullName
+                            ?? operation.GetType()
+                                .Name,
                             isSafeOperation: false,
                             operationKind: null,
                             objectName: null,
@@ -413,8 +440,12 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
                         if (preflightProjection.ModelManagedDataChangeVersion != managedDataVersion)
                         {
                             managedDataOrigin = new SafeMigrationDeferredOrigin(
-                                migrationIds?[ordinal], ordinal,
-                                operation.GetType().FullName ?? operation.GetType().Name);
+                                migrationIds?[ordinal],
+                                ordinal,
+                                operation.GetType()
+                                    .FullName
+                                ?? operation.GetType()
+                                    .Name);
                         }
 
                         if (preflightProjection.DataMutationVersion != globalDataVersion)
@@ -428,7 +459,10 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
                             rawSqlOrigin ??= new SafeMigrationDeferredOrigin(
                                 migrationIds?[ordinal],
                                 ordinal,
-                                operation.GetType().FullName ?? operation.GetType().Name);
+                                operation.GetType()
+                                    .FullName
+                                ?? operation.GetType()
+                                    .Name);
                         }
                     }
 
@@ -441,7 +475,9 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
                     ? analysis.HasStaleGlobalModelManagedData
                         ? globalDataOrigin ?? managedDataOrigin
                         : managedDataOrigin
-                    : analysis.IsOpaqueProjectionUnknown ? rawSqlOrigin : null;
+                    : analysis.IsOpaqueProjectionUnknown
+                        ? rawSqlOrigin
+                        : null;
 
                 if (analysis.IsModelManagedProjectionUnknown
                     && !analysis.HasStaleGlobalModelManagedData
@@ -450,8 +486,12 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
                     var originOperation = operations[localOriginOrdinal];
 
                     deferredOrigin = new SafeMigrationDeferredOrigin(
-                        migrationIds?[localOriginOrdinal], localOriginOrdinal,
-                        originOperation.GetType().FullName ?? originOperation.GetType().Name);
+                        migrationIds?[localOriginOrdinal],
+                        localOriginOrdinal,
+                        originOperation.GetType()
+                            .FullName
+                        ?? originOperation.GetType()
+                            .Name);
                 }
 
                 if (analysis.ProviderDeferredOriginOrdinal is { } providerOriginOrdinal)
@@ -459,7 +499,8 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
                     // WHY: A provider may invalidate row evidence through typed or
                     // safe DDL rather than SQL. Only a preceding stream position is
                     // a valid provenance certificate; a bad certificate fails closed.
-                    if (providerOriginOrdinal < 0 || providerOriginOrdinal >= ordinal)
+                    if (providerOriginOrdinal < 0
+                        || providerOriginOrdinal >= ordinal)
                     {
                         throw new InvalidOperationException(
                             "The provider returned an invalid deferred-validation origin.");
@@ -468,8 +509,12 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
                     var originOperation = operations[providerOriginOrdinal];
 
                     deferredOrigin = new SafeMigrationDeferredOrigin(
-                        migrationIds?[providerOriginOrdinal], providerOriginOrdinal,
-                        originOperation.GetType().FullName ?? originOperation.GetType().Name);
+                        migrationIds?[providerOriginOrdinal],
+                        providerOriginOrdinal,
+                        originOperation.GetType()
+                            .FullName
+                        ?? originOperation.GetType()
+                            .Name);
                 }
 
                 if (mode == SafeMigrationReportMode.Preflight
@@ -483,7 +528,10 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
                     {
                         preflightProjection!.ObserveDeferredModelManagedMutation();
                         managedDataOrigin = new SafeMigrationDeferredOrigin(
-                            migrationIds?[ordinal], ordinal, typeof(SafeMigrationOperation).FullName!);
+                            migrationIds?[ordinal],
+                            ordinal,
+                            typeof(SafeMigrationOperation).FullName!);
+
                         globalDataOrigin = managedDataOrigin;
                     }
 
@@ -513,7 +561,10 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
                             migrationId: migrationIds?[ordinal],
                             policy: safeOperation.Policy,
                             explanation: SafeMigrationDiagnosticMessages.GetExplanation(
-                                safeOperation.Intent, state: null, analysis.Code, "runtime_validation_required")));
+                                safeOperation.Intent,
+                                state: null,
+                                analysis.Code,
+                                "runtime_validation_required")));
 
                     continue;
                 }
@@ -540,7 +591,9 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
                     && preflightProjection.ModelManagedDataChangeVersion != managedDataVersion)
                 {
                     managedDataOrigin = new SafeMigrationDeferredOrigin(
-                        migrationIds?[ordinal], ordinal, typeof(SafeMigrationOperation).FullName!);
+                        migrationIds?[ordinal],
+                        ordinal,
+                        typeof(SafeMigrationOperation).FullName!);
                 }
 
                 if (preflightProjection is not null
@@ -555,14 +608,14 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
                 var assessmentCode = postflightIdentityUnproven
                     ? "postcondition_identity_unproven"
                     : postconditionSuperseded
-                    ? "postcondition_superseded"
-                    : operationBlocked
-                        ? mode == SafeMigrationReportMode.Postflight
-                            ? "postcondition_failed"
-                            : analysis.ObservedState == SafeMigrationObservedState.Unsupported
-                                ? analysis.Code
-                                : decision.Code
-                        : analysis.Code;
+                        ? "postcondition_superseded"
+                        : operationBlocked
+                            ? mode == SafeMigrationReportMode.Postflight
+                                ? "postcondition_failed"
+                                : analysis.ObservedState == SafeMigrationObservedState.Unsupported
+                                    ? analysis.Code
+                                    : decision.Code
+                            : analysis.Code;
 
                 assessments.Add(
                     new SafeMigrationAssessment(
@@ -586,13 +639,15 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
                         explanation: SafeMigrationDiagnosticMessages.GetExplanation(
                             safeOperation.Intent,
                             analysis.ObservedState,
+
                             // WHY: Aggregate preflight codes identify a planner decision,
                             // not its provider-proven cause. Postflight phase overrides
                             // instead describe the established final-condition result.
-                            mode == SafeMigrationReportMode.Postflight ? assessmentCode : analysis.Code,
+                            mode == SafeMigrationReportMode.Postflight
+                                ? assessmentCode
+                                : analysis.Code,
                             decision.Code)));
             }
-
         }
 
         var status = operations.Count == 0
@@ -633,78 +688,170 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
     ) => operation switch
     {
         AddColumnOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.EnsureColumn, value.Schema, value.Table, value.Name,
+            SafeMigrationOperationKind.EnsureColumn,
+            value.Schema,
+            value.Table,
+            value.Name,
             SafeMigrationOperationIdentity.CaptureSingleColumn(value.Name)),
         AlterColumnOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.AlterColumn, value.Schema, value.Table, value.Name,
+            SafeMigrationOperationKind.AlterColumn,
+            value.Schema,
+            value.Table,
+            value.Name,
             SafeMigrationOperationIdentity.CaptureSingleColumn(value.Name)),
         DropColumnOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.DropColumn, value.Schema, value.Table, value.Name,
+            SafeMigrationOperationKind.DropColumn,
+            value.Schema,
+            value.Table,
+            value.Name,
             SafeMigrationOperationIdentity.CaptureSingleColumn(value.Name)),
         RenameColumnOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.RenameColumn, value.Schema, value.Table, value.Name,
-            SafeMigrationOperationIdentity.CaptureSingleColumn(value.Name), newObjectName: value.NewName),
+            SafeMigrationOperationKind.RenameColumn,
+            value.Schema,
+            value.Table,
+            value.Name,
+            SafeMigrationOperationIdentity.CaptureSingleColumn(value.Name),
+            newObjectName: value.NewName),
         CreateIndexOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.EnsureIndex, value.Schema, value.Table, value.Name,
+            SafeMigrationOperationKind.EnsureIndex,
+            value.Schema,
+            value.Table,
+            value.Name,
             SnapshotColumns(value.Columns)),
         DropIndexOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.DropIndex, value.Schema, value.Table, value.Name),
+            SafeMigrationOperationKind.DropIndex,
+            value.Schema,
+            value.Table,
+            value.Name),
         RenameIndexOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.RenameIndex, value.Schema, value.Table, value.Name,
+            SafeMigrationOperationKind.RenameIndex,
+            value.Schema,
+            value.Table,
+            value.Name,
             newObjectName: value.NewName),
         AddPrimaryKeyOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.EnsurePrimaryKey, value.Schema, value.Table, value.Name,
+            SafeMigrationOperationKind.EnsurePrimaryKey,
+            value.Schema,
+            value.Table,
+            value.Name,
             SnapshotColumns(value.Columns)),
         DropPrimaryKeyOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.DropPrimaryKey, value.Schema, value.Table, value.Name),
+            SafeMigrationOperationKind.DropPrimaryKey,
+            value.Schema,
+            value.Table,
+            value.Name),
         AddUniqueConstraintOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.EnsureUniqueConstraint, value.Schema, value.Table, value.Name,
+            SafeMigrationOperationKind.EnsureUniqueConstraint,
+            value.Schema,
+            value.Table,
+            value.Name,
             SnapshotColumns(value.Columns)),
         DropUniqueConstraintOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.DropUniqueConstraint, value.Schema, value.Table, value.Name),
+            SafeMigrationOperationKind.DropUniqueConstraint,
+            value.Schema,
+            value.Table,
+            value.Name),
         AddCheckConstraintOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.EnsureCheckConstraint, value.Schema, value.Table, value.Name),
+            SafeMigrationOperationKind.EnsureCheckConstraint,
+            value.Schema,
+            value.Table,
+            value.Name),
         DropCheckConstraintOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.DropCheckConstraint, value.Schema, value.Table, value.Name),
+            SafeMigrationOperationKind.DropCheckConstraint,
+            value.Schema,
+            value.Table,
+            value.Name),
         AddForeignKeyOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.EnsureForeignKey, value.Schema, value.Table, value.Name,
-            SnapshotColumns(value.Columns), value.PrincipalSchema, value.PrincipalTable,
+            SafeMigrationOperationKind.EnsureForeignKey,
+            value.Schema,
+            value.Table,
+            value.Name,
+            SnapshotColumns(value.Columns),
+            value.PrincipalSchema,
+            value.PrincipalTable,
             SnapshotColumns(value.PrincipalColumns)),
         DropForeignKeyOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.DropForeignKey, value.Schema, value.Table, value.Name),
+            SafeMigrationOperationKind.DropForeignKey,
+            value.Schema,
+            value.Table,
+            value.Name),
         CreateTableOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.EnsureTable, value.Schema, value.Name, value.Name),
+            SafeMigrationOperationKind.EnsureTable,
+            value.Schema,
+            value.Name,
+            value.Name),
         DropTableOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.DropTable, value.Schema, value.Name, value.Name),
+            SafeMigrationOperationKind.DropTable,
+            value.Schema,
+            value.Name,
+            value.Name),
         RenameTableOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.RenameTable, value.Schema, value.Name, value.Name,
-            newSchema: value.NewSchema, newTable: value.NewName ?? value.Name),
+            SafeMigrationOperationKind.RenameTable,
+            value.Schema,
+            value.Name,
+            value.Name,
+            newSchema: value.NewSchema,
+            newTable: value.NewName ?? value.Name),
         EnsureSchemaOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.EnsureSchema, value.Name, table: null, value.Name),
+            SafeMigrationOperationKind.EnsureSchema,
+            value.Name,
+            table: null,
+            value.Name),
         DropSchemaOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.DropSchema, value.Name, table: null, value.Name),
+            SafeMigrationOperationKind.DropSchema,
+            value.Name,
+            table: null,
+            value.Name),
         AlterTableOperation value => CaptureKnownProviderIdentity(
-            operationKind: null, value.Schema, value.Name, value.Name),
+            operationKind: null,
+            value.Schema,
+            value.Name,
+            value.Name),
         InsertDataOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.EnsureModelManagedData, value.Schema, value.Table, value.Table,
+            SafeMigrationOperationKind.EnsureModelManagedData,
+            value.Schema,
+            value.Table,
+            value.Table,
             SnapshotColumns(value.Columns)),
         UpdateDataOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.UpdateModelManagedData, value.Schema, value.Table, value.Table,
+            SafeMigrationOperationKind.UpdateModelManagedData,
+            value.Schema,
+            value.Table,
+            value.Table,
             SnapshotColumns(value.Columns)),
         DeleteDataOperation value => CaptureKnownProviderIdentity(
-            SafeMigrationOperationKind.DeleteModelManagedData, value.Schema, value.Table, value.Table,
+            SafeMigrationOperationKind.DeleteModelManagedData,
+            value.Schema,
+            value.Table,
+            value.Table,
             SnapshotColumns(value.KeyColumns)),
         CreateSequenceOperation value => CaptureKnownProviderIdentity(
-            operationKind: null, value.Schema, table: null, value.Name),
+            operationKind: null,
+            value.Schema,
+            table: null,
+            value.Name),
         AlterSequenceOperation value => CaptureKnownProviderIdentity(
-            operationKind: null, value.Schema, table: null, value.Name),
+            operationKind: null,
+            value.Schema,
+            table: null,
+            value.Name),
         DropSequenceOperation value => CaptureKnownProviderIdentity(
-            operationKind: null, value.Schema, table: null, value.Name),
+            operationKind: null,
+            value.Schema,
+            table: null,
+            value.Name),
         RestartSequenceOperation value => CaptureKnownProviderIdentity(
-            operationKind: null, value.Schema, table: null, value.Name),
+            operationKind: null,
+            value.Schema,
+            table: null,
+            value.Name),
         RenameSequenceOperation value => CaptureKnownProviderIdentity(
-            operationKind: null, value.Schema, table: null, value.Name,
-            newSchema: value.NewSchema, newObjectName: value.NewName),
+            operationKind: null,
+            value.Schema,
+            table: null,
+            value.Name,
+            newSchema: value.NewSchema,
+            newObjectName: value.NewName),
         _ => null,
     };
 
@@ -724,7 +871,8 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
     )
     {
         var requiresTable = operationKind is not (null
-            or SafeMigrationOperationKind.EnsureSchema or SafeMigrationOperationKind.DropSchema);
+            or SafeMigrationOperationKind.EnsureSchema
+            or SafeMigrationOperationKind.DropSchema);
 
         if (string.IsNullOrWhiteSpace(objectName)
             || (requiresTable && string.IsNullOrWhiteSpace(table))
@@ -748,12 +896,24 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
             return null;
         }
 
-        return SafeMigrationOperationIdentity.CreateKnown(operationKind, schema, table, objectName, columns,
-            principalSchema, principalTable, principalColumns, newSchema, newTable, newObjectName);
+        return SafeMigrationOperationIdentity.CreateKnown(
+            operationKind,
+            schema,
+            table,
+            objectName,
+            columns,
+            principalSchema,
+            principalTable,
+            principalColumns,
+            newSchema,
+            newTable,
+            newObjectName);
     }
 
     /// <summary>Checks a captured member list without allocating a filtered endpoint.</summary>
-    private static bool HasUnavailableIdentifier(IReadOnlyList<string>? identifiers)
+    private static bool HasUnavailableIdentifier(
+        IReadOnlyList<string>? identifiers
+    )
     {
         if (identifiers is null)
         {
@@ -770,19 +930,20 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
             {
                 return true;
             }
-
         }
 
         return false;
     }
 
     /// <summary>Snapshots mutable EF column arrays before the report outlives the analyzed stream.</summary>
-    private static System.Collections.ObjectModel.ReadOnlyCollection<string>? SnapshotColumns(
+    private static ReadOnlyCollection<string>? SnapshotColumns(
         string[]? columns
     )
     {
         // WHY: EF operations are mutable and may be reused after analysis.
         // A report must not change when callers mutate a composite endpoint.
-        return columns is null ? null : Array.AsReadOnly((string[])columns.Clone());
+        return columns is null
+            ? null
+            : Array.AsReadOnly((string[])columns.Clone());
     }
 }

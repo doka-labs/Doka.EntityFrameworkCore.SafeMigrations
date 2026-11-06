@@ -4,13 +4,13 @@ internal static partial class SafeMigrationModelManagedDataPairer
 {
     private sealed class InverseRowIndex
     {
-        private readonly HashSet<TableIdentity> _droppedTables = [];
         private readonly Dictionary<TableIdentity, string[]> _deleteKeyShapes = [];
         private readonly Dictionary<string, List<DataRow>> _deleteRows = new(StringComparer.Ordinal);
+        private readonly HashSet<TableIdentity> _droppedTables = [];
         private readonly Dictionary<TableIdentity, List<DataRow>> _insertRows = [];
         private readonly Dictionary<LookupShape, Dictionary<string, List<DataRow>>> _insertRowsByKey = [];
-        private readonly Dictionary<string, List<DataRow>> _updateRows = new(StringComparer.Ordinal);
         private readonly IReadOnlyList<DataRow> _rows;
+        private readonly Dictionary<string, List<DataRow>> _updateRows = new(StringComparer.Ordinal);
 
         public InverseRowIndex(
             IReadOnlyList<MigrationOperation> operations
@@ -36,6 +36,7 @@ internal static partial class SafeMigrationModelManagedDataPairer
                             _updateRows,
                             Fingerprint(update.Table, update.Schema, update.KeyColumns, update.KeyValues, row.Row),
                             row);
+
                         break;
                     case DeleteDataOperation delete:
                         AddDeleteRow(delete, row);
@@ -253,12 +254,14 @@ internal static partial class SafeMigrationModelManagedDataPairer
         )
         {
             var result = new int[keyColumns.Length];
+
             // WHY: Resolve one source-matrix ordinal for each ordered key column.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
             for (var key = 0; key < keyColumns.Length; key++)
             {
                 var ordinal = -1;
+
                 // WHY: Retain the matching source column ordinal instead of assuming key and row layouts coincide.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
@@ -310,6 +313,7 @@ internal static partial class SafeMigrationModelManagedDataPairer
             }
 
             writer.Add(valueCount);
+
             // WHY: Read delegate-supplied values in the exact ordinal order of the canonical fingerprint.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery

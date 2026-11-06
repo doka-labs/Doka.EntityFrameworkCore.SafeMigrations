@@ -99,7 +99,9 @@ internal static class MySqlCapturedExpressionContract
     internal static string RenderExecutable(
         SafeMigrationSqlExpression expression,
         MySqlSafeMigrationSqlExpressionRenderer renderer
-    ) => RequiresStableStrings(expression) ? renderer.RenderDefault(expression) : renderer.Render(expression);
+    ) => RequiresStableStrings(expression)
+        ? renderer.RenderDefault(expression)
+        : renderer.Render(expression);
 
     /// <summary>Identifies whether every string leaf must use the same stable executable spelling.</summary>
     internal static bool RequiresStableStrings(

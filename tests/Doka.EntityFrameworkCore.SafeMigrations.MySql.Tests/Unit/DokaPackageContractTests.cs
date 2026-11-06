@@ -22,7 +22,11 @@ public sealed class DokaPackageContractTests : IDisposable
     public void ApplicationConvertedGuidRelationship_EmitsCatalogNeutralClientGuidAnnotation()
     {
         using var context = CreateApplicationConvertedGuidContext();
-        var model = context.GetService<IDesignTimeModel>().Model.GetRelationalModel();
+        var model = context
+            .GetService<IDesignTimeModel>()
+            .Model
+            .GetRelationalModel();
+
         var operations = context
             .GetService<IMigrationsModelDiffer>()
             .GetDifferences(null, model);
@@ -46,12 +50,15 @@ public sealed class DokaPackageContractTests : IDisposable
             Assert.Single(leaf.Columns, column => column.Name == "branch_id"),
         };
 
-        Assert.All(columns, column =>
-        {
-            Assert.Equal(typeof(string), column.ClrType);
-            Assert.Equal("varchar(36)", column.ColumnType);
-            Assert.Null(column["Doka:MySql:GuidFormat"]);
-        });
+        Assert.All(
+            columns,
+            column =>
+            {
+                Assert.Equal(typeof(string), column.ClrType);
+                Assert.Equal("varchar(36)", column.ColumnType);
+                Assert.Null(column["Doka:MySql:GuidFormat"]);
+            });
+
         Assert.Equal(
             MySqlValueGenerationStrategy.ClientGuid,
             columns[0]["Doka:MySql:ValueGenerationStrategy"]);
@@ -80,14 +87,18 @@ public sealed class DokaPackageContractTests : IDisposable
         var compatibility = SafeMigrationOperationCompatibility.Normalize(
             operation,
             MySqlSafeMigrationProviderOperationAdapter.Instance);
+
         var sql = string.Concat(
-            context.GetService<IMigrationsSqlGenerator>()
+            context
+                .GetService<IMigrationsSqlGenerator>()
                 .Generate([operation], context.Model)
                 .Select(static command => command.CommandText));
 
         // Assert
         Assert.Equal(SafeMigrationOperationCompatibilityKind.Safe, compatibility.Kind);
-        Assert.IsType<RenameColumnIntent>(Assert.IsType<SafeMigrationOperation>(compatibility.Operation).Intent);
+        Assert.IsType<RenameColumnIntent>(Assert.IsType<SafeMigrationOperation>(compatibility.Operation)
+            .Intent);
+
         Assert.Contains("RENAME COLUMN `old_code` TO `new_code`", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("CHANGE COLUMN", sql, StringComparison.Ordinal);
     }
@@ -111,6 +122,7 @@ public sealed class DokaPackageContractTests : IDisposable
             fragment => AssertFragment(fragment, MySqlMigrationCommandFragmentKind.Body, "DO 0;"),
             fragment => AssertFragment(fragment, MySqlMigrationCommandFragmentKind.Cleanup, "SET @second = NULL;"),
             fragment => AssertFragment(fragment, MySqlMigrationCommandFragmentKind.Cleanup, "SET @first = NULL;"));
+
         Assert.Equal(
             command.CommandText,
             string.Concat(command.Fragments.Select(static fragment => fragment.CommandText.ToString())));
@@ -127,7 +139,8 @@ public sealed class DokaPackageContractTests : IDisposable
         ];
 
         // Act
-        var exception = Record.Exception(() => MySqlSafeMigrationOperationHandler.ValidateMultiCommandCleanup(commands));
+        var exception =
+            Record.Exception(() => MySqlSafeMigrationOperationHandler.ValidateMultiCommandCleanup(commands));
 
         // Assert
         Assert.Null(exception);
@@ -148,7 +161,8 @@ public sealed class DokaPackageContractTests : IDisposable
         ];
 
         // Act
-        var exception = Record.Exception(() => MySqlSafeMigrationOperationHandler.ValidateMultiCommandCleanup(commands));
+        var exception =
+            Record.Exception(() => MySqlSafeMigrationOperationHandler.ValidateMultiCommandCleanup(commands));
 
         // Assert
         var invalidOperation = Assert.IsType<InvalidOperationException>(exception);
@@ -202,7 +216,14 @@ public sealed class DokaPackageContractTests : IDisposable
         using var context = CreateContext(CreateServerVersion(isMariaDb));
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var operation = CreateNullableTimestampRepair();
-        operation.DefaultValue = new DateTime(2026, 8, 21, 12, 34, 56, DateTimeKind.Unspecified);
+        operation.DefaultValue = new DateTime(
+            2026,
+            8,
+            21,
+            12,
+            34,
+            56,
+            DateTimeKind.Unspecified);
 
         var exception = Assert.Throws<InvalidOperationException>(() => generator.Generate([operation], context.Model));
 
@@ -233,6 +254,7 @@ public sealed class DokaPackageContractTests : IDisposable
             "UPDATE `Entries` SET `OccurredAt` = CURRENT_TIMESTAMP(6) WHERE `OccurredAt` IS NULL;",
             sql,
             StringComparison.Ordinal);
+
         Assert.Contains("MODIFY COLUMN `OccurredAt` timestamp(6) NOT NULL", sql, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -240,7 +262,8 @@ public sealed class DokaPackageContractTests : IDisposable
         MySqlServerVersion serverVersion
     )
     {
-        var options = new DbContextOptionsBuilder<DbContext>().UseMySql(
+        var options = new DbContextOptionsBuilder<DbContext>()
+            .UseMySql(
                 "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
                 serverVersion)
             .UseInternalServiceProvider(_services)
@@ -251,7 +274,8 @@ public sealed class DokaPackageContractTests : IDisposable
 
     private ApplicationConvertedGuidContext CreateApplicationConvertedGuidContext()
     {
-        var options = new DbContextOptionsBuilder<ApplicationConvertedGuidContext>().UseMySql(
+        var options = new DbContextOptionsBuilder<ApplicationConvertedGuidContext>()
+            .UseMySql(
                 "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
                 MySqlServerVersion.MySql(new Version(8, 4, 11)))
             .UseInternalServiceProvider(_services)
@@ -354,7 +378,9 @@ public sealed class DokaPackageContractTests : IDisposable
             {
                 entity.ToTable("application_guid_branches");
                 entity.HasKey(value => value.Id);
-                entity.Property(value => value.Id).HasColumnName("id");
+                entity
+                    .Property(value => value.Id)
+                    .HasColumnName("id");
 
                 entity
                     .HasOne(value => value.Root)
@@ -366,8 +392,13 @@ public sealed class DokaPackageContractTests : IDisposable
             {
                 entity.ToTable("application_guid_leaves");
                 entity.HasKey(value => value.Id);
-                entity.Property(value => value.Id).HasColumnName("id");
-                entity.Property(value => value.BranchId).HasColumnName("branch_id");
+                entity
+                    .Property(value => value.Id)
+                    .HasColumnName("id");
+
+                entity
+                    .Property(value => value.BranchId)
+                    .HasColumnName("branch_id");
 
                 entity
                     .HasOne(value => value.Branch)

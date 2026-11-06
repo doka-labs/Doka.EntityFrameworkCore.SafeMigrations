@@ -1,5 +1,5 @@
 [assembly: CollectionBehavior(CollectionBehavior.CollectionPerClass)]
 
-[assembly: Microsoft.EntityFrameworkCore.Design.DesignTimeServicesReference(
+[assembly: DesignTimeServicesReference(
     "Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationDesignTimeServices, Doka.EntityFrameworkCore.SafeMigrations",
     "Microsoft.EntityFrameworkCore.Sqlite")]

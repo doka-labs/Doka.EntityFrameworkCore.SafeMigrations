@@ -37,13 +37,14 @@ internal sealed class MySqlGeneratedColumnDependencyContractCatalog
         IReadOnlyList<MigrationOperation> operations,
         string? currentDatabase = null,
         StringComparer? tableComparer = null,
-        IReadOnlyDictionary<SafeMigrationOperation, IReadOnlyList<ExpectedTableDefinition>>? targetModelCandidates = null
+        IReadOnlyDictionary<SafeMigrationOperation, IReadOnlyList<ExpectedTableDefinition>>? targetModelCandidates =
+            null
     )
     {
         ArgumentNullException.ThrowIfNull(operations);
         if (!operations.Any(static operation => operation is SafeMigrationOperation
             {
-                Intent: RenameColumnIntent or DropColumnIntent
+                Intent: RenameColumnIntent or DropColumnIntent,
             }))
         {
             return s_empty;
@@ -72,8 +73,10 @@ internal sealed class MySqlGeneratedColumnDependencyContractCatalog
                     contracts[keyed] = null;
                     modelContracts?.Remove(keyed);
                 }
-                else if (!keyed.GetAnnotations().Any()
-                         && CaptureModelCandidate(keyed) is { } modelContract)
+                else if (!keyed
+                        .GetAnnotations()
+                        .Any()
+                    && CaptureModelCandidate(keyed) is { } modelContract)
                 {
                     modelContracts ??= new Dictionary<SafeMigrationOperation, MySqlGeneratedColumnDependencyContract>(
                         ReferenceEqualityComparer.Instance);
@@ -83,7 +86,9 @@ internal sealed class MySqlGeneratedColumnDependencyContractCatalog
             }
 
             if (candidate is InsertDataOperation or UpdateDataOperation or DeleteDataOperation
-                && !candidate.GetAnnotations().Any())
+                && !candidate
+                    .GetAnnotations()
+                    .Any())
             {
                 // WHY: Typed row changes do not redefine generated members.
                 // Retaining this authored candidate grants no metadata proof:
@@ -92,7 +97,9 @@ internal sealed class MySqlGeneratedColumnDependencyContractCatalog
             }
 
             if (candidate is not SafeMigrationOperation operation
-                || operation.GetAnnotations().Any())
+                || operation
+                    .GetAnnotations()
+                    .Any())
             {
                 // WHY: An ordinary operation or unknown annotation has no
                 // accepted SafeMigrations target contract. It cannot extend
@@ -420,7 +427,10 @@ internal sealed class MySqlGeneratedColumnDependencyContractCatalog
             // WHY: Snapshot only the immutable generated-member references.
             // Two allocation-free dictionary walks avoid a captured predicate
             // and a growable intermediate buffer for each DROP/rename.
-            var generated = generatedCount == 0 ? [] : new ExpectedColumnDefinition[generatedCount];
+            var generated = generatedCount == 0
+                ? []
+                : new ExpectedColumnDefinition[generatedCount];
+
             var ordinal = 0;
             foreach (var column in Columns.Values)
             {

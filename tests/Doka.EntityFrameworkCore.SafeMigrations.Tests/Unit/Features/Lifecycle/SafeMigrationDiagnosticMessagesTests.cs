@@ -11,15 +11,21 @@ public sealed class SafeMigrationDiagnosticMessagesTests
         const string code = "integer_widening_unproven";
 
         // Act
-        var explanation = SafeMigrationDiagnosticMessages.GetExplanation(SafeMigrationOperationKind.AlterColumn,
-            SafeMigrationObservedState.Unsupported, code, "unsupported");
+        var explanation = SafeMigrationDiagnosticMessages.GetExplanation(
+            SafeMigrationOperationKind.AlterColumn,
+            SafeMigrationObservedState.Unsupported,
+            code,
+            "unsupported");
 
         // Assert
         Assert.Equal(code, explanation.ReasonCode);
         Assert.Contains("lock-authority", explanation.Reason, StringComparison.Ordinal);
         Assert.Contains("READ COMMITTED", explanation.NextStep, StringComparison.Ordinal);
-        Assert.Contains("no privileges or isolation settings are changed automatically", explanation.NextStep,
+        Assert.Contains(
+            "no privileges or isolation settings are changed automatically",
+            explanation.NextStep,
             StringComparison.Ordinal);
+
         Assert.DoesNotContain("offending", explanation.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -31,8 +37,11 @@ public sealed class SafeMigrationDiagnosticMessagesTests
         const string unknown = "integer_widening_unproven_private_payload";
 
         // Act
-        var explanation = SafeMigrationDiagnosticMessages.GetExplanation(SafeMigrationOperationKind.AlterColumn,
-            SafeMigrationObservedState.Unsupported, unknown, "unsupported");
+        var explanation = SafeMigrationDiagnosticMessages.GetExplanation(
+            SafeMigrationOperationKind.AlterColumn,
+            SafeMigrationObservedState.Unsupported,
+            unknown,
+            "unsupported");
 
         // Assert
         Assert.NotEqual(unknown, explanation.ReasonCode);
@@ -52,7 +61,9 @@ public sealed class SafeMigrationDiagnosticMessagesTests
     [InlineData("doka_sm_script_unsupported")]
     [InlineData("doka_sm_identity_scope_in_use")]
     [InlineData("doka_sm_identity_acquisition_unproven")]
-    public void RuntimeFormattingPreservesGuardAndOperationContext(string guardCode)
+    public void RuntimeFormattingPreservesGuardAndOperationContext(
+        string guardCode
+    )
     {
         // Arrange
         var operation = RequiredColumnOperation();
@@ -80,7 +91,9 @@ public sealed class SafeMigrationDiagnosticMessagesTests
         var operation = RequiredColumnOperation();
 
         // Act
-        var message = SafeMigrationDiagnosticMessages.FormatRuntime(operation, "doka_sm_data_blocked",
+        var message = SafeMigrationDiagnosticMessages.FormatRuntime(
+            operation,
+            "doka_sm_data_blocked",
             diagnosticReasonCode: "required_column_backfill_missing");
 
         // Assert
@@ -96,8 +109,9 @@ public sealed class SafeMigrationDiagnosticMessagesTests
     public void GenericDataBlockRetainsUnavailableSpecificCause()
     {
         // Arrange
-        var foreignKey = new SafeMigrationOperation(new EnsureForeignKeyIntent(
-            new ExpectedForeignKeyDefinition("FK_Children_Parents", "Children", ["ParentId"], "Parents", ["Id"])),
+        var foreignKey = new SafeMigrationOperation(
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition("FK_Children_Parents", "Children", ["ParentId"], "Parents", ["Id"])),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -117,11 +131,16 @@ public sealed class SafeMigrationDiagnosticMessagesTests
     {
         // Arrange
         var operation = RequiredColumnOperation();
-        var analysis = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.DataBlocked,
-            SafeMigrationRepairCapability.None, postconditionSatisfied: false, "column_nullability_data_blocked");
+        var analysis = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.DataBlocked,
+            SafeMigrationRepairCapability.None,
+            postconditionSatisfied: false,
+            "column_nullability_data_blocked");
 
         var decision = SafeMigrationDecisionPlanner.Plan(
-            operation.Intent.Kind, analysis.ObservedState, operation.Policy);
+            operation.Intent.Kind,
+            analysis.ObservedState,
+            operation.Policy);
 
         // Act
         var message = SafeMigrationDiagnosticMessages.FormatRuntimeFromAnalysis(operation, analysis, decision, 3);
@@ -140,11 +159,16 @@ public sealed class SafeMigrationDiagnosticMessagesTests
     {
         // Arrange
         var operation = RequiredColumnOperation();
-        var analysis = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
-            SafeMigrationRepairCapability.None, postconditionSatisfied: true, "classified_matching");
+        var analysis = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Matching,
+            SafeMigrationRepairCapability.None,
+            postconditionSatisfied: true,
+            "classified_matching");
 
         var decision = SafeMigrationDecisionPlanner.Plan(
-            operation.Intent.Kind, analysis.ObservedState, operation.Policy);
+            operation.Intent.Kind,
+            analysis.ObservedState,
+            operation.Policy);
 
         // Act
         var exception = Assert.Throws<ArgumentException>(() =>
@@ -165,9 +189,14 @@ public sealed class SafeMigrationDiagnosticMessagesTests
 
         // Act
         var explanation = SafeMigrationDiagnosticMessages.GetExplanation(
-            (SafeMigrationOperationKind?)null, state: null, sentinel, sentinel);
+            (SafeMigrationOperationKind?)null,
+            state: null,
+            sentinel,
+            sentinel);
 
-        var message = SafeMigrationDiagnosticMessages.FormatRuntime(operation, sentinel,
+        var message = SafeMigrationDiagnosticMessages.FormatRuntime(
+            operation,
+            sentinel,
             diagnosticReasonCode: sentinel);
 
         // Assert
@@ -189,7 +218,9 @@ public sealed class SafeMigrationDiagnosticMessagesTests
     [InlineData("doka_sm_postcondition_failed_suffix")]
     [InlineData("unrecognized_guard")]
     [InlineData("doka_sm_unknown")]
-    public void UnknownGuardUsesDisplayFallbackWithoutGrantingOwnership(string guardCode)
+    public void UnknownGuardUsesDisplayFallbackWithoutGrantingOwnership(
+        string guardCode
+    )
     {
         // Arrange
         var operation = RequiredColumnOperation();
@@ -218,8 +249,11 @@ public sealed class SafeMigrationDiagnosticMessagesTests
         const string analysisCode = "postcondition_failed";
 
         // Act
-        var explanation = SafeMigrationDiagnosticMessages.GetExplanation(SafeMigrationOperationKind.EnsureColumn,
-            SafeMigrationObservedState.Different, analysisCode, "different_no_safe_repair");
+        var explanation = SafeMigrationDiagnosticMessages.GetExplanation(
+            SafeMigrationOperationKind.EnsureColumn,
+            SafeMigrationObservedState.Different,
+            analysisCode,
+            "different_no_safe_repair");
 
         // Assert
         Assert.Equal(analysisCode, explanation.ReasonCode);
@@ -236,7 +270,9 @@ public sealed class SafeMigrationDiagnosticMessagesTests
         const string providerCode = "unsupported_fixture";
 
         // Act
-        var message = SafeMigrationDiagnosticMessages.FormatRuntime(operation, "doka_sm_unsupported",
+        var message = SafeMigrationDiagnosticMessages.FormatRuntime(
+            operation,
+            "doka_sm_unsupported",
             diagnosticReasonCode: providerCode);
 
         // Assert
@@ -280,15 +316,22 @@ public sealed class SafeMigrationDiagnosticMessagesTests
     [Theory]
     [InlineData("doka_sm_postcondition")]
     [InlineData("doka_sm_postcondition_failed")]
-    public void PostconditionReasonCannotEraseExecutionWarning(string guardCode)
+    public void PostconditionReasonCannotEraseExecutionWarning(
+        string guardCode
+    )
     {
         // Arrange
         var operation = RequiredColumnOperation();
-        var analysis = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.None, postconditionSatisfied: false, "classified_different");
+        var analysis = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.None,
+            postconditionSatisfied: false,
+            "classified_different");
 
         // Act
-        var message = SafeMigrationDiagnosticMessages.FormatRuntime(operation, guardCode,
+        var message = SafeMigrationDiagnosticMessages.FormatRuntime(
+            operation,
+            guardCode,
             diagnosticReasonCode: "required_column_backfill_missing");
 
         var postcondition = SafeMigrationDiagnosticMessages.FormatPostcondition(operation, analysis, 2);
@@ -310,7 +353,10 @@ public sealed class SafeMigrationDiagnosticMessagesTests
 
         // Act
         var explanation = SafeMigrationDiagnosticMessages.GetExplanation(
-            SafeMigrationOperationKind.EnsureForeignKey, state: null, invalidatedCode, "runtime_validation_required");
+            SafeMigrationOperationKind.EnsureForeignKey,
+            state: null,
+            invalidatedCode,
+            "runtime_validation_required");
 
         // Assert
         Assert.Equal("runtime_validation_required", explanation.ReasonCode);
@@ -324,10 +370,19 @@ public sealed class SafeMigrationDiagnosticMessagesTests
     public void LegacyAssessmentHasHonestUnknownOwnerAndSafeFacetValues()
     {
         // Arrange
-        var assessment = new SafeMigrationAssessment(1, typeof(SafeMigrationOperation).FullName!,
-            isSafeOperation: true, SafeMigrationOperationKind.EnsureColumn, "Id", SafeMigrationObservedState.Different,
-            SafeMigrationAction.RejectDifferent, postconditionSatisfied: false, "different_no_safe_repair",
-            "classified_different", "different_no_safe_repair", SafeMigrationOperationalImpact.NotApplicable,
+        var assessment = new SafeMigrationAssessment(
+            1,
+            typeof(SafeMigrationOperation).FullName!,
+            isSafeOperation: true,
+            SafeMigrationOperationKind.EnsureColumn,
+            "Id",
+            SafeMigrationObservedState.Different,
+            SafeMigrationAction.RejectDifferent,
+            postconditionSatisfied: false,
+            "different_no_safe_repair",
+            "classified_different",
+            "different_no_safe_repair",
+            SafeMigrationOperationalImpact.NotApplicable,
             [new SafeMigrationFacetDifference("column_max_length", "200", "10")]);
 
         // Act
@@ -346,12 +401,23 @@ public sealed class SafeMigrationDiagnosticMessagesTests
     {
         // Arrange
         const string sentinel = "private-password-sentinel";
-        var assessment = new SafeMigrationAssessment(1, typeof(SafeMigrationOperation).FullName!,
-            isSafeOperation: true, SafeMigrationOperationKind.EnsureColumn, "Id", SafeMigrationObservedState.Different,
-            SafeMigrationAction.RejectDifferent, postconditionSatisfied: false, "different_no_safe_repair",
-            "classified_different", "different_no_safe_repair", SafeMigrationOperationalImpact.NotApplicable,
-            [new SafeMigrationFacetDifference("column_default", sentinel, sentinel),
-                new SafeMigrationFacetDifference("column_comment", sentinel, sentinel)]);
+        var assessment = new SafeMigrationAssessment(
+            1,
+            typeof(SafeMigrationOperation).FullName!,
+            isSafeOperation: true,
+            SafeMigrationOperationKind.EnsureColumn,
+            "Id",
+            SafeMigrationObservedState.Different,
+            SafeMigrationAction.RejectDifferent,
+            postconditionSatisfied: false,
+            "different_no_safe_repair",
+            "classified_different",
+            "different_no_safe_repair",
+            SafeMigrationOperationalImpact.NotApplicable,
+            [
+                new SafeMigrationFacetDifference("column_default", sentinel, sentinel),
+                new SafeMigrationFacetDifference("column_comment", sentinel, sentinel),
+            ]);
 
         // Act
         var message = SafeMigrationDiagnosticMessages.FormatAssessment(assessment);
@@ -367,9 +433,16 @@ public sealed class SafeMigrationDiagnosticMessagesTests
     public void IdentityFormattingDisplaysCompositeRelationshipAndRenameDirection()
     {
         // Arrange
-        var foreignKey = SafeMigrationOperationIdentity.Create(new EnsureForeignKeyIntent(
-            new ExpectedForeignKeyDefinition("FK_Children_Parents", "Children", ["TenantId", "ParentId"],
-                "Parents", ["TenantId", "Id"], "child", "parent")));
+        var foreignKey = SafeMigrationOperationIdentity.Create(
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition(
+                    "FK_Children_Parents",
+                    "Children",
+                    ["TenantId", "ParentId"],
+                    "Parents",
+                    ["TenantId", "Id"],
+                    "child",
+                    "parent")));
 
         var rename = SafeMigrationOperationIdentity.Create(new RenameColumnIntent("OldId", "Children", "NewId"));
 
@@ -393,8 +466,11 @@ public sealed class SafeMigrationDiagnosticMessagesTests
     {
         // Arrange
         var identifier = "Items\r\n\u001B]\\\u20AC" + new string('x', 10_000);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent(identifier,
-            new ExpectedColumnDefinition(identifier, typeof(bool), isNullable: false), schema: identifier),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                identifier,
+                new ExpectedColumnDefinition(identifier, typeof(bool), isNullable: false),
+                schema: identifier),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -416,9 +492,15 @@ public sealed class SafeMigrationDiagnosticMessagesTests
     {
         // Arrange
         const string sentinel = "private-password-sentinel";
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("Items",
-            new ExpectedColumnDefinition("Value", typeof(string), isNullable: false,
-                comment: sentinel, defaultValue: SafeMigrationDefaultValue.Literal(sentinel))),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "Items",
+                new ExpectedColumnDefinition(
+                    "Value",
+                    typeof(string),
+                    isNullable: false,
+                    comment: sentinel,
+                    defaultValue: SafeMigrationDefaultValue.Literal(sentinel))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -437,11 +519,19 @@ public sealed class SafeMigrationDiagnosticMessagesTests
         var operation = RequiredColumnOperation();
         var identity = SafeMigrationOperationIdentity.Create(operation.Intent);
         var destination = new StringBuilder("preserved-prefix");
-        var expected = SafeMigrationDiagnosticMessages.FormatRuntime(operation, "doka_sm_data_blocked", 2,
+        var expected = SafeMigrationDiagnosticMessages.FormatRuntime(
+            operation,
+            "doka_sm_data_blocked",
+            2,
             "required_column_backfill_missing");
 
         // Act
-        SafeMigrationDiagnosticMessages.AppendRuntime(destination, operation, identity, "doka_sm_data_blocked", 2,
+        SafeMigrationDiagnosticMessages.AppendRuntime(
+            destination,
+            operation,
+            identity,
+            "doka_sm_data_blocked",
+            2,
             "required_column_backfill_missing");
 
         // Assert
@@ -456,13 +546,16 @@ public sealed class SafeMigrationDiagnosticMessagesTests
     [InlineData("Items\n", "Items\\u000A")]
     [InlineData("\u20AC", "\\u20AC")]
     [InlineData("\\", "\\\\")]
-    public void IdentifierDisplayEscapesWithoutGuessingOrPayloadInterpretation(string source, string expected)
+    public void IdentifierDisplayEscapesWithoutGuessingOrPayloadInterpretation(
+        string source,
+        string expected
+    )
     {
         // Arrange
         const int maximumLength = 128;
 
         // Act
-        var display = SafeMigrationDiagnosticMessages.BoundForDisplay(source, maximumLength);
+        var display = SafeMigrationDiagnosticMessages.BoundForDisplay(source);
 
         // Assert
         Assert.Equal(expected, display);
@@ -501,7 +594,8 @@ public sealed class SafeMigrationDiagnosticMessagesTests
     }
 
     private static SafeMigrationOperation RequiredColumnOperation() => new(
-        new EnsureColumnIntent("Items",
+        new EnsureColumnIntent(
+            "Items",
             new ExpectedColumnDefinition("IsActive", typeof(bool), isNullable: false, storeType: "tinyint(1)"),
             schema: "application"),
         SafeMigrationPolicy.ThrowIfDifferent);

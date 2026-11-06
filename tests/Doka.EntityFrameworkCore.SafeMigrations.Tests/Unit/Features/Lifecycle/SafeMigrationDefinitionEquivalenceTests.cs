@@ -8,10 +8,18 @@ public sealed class SafeMigrationDefinitionEquivalenceTests
         var baseline = Column();
         var variants = new[]
         {
-            Column(name: "other"), Column(clrType: typeof(int), defaultValue: SafeMigrationDefaultValue.Literal(1)),
-            Column(isNullable: false), Column(storeType: "varchar(41)"), Column(isUnicode: false),
-            Column(maxLength: 41), Column(isFixedLength: true), Column(isRowVersion: true), Column(precision: 11),
-            Column(scale: 3), Column(collation: "other_collation"), Column(comment: "other"),
+            Column(name: "other"),
+            Column(clrType: typeof(int), defaultValue: SafeMigrationDefaultValue.Literal(1)),
+            Column(isNullable: false),
+            Column(storeType: "varchar(41)"),
+            Column(isUnicode: false),
+            Column(maxLength: 41),
+            Column(isFixedLength: true),
+            Column(isRowVersion: true),
+            Column(precision: 11),
+            Column(scale: 3),
+            Column(collation: "other_collation"),
+            Column(comment: "other"),
             Column(defaultValue: SafeMigrationDefaultValue.Literal("other")),
             Column(defaultValue: SafeMigrationDefaultValue.Sql("CURRENT_TIMESTAMP")),
             Column(defaultValue: SafeMigrationDefaultValue.None, computedColumnSql: "1 + 1", isStored: true),
@@ -29,6 +37,7 @@ public sealed class SafeMigrationDefinitionEquivalenceTests
                     clrType: typeof(byte[]),
                     storeType: "varbinary(3)",
                     defaultValue: SafeMigrationDefaultValue.Literal(new byte[] { 1, 2, 3 }))));
+
         Assert.False(
             SafeMigrationDefinitionEquivalence.Column(
                 Column(
@@ -47,9 +56,14 @@ public sealed class SafeMigrationDefinitionEquivalenceTests
         var baseline = Index();
         var variants = new[]
         {
-            Index(name: "ix_other"), Index(table: "other"), Index(schema: "app"),
-            Index(unique: false, nullsDistinct: null), Index(filter: "value IS NOT NULL"),
-            Index(includedColumns: ["payload", "other"]), Index(method: "hash"), Index(nullsDistinct: false),
+            Index(name: "ix_other"),
+            Index(table: "other"),
+            Index(schema: "app"),
+            Index(unique: false, nullsDistinct: null),
+            Index(filter: "value IS NOT NULL"),
+            Index(includedColumns: ["payload", "other"]),
+            Index(method: "hash"),
+            Index(nullsDistinct: false),
             Index(keys: [new ExpectedIndexKeyDefinition(column: "other")]),
             Index(keys: [new ExpectedIndexKeyDefinition(expression: "lower(value)")]),
             Index(
@@ -57,7 +71,7 @@ public sealed class SafeMigrationDefinitionEquivalenceTests
                 [
                     new ExpectedIndexKeyDefinition(
                         column: "value",
-                        sortOrder: SafeMigrationIndexSortOrder.Descending)
+                        sortOrder: SafeMigrationIndexSortOrder.Descending),
                 ]),
             Index(keys: [new ExpectedIndexKeyDefinition(column: "value", prefixLength: 8)]),
             Index(
@@ -65,7 +79,7 @@ public sealed class SafeMigrationDefinitionEquivalenceTests
                 [
                     new ExpectedIndexKeyDefinition(
                         column: "value",
-                        collation: new SafeMigrationCollationIdentifier("C"))
+                        collation: new SafeMigrationCollationIdentifier("C")),
                 ]),
             Index(keys: [new ExpectedIndexKeyDefinition(column: "value", operatorClass: "text_pattern_ops")]),
         };
@@ -95,18 +109,22 @@ public sealed class SafeMigrationDefinitionEquivalenceTests
             SafeMigrationDefinitionEquivalence.PrimaryKey(
                 primaryKey,
                 new ExpectedPrimaryKeyDefinition("pk_items", "items", ["tenant_id", "id"], "app")));
+
         Assert.False(
             SafeMigrationDefinitionEquivalence.PrimaryKey(
                 primaryKey,
                 new ExpectedPrimaryKeyDefinition("pk_other", "items", ["tenant_id", "id"], "app")));
+
         Assert.False(
             SafeMigrationDefinitionEquivalence.PrimaryKey(
                 primaryKey,
                 new ExpectedPrimaryKeyDefinition("pk_items", "other", ["tenant_id", "id"], "app")));
+
         Assert.False(
             SafeMigrationDefinitionEquivalence.PrimaryKey(
                 primaryKey,
                 new ExpectedPrimaryKeyDefinition("pk_items", "items", ["id", "tenant_id"], "app")));
+
         Assert.False(
             SafeMigrationDefinitionEquivalence.PrimaryKey(
                 primaryKey,
@@ -116,18 +134,22 @@ public sealed class SafeMigrationDefinitionEquivalenceTests
             SafeMigrationDefinitionEquivalence.UniqueConstraint(
                 unique,
                 new ExpectedUniqueConstraintDefinition("uq_items", "items", ["tenant_id", "code"], "app")));
+
         Assert.False(
             SafeMigrationDefinitionEquivalence.UniqueConstraint(
                 unique,
                 new ExpectedUniqueConstraintDefinition("uq_other", "items", ["tenant_id", "code"], "app")));
+
         Assert.False(
             SafeMigrationDefinitionEquivalence.UniqueConstraint(
                 unique,
                 new ExpectedUniqueConstraintDefinition("uq_items", "other", ["tenant_id", "code"], "app")));
+
         Assert.False(
             SafeMigrationDefinitionEquivalence.UniqueConstraint(
                 unique,
                 new ExpectedUniqueConstraintDefinition("uq_items", "items", ["code", "tenant_id"], "app")));
+
         Assert.False(
             SafeMigrationDefinitionEquivalence.UniqueConstraint(
                 unique,
@@ -137,18 +159,22 @@ public sealed class SafeMigrationDefinitionEquivalenceTests
             SafeMigrationDefinitionEquivalence.CheckConstraint(
                 check,
                 new ExpectedCheckConstraintDefinition("ck_items", "items", "code <> ''", "app")));
+
         Assert.False(
             SafeMigrationDefinitionEquivalence.CheckConstraint(
                 check,
                 new ExpectedCheckConstraintDefinition("ck_other", "items", "code <> ''", "app")));
+
         Assert.False(
             SafeMigrationDefinitionEquivalence.CheckConstraint(
                 check,
                 new ExpectedCheckConstraintDefinition("ck_items", "other", "code <> ''", "app")));
+
         Assert.False(
             SafeMigrationDefinitionEquivalence.CheckConstraint(
                 check,
                 new ExpectedCheckConstraintDefinition("ck_items", "items", "code IS NOT NULL", "app")));
+
         Assert.False(
             SafeMigrationDefinitionEquivalence.CheckConstraint(
                 check,
@@ -158,10 +184,15 @@ public sealed class SafeMigrationDefinitionEquivalenceTests
         Assert.All(
             new[]
             {
-                ForeignKey(name: "fk_other"), ForeignKey(table: "other"), ForeignKey(schema: "other"),
-                ForeignKey(columns: ["parent_id", "tenant_id"]), ForeignKey(principalTable: "other"),
-                ForeignKey(principalSchema: "other"), ForeignKey(principalColumns: ["id", "tenant_id"]),
-                ForeignKey(onUpdate: ReferentialAction.NoAction), ForeignKey(onDelete: ReferentialAction.NoAction),
+                ForeignKey(name: "fk_other"),
+                ForeignKey(table: "other"),
+                ForeignKey(schema: "other"),
+                ForeignKey(columns: ["parent_id", "tenant_id"]),
+                ForeignKey(principalTable: "other"),
+                ForeignKey(principalSchema: "other"),
+                ForeignKey(principalColumns: ["id", "tenant_id"]),
+                ForeignKey(onUpdate: ReferentialAction.NoAction),
+                ForeignKey(onDelete: ReferentialAction.NoAction),
             },
             variant => Assert.False(SafeMigrationDefinitionEquivalence.ForeignKey(foreignKey, variant)));
     }
@@ -193,7 +224,9 @@ public sealed class SafeMigrationDefinitionEquivalenceTests
         isRowVersion,
         precision,
         scale,
-        collation is null ? null : new SafeMigrationCollationIdentifier(collation),
+        collation is null
+            ? null
+            : new SafeMigrationCollationIdentifier(collation),
         comment,
         defaultValue ?? SafeMigrationDefaultValue.Literal("canonical"),
         computedColumnSql,

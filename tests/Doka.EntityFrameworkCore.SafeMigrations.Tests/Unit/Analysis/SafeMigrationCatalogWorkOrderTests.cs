@@ -7,8 +7,10 @@ public sealed class SafeMigrationCatalogWorkOrderTests
     [Fact]
     public void Create_PacksUnresolvedWorkAcrossGapsWithoutRenumbering()
     {
+        // Arrange
         var calls = new int[12];
 
+        // Act
         var ordinals = SafeMigrationCatalogWorkOrder.Create(
             calls.Length,
             ordinal =>
@@ -16,13 +18,16 @@ public sealed class SafeMigrationCatalogWorkOrderTests
                 calls[ordinal]++;
 
                 return ordinal % 3 != 1;
-            });
+            },
+            CancellationToken.None);
 
+        // Assert
         Assert.Equal([0, 2, 3, 5, 6, 8, 9, 11], ordinals);
         Assert.All(calls, static count => Assert.Equal(1, count));
     }
 
     /// <summary>Empty and fully resolved captures produce no submitted work.</summary>
+    /// <param name="count">The number of already resolved operations in the capture.</param>
     [Theory]
     [InlineData(0)]
     [InlineData(512)]
@@ -30,8 +35,10 @@ public sealed class SafeMigrationCatalogWorkOrderTests
         int count
     )
     {
+        // Arrange
         var calls = 0;
 
+        // Act
         var ordinals = SafeMigrationCatalogWorkOrder.Create(
             count,
             _ =>
@@ -39,8 +46,10 @@ public sealed class SafeMigrationCatalogWorkOrderTests
                 calls++;
 
                 return false;
-            });
+            },
+            CancellationToken.None);
 
+        // Assert
         Assert.Empty(ordinals);
         Assert.Equal(count, calls);
     }
@@ -49,14 +58,18 @@ public sealed class SafeMigrationCatalogWorkOrderTests
     [Fact]
     public void Create_AcceptsTheExactCaptureBound()
     {
+        // Arrange
         var count = SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture;
 
-        var ordinals = SafeMigrationCatalogWorkOrder.Create(count, static _ => true);
+        // Act
+        var ordinals = SafeMigrationCatalogWorkOrder.Create(count, static _ => true, CancellationToken.None);
 
+        // Assert
         Assert.Equal(Enumerable.Range(0, count), ordinals);
     }
 
     /// <summary>Unbounded or invalid captures are rejected before invoking the predicate.</summary>
+    /// <param name="count">The invalid number of operations supplied by the caller.</param>
     [Theory]
     [InlineData(-1)]
     [InlineData(513)]
@@ -65,10 +78,16 @@ public sealed class SafeMigrationCatalogWorkOrderTests
         int count
     )
     {
+        // Arrange
         var calls = 0;
 
-        var exception = Record.Exception(() => SafeMigrationCatalogWorkOrder.Create(count, _ => ++calls > 0));
+        // Act
+        var exception = Record.Exception(() => SafeMigrationCatalogWorkOrder.Create(
+            count,
+            _ => ++calls > 0,
+            CancellationToken.None));
 
+        // Assert
         Assert.IsType<ArgumentOutOfRangeException>(exception);
         Assert.Equal(0, calls);
     }
@@ -77,8 +96,16 @@ public sealed class SafeMigrationCatalogWorkOrderTests
     [Fact]
     public void Create_RejectsANullPredicate()
     {
-        var exception = Record.Exception(() => SafeMigrationCatalogWorkOrder.Create(0, null!));
+        // Arrange
+        const int count = 0;
 
+        // Act
+        var exception = Record.Exception(() => SafeMigrationCatalogWorkOrder.Create(
+            count,
+            null!,
+            CancellationToken.None));
+
+        // Assert
         Assert.IsType<ArgumentNullException>(exception);
     }
 
@@ -90,7 +117,7 @@ public sealed class SafeMigrationCatalogWorkOrderTests
         int count
     )
     {
-        using var cancellation = new System.Threading.CancellationTokenSource();
+        using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         var calls = 0;
 
@@ -107,7 +134,7 @@ public sealed class SafeMigrationCatalogWorkOrderTests
     [Fact]
     public void Create_ObservesCancellationDuringSelection()
     {
-        using var cancellation = new System.Threading.CancellationTokenSource();
+        using var cancellation = new CancellationTokenSource();
         var calls = 0;
 
         var exception = Record.Exception(() => SafeMigrationCatalogWorkOrder.Create(
@@ -132,7 +159,7 @@ public sealed class SafeMigrationCatalogWorkOrderTests
     [Fact]
     public void Create_ObservesCancellationAfterTheFinalPredicate()
     {
-        using var cancellation = new System.Threading.CancellationTokenSource();
+        using var cancellation = new CancellationTokenSource();
         var calls = 0;
 
         var exception = Record.Exception(() => SafeMigrationCatalogWorkOrder.Create(
@@ -193,7 +220,9 @@ public sealed class SafeMigrationCatalogWorkOrderTests
         int count
     )
     {
-        var submitted = Enumerable.Range(0, count).ToArray();
+        var submitted = Enumerable
+            .Range(0, count)
+            .ToArray();
 
         var exception = Record.Exception(() => SafeMigrationCatalogWorkOrder.ValidateCompletion(count, submitted));
 

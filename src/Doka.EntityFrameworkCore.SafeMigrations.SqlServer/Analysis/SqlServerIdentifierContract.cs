@@ -109,22 +109,36 @@ internal static class SqlServerIdentifierContract
                     AddIndex(names, value.Schema, value.Table, value.NewName);
                     break;
                 case EnsurePrimaryKeyIntent value:
-                    AddKey(names, value.Definition.Schema, value.Definition.Table,
-                        value.Definition.Name, value.Definition.Columns);
+                    AddKey(
+                        names,
+                        value.Definition.Schema,
+                        value.Definition.Table,
+                        value.Definition.Name,
+                        value.Definition.Columns);
+
                     break;
                 case DropPrimaryKeyIntent value:
                     AddKeyName(names, value.Schema, value.Table, value.Name);
                     break;
                 case EnsureUniqueConstraintIntent value:
-                    AddKey(names, value.Definition.Schema, value.Definition.Table,
-                        value.Definition.Name, value.Definition.Columns);
+                    AddKey(
+                        names,
+                        value.Definition.Schema,
+                        value.Definition.Table,
+                        value.Definition.Name,
+                        value.Definition.Columns);
+
                     break;
                 case DropUniqueConstraintIntent value:
                     AddKeyName(names, value.Schema, value.Table, value.Name);
                     break;
                 case EnsureCheckConstraintIntent value:
-                    AddConstraint(names, value.Definition.Schema, value.Definition.Table,
+                    AddConstraint(
+                        names,
+                        value.Definition.Schema,
+                        value.Definition.Table,
                         value.Definition.Name);
+
                     break;
                 case DropCheckConstraintIntent value:
                     AddConstraint(names, value.Schema, value.Table, value.Name);
@@ -161,9 +175,12 @@ internal static class SqlServerIdentifierContract
     )
     {
         if (!operations.Any(static operation => operation is AddCheckConstraintOperation
-            or CreateTableOperation { CheckConstraints.Count: > 0, }
-            or SafeMigrationOperation { Intent: EnsureCheckConstraintIntent
-                or EnsureTableIntent { Definition.CheckConstraints.Count: > 0, }, }))
+            or CreateTableOperation { CheckConstraints.Count: > 0 }
+            or SafeMigrationOperation
+            {
+                Intent: EnsureCheckConstraintIntent
+                or EnsureTableIntent { Definition.CheckConstraints.Count: > 0 },
+            }))
         {
             return references;
         }
@@ -173,7 +190,7 @@ internal static class SqlServerIdentifierContract
         {
             switch (operation)
             {
-                case CreateTableOperation { CheckConstraints.Count: > 0, } table:
+                case CreateTableOperation { CheckConstraints.Count: > 0 } table:
                     names ??= new HashSet<SqlServerIdentifierReference>(references);
                     AddTable(names, table.Schema, table.Name);
                     foreach (var check in table.CheckConstraints)
@@ -232,7 +249,7 @@ internal static class SqlServerIdentifierContract
 
         if (references.Any(static reference => !IsValidIdentifier(reference.Name)
             || !IsValidIdentifier(reference.Schema)
-            || reference.Table is { } table && !IsValidIdentifier(table)))
+            || (reference.Table is { } table && !IsValidIdentifier(table))))
         {
             return [EndGuard(throwOnCollision, safe: false)];
         }
@@ -250,26 +267,40 @@ internal static class SqlServerIdentifierContract
         // WHY: A caller may own a similarly named local temporary table on
         // this connection. Per-invocation SQL text is intentional: a reserved
         // fixed name would block recovery after an interrupted earlier guard.
-        temporaryTable = "#doka_sm_identifiers_" + Guid.NewGuid().ToString("N");
+        temporaryTable = "#doka_sm_identifiers_"
+            + Guid
+                .NewGuid()
+                .ToString("N");
+
         var commands = new List<string>();
-        commands.Add($"IF OBJECT_ID(N'tempdb..{temporaryTable}') IS NOT NULL "
-            + "THROW 51002, N'" + ScratchScopeFailureMessage + "', 1; "
+        commands.Add(
+            $"IF OBJECT_ID(N'tempdb..{temporaryTable}') IS NOT NULL "
+            + "THROW 51002, N'"
+            + ScratchScopeFailureMessage
+            + "', 1; "
             + $"CREATE TABLE {temporaryTable} (scope tinyint NOT NULL, "
             + "schema_name nvarchar(128) COLLATE CATALOG_DEFAULT NOT NULL, "
             + "table_name nvarchar(128) COLLATE CATALOG_DEFAULT NOT NULL, "
             + "name nvarchar(128) COLLATE CATALOG_DEFAULT NOT NULL);");
+
         var batch = new StringBuilder(4096);
         var batchBytes = 0;
         var count = 0;
         foreach (var reference in references)
         {
-            var row = "(" + ((byte)reference.Scope).ToString(CultureInfo.InvariantCulture)
-                + ", " + Literal(reference.Schema)
-                + ", " + Literal(reference.Table ?? string.Empty)
-                + ", " + Literal(reference.Name) + ")";
+            var row = "("
+                + ((byte)reference.Scope).ToString(CultureInfo.InvariantCulture)
+                + ", "
+                + Literal(reference.Schema)
+                + ", "
+                + Literal(reference.Table ?? string.Empty)
+                + ", "
+                + Literal(reference.Name)
+                + ")";
 
             var bytes = Encoding.UTF8.GetByteCount(row);
-            if (count == 512 || batchBytes + bytes > 1024 * 1024)
+            if (count == 512
+                || batchBytes + bytes > 1024 * 1024)
             {
                 commands.Add($"INSERT INTO {temporaryTable} VALUES " + batch + ";");
                 batch.Clear();
@@ -308,7 +339,11 @@ internal static class SqlServerIdentifierContract
             + "<> MAX(table_name COLLATE Latin1_General_100_BIN2) "
             + "OR MIN(DATALENGTH(table_name)) <> MAX(DATALENGTH(table_name)))";
 
-        commands.Add("DECLARE " + ResultVariable + " int = CASE WHEN " + check
+        commands.Add(
+            "DECLARE "
+            + ResultVariable
+            + " int = CASE WHEN "
+            + check
             + $" THEN 0 ELSE 1 END; DROP TABLE {temporaryTable}; "
             + EndGuard(throwOnCollision, safe: null));
 
@@ -337,6 +372,7 @@ internal static class SqlServerIdentifierContract
         // grouped names. Stop at the first repeat while leaving every original
         // reference available to the unchanged catalog guard after validation.
         var scopes = new HashSet<(SqlServerIdentifierScope Scope, string Schema, string? Table)>();
+
         // WHY: Scan the captured reference list without an interface enumerator.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -359,16 +395,26 @@ internal static class SqlServerIdentifierContract
     {
         var declaration = safe is null
             ? string.Empty
-            : "DECLARE " + ResultVariable + " int = " + (safe.Value ? "1" : "0") + "; ";
+            : "DECLARE "
+            + ResultVariable
+            + " int = "
+            + (safe.Value
+                ? "1"
+                : "0")
+            + "; ";
 
-        return declaration + (throwOnCollision
-            ? "IF " + ResultVariable + " <> 1 THROW 51002, N'" + IdentifierFailureMessage + "', 1;"
-            : "SELECT " + ResultVariable + ";");
+        return declaration
+            + (throwOnCollision
+                ? "IF " + ResultVariable + " <> 1 THROW 51002, N'" + IdentifierFailureMessage + "', 1;"
+                : "SELECT " + ResultVariable + ";");
     }
 
-    private static bool IsValidIdentifier(string value)
+    private static bool IsValidIdentifier(
+        string value
+    )
     {
-        if (value.Length > 128 || value.Contains('\0'))
+        if (value.Length > 128
+            || value.Contains('\0'))
         {
             return false;
         }
@@ -380,7 +426,8 @@ internal static class SqlServerIdentifierContract
         {
             if (char.IsHighSurrogate(value[index]))
             {
-                if (index + 1 == value.Length || !char.IsLowSurrogate(value[index + 1]))
+                if (index + 1 == value.Length
+                    || !char.IsLowSurrogate(value[index + 1]))
                 {
                     return false;
                 }
@@ -396,7 +443,9 @@ internal static class SqlServerIdentifierContract
         return true;
     }
 
-    private static string Literal(string value)
+    private static string Literal(
+        string value
+    )
         => SqlServerSqlStringLiteral.Render(value);
 
     private static void AddTableDefinition(
@@ -481,8 +530,12 @@ internal static class SqlServerIdentifierContract
     )
     {
         var effective = schema ?? "dbo";
-        names.Add(new SqlServerIdentifierReference(
-            SqlServerIdentifierScope.Schema, string.Empty, null, effective));
+        names.Add(
+            new SqlServerIdentifierReference(
+                SqlServerIdentifierScope.Schema,
+                string.Empty,
+                null,
+                effective));
     }
 
     private static void AddTable(
@@ -492,8 +545,12 @@ internal static class SqlServerIdentifierContract
     )
     {
         AddSchema(names, schema);
-        names.Add(new SqlServerIdentifierReference(
-            SqlServerIdentifierScope.SchemaObject, schema ?? "dbo", null, table));
+        names.Add(
+            new SqlServerIdentifierReference(
+                SqlServerIdentifierScope.SchemaObject,
+                schema ?? "dbo",
+                null,
+                table));
     }
 
     private static void AddColumn(
@@ -504,8 +561,12 @@ internal static class SqlServerIdentifierContract
     )
     {
         AddTable(names, schema, table);
-        names.Add(new SqlServerIdentifierReference(
-            SqlServerIdentifierScope.Column, schema ?? "dbo", table, column));
+        names.Add(
+            new SqlServerIdentifierReference(
+                SqlServerIdentifierScope.Column,
+                schema ?? "dbo",
+                table,
+                column));
     }
 
     private static void AddConstraint(
@@ -516,8 +577,12 @@ internal static class SqlServerIdentifierContract
     )
     {
         AddTable(names, schema, table);
-        names.Add(new SqlServerIdentifierReference(
-            SqlServerIdentifierScope.SchemaObject, schema ?? "dbo", null, name));
+        names.Add(
+            new SqlServerIdentifierReference(
+                SqlServerIdentifierScope.SchemaObject,
+                schema ?? "dbo",
+                null,
+                name));
     }
 
     private static void AddIndex(
@@ -528,7 +593,11 @@ internal static class SqlServerIdentifierContract
     )
     {
         AddTable(names, schema, table);
-        names.Add(new SqlServerIdentifierReference(
-            SqlServerIdentifierScope.Index, schema ?? "dbo", table, name));
+        names.Add(
+            new SqlServerIdentifierReference(
+                SqlServerIdentifierScope.Index,
+                schema ?? "dbo",
+                table,
+                name));
     }
 }

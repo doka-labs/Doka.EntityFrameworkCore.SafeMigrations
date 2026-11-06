@@ -12,7 +12,7 @@ public static class SqlServerServiceCollectionExtensions
     /// <returns>The same service collection so additional registrations can be chained.</returns>
     public static IServiceCollection AddSqlServerSafeMigrations(
         this IServiceCollection services
-    ) => AddSqlServerSafeMigrations(services, typeof(SqlServerMigrationsSqlGenerator), canonicalContextType: null);
+    ) => services.AddSqlServerSafeMigrations(typeof(SqlServerMigrationsSqlGenerator), canonicalContextType: null);
 
     /// <summary>
     /// Registers SafeMigrations with explicit ordinary-operation and canonical-context contracts.
@@ -25,8 +25,7 @@ public static class SqlServerServiceCollectionExtensions
         this IServiceCollection services
     )
         where TBaselineGenerator : class, IMigrationsSqlGenerator
-        where TCanonicalMigrationContext : DbContext => AddSqlServerSafeMigrations(
-        services,
+        where TCanonicalMigrationContext : DbContext => services.AddSqlServerSafeMigrations(
         typeof(TBaselineGenerator),
         typeof(TCanonicalMigrationContext));
 

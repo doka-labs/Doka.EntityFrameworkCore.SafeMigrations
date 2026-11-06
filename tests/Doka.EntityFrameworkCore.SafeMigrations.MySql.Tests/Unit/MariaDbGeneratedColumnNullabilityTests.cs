@@ -10,11 +10,20 @@ public sealed class MariaDbGeneratedColumnNullabilityTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void LiteralProofRetainsSignedIntegralDomain(bool outsideSignedDomain)
+    public void LiteralProofRetainsSignedIntegralDomain(
+        bool outsideSignedDomain
+    )
     {
         // Arrange
-        var literal = outsideSignedDomain ? ulong.MaxValue : (ulong)long.MaxValue;
-        var definition = new ExpectedColumnDefinition("generated", typeof(long), false, "bigint",
+        var literal = outsideSignedDomain
+            ? ulong.MaxValue
+            : long.MaxValue;
+
+        var definition = new ExpectedColumnDefinition(
+            "generated",
+            typeof(long),
+            false,
+            "bigint",
             computedExpression: SafeMigrationSql.Literal(literal));
 
         // Act
@@ -32,10 +41,16 @@ public sealed class MariaDbGeneratedColumnNullabilityTests
     [InlineData("varchar(20)")]
     [InlineData("decimal(20,0)")]
     [InlineData("bigint unsigned")]
-    public void NonIntegralTargetStorageCannotBorrowAnIntegerResultProof(string storeType)
+    public void NonIntegralTargetStorageCannotBorrowAnIntegerResultProof(
+        string storeType
+    )
     {
         // Arrange
-        var definition = new ExpectedColumnDefinition("generated", typeof(long), false, storeType,
+        var definition = new ExpectedColumnDefinition(
+            "generated",
+            typeof(long),
+            false,
+            storeType,
             computedExpression: SafeMigrationSql.Literal(1));
 
         // Act
@@ -64,12 +79,22 @@ public sealed class MariaDbGeneratedColumnNullabilityTests
     [InlineData("decimal(20,0)", false, false, false)]
     [InlineData("double", false, false, false)]
     [InlineData("varchar(20)", false, false, false)]
-    public void SourceProofRequiresAnExactRequiredSignedInteger(string storeType, bool nullable, bool computed,
-        bool expected)
+    public void SourceProofRequiresAnExactRequiredSignedInteger(
+        string storeType,
+        bool nullable,
+        bool computed,
+        bool expected
+    )
     {
         // Arrange
-        var definition = new ExpectedColumnDefinition("source", typeof(long), nullable, storeType,
-            computedExpression: computed ? SafeMigrationSql.Literal(1) : null);
+        var definition = new ExpectedColumnDefinition(
+            "source",
+            typeof(long),
+            nullable,
+            storeType,
+            computedExpression: computed
+                ? SafeMigrationSql.Literal(1)
+                : null);
 
         // Act
         var qualified = MariaDbGeneratedColumnNullability.IsRequiredOrdinaryInteger(definition);
@@ -91,11 +116,17 @@ public sealed class MariaDbGeneratedColumnNullabilityTests
     [InlineData("NULL")]
     [InlineData("'1'")]
     [InlineData("CURRENT_TIMESTAMP")]
-    public void UnknownOrPotentiallyNullResultsDoNotAcquireAProof(string sql)
+    public void UnknownOrPotentiallyNullResultsDoNotAcquireAProof(
+        string sql
+    )
     {
         // Arrange
         Assert.True(SafeMigrationSqlExpressionParser.TryParse(sql, out var expression, out _));
-        var definition = new ExpectedColumnDefinition("generated", typeof(long), false, "bigint",
+        var definition = new ExpectedColumnDefinition(
+            "generated",
+            typeof(long),
+            false,
+            "bigint",
             computedExpression: expression);
 
         // Act
@@ -113,8 +144,13 @@ public sealed class MariaDbGeneratedColumnNullabilityTests
         // Arrange
         const string sql = "right_bound > CASE WHEN left_bound = 9223372036854775807 "
             + "THEN left_bound ELSE left_bound + 1 END";
+
         Assert.True(SafeMigrationSqlExpressionParser.TryParse(sql, out var expression, out _));
-        var definition = new ExpectedColumnDefinition("generated", typeof(bool), false, "tinyint(1)",
+        var definition = new ExpectedColumnDefinition(
+            "generated",
+            typeof(bool),
+            false,
+            "tinyint(1)",
             computedExpression: expression);
 
         // Act
@@ -131,11 +167,18 @@ public sealed class MariaDbGeneratedColumnNullabilityTests
     {
         // Arrange
         var expression = SafeMigrationSql.Case(
-        [
-            new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.Identifier("nullable_condition"),
-                SafeMigrationSql.Literal(1)),
-        ], SafeMigrationSql.Literal(0));
-        var definition = new ExpectedColumnDefinition("generated", typeof(int), false, "int",
+            [
+                new SafeMigrationSqlCaseWhenClause(
+                    SafeMigrationSql.Identifier("nullable_condition"),
+                    SafeMigrationSql.Literal(1)),
+            ],
+            SafeMigrationSql.Literal(0));
+
+        var definition = new ExpectedColumnDefinition(
+            "generated",
+            typeof(int),
+            false,
+            "int",
             computedExpression: expression);
 
         // Act

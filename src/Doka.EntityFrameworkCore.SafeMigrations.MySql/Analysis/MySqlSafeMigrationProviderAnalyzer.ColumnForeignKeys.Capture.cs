@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed partial class MySqlSafeMigrationProviderAnalyzer
@@ -12,10 +14,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     /// <returns>Unique requests and additional reference-distinct consumers of each captured fact.</returns>
     internal static (IReadOnlyList<MySqlColumnDependencyRequest> Requests,
         IReadOnlyDictionary<int, HashSet<SafeMigrationOperation>>? Aliases) CreateColumnDependencyRequests(
-        IReadOnlyList<SafeMigrationOperation> operations,
-        IReadOnlyList<SafeMigrationProviderAnalysis> analyses,
-        string? currentDatabase
-    )
+            IReadOnlyList<SafeMigrationOperation> operations,
+            IReadOnlyList<SafeMigrationProviderAnalysis> analyses,
+            string? currentDatabase
+        )
     {
         ArgumentNullException.ThrowIfNull(operations);
         ArgumentNullException.ThrowIfNull(analyses);
@@ -27,6 +29,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         Dictionary<(string? Schema, string Table, string Column, bool Nullable), int>? identities = null;
         List<MySqlColumnDependencyRequest>? requests = null;
         Dictionary<int, HashSet<SafeMigrationOperation>>? aliases = null;
+
         // WHY: Pair each operation with its own analysis before requesting dependency evidence.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -44,7 +47,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             var key = (MySqlTableIdentity.NormalizeDatabase(schema, currentDatabase), table, column.Name,
                 column.IsNullable);
 
-            identities ??= new(ColumnDependencyIdentityComparer.Instance);
+            identities ??=
+                new Dictionary<(string? Schema, string Table, string Column, bool Nullable), int>(
+                    ColumnDependencyIdentityComparer.Instance);
+
             if (identities.TryGetValue(key, out var existing))
             {
                 if (!ReferenceEquals(requests![existing].Operation, operation))
@@ -52,7 +58,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     aliases ??= [];
                     if (!aliases.TryGetValue(existing, out var consumers))
                     {
-                        aliases.Add(existing, consumers = new(ReferenceEqualityComparer.Instance));
+                        aliases.Add(
+                            existing,
+                            consumers = new HashSet<SafeMigrationOperation>(ReferenceEqualityComparer.Instance));
                     }
 
                     consumers.Add(operation);
@@ -63,10 +71,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
             requests ??= [];
             identities.Add(key, requests.Count);
-            requests.Add(new(operation, table, column.Name, column.IsNullable, ordinal));
+            requests.Add(new MySqlColumnDependencyRequest(operation, table, column.Name, column.IsNullable, ordinal));
         }
 
-        return (requests is null ? [] : requests, aliases);
+        return (requests is null
+            ? []
+            : requests, aliases);
     }
 
     /// <summary>Reads bounded dependency facts, including an explicit absence sentinel for every request.</summary>
@@ -92,12 +102,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
         var fixedBytes = Encoding.UTF8.GetByteCount(BuildColumnDependencyQuery(string.Empty));
         await SafeMigrationCatalogProbeBatch.ReadAsync(
-            connection, requests.Count, maximumPayloadBytes, commandTimeout,
+            connection,
+            requests.Count,
+            maximumPayloadBytes,
+            commandTimeout,
             (command, offset) =>
             {
                 var parameters = new MySqlCatalogQueryParameterizer(command);
-                var sources = new List<string>(Math.Min(
-                    SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement, requests.Count - offset));
+                var sources = new List<string>(
+                    Math.Min(
+                        SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
+                        requests.Count - offset));
 
                 var sourceBytes = 0;
                 while (offset + sources.Count < requests.Count
@@ -112,7 +127,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         + $"{(request.Nullable ? "TRUE" : "FALSE")} AS target_nullable";
 
                     var addedBytes = Encoding.UTF8.GetByteCount(source)
-                        + (sources.Count == 0 ? 0 : separatorBytes);
+                        + (sources.Count == 0
+                            ? 0
+                            : separatorBytes);
 
                     var payload = checked(fixedBytes + 3 * (sourceBytes + addedBytes) + parameters.Utf8PayloadBytes);
                     if (SafeMigrationCatalogQueryLimits.Exceeded(parameters.Count, payload, maximumPayloadBytes))
@@ -122,7 +139,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         if (sources.Count == 0)
                         {
                             throw SafeMigrationCatalogQueryLimits.OversizedOperation(
-                                request.Ordinal, parameterCount, payload);
+                                request.Ordinal,
+                                parameterCount,
+                                payload);
                         }
 
                         break;
@@ -136,10 +155,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     string.Join(SafeMigrationCatalogQueryLimits.Separator, sources));
 
                 return new SafeMigrationCatalogProbeStatement(
-                    sources.Count, parameters.Utf8PayloadBytes, requests[offset].Ordinal);
+                    sources.Count,
+                    parameters.Utf8PayloadBytes,
+                    requests[offset].Ordinal);
             },
             (reader, offset, count, token) => ReadColumnDependencyStatementAsync(
-                reader, requests, offset, count, observe, token),
+                reader,
+                requests,
+                offset,
+                count,
+                observe,
+                token),
             cancellationToken);
     }
 
@@ -153,18 +179,26 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         ArgumentNullException.ThrowIfNull(source);
 
         var primaryOwner = MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
-            "primary_key.TABLE_NAME", "request.table_name");
+            "primary_key.TABLE_NAME",
+            "request.table_name");
+
         var foreignOwner = MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
-            "rc.TABLE_NAME", "request.table_name");
+            "rc.TABLE_NAME",
+            "request.table_name");
+
         var primarySchema = MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
-            "primary_key.CONSTRAINT_SCHEMA", "DATABASE()");
+            "primary_key.CONSTRAINT_SCHEMA",
+            "DATABASE()");
+
         var foreignSchema = MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
-            "rc.CONSTRAINT_SCHEMA", "DATABASE()");
+            "rc.CONSTRAINT_SCHEMA",
+            "DATABASE()");
 
         // WHY: Sentinels prove absence rather than inferring it from a missing
         // result. Both dependency roles share one bounded source window, while
         // actual FK names remain complete separate rows, never concatenations.
-        return ColumnDependencyQueryMarker + "\nSELECT request.request_ordinal, 0 AS proof_kind, "
+        return ColumnDependencyQueryMarker
+            + "\nSELECT request.request_ordinal, 0 AS proof_kind, "
             + "request.target_nullable, NULL AS primary_member, NULL AS foreign_key_name "
             + $"FROM ({source}) request\nUNION ALL\n"
             + "SELECT request.request_ordinal, 1, TRUE, COUNT(primary_column.COLUMN_NAME) > 0, NULL "
@@ -221,7 +255,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         while (await reader.ReadAsync(cancellationToken))
         {
             var ordinal = reader.GetInt32(0);
-            if (ordinal < offset || ordinal >= offset + count || ordinal < previous)
+            if (ordinal < offset
+                || ordinal >= offset + count
+                || ordinal < previous)
             {
                 throw InvalidColumnDependencyResult();
             }
@@ -237,7 +273,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             switch (reader.GetInt32(1))
             {
                 case 0:
-                    if (sentinels[index] || !reader.IsDBNull(3) || !reader.IsDBNull(4))
+                    if (sentinels[index]
+                        || !reader.IsDBNull(3)
+                        || !reader.IsDBNull(4))
                     {
                         throw InvalidColumnDependencyResult();
                     }
@@ -245,7 +283,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     sentinels[index] = true;
                     break;
                 case 1:
-                    if (!sentinels[index] || !nullable || primarySeen[index] || !reader.IsDBNull(4))
+                    if (!sentinels[index]
+                        || !nullable
+                        || primarySeen[index]
+                        || !reader.IsDBNull(4))
                     {
                         throw InvalidColumnDependencyResult();
                     }
@@ -254,14 +295,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     primarySeen[index] = true;
                     break;
                 case 2:
-                    if (!sentinels[index] || nullable || !reader.IsDBNull(3) || reader.IsDBNull(4))
+                    if (!sentinels[index]
+                        || nullable
+                        || !reader.IsDBNull(3)
+                        || reader.IsDBNull(4))
                     {
                         throw InvalidColumnDependencyResult();
                     }
 
                     var name = reader.GetString(4);
                     if (string.IsNullOrWhiteSpace(name)
-                        || !(names[index] ??= new(StringComparer.OrdinalIgnoreCase)).Add(name))
+                        || !(names[index] ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase)).Add(name))
                     {
                         throw InvalidColumnDependencyResult();
                     }
@@ -277,7 +321,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < count; index++)
         {
-            if (!sentinels[index] || primarySeen[index] != requests[offset + index].Nullable)
+            if (!sentinels[index]
+                || primarySeen[index] != requests[offset + index].Nullable)
             {
                 throw InvalidColumnDependencyResult();
             }
@@ -291,7 +336,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         for (var index = 0; index < count; index++)
         {
             var completed = names[index] is { } captured
-                ? System.Collections.Frozen.FrozenSet.ToFrozenSet(captured, StringComparer.OrdinalIgnoreCase)
+                ? captured.ToFrozenSet(StringComparer.OrdinalIgnoreCase)
                 : null;
 
             observe(offset + index, primary[index], completed);
@@ -344,12 +389,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     {
         if (hasPrimaryKey)
         {
-            (primary ??= new(ReferenceEqualityComparer.Instance)).Add(operation);
+            (primary ??= new HashSet<SafeMigrationOperation>(ReferenceEqualityComparer.Instance)).Add(operation);
         }
 
         if (names is { Count: > 0 })
         {
-            (setNull ??= new(ReferenceEqualityComparer.Instance)).Add(operation, names);
+            (setNull ??=
+                    new Dictionary<SafeMigrationOperation, IReadOnlySet<string>>(ReferenceEqualityComparer.Instance))
+                .Add(operation, names);
         }
     }
 
@@ -374,9 +421,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         public int GetHashCode(
             (string? Schema, string Table, string Column, bool Nullable) value
         )
-            => HashCode.Combine(value.Schema is null ? 0 : StringComparer.Ordinal.GetHashCode(value.Schema),
+            => HashCode.Combine(
+                value.Schema is null
+                    ? 0
+                    : StringComparer.Ordinal.GetHashCode(value.Schema),
                 StringComparer.Ordinal.GetHashCode(value.Table),
-                StringComparer.OrdinalIgnoreCase.GetHashCode(value.Column), value.Nullable);
+                StringComparer.OrdinalIgnoreCase.GetHashCode(value.Column),
+                value.Nullable);
     }
 }
 

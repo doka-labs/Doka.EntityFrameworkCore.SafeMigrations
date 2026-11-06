@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed partial class SafeMigrationScaffoldingTests
@@ -6,11 +8,23 @@ public sealed partial class SafeMigrationScaffoldingTests
     public static TheoryData<MigrationOperation> DisabledUnsupportedOperations => new()
     {
         new AlterTableOperation { Name = "items" },
-        new CreateSequenceOperation { Name = "item_ids", ClrType = typeof(long) },
+        new CreateSequenceOperation
+        {
+            Name = "item_ids",
+            ClrType = typeof(long),
+        },
         new AlterSequenceOperation { Name = "item_ids" },
         new DropSequenceOperation { Name = "item_ids" },
-        new RenameSequenceOperation { Name = "item_ids", NewName = "product_ids" },
-        new RestartSequenceOperation { Name = "item_ids", StartValue = 42 },
+        new RenameSequenceOperation
+        {
+            Name = "item_ids",
+            NewName = "product_ids",
+        },
+        new RestartSequenceOperation
+        {
+            Name = "item_ids",
+            StartValue = 42,
+        },
         new SqlOperation { Sql = "SELECT 1;" },
     };
 
@@ -22,8 +36,16 @@ public sealed partial class SafeMigrationScaffoldingTests
         new CreateSequenceOperation { Name = "item_ids" },
         new AlterSequenceOperation { Name = "item_ids" },
         new DropSequenceOperation { Name = "item_ids" },
-        new RenameSequenceOperation { Name = "item_ids", NewName = "product_ids" },
-        new RestartSequenceOperation { Name = "item_ids", StartValue = 42 },
+        new RenameSequenceOperation
+        {
+            Name = "item_ids",
+            NewName = "product_ids",
+        },
+        new RestartSequenceOperation
+        {
+            Name = "item_ids",
+            StartValue = 42,
+        },
         new SqlOperation { Sql = "SELECT 1;" },
     };
 
@@ -49,37 +71,6 @@ public sealed partial class SafeMigrationScaffoldingTests
             createIndexProjectors ?? [],
             providerOperationAdapters ?? []);
     }
-
-    private sealed class TestProviderOperationAdapter : ISafeMigrationProviderOperationAdapter
-    {
-        public bool TryNormalize(
-            MigrationOperation operation,
-            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)]
-            out SafeMigrationOperation? safeOperation
-        )
-        {
-            safeOperation = operation switch
-            {
-                CreateIndexOperation index when index["Test:ProviderMetadata"] is not null =>
-                    new SafeMigrationOperation(
-                        new EnsureIndexIntent(SafeMigrationExpectedDefinitionFactory.From(index)),
-                        SafeMigrationPolicy.ThrowIfDifferent),
-                DropColumnOperation column when column["Test:ProviderMetadata"] is not null =>
-                    new SafeMigrationOperation(
-                        new DropColumnIntent(column.Name, column.Table, column.Schema),
-                        SafeMigrationPolicy.ThrowIfDifferent),
-                _ => null,
-            };
-
-            return safeOperation is not null;
-        }
-
-        public bool IsCertifiedPassthrough(
-            MigrationOperation operation
-        ) => operation is AlterDatabaseOperation;
-    }
-
-    private sealed class UnknownMigrationOperation : MigrationOperation { }
 
     /// <summary>Wraps the provider generator with the selected safe-scaffolding configuration.</summary>
     private static SafeMigrationCSharpMigrationsGenerator CreateMigrationsGenerator(
@@ -136,6 +127,36 @@ public sealed partial class SafeMigrationScaffoldingTests
         return count;
     }
 
+    private sealed class TestProviderOperationAdapter : ISafeMigrationProviderOperationAdapter
+    {
+        public bool TryNormalize(
+            MigrationOperation operation,
+            [NotNullWhen(true)] out SafeMigrationOperation? safeOperation
+        )
+        {
+            safeOperation = operation switch
+            {
+                CreateIndexOperation index when index["Test:ProviderMetadata"] is not null =>
+                    new SafeMigrationOperation(
+                        new EnsureIndexIntent(SafeMigrationExpectedDefinitionFactory.From(index)),
+                        SafeMigrationPolicy.ThrowIfDifferent),
+                DropColumnOperation column when column["Test:ProviderMetadata"] is not null =>
+                    new SafeMigrationOperation(
+                        new DropColumnIntent(column.Name, column.Table, column.Schema),
+                        SafeMigrationPolicy.ThrowIfDifferent),
+                _ => null,
+            };
+
+            return safeOperation is not null;
+        }
+
+        public bool IsCertifiedPassthrough(
+            MigrationOperation operation
+        ) => operation is AlterDatabaseOperation;
+    }
+
+    private sealed class UnknownMigrationOperation : MigrationOperation { }
+
     private sealed class NullTypeMappingSource : ITypeMappingSource
     {
         public CoreTypeMapping? FindMapping(
@@ -147,11 +168,11 @@ public sealed partial class SafeMigrationScaffoldingTests
         ) => null;
 
         public CoreTypeMapping? FindMapping(
-            System.Reflection.MemberInfo member
+            MemberInfo member
         ) => null;
 
         public CoreTypeMapping? FindMapping(
-            System.Reflection.MemberInfo member,
+            MemberInfo member,
             IModel model,
             bool useAttributes
         ) => null;
@@ -173,6 +194,7 @@ public sealed partial class SafeMigrationScaffoldingTests
     ) : IMigrationsCodeGenerator
     {
         public const string MigrationSource = "module Company.Migrations.CreateUsers";
+
         public const string CSharpMigrationSource = "using Microsoft.EntityFrameworkCore.Migrations;\n\n"
             + "#nullable disable\n\n"
             + "namespace Company.Migrations\n"
@@ -184,14 +206,11 @@ public sealed partial class SafeMigrationScaffoldingTests
 
         public const string MetadataSource = "using System;\npartial class CreateUsers "
             + "{ private readonly Guid _id = new Guid(\"1714e708-5197-44c4-b355-ad0f2bc6cc80\"); }";
+
         public const string SnapshotSource = "using System;\npartial class ReviewContextModelSnapshot "
             + "{ private readonly Guid _id = new Guid(\"1714e708-5197-44c4-b355-ad0f2bc6cc80\"); }";
 
         private readonly string _migrationSource = migrationSource ?? MigrationSource;
-
-        public string FileExtension => ".cs";
-
-        public string? Language { get; } = language;
 
         public int MigrationCallCount { get; private set; }
 
@@ -202,6 +221,10 @@ public sealed partial class SafeMigrationScaffoldingTests
         public IReadOnlyList<MigrationOperation>? LastUpOperations { get; private set; }
 
         public IReadOnlyList<MigrationOperation>? LastDownOperations { get; private set; }
+
+        public string FileExtension => ".cs";
+
+        public string? Language { get; } = language;
 
         public string GenerateMigration(
             string? migrationNamespace,

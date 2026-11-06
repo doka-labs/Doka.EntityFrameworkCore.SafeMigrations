@@ -124,7 +124,15 @@ Version 10.6.1 retains that public surface, report schemas and fingerprint
 formats. Its serviced dependency floors and upgrade requirements are listed
 in the [10.6.1 upgrade notes](support-and-qualification.md#upgrade-to-1061).
 
-The current MySQL/MariaDB adapter requires Doka `[10.6.3,10.7.0)` and
+Version 10.7.0 promotes the ten required-token runner/provider-analyzer
+declarations into the Core shipped baseline. CLR method signatures remain,
+but the optional/default-argument metadata is removed: callers must pass a
+token explicitly, including late-bound callers. This is a source/API contract
+break within the retained 10.x line, not a claim of strict SemVer compatibility.
+See the [10.7.0 upgrade notes](support-and-qualification.md#upgrade-to-1070).
+Framework-owned overrides, report schemas and fingerprint formats are unchanged.
+
+The current MySQL/MariaDB adapter requires Doka `[10.6.4,10.7.0)` and
 MySqlConnector minimum 2.6.2; EF Core and dependency-injection minimums are
 10.0.14. SQL Server requires SqlClient minimum 6.1.8 and PKCS minimum 9.0.22.
 These promoted transport floors belong only to their respective providers.
@@ -785,6 +793,43 @@ classification semantics. Snapshot cleanup preserves the original analysis
 failure; failed cleanup closes the connection, with pooled sessions reset before
 reuse. See
 [catalog transport](mysql-mariadb-ddl-behavior.md#read-only-catalog-transport).
+
+### Cancellation contract
+
+Every repository-owned method accepting a `CancellationToken` requires that
+argument explicitly. This includes `ISafeMigrationRunner`,
+`SafeMigrationRunner`, `ISafeMigrationProviderAnalyzer` and their internal
+implementations. Pass the existing operation token through each layer; use
+`CancellationToken.None` only for a deliberately uncancellable root operation.
+There are no tokenless compatibility overloads.
+
+Ordinary owned asynchronous methods also require the token when none was
+previously declared. This includes internal/test helpers and owned asynchronous
+action delegates. Cancellation is forwarded to the actual operation rather
+than merely accepted by an unused wrapper parameter.
+
+A local function belonging to the same operation may capture its enclosing
+token or token source directly; no redundant token argument is required there.
+Callbacks with a token-bearing delegate contract still use the invocation's
+token, and separate operations keep their own explicit cancellation boundary.
+
+Removing the optional defaults is a source compatibility break for callers
+that omitted the token, including named-argument calls. Existing compiled
+callers retain their binary signatures and already supply the previously
+compiled default. Provider SPI implementations should also remove their own
+defaults; all callers must make the cancellation choice explicitly.
+
+EF/ADO.NET overrides and implementations of external framework interfaces
+retain the framework-owned parameter convention. This exception does not
+extend to SafeMigrations-owned interfaces or helpers with similar names.
+Framework-controlled test, benchmark and process entry points likewise retain
+their external signatures and adapt explicitly to owned cancellable helpers.
+Cancellation remains cooperative, not a command timeout or rollback guarantee.
+Cleanup that must restore session state or release owned resources after the
+point of no cancellation is an explicit exception: uninterruptible cleanup and
+recovery methods remain tokenless where required, retaining their independent
+deadlines. Do not wrap their completion in a wait canceled by the failed
+operation; the resource must not be reused or disposed while cleanup still owns it.
 
 ## Provider analyzer SPI
 

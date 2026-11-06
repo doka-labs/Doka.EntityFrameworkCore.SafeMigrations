@@ -1,104 +1,170 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 
 /// <summary>Attributes real bounded narrowing discovery and transport phases with deterministic ADO results.</summary>
-internal static class PostgreSqlMaintenanceAttribution
+public class PostgreSqlMaintenanceAttribution : IDisposable
 {
-    /// <summary>Measures exact native-batch and fallback windows without claiming native database timings.</summary>
-    /// <param name="outputPath">The caller-owned JSON evidence destination.</param>
-    /// <returns>Zero after all ordinal, SQL, transport and cancellation controls pass.</returns>
-    internal static int Run(
-        string outputPath
-    )
+    private CatalogStatementTestConnection _connection = null!;
+    private PostgreSqlGenerationContext _context = null!;
+    private bool _disposed;
+    private SafeMigrationOperation[] _operations = null!;
+
+    private Func<DbConnection, IReadOnlyList<SafeMigrationOperation>, SafeMigrationObservedState?[], CancellationToken,
+        Task> _resolve = null!;
+
+    private SafeMigrationObservedState?[] _states = null!;
+
+    /// <summary>Gets or sets the operation count surrounding statement and transport batch boundaries.</summary>
+    [Params(
+        31,
+        32,
+        33,
+        511,
+        512,
+        513,
+        4097)]
+    public int OperationCount { get; set; }
+
+    /// <summary>Gets or sets whether deterministic ADO supports native batching or command fallback.</summary>
+    [Params(false, true)]
+    public bool NativeBatch { get; set; }
+
+    /// <summary>Releases the deterministic transport and provider service context.</summary>
+    public void Dispose()
     {
-        using var context = new PostgreSqlGenerationContext();
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Runs exact native-batch and fallback windows without claiming native database timings.</summary>
+    /// <param name="args">The BenchmarkDotNet command-line arguments.</param>
+    /// <returns>The shared benchmark runner exit code.</returns>
+    internal static int Run(
+        string[] args
+    ) => BenchmarkProgram.Run(args, typeof(PostgreSqlMaintenanceAttribution));
+
+    /// <summary>Checks exact SQL, ordinal ownership, replay and cancellation outside measurements.</summary>
+    [GlobalSetup]
+    public void Setup()
+    {
+        _disposed = false;
+        _context = new PostgreSqlGenerationContext();
         var catalog = new PostgreSqlSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(),
-            context.GetService<ISqlGenerationHelper>());
+            _context.GetService<IRelationalTypeMappingSource>(),
+            _context.GetService<ISqlGenerationHelper>());
 
         var analyzer = new PostgreSqlSafeMigrationProviderAnalyzer(
-            context.GetService<IRelationalTypeMappingSource>(),
-            context.GetService<ISqlGenerationHelper>());
+            _context.GetService<IRelationalTypeMappingSource>(),
+            _context.GetService<ISqlGenerationHelper>());
 
-        var resolve = Bind(analyzer);
-        var results = new List<object>();
-        foreach (var count in new[] { 31, 32, 33, 511, 512, 513, 4097 })
+        _resolve = Bind(analyzer);
+        _operations = Operations(OperationCount);
+        _states = new SafeMigrationObservedState?[OperationCount];
+        _connection = new CatalogStatementTestConnection(NativeBatch, EligibilityRows);
+        var resolved = ResolveEligibility();
+        resolved
+            .GetAwaiter()
+            .GetResult();
+
+        var observed = ReadResult(resolved);
+        var expected = _operations
+            .Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+            .Select((chunk,
+                    window) => string.Join(
+                    SafeMigrationCatalogQueryLimits.Separator,
+                    chunk.Select((operation,
+                        ordinal) => EligibilitySql(
+                        catalog,
+                        operation,
+                        window * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement + ordinal)))
+                + SafeMigrationCatalogQueryLimits.Trailer)
+            .ToArray();
+
+        MaintenanceAttribution.Require(
+            expected.SequenceEqual(_connection.Submissions.Select(static submission => submission.Sql)),
+            "The measured PostgreSQL window lost exact SQL or ordinal ownership.");
+
+        MaintenanceAttribution.Require(
+            observed.Length == OperationCount
+            && _connection.Submissions.All(static submission => submission is { Timeout: 71, Parameters.Count: 0 }
+                && Encoding.UTF8.GetByteCount(submission.Sql)
+                <= SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes),
+            "The PostgreSQL attribution transport or result shape is invalid.");
+
+        VerifyFacts(observed);
+        var batches = _connection.BatchCounts.ToArray();
+        var sqlBytes = _connection.Submissions.Sum(static submission =>
+            Encoding.UTF8.GetByteCount(submission.Sql));
+
+        var hash = MaintenanceAttribution.Hash(string.Join("\n", expected));
+        _connection.ResetCaptures();
+        var replay = ResolveEligibility();
+        replay
+            .GetAwaiter()
+            .GetResult();
+
+        VerifyFacts(ReadResult(replay));
+        MaintenanceAttribution.Require(
+            expected.SequenceEqual(_connection.Submissions.Select(static submission => submission.Sql))
+            && batches.SequenceEqual(_connection.BatchCounts),
+            "PostgreSQL attribution replay accumulated captures or changed transport ownership.");
+
+        VerifyRepeatedSkippedAndCancelled(_resolve);
+        var output = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_ATTRIBUTION_OUTPUT");
+        if (!string.IsNullOrWhiteSpace(output))
         {
-            foreach (var native in new[] { false, true })
-            {
-                var operations = Operations(count);
-                var states = new SafeMigrationObservedState?[count];
-                using var connection = new CatalogStatementTestConnection(native, EligibilityRows);
-                var resolved = resolve(connection, operations, states, CancellationToken.None);
-
-                resolved
-                    .GetAwaiter()
-                    .GetResult();
-
-                var output = ReadResult(resolved);
-                var expected = operations
-                    .Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
-                    .Select((
-                            chunk,
-                            window
-                        ) => string.Join(
-                            SafeMigrationCatalogQueryLimits.Separator,
-                            chunk.Select((
-                                operation,
-                                ordinal
-                            ) => EligibilitySql(
-                                catalog,
-                                operation,
-                                (window * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement) + ordinal)))
-                        + SafeMigrationCatalogQueryLimits.Trailer)
-                    .ToArray();
-
-                MaintenanceAttribution.Require(
-                    expected.SequenceEqual(connection.Submissions.Select(static submission => submission.Sql)),
-                    "The measured PostgreSQL window lost exact SQL or ordinal ownership.");
-
-                MaintenanceAttribution.Require(
-                    output.Length == count
-                    && connection.Submissions.All(static submission =>
-                        submission is { Timeout: 71, Parameters.Count: 0 }
-                        && System.Text.Encoding.UTF8.GetByteCount(submission.Sql)
-                        <= SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes),
-                    "The PostgreSQL attribution transport or result shape is invalid.");
-
-                VerifyFacts(output);
-                results.Add(
+            _ = MaintenanceAttribution.Write(
+                Path.Combine(output, $"postgresql-eligibility-{OperationCount}-{NativeBatch}.json"),
+                "Functional/source evidence; PostgreSQL deterministic client ADO workload; not timing evidence",
+                [
                     new
                     {
                         Id = "PERF-03",
                         Workload = "eligibility_windows",
-                        Operations = count,
-                        NativeBatch = native,
-                        Statements = connection.Submissions.Count,
-                        Batches = connection.BatchCounts.ToArray(),
-                        SqlUtf8Bytes =
-                            connection.Submissions.Sum(static submission =>
-                                System.Text.Encoding.UTF8.GetByteCount(submission.Sql)),
-                        ExactSqlHash =
-                            MaintenanceAttribution.Hash(
-                                string.Join("\n", connection.Submissions.Select(static submission => submission.Sql))),
-                        Samples = MaintenanceAttribution.Measure(
-                            () =>
-                            {
-                                connection.Submissions.Clear();
-                                connection.BatchCounts.Clear();
-                                resolve(connection, operations, states, CancellationToken.None)
-                                    .GetAwaiter()
-                                    .GetResult();
-
-                                return connection.Submissions.Count;
-                            },
-                            count >= 512 ? 2 : 16),
-                    });
-            }
+                        Operations = OperationCount,
+                        NativeBatch,
+                        Statements = expected.Length,
+                        Batches = batches,
+                        SqlUtf8Bytes = sqlBytes,
+                        ExactSqlHash = hash,
+                    },
+                ]);
         }
 
-        VerifyRepeatedSkippedAndCancelled(resolve);
+        // WHY: Keep exact SQL/replay assertions above, but never retain or clear diagnostic observations
+        // in measured invocations. IterationSetup would force single-invocation calibration instead.
+        _connection.Dispose();
+        _connection = new CatalogStatementTestConnection(NativeBatch, EligibilityRows) { CaptureObservations = false };
+        var unrecorded = ResolveEligibility();
+        unrecorded
+            .GetAwaiter()
+            .GetResult();
 
-        return MaintenanceAttribution.Write(outputPath, "PostgreSQL deterministic client ADO workload", results);
+        VerifyFacts(ReadResult(unrecorded));
+    }
+
+    /// <summary>Resolves one complete eligibility workload without recording diagnostic observations.</summary>
+    /// <returns>The real asynchronous phase completion, consumed by BenchmarkDotNet.</returns>
+    [Benchmark]
+    public Task ResolveEligibility() => _resolve(_connection, _operations, _states, CancellationToken.None);
+
+    /// <summary>Disposes the deterministic transport and provider service context.</summary>
+    [GlobalCleanup]
+    public void Cleanup() => Dispose();
+
+    /// <summary>Releases owned managed resources once while supporting generated benchmark subclasses.</summary>
+    /// <param name="disposing">Whether managed resources should be released.</param>
+    protected virtual void Dispose(
+        bool disposing
+    )
+    {
+        if (!disposing || _disposed)
+        {
+            return;
+        }
+
+        _connection.Dispose();
+        _context.Dispose();
+        _disposed = true;
     }
 
     /// <summary>Binds the existing private phase once so reflection and argument arrays are never measured.</summary>
@@ -274,7 +340,7 @@ internal static class PostgreSqlMaintenanceAttribution
         rows.Columns.Add("ordinal", typeof(int));
         rows.Columns.Add("eligible", typeof(bool));
         rows.Columns.Add("narrowing", typeof(bool));
-        foreach (var selection in sql.Split(SafeMigrationCatalogQueryLimits.Separator, StringSplitOptions.None))
+        foreach (var selection in sql.Split(SafeMigrationCatalogQueryLimits.Separator))
         {
             var start = selection.IndexOf("SELECT ", StringComparison.Ordinal) + 7;
             var end = selection.IndexOf(',', start);

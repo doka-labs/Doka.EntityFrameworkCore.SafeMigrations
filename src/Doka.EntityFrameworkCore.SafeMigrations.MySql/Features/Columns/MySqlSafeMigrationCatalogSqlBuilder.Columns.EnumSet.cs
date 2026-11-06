@@ -3,13 +3,16 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 {
     private const string EnumSetSqlWhitespace = " \t\r\n\v\f";
+
     private const string NativeEnumNoBackslashEscapesExpression =
         "FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) > 0";
 
     /// <summary>Identifies standard-only literals whose known native comment scope invalidates the protocol.</summary>
     /// <param name="definition">The immutable target with its authored member syntax and comment.</param>
     /// <returns>Whether missing work must refuse staging without rejecting an already exact target.</returns>
-    internal static bool HasStandardOnlyEnumSetNativeCommentScope(ExpectedColumnDefinition definition)
+    internal static bool HasStandardOnlyEnumSetNativeCommentScope(
+        ExpectedColumnDefinition definition
+    )
     {
         ArgumentNullException.ThrowIfNull(definition);
 
@@ -22,7 +25,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <summary>Identifies a target whose native comment scope can change ENUM/SET member interpretation.</summary>
     /// <param name="definition">The immutable target, including nullable repair targets.</param>
     /// <returns>Whether non-matching work requires NO_BACKSLASH_ESCAPES to be enabled already.</returns>
-    internal static bool RequiresNativeEnumNoBackslashEscapes(ExpectedColumnDefinition definition)
+    internal static bool RequiresNativeEnumNoBackslashEscapes(
+        ExpectedColumnDefinition definition
+    )
     {
         ArgumentNullException.ThrowIfNull(definition);
 
@@ -33,7 +38,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <summary>Identifies a CREATE TABLE comment scope affecting any mode-sensitive ENUM/SET column.</summary>
     /// <param name="definition">The immutable table with its table and column comments.</param>
     /// <returns>Whether creation requires NO_BACKSLASH_ESCAPES to be enabled already.</returns>
-    internal static bool RequiresNativeEnumNoBackslashEscapes(ExpectedTableDefinition definition)
+    internal static bool RequiresNativeEnumNoBackslashEscapes(
+        ExpectedTableDefinition definition
+    )
     {
         ArgumentNullException.ThrowIfNull(definition);
 
@@ -46,7 +53,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <summary>Compares decoded member domains without rewriting authored types or merging mode variants.</summary>
     /// <param name="definition">The immutable target's explicitly authored store type.</param>
     /// <returns>Whether native literal decoding changes the member domain.</returns>
-    private static bool HasModeSensitiveEnumSetMembers(ExpectedColumnDefinition definition) =>
+    private static bool HasModeSensitiveEnumSetMembers(
+        ExpectedColumnDefinition definition
+    ) =>
         definition.StoreType is { } storeType
         && !StringComparer.Ordinal.Equals(
             BuildEnumSetCatalogDisplay(storeType, backslashEscapes: true, out _),
@@ -68,7 +77,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             EnsureTableIntent table => RequiresNativeEnumNoBackslashEscapes(table.Definition),
             _ => false,
         };
-        if (!required || plan.IsStaticallyUnsupported)
+
+        if (!required
+            || plan.IsStaticallyUnsupported)
         {
             return plan;
         }
@@ -76,11 +87,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var matching = plan.RequiredColumnAddPlan is null
             ? plan.Postcondition
             : $"({MySqlSafeMigrationRuntimePlan.RequiredColumnAddStatusPlaceholder}) = 'complete'";
+
         var prerequisite = plan.PrerequisiteExpression;
         var mode = NativeEnumNoBackslashEscapesExpression;
         var ordinaryCode = plan.ClassificationCodeExpression ?? "NULL";
 
-        string QualifyState(string expression) =>
+        string QualifyState(
+            string expression
+        ) =>
             $"CASE WHEN NOT ({prerequisite}) THEN 'prerequisite_missing' "
             + $"WHEN ({matching}) THEN 'matching' WHEN NOT ({mode}) THEN 'unsupported' ELSE ({expression}) END";
 
@@ -96,7 +110,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 : null,
             RepairPrecondition = $"({mode}) AND ({plan.RepairPrecondition})",
             ClassificationCodeExpression = $"CASE WHEN NOT ({matching}) AND NOT ({mode}) "
-                + $"THEN 'column_native_enum_mode_conflict' ELSE ({ordinaryCode}) END",
+            + $"THEN 'column_native_enum_mode_conflict' ELSE ({ordinaryCode}) END",
             NullabilityDataProbe = plan.NullabilityDataProbe is { } nullability
                 ? nullability with
                 {
@@ -118,21 +132,29 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <summary>Compares ordered ENUM/SET members exactly under the native literal-decoding mode.</summary>
     /// <param name="storeType">The complete authored ENUM or SET declaration.</param>
     /// <returns>The binary catalog comparison qualified by current literal syntax.</returns>
-    private string BuildEnumSetStoreTypeMatches(string storeType)
+    private string BuildEnumSetStoreTypeMatches(
+        string storeType
+    )
     {
         var escaped = BuildEnumSetCatalogDisplay(storeType, backslashEscapes: true, out var escapedDoubleQuotes);
         var literal = BuildEnumSetCatalogDisplay(storeType, backslashEscapes: false, out var literalDoubleQuotes);
 
-        string Match(string? display, bool doubleQuotes) => display is null
+        string Match(
+            string? display,
+            bool doubleQuotes
+        ) => display is null
             ? "FALSE"
             : $"CAST(c.COLUMN_TYPE AS BINARY) = CAST({Literal(display)} AS BINARY)"
-                + (doubleQuotes ? " AND FIND_IN_SET('ANSI_QUOTES', @@SESSION.sql_mode) = 0" : string.Empty);
+            + (doubleQuotes
+                ? " AND FIND_IN_SET('ANSI_QUOTES', @@SESSION.sql_mode) = 0"
+                : string.Empty);
 
         // WHY: Folding the complete type also folds member values. Backslash
         // interpretations must remain mode-qualified; accepting both displays
         // together could certify a different stored value domain.
         var escapedMatch = Match(escaped, escapedDoubleQuotes);
-        if (StringComparer.Ordinal.Equals(escaped, literal) && escapedDoubleQuotes == literalDoubleQuotes)
+        if (StringComparer.Ordinal.Equals(escaped, literal)
+            && escapedDoubleQuotes == literalDoubleQuotes)
         {
             return escapedMatch;
         }
@@ -155,33 +177,47 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         ArgumentNullException.ThrowIfNull(storeType);
 
         doubleQuotes = false;
-        var text = storeType.AsSpan().Trim(EnumSetSqlWhitespace);
+        var text = storeType
+            .AsSpan()
+            .Trim(EnumSetSqlWhitespace);
+
         var open = text.IndexOf('(');
         if (open <= 0)
         {
             return null;
         }
 
-        var keyword = text[..open].TrimEnd(EnumSetSqlWhitespace);
-        var kind = keyword.Equals("enum", StringComparison.OrdinalIgnoreCase) ? "enum"
-            : keyword.Equals("set", StringComparison.OrdinalIgnoreCase) ? "set" : null;
+        var keyword = text[..open]
+            .TrimEnd(EnumSetSqlWhitespace);
+
+        var kind = keyword.Equals("enum", StringComparison.OrdinalIgnoreCase)
+            ? "enum"
+            : keyword.Equals("set", StringComparison.OrdinalIgnoreCase)
+                ? "set"
+                : null;
+
         if (kind is null)
         {
             return null;
         }
 
-        var result = new StringBuilder(text.Length).Append(kind).Append('(');
+        var result = new StringBuilder(text.Length)
+            .Append(kind)
+            .Append('(');
+
         var index = open + 1;
         while (index < text.Length)
         {
-            while (index < text.Length && EnumSetSqlWhitespace.Contains(text[index], StringComparison.Ordinal))
+            while (index < text.Length
+                && EnumSetSqlWhitespace.Contains(text[index], StringComparison.Ordinal))
             {
                 index++;
             }
 
             result.Append('\'');
             var fragments = 0;
-            while (index < text.Length && text[index] is '\'' or '"')
+            while (index < text.Length
+                && text[index] is '\'' or '"')
             {
                 var quote = text[index++];
                 doubleQuotes |= quote == '"';
@@ -191,13 +227,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 }
 
                 fragments++;
-                while (index < text.Length && EnumSetSqlWhitespace.Contains(text[index], StringComparison.Ordinal))
+                while (index < text.Length
+                    && EnumSetSqlWhitespace.Contains(text[index], StringComparison.Ordinal))
                 {
                     index++;
                 }
             }
 
-            if (fragments == 0 || index >= text.Length)
+            if (fragments == 0
+                || index >= text.Length)
             {
                 return null;
             }
@@ -218,12 +256,17 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 continue;
             }
 
-            if (text[index++] != ')' || !text[index..].Trim(EnumSetSqlWhitespace).IsEmpty)
+            if (text[index++] != ')'
+                || !text[index..]
+                    .Trim(EnumSetSqlWhitespace)
+                    .IsEmpty)
             {
                 return null;
             }
 
-            return result.Append(')').ToString();
+            return result
+                .Append(')')
+                .ToString();
         }
 
         return null;
@@ -249,7 +292,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             var character = text[index++];
             if (character == quote)
             {
-                if (index >= text.Length || text[index] != quote)
+                if (index >= text.Length
+                    || text[index] != quote)
                 {
                     return true;
                 }
@@ -271,13 +315,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
                 character = character switch
                 {
-                    '0' => '\0',
-                    'b' => '\b',
-                    'n' => '\n',
-                    'r' => '\r',
-                    't' => '\t',
-                    'Z' => (char)26,
-                    _ => character,
+                    '0' => '\0', 'b' => '\b', 'n' => '\n', 'r' => '\r', 't' => '\t', 'Z' => (char)26, _ => character,
                 };
             }
 
@@ -290,7 +328,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <summary>Applies the shared native ENUM/SET catalog escaping after literal decoding.</summary>
     /// <param name="result">The ordered member display receiving one character.</param>
     /// <param name="character">The decoded character, with literal case retained.</param>
-    private static void AppendEnumSetCatalogCharacter(StringBuilder result, char character)
+    private static void AppendEnumSetCatalogCharacter(
+        StringBuilder result,
+        char character
+    )
     {
         _ = character switch
         {

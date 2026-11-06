@@ -22,7 +22,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         cancellationToken.ThrowIfCancellationRequested();
 
         var (authored, physical) = FindRequiredColumnAddRecoveryOwnerCandidates(
-            operations, findings, _currentDatabase);
+            operations,
+            findings,
+            _currentDatabase);
 
         if (authored.Length == 0)
         {
@@ -30,12 +32,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         }
 
         var result = await ReadNativeInventoryOwnersAsync(
-            connection, authored, maximumPayloadBytes, commandTimeout, cancellationToken);
+            connection,
+            authored,
+            maximumPayloadBytes,
+            commandTimeout,
+            cancellationToken);
 
         var allowedPhysicalOwners = physical.ToHashSet(StringComparer.Ordinal);
         foreach (var (owner, _) in authored)
         {
-            if (result[owner] is { } resolved && !allowedPhysicalOwners.Contains(resolved))
+            if (result[owner] is { } resolved
+                && !allowedPhysicalOwners.Contains(resolved))
             {
                 result[owner] = null;
             }
@@ -62,12 +69,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         var result = new Dictionary<string, string?>(authored.Length, StringComparer.Ordinal);
         var separatorBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator);
         await SafeMigrationCatalogProbeBatch.ReadAsync(
-            connection, authored.Length, maximumPayloadBytes, commandTimeout,
+            connection,
+            authored.Length,
+            maximumPayloadBytes,
+            commandTimeout,
             (command, offset) =>
             {
                 var parameters = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
-                var selections = new List<string>(Math.Min(
-                    SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement, authored.Length - offset));
+                var selections = new List<string>(
+                    Math.Min(
+                        SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
+                        authored.Length - offset));
 
                 var sqlBytes = Encoding.UTF8.GetByteCount(BuildRequiredColumnAddRecoveryOwnerQuery(string.Empty));
                 while (offset + selections.Count < authored.Length
@@ -79,7 +91,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         + $"{parameters.AddString(authored[ordinal].Owner)} AS owner";
 
                     var selectionBytes = Encoding.UTF8.GetByteCount(selection)
-                        + (selections.Count == 0 ? 0 : separatorBytes);
+                        + (selections.Count == 0
+                            ? 0
+                            : separatorBytes);
 
                     var payloadBytes = checked(sqlBytes + selectionBytes + parameters.Utf8PayloadBytes);
                     if (SafeMigrationCatalogQueryLimits.Exceeded(parameters.Count, payloadBytes, maximumPayloadBytes))
@@ -89,7 +103,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         if (selections.Count == 0)
                         {
                             throw SafeMigrationCatalogQueryLimits.OversizedOperation(
-                                authored[ordinal].Ordinal, parameterCount, payloadBytes);
+                                authored[ordinal].Ordinal,
+                                parameterCount,
+                                payloadBytes);
                         }
 
                         break;
@@ -103,27 +119,36 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     string.Join(SafeMigrationCatalogQueryLimits.Separator, selections));
 
                 return new SafeMigrationCatalogProbeStatement(
-                    selections.Count, parameters.Utf8PayloadBytes, authored[offset].Ordinal);
+                    selections.Count,
+                    parameters.Utf8PayloadBytes,
+                    authored[offset].Ordinal);
             },
             async (reader, offset, count, token) =>
             {
                 var row = 0;
                 while (await reader.ReadAsync(token))
                 {
-                    if (row >= count || reader.GetInt32(0) != offset + row)
+                    if (row >= count
+                        || reader.GetInt32(0) != offset + row)
                     {
                         throw new InvalidOperationException(
                             "The MySQL recovery owner query returned an invalid ordinal.");
                     }
 
                     var matches = reader.GetInt64(2);
-                    if (matches is < 0 or > 1 || (matches == 0) != reader.IsDBNull(1))
+                    if (matches is < 0 or > 1
+                        || matches == 0 != reader.IsDBNull(1))
                     {
                         throw new InvalidOperationException(
                             "The MySQL native inventory owner query returned an ambiguous or inconsistent identity.");
                     }
 
-                    result.Add(authored[offset + row].Owner, matches == 0 ? null : reader.GetString(1));
+                    result.Add(
+                        authored[offset + row].Owner,
+                        matches == 0
+                            ? null
+                            : reader.GetString(1));
+
                     row++;
                 }
 
@@ -144,12 +169,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     /// <summary>Builds one indexed native-owner lookup without parameterizing the entire physical inventory.</summary>
     /// <param name="authoredOwners">The trusted bounded derived SELECT of ordinals and bound owner values.</param>
     /// <returns>The catalog-only statement, including its fixed grouping and ordering.</returns>
-    internal static string BuildRequiredColumnAddRecoveryOwnerQuery(string authoredOwners)
+    internal static string BuildRequiredColumnAddRecoveryOwnerQuery(
+        string authoredOwners
+    )
     {
         ArgumentNullException.ThrowIfNull(authoredOwners);
 
         var nativeMatches = MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
-            "physical_owner.TABLE_NAME", "source_owner.owner");
+            "physical_owner.TABLE_NAME",
+            "source_owner.owner");
 
         // WHY: Ordinary name equality keeps the catalog filter index-eligible;
         // the native binary cast then excludes collation aliases and
@@ -189,10 +217,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 continue;
             }
 
-            checks ??= new(StringComparer.Ordinal);
+            checks ??= new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
             if (!checks.TryGetValue(finding.Name, out var owners))
             {
-                checks.Add(finding.Name, owners = new(StringComparer.Ordinal));
+                checks.Add(finding.Name, owners = new HashSet<string>(StringComparer.Ordinal));
             }
 
             owners.Add(finding.Table);
@@ -209,7 +237,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         {
             if (operation is not SafeMigrationOperation { Intent: EnsureColumnIntent ensure } safe
                 || !MySqlSafeMigrationCatalogSqlBuilder.TargetsDatabase(ensure, currentDatabase)
-                || safe.GetAnnotations().Any()
+                || safe
+                    .GetAnnotations()
+                    .Any()
                 || !MySqlSafeMigrationCatalogSqlBuilder.CanUseRequiredColumnAddProtocol(ensure.Definition))
             {
                 continue;
@@ -218,17 +248,19 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             var guardName = MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(ensure);
             if (checks.TryGetValue(guardName, out var owners))
             {
-                (columns ??= new(StringComparer.OrdinalIgnoreCase)).Add(ensure.Definition.Name);
-                (physicalOwners ??= new(StringComparer.Ordinal)).UnionWith(owners);
+                (columns ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase)).Add(ensure.Definition.Name);
+                (physicalOwners ??= new HashSet<string>(StringComparer.Ordinal)).UnionWith(owners);
             }
         }
 
-        if (columns is null || physicalOwners is null)
+        if (columns is null
+            || physicalOwners is null)
         {
             return ([], []);
         }
 
         var authoredOwners = new Dictionary<string, int>(StringComparer.Ordinal);
+
         // WHY: Retain the authored operation ordinal when resolving each recovery owner.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -245,7 +277,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             }
         }
 
-        return (authoredOwners.Select(static owner => (Owner: owner.Key, Ordinal: owner.Value)).ToArray(),
+        return (authoredOwners
+                .Select(static owner => (Owner: owner.Key, Ordinal: owner.Value))
+                .ToArray(),
             physicalOwners.ToArray());
     }
 }

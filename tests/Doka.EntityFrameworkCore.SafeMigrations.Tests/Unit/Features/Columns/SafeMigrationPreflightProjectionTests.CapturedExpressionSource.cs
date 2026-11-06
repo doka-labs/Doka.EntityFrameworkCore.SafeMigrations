@@ -7,10 +7,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     /// <param name="expectedColumnSql">The exact native computed expression after the rename.</param>
     /// <param name="expectedCheckSql">The exact native CHECK predicate after the rename.</param>
     [Theory]
-    [InlineData("source_value",
+    [InlineData(
+        "source_value",
         "CASE WHEN [renamed_value] > 0 THEN 2147483648 / 2147483647 ELSE 0 END",
         "[renamed_value] > 0 AND 'source_value' <> ''")]
-    [InlineData("unrelated_value",
+    [InlineData(
+        "unrelated_value",
         "CASE WHEN [source_value] > 0 THEN 2147483648 / 2147483647 ELSE 0 END",
         "[source_value] > 0 AND 'source_value' <> ''")]
     public void CapturedExpressionRenamePreservesNativeSource(
@@ -32,10 +34,14 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             .TryGetProjectedColumn("items", null, "computed_value", out var copied);
 
         var expectedCheck = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
-            "ck_items", "items", expectedCheckSql, null);
+            "ck_items",
+            "items",
+            expectedCheckSql,
+            null);
 
         var checkAnalysis = projection.Project(
-            new SafeMigrationOperation(new EnsureCheckConstraintIntent(expectedCheck),
+            new SafeMigrationOperation(
+                new EnsureCheckConstraintIntent(expectedCheck),
                 SafeMigrationPolicy.ThrowIfDifferent),
             Live(SafeMigrationObservedState.Missing));
 
@@ -61,7 +67,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         const string sql = "source_value + 2147483648";
         var computed = CaptureProjectionComputed(sql);
         var check = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
-            "ck_items", "items", "source_value > 0", null);
+            "ck_items",
+            "items",
+            "source_value > 0",
+            null);
 
         var projection = CapturedExpressionProjection(computed, check);
 
@@ -97,10 +106,14 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             .TryGetProjectedColumn("renamed_items", null, "computed_value", out var copied);
 
         var expectedCheck = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
-            "ck_items", "renamed_items", checkSql, null);
+            "ck_items",
+            "renamed_items",
+            checkSql,
+            null);
 
         var checkAnalysis = projection.Project(
-            new SafeMigrationOperation(new EnsureCheckConstraintIntent(expectedCheck),
+            new SafeMigrationOperation(
+                new EnsureCheckConstraintIntent(expectedCheck),
                 SafeMigrationPolicy.ThrowIfDifferent),
             Live(SafeMigrationObservedState.Missing));
 
@@ -120,7 +133,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         const string computedSql = "source_value + 2147483648";
         var computed = CaptureProjectionComputed(computedSql);
         var check = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
-            "ck_items", "items", "source_value > 0", null);
+            "ck_items",
+            "items",
+            "source_value > 0",
+            null);
 
         var projection = CapturedExpressionProjection(computed, check);
 
@@ -149,7 +165,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var table = new ExpectedTableDefinition("items", [Column("source_value"), computed]);
         Apply(projection, new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition));
         Apply(projection, new RenameColumnIntent("source_value", "items", "renamed_value"));
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", target),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", target),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -165,35 +182,52 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         // Arrange
         var provider = new RenameAbsenceProjection();
-        var projection = new SafeMigrationPreflightProjection(provider,
+        var projection = new SafeMigrationPreflightProjection(
+            provider,
             objectIdentityNormalizer: new CapturedSqlQuoteIdentityNormalizer());
 
         var source = CaptureProjectionComputed("CASE WHEN \"source_value\" > 0 THEN \"source_value\" ELSE 0 END");
         var target = CaptureProjectionComputed("CASE WHEN \"renamed_value\" > 0 THEN \"renamed_value\" ELSE 0 END");
         var check = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
-            "ck_items", "items", "\"source_value\" >= 0", null);
+            "ck_items",
+            "items",
+            "\"source_value\" >= 0",
+            null);
 
         var targetCheck = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
-            "ck_items", "items", "\"renamed_value\" >= 0", null);
+            "ck_items",
+            "items",
+            "\"renamed_value\" >= 0",
+            null);
 
         var table = new ExpectedTableDefinition("items", [Column("source_value"), source], checkConstraints: [check]);
-        ObserveAccepted(projection, new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition),
+        ObserveAccepted(
+            projection,
+            new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition),
             SafeMigrationObservedState.Matching);
 
         // Act
         Apply(projection, new RenameColumnIntent("source_value", "items", "renamed_value"));
-        var columnAnalysis = projection.Project(new SafeMigrationOperation(new EnsureColumnIntent("items", target),
-            SafeMigrationPolicy.ThrowIfDifferent), Live(SafeMigrationObservedState.Different));
+        var columnAnalysis = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureColumnIntent("items", target),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            Live(SafeMigrationObservedState.Different));
 
-        var checkAnalysis = projection.Project(new SafeMigrationOperation(new EnsureCheckConstraintIntent(targetCheck),
-            SafeMigrationPolicy.ThrowIfDifferent), Live(SafeMigrationObservedState.Different));
+        var checkAnalysis = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureCheckConstraintIntent(targetCheck),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            Live(SafeMigrationObservedState.Different));
 
         // Assert
         Assert.True(provider.WasQueried);
         Assert.Equal(SafeMigrationObservedState.Matching, columnAnalysis.ObservedState);
         Assert.Equal(SafeMigrationObservedState.Matching, checkAnalysis.ObservedState);
-        Assert.True(((ISafeMigrationProjectedTableSource)projection)
+        Assert.True(
+            ((ISafeMigrationProjectedTableSource)projection)
             .TryGetProjectedTableState("items", null, out var state));
+
         Assert.False(state.IsNewlyCreated);
     }
 
@@ -202,33 +236,49 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ExistingStrictRenameDoesNotInventUnrelatedColumnOrEmptyTableProof(bool requiredAdd)
+    public void ExistingStrictRenameDoesNotInventUnrelatedColumnOrEmptyTableProof(
+        bool requiredAdd
+    )
     {
         // Arrange
-        var projection = new SafeMigrationPreflightProjection(new RenameAbsenceProjection(),
+        var projection = new SafeMigrationPreflightProjection(
+            new RenameAbsenceProjection(),
             objectIdentityNormalizer: new CapturedSqlQuoteIdentityNormalizer());
 
-        var table = new ExpectedTableDefinition("items",
+        var table = new ExpectedTableDefinition(
+            "items",
             [Column("source_value"), CaptureProjectionComputed("\"source_value\" + 1")]);
 
-        ObserveAccepted(projection, new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition),
+        ObserveAccepted(
+            projection,
+            new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition),
             SafeMigrationObservedState.Matching);
 
         Apply(projection, new RenameColumnIntent("source_value", "items", "renamed_value"));
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", Column("external_member")),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", Column("external_member")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var analysis = projection.Project(operation,
-            Live(requiredAdd ? SafeMigrationObservedState.DataBlocked : SafeMigrationObservedState.Matching));
+        var analysis = projection.Project(
+            operation,
+            Live(
+                requiredAdd
+                    ? SafeMigrationObservedState.DataBlocked
+                    : SafeMigrationObservedState.Matching));
 
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, analysis.ObservedState,
-            operation.Policy, analysis.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            analysis.ObservedState,
+            operation.Policy,
+            analysis.RepairCapability);
 
         // Assert
         Assert.True(decision.Action.RejectsExecution());
-        Assert.True(((ISafeMigrationProjectedTableSource)projection)
+        Assert.True(
+            ((ISafeMigrationProjectedTableSource)projection)
             .TryGetProjectedTableState("items", null, out var state));
+
         Assert.False(state.IsNewlyCreated);
         Assert.True(state.HasUnknownStructure);
     }
@@ -238,26 +288,40 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     public void ExistingRenamedCheckProofExpiresAfterAnotherMemberDrop()
     {
         // Arrange
-        var projection = new SafeMigrationPreflightProjection(new RenameAbsenceProjection(),
+        var projection = new SafeMigrationPreflightProjection(
+            new RenameAbsenceProjection(),
             objectIdentityNormalizer: new CapturedSqlQuoteIdentityNormalizer());
 
         var check = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
-            "ck_items", "items", "\"source_value\" >= 0", null);
+            "ck_items",
+            "items",
+            "\"source_value\" >= 0",
+            null);
 
-        var table = new ExpectedTableDefinition("items", [Column("source_value"), Column("unrelated_value")],
+        var table = new ExpectedTableDefinition(
+            "items",
+            [Column("source_value"), Column("unrelated_value")],
             checkConstraints: [check]);
 
-        ObserveAccepted(projection, new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition),
+        ObserveAccepted(
+            projection,
+            new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition),
             SafeMigrationObservedState.Matching);
 
         Apply(projection, new RenameColumnIntent("source_value", "items", "renamed_value"));
         Apply(projection, new DropColumnIntent("unrelated_value", "items"));
         var target = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
-            "ck_items", "items", "\"renamed_value\" >= 0", null);
+            "ck_items",
+            "items",
+            "\"renamed_value\" >= 0",
+            null);
 
         // Act
-        var analysis = projection.Project(new SafeMigrationOperation(new EnsureCheckConstraintIntent(target),
-            SafeMigrationPolicy.ThrowIfDifferent), Live(SafeMigrationObservedState.Matching));
+        var analysis = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureCheckConstraintIntent(target),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            Live(SafeMigrationObservedState.Matching));
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
@@ -268,26 +332,40 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     public void ExistingRenameDoesNotRestoreChecksAfterPriorMemberDrop()
     {
         // Arrange
-        var projection = new SafeMigrationPreflightProjection(new RenameAbsenceProjection(),
+        var projection = new SafeMigrationPreflightProjection(
+            new RenameAbsenceProjection(),
             objectIdentityNormalizer: new CapturedSqlQuoteIdentityNormalizer());
 
         var check = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
-            "ck_items", "items", "\"source_value\" >= 0", null);
+            "ck_items",
+            "items",
+            "\"source_value\" >= 0",
+            null);
 
-        var table = new ExpectedTableDefinition("items", [Column("source_value"), Column("unrelated_value")],
+        var table = new ExpectedTableDefinition(
+            "items",
+            [Column("source_value"), Column("unrelated_value")],
             checkConstraints: [check]);
 
-        ObserveAccepted(projection, new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition),
+        ObserveAccepted(
+            projection,
+            new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition),
             SafeMigrationObservedState.Matching);
 
         Apply(projection, new DropColumnIntent("unrelated_value", "items"));
         Apply(projection, new RenameColumnIntent("source_value", "items", "renamed_value"));
         var target = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
-            "ck_items", "items", "\"renamed_value\" >= 0", null);
+            "ck_items",
+            "items",
+            "\"renamed_value\" >= 0",
+            null);
 
         // Act
-        var analysis = projection.Project(new SafeMigrationOperation(new EnsureCheckConstraintIntent(target),
-            SafeMigrationPolicy.ThrowIfDifferent), Live(SafeMigrationObservedState.Matching));
+        var analysis = projection.Project(
+            new SafeMigrationOperation(
+                new EnsureCheckConstraintIntent(target),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            Live(SafeMigrationObservedState.Matching));
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
@@ -298,30 +376,71 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void CapturedRenameQuoteEquivalenceUsesNativeUnquotedBinding(bool quotedUppercaseTarget)
+    public void CapturedRenameQuoteEquivalenceUsesNativeUnquotedBinding(
+        bool quotedUppercaseTarget
+    )
     {
         // Arrange
-        var normalizer = new CapturedSqlQuoteIdentityNormalizer { FoldUnquotedCapturedSqlIdentifiers = true, };
+        var normalizer = new CapturedSqlQuoteIdentityNormalizer { FoldUnquotedCapturedSqlIdentifiers = true };
         var projection = new SafeMigrationPreflightProjection(objectIdentityNormalizer: normalizer);
         var initial = CaptureProjectionComputed("SOURCE_VALUE + 2147483648");
-        var target = CaptureProjectionComputed(quotedUppercaseTarget
-            ? "\"RENAMED_VALUE\" + 2147483648"
-            : "RENAMED_VALUE + 2147483648");
+        var target = CaptureProjectionComputed(
+            quotedUppercaseTarget
+                ? "\"RENAMED_VALUE\" + 2147483648"
+                : "RENAMED_VALUE + 2147483648");
 
-        Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items",
-            [Column("source_value"), initial]), SafeMigrationTableMode.StrictDefinition));
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "items",
+                    [Column("source_value"), initial]),
+                SafeMigrationTableMode.StrictDefinition));
 
         Apply(projection, new RenameColumnIntent("source_value", "items", "renamed_value"));
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", target),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", target),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var analysis = projection.Project(operation, Live(SafeMigrationObservedState.Missing));
 
         // Assert
-        Assert.Equal(quotedUppercaseTarget ? SafeMigrationObservedState.Different : SafeMigrationObservedState.Matching,
+        Assert.Equal(
+            quotedUppercaseTarget
+                ? SafeMigrationObservedState.Different
+                : SafeMigrationObservedState.Matching,
             analysis.ObservedState);
     }
+
+    private static SafeMigrationPreflightProjection CapturedExpressionProjection(
+        ExpectedColumnDefinition computed,
+        ExpectedCheckConstraintDefinition check
+    )
+    {
+        var projection = new SafeMigrationPreflightProjection();
+        var table = new ExpectedTableDefinition(
+            "items",
+            [Column("source_value"), Column("unrelated_value"), computed],
+            checkConstraints: [check]);
+
+        Apply(projection, new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition));
+
+        return projection;
+    }
+
+    private static ExpectedColumnDefinition CaptureProjectionComputed(
+        string sql
+    ) =>
+        SafeMigrationExpectedDefinitionFactory.From(
+            new AddColumnOperation
+            {
+                Name = "computed_value",
+                Table = "items",
+                ClrType = typeof(long),
+                IsNullable = true,
+                ComputedColumnSql = sql,
+            });
 
     private sealed class CapturedSqlQuoteIdentityNormalizer : ISafeMigrationProviderObjectIdentityNormalizer
     {
@@ -331,35 +450,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         public bool FoldUnquotedCapturedSqlIdentifiers { get; init; }
 
-        public string NormalizeIdentifier(string identifier) => identifier;
+        public string NormalizeIdentifier(
+            string identifier
+        ) => identifier;
 
-        public string? NormalizeSchema(string? schema) => schema;
+        public string? NormalizeSchema(
+            string? schema
+        ) => schema;
 
-        public bool IsObjectIdentityMismatch(SafeMigrationProviderAnalysis analysis) => false;
+        public bool IsObjectIdentityMismatch(
+            SafeMigrationProviderAnalysis analysis
+        ) => false;
     }
-
-    private static SafeMigrationPreflightProjection CapturedExpressionProjection(
-        ExpectedColumnDefinition computed,
-        ExpectedCheckConstraintDefinition check
-    )
-    {
-        var projection = new SafeMigrationPreflightProjection();
-        var table = new ExpectedTableDefinition("items",
-            [Column("source_value"), Column("unrelated_value"), computed],
-            checkConstraints: [check]);
-
-        Apply(projection, new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition));
-
-        return projection;
-    }
-
-    private static ExpectedColumnDefinition CaptureProjectionComputed(string sql) =>
-        SafeMigrationExpectedDefinitionFactory.From(new AddColumnOperation
-        {
-            Name = "computed_value",
-            Table = "items",
-            ClrType = typeof(long),
-            IsNullable = true,
-            ComputedColumnSql = sql,
-        });
 }

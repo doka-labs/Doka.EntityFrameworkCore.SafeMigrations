@@ -25,7 +25,11 @@ public sealed class SafeMigrationDiagnosticTruncationTests
     [InlineData("\\\\\\u20ACtail", 7, 2)]
     [InlineData("\\\\\\u20ACtail", 8, 8)]
     [InlineData("plain text", 5, 5)]
-    public void DisplayPrefixPreservesCompleteUnits(string display, int proposedEnd, int expectedEnd)
+    public void DisplayPrefixPreservesCompleteUnits(
+        string display,
+        int proposedEnd,
+        int expectedEnd
+    )
     {
         // Arrange
         const string outside = "retained\\";
@@ -33,7 +37,9 @@ public sealed class SafeMigrationDiagnosticTruncationTests
 
         // Act
         var end = SafeMigrationDiagnosticMessages.GetDisplayPrefixLength(
-            builder, outside.Length, outside.Length + proposedEnd);
+            builder,
+            outside.Length,
+            outside.Length + proposedEnd);
 
         // Assert
         Assert.Equal(outside.Length + expectedEnd, end);
@@ -53,7 +59,9 @@ public sealed class SafeMigrationDiagnosticTruncationTests
         var chunkCount = 0;
         foreach (var chunk in builder.GetChunks())
         {
-            chunkCount += chunk.Length == 0 ? 0 : 1;
+            chunkCount += chunk.Length == 0
+                ? 0
+                : 1;
         }
 
         Assert.True(chunkCount > 1, "The fixture must cross a real builder chunk.");
@@ -73,7 +81,10 @@ public sealed class SafeMigrationDiagnosticTruncationTests
     [InlineData(-1, 0)]
     [InlineData(2, 1)]
     [InlineData(0, 5)]
-    public void InvalidDisplayRangeIsRejected(int start, int end)
+    public void InvalidDisplayRangeIsRejected(
+        int start,
+        int end
+    )
     {
         // Arrange
         var builder = new StringBuilder("text");
@@ -96,14 +107,21 @@ public sealed class SafeMigrationDiagnosticTruncationTests
     [InlineData(3)]
     [InlineData(4)]
     [InlineData(5)]
-    public void IdentityCapDoesNotSplitDisplayEscapes(int padding)
+    public void IdentityCapDoesNotSplitDisplayEscapes(
+        int padding
+    )
     {
         // Arrange
         var member = new string('\u20AC', 18) + "\\u20AC";
-        var identity = SafeMigrationOperationIdentity.CreateKnown(SafeMigrationOperationKind.EnsureForeignKey,
-            member, member, new string('n', padding) + member,
+        var identity = SafeMigrationOperationIdentity.CreateKnown(
+            SafeMigrationOperationKind.EnsureForeignKey,
+            member,
+            member,
+            new string('n', padding) + member,
             Array.AsReadOnly(new[] { member, member, member, member }),
-            member, member, Array.AsReadOnly(new[] { member, member, member, member }));
+            member,
+            member,
+            Array.AsReadOnly(new[] { member, member, member, member }));
 
         // Act
         var display = SafeMigrationDiagnosticMessages.FormatIdentity(identity);
@@ -123,25 +141,48 @@ public sealed class SafeMigrationDiagnosticTruncationTests
     [InlineData(3)]
     [InlineData(4)]
     [InlineData(5)]
-    public void AssessmentCapDoesNotSplitDisplayEscapes(int padding)
+    public void AssessmentCapDoesNotSplitDisplayEscapes(
+        int padding
+    )
     {
         // Arrange
         var member = new string('\u20AC', 18);
-        var identity = SafeMigrationOperationIdentity.CreateKnown(SafeMigrationOperationKind.EnsureForeignKey,
-            member, member, member, Array.AsReadOnly(new[] { member, member, member, member }),
-            member, member, Array.AsReadOnly(new[] { member, member, member, member }));
+        var identity = SafeMigrationOperationIdentity.CreateKnown(
+            SafeMigrationOperationKind.EnsureForeignKey,
+            member,
+            member,
+            member,
+            Array.AsReadOnly(new[] { member, member, member, member }),
+            member,
+            member,
+            Array.AsReadOnly(new[] { member, member, member, member }));
 
-        var assessment = new SafeMigrationAssessment(1, "SafeOperation", true,
-            SafeMigrationOperationKind.EnsureForeignKey, "FK", observedState: null,
-            SafeMigrationAction.ValidateAtRuntime, postconditionSatisfied: null, "runtime_validation_required",
-            new string('a', padding) + new string('\u20AC', 30), new string('\u20AC', 30),
+        var assessment = new SafeMigrationAssessment(
+            1,
+            "SafeOperation",
+            true,
+            SafeMigrationOperationKind.EnsureForeignKey,
+            "FK",
+            observedState: null,
+            SafeMigrationAction.ValidateAtRuntime,
+            postconditionSatisfied: null,
+            "runtime_validation_required",
+            new string('a', padding) + new string('\u20AC', 30),
+            new string('\u20AC', 30),
             SafeMigrationOperationalImpact.NotApplicable,
-            [new SafeMigrationFacetDifference("column_store_type", new string('x', 96), new string('y', 96)),
-                new SafeMigrationFacetDifference("column_collation", new string('\\', 96), new string('\\', 96))],
-            deferredOrigin: new SafeMigrationDeferredOrigin(member, 123, member), identity: identity,
-            migrationId: member, policy: SafeMigrationPolicy.ThrowIfDifferent,
-            explanation: SafeMigrationDiagnosticMessages.GetExplanation(SafeMigrationOperationKind.EnsureForeignKey,
-                state: null, "projected_structure_state_unknown", "runtime_validation_required"));
+            [
+                new SafeMigrationFacetDifference("column_store_type", new string('x', 96), new string('y', 96)),
+                new SafeMigrationFacetDifference("column_collation", new string('\\', 96), new string('\\', 96)),
+            ],
+            deferredOrigin: new SafeMigrationDeferredOrigin(member, 123, member),
+            identity: identity,
+            migrationId: member,
+            policy: SafeMigrationPolicy.ThrowIfDifferent,
+            explanation: SafeMigrationDiagnosticMessages.GetExplanation(
+                SafeMigrationOperationKind.EnsureForeignKey,
+                state: null,
+                "projected_structure_state_unknown",
+                "runtime_validation_required"));
 
         // Act
         var display = SafeMigrationDiagnosticMessages.FormatAssessment(assessment);
@@ -157,11 +198,15 @@ public sealed class SafeMigrationDiagnosticTruncationTests
     public void PostconditionUsesCanonicalOwnedGuardIdentity()
     {
         // Arrange
-        var operation = new SafeMigrationOperation(new DropTableIntent("Items", null),
+        var operation = new SafeMigrationOperation(
+            new DropTableIntent("Items", null),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var analysis = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
-            SafeMigrationRepairCapability.None, false, "classified_matching");
+        var analysis = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Matching,
+            SafeMigrationRepairCapability.None,
+            false,
+            "classified_matching");
 
         var native = new InvalidOperationException("native cause");
 
@@ -183,11 +228,15 @@ public sealed class SafeMigrationDiagnosticTruncationTests
     public void SatisfiedPostconditionCannotProduceFailureText()
     {
         // Arrange
-        var operation = new SafeMigrationOperation(new DropTableIntent("Items", null),
+        var operation = new SafeMigrationOperation(
+            new DropTableIntent("Items", null),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var analysis = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-            SafeMigrationRepairCapability.None, true, "classified_missing");
+        var analysis = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Missing,
+            SafeMigrationRepairCapability.None,
+            true,
+            "classified_missing");
 
         // Act
         var rejection = Assert.Throws<ArgumentException>(() =>
@@ -203,7 +252,8 @@ public sealed class SafeMigrationDiagnosticTruncationTests
     public void PostconditionDisplayAliasIsNotAnOwnedNativeGuard()
     {
         // Arrange
-        var operation = new SafeMigrationOperation(new DropTableIntent("Items", null),
+        var operation = new SafeMigrationOperation(
+            new DropTableIntent("Items", null),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var native = new InvalidOperationException("native cause");
@@ -224,7 +274,8 @@ public sealed class SafeMigrationDiagnosticTruncationTests
     public void PostconditionDisplayAliasRendersCanonicalCategory()
     {
         // Arrange
-        var operation = new SafeMigrationOperation(new DropTableIntent("Items", null),
+        var operation = new SafeMigrationOperation(
+            new DropTableIntent("Items", null),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -244,13 +295,15 @@ public sealed class SafeMigrationDiagnosticTruncationTests
     [InlineData("\\u20")]
     [InlineData("\\u20A...")]
     [InlineData("\\x")]
-    public void DisplayEscapeOracleRejectsIncompleteUnits(string display)
+    public void DisplayEscapeOracleRejectsIncompleteUnits(
+        string display
+    )
     {
         // Arrange
-        Action check = () => AssertCompleteDisplayEscapes(display);
+        var check = () => AssertCompleteDisplayEscapes(display);
 
         // Act
-        var rejection = Assert.ThrowsAny<Xunit.Sdk.XunitException>(check);
+        var rejection = Assert.ThrowsAny<XunitException>(check);
 
         // Assert
         Assert.NotNull(rejection);
@@ -258,7 +311,9 @@ public sealed class SafeMigrationDiagnosticTruncationTests
 
     /// <summary>Asserts whole display units independently of the production truncation algorithm.</summary>
     /// <param name="display">The printable Core output under test.</param>
-    private static void AssertCompleteDisplayEscapes(string display)
+    private static void AssertCompleteDisplayEscapes(
+        string display
+    )
     {
         for (var offset = 0; offset < display.Length; offset++)
         {
@@ -280,8 +335,6 @@ public sealed class SafeMigrationDiagnosticTruncationTests
                 Assert.True(++offset < display.Length, "A Unicode display escape needs all four hex digits.");
                 Assert.True(char.IsAsciiHexDigit(display[offset]), "A display escape contains invalid hex.");
             }
-
         }
-
     }
 }

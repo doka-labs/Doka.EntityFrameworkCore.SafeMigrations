@@ -35,10 +35,12 @@ public sealed class SafeMigrationDecisionPlannerTests
                     SafeMigrationAction.RejectUnsupported,
                     SafeMigrationDecisionPlanner.Plan(kind, SafeMigrationObservedState.Unsupported, policy)
                         .Action);
+
                 Assert.Equal(
                     SafeMigrationAction.RejectDataBlocked,
                     SafeMigrationDecisionPlanner.Plan(kind, SafeMigrationObservedState.DataBlocked, policy)
                         .Action);
+
                 Assert.Equal(
                     SafeMigrationAction.RejectPrerequisiteMissing,
                     SafeMigrationDecisionPlanner.Plan(kind, SafeMigrationObservedState.PrerequisiteMissing, policy)
@@ -58,14 +60,15 @@ public sealed class SafeMigrationDecisionPlannerTests
                     SafeMigrationPolicy.RepairIfSafe,
                     SafeMigrationRepairCapability.Safe)
                 .Action);
+
         Assert.Equal(
             SafeMigrationAction.RejectDifferent,
             SafeMigrationDecisionPlanner.Plan(
                     SafeMigrationOperationKind.EnsureColumn,
                     SafeMigrationObservedState.Different,
-                    SafeMigrationPolicy.RepairIfSafe,
-                    SafeMigrationRepairCapability.None)
+                    SafeMigrationPolicy.RepairIfSafe)
                 .Action);
+
         Assert.Equal(
             SafeMigrationAction.RejectDifferent,
             SafeMigrationDecisionPlanner.Plan(

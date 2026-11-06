@@ -4,8 +4,16 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 /// <remarks>
 /// WHY: Models stay on their original CLR owner so EF model-cache and fixture identities do not drift.
 /// </remarks>
-public abstract partial class PostgreSqlSafeMigrationIntegrationTests : PostgreSqlIntegrationTestBase
+public abstract class PostgreSqlSafeMigrationIntegrationTests : PostgreSqlIntegrationTestBase
 {
+    /// <summary>Provides the NullProofSentinelSql contract shared by PostgreSQL feature tests.</summary>
+    protected const string NullProofSentinelSql = "CREATE FUNCTION null_proof_sentinel() RETURNS boolean "
+        + "LANGUAGE plpgsql AS $null_proof$ BEGIN RAISE EXCEPTION USING ERRCODE = 'P1901', "
+        + "MESSAGE = 'null_proof_branch_executed'; END $null_proof$;";
+
+    /// <summary>Bounds setup commands for the large performance fixtures.</summary>
+    protected const int PerformanceFixtureCommandTimeoutSeconds = 180;
+
     /// <summary>Uses the assembly-owned fixture without taking container ownership.</summary>
     /// <param name="fixture">The shared PostgreSQL container fixture.</param>
     protected PostgreSqlSafeMigrationIntegrationTests(
@@ -48,6 +56,147 @@ public abstract partial class PostgreSqlSafeMigrationIntegrationTests : PostgreS
         throw new TimeoutException("The PostgreSQL narrowing repair did not reach its blocked table lock.");
     }
 
+    /// <summary>Builds real catalog predicates without retaining a live catalog snapshot.</summary>
+    private protected static PostgreSqlSafeMigrationRuntimePlan BuildNullProofEligibilityPlan(
+        DbContext context,
+        SafeMigrationOperation operation
+    ) => new PostgreSqlSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>())
+        .Build(operation, includeAnalysisEvidence: true, includeTransitionEvidence: true);
+
+    /// <summary>Builds a source-frozen standalone filtered-index operation through the public authoring path.</summary>
+    protected static MigrationBuilder SimpleFilterBuilder(
+        DbContext context,
+        string filter,
+        bool unique = false,
+        string name = "simple_filter_lookup"
+    )
+    {
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.CreateCompositeIndexIfNotExistsFromModel(
+            name,
+            "simple_filters",
+            ["id"],
+            schema: "hierarchy",
+            unique: unique,
+            filter: filter);
+
+        return builder;
+    }
+
+    /// <summary>Creates only test-owned schema and mixed null/non-null rows for the predicate boundary.</summary>
+    /// <param name="connectionString">The isolated fixture database connection string.</param>
+    /// <param name="column">The fixture column whose physical contract is inspected.</param>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+    /// <returns>The asynchronous fixture operation or observation.</returns>
+    protected static Task CreateSimpleFilterTableAsync(
+        string connectionString,
+        CancellationToken cancellationToken,
+        string column = "parent"
+    ) => ExecuteSqlAsync(
+        connectionString,
+        "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters "
+        + $"(id integer NOT NULL, {PostgreSqlIdentifier(column)} integer NULL);"
+        + "INSERT INTO hierarchy.simple_filters VALUES (1, NULL), (2, 1), (3, 2);",
+        cancellationToken: cancellationToken);
+
+    /// <summary>Counts the independently managed filtered index in the exact test-owned schema.</summary>
+    /// <param name="connectionString">The isolated fixture database connection string.</param>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+    /// <returns>The asynchronous fixture operation or observation.</returns>
+    protected static Task<int> SimpleFilterIndexCountAsync(
+        string connectionString,
+        CancellationToken cancellationToken
+    ) => ScalarIntAsync(
+        connectionString,
+        "SELECT count(*) FROM pg_catalog.pg_indexes "
+        + "WHERE schemaname = 'hierarchy' AND indexname = 'simple_filter_lookup';",
+        cancellationToken: cancellationToken);
+
+    /// <summary>Provides the AppendSideEffectWrite contract shared by PostgreSQL feature tests.</summary>
+    protected static void AppendSideEffectWrite(
+        MigrationBuilder builder,
+        string writeKind
+    )
+    {
+        switch (writeKind)
+        {
+            case "INSERT":
+                builder.EnsureModelManagedDataFromModel(
+                    "side_effect_writes",
+                    ["id"],
+                    ["integer"],
+                    ["id", "managed_value"],
+                    ["integer", "character varying(64)"],
+                    new object?[,] { { 1, "target" } });
+
+                break;
+            case "UPDATE":
+                builder.UpdateModelManagedDataFromModel(
+                    "side_effect_writes",
+                    ["id"],
+                    ["integer"],
+                    new object?[,] { { 1 } },
+                    ["managed_value"],
+                    ["character varying(64)"],
+                    new object?[,] { { "source" } },
+                    new object?[,] { { "target" } });
+
+                break;
+            case "DELETE":
+                builder.DeleteModelManagedDataFromModel(
+                    "side_effect_writes",
+                    ["id"],
+                    ["integer"],
+                    new object?[,] { { 1 } },
+                    ["id", "managed_value"],
+                    ["integer", "character varying(64)"],
+                    new object?[,] { { 1, "source" } });
+
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(writeKind));
+        }
+    }
+
+    /// <summary>Provides the PostgreSqlIdentifier contract shared by PostgreSQL feature tests.</summary>
+    protected static string PostgreSqlIdentifier(
+        string value
+    ) => $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+
+    /// <summary>Provides the SqlColumn contract shared by PostgreSQL feature tests.</summary>
+    protected static SafeMigrationSqlExpression SqlColumn(
+        string name
+    ) => SafeMigrationSql.Identifier(name);
+
+    /// <summary>Provides the SqlBinary contract shared by PostgreSQL feature tests.</summary>
+    protected static SafeMigrationSqlExpression SqlBinary(
+        SafeMigrationSqlExpression left,
+        SafeMigrationSqlBinaryOperator @operator,
+        SafeMigrationSqlExpression right
+    ) => SafeMigrationSql.Binary(left, @operator, right);
+
+    /// <summary>Provides the SqlColumnAndColumn contract shared by PostgreSQL feature tests.</summary>
+    protected static SafeMigrationSqlExpression SqlColumnAndColumn(
+        string left,
+        SafeMigrationSqlBinaryOperator @operator,
+        string right
+    ) => SqlBinary(SqlColumn(left), @operator, SqlColumn(right));
+
+    /// <summary>Provides the SqlColumnAndInt contract shared by PostgreSQL feature tests.</summary>
+    protected static SafeMigrationSqlExpression SqlColumnAndInt(
+        string column,
+        SafeMigrationSqlBinaryOperator @operator,
+        int value
+    ) => SqlBinary(SqlColumn(column), @operator, SafeMigrationSql.Literal(value));
+
+    /// <summary>Provides the SqlFunction contract shared by PostgreSQL feature tests.</summary>
+    protected static SafeMigrationSqlExpression SqlFunction(
+        string name,
+        string column
+    ) => SafeMigrationSql.Function(name, SqlColumn(column));
+
     /// <summary>Retains the CountingDbConnection CLR identity while feature classes share its model.</summary>
     protected sealed class CountingDbConnection(
         NpgsqlConnection connection
@@ -57,7 +206,7 @@ public abstract partial class PostgreSqlSafeMigrationIntegrationTests : PostgreS
 
         public int CommandCount => Volatile.Read(ref _commandCount);
 
-        [System.Diagnostics.CodeAnalysis.AllowNull]
+        [AllowNull]
         public override string ConnectionString
         {
             get => connection.ConnectionString;
@@ -108,57 +257,6 @@ public abstract partial class PostgreSqlSafeMigrationIntegrationTests : PostgreS
         }
     }
 
-    /// <summary>Provides the NullProofSentinelSql contract shared by PostgreSQL feature tests.</summary>
-    protected const string NullProofSentinelSql = "CREATE FUNCTION null_proof_sentinel() RETURNS boolean "
-        + "LANGUAGE plpgsql AS $null_proof$ BEGIN RAISE EXCEPTION USING ERRCODE = 'P1901', "
-        + "MESSAGE = 'null_proof_branch_executed'; END $null_proof$;";
-
-    /// <summary>Builds real catalog predicates without retaining a live catalog snapshot.</summary>
-    private protected static PostgreSqlSafeMigrationRuntimePlan BuildNullProofEligibilityPlan(
-        DbContext context,
-        SafeMigrationOperation operation
-    ) => new PostgreSqlSafeMigrationCatalogSqlBuilder(
-        context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>())
-        .Build(operation, includeAnalysisEvidence: true, includeTransitionEvidence: true);
-
-    /// <summary>Builds a source-frozen standalone filtered-index operation through the public authoring path.</summary>
-    protected static MigrationBuilder SimpleFilterBuilder(
-        DbContext context,
-        string filter,
-        bool unique = false,
-        string name = "simple_filter_lookup"
-    )
-    {
-        var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.CreateCompositeIndexIfNotExistsFromModel(
-            name,
-            "simple_filters",
-            ["id"],
-            schema: "hierarchy",
-            unique: unique,
-            filter: filter);
-
-        return builder;
-    }
-
-    /// <summary>Creates only test-owned schema and mixed null/non-null rows for the predicate boundary.</summary>
-    protected static Task CreateSimpleFilterTableAsync(
-        string connectionString,
-        string column = "parent"
-    ) => ExecuteSqlAsync(
-        connectionString,
-        "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters "
-        + $"(id integer NOT NULL, {PostgreSqlIdentifier(column)} integer NULL);"
-        + "INSERT INTO hierarchy.simple_filters VALUES (1, NULL), (2, 1), (3, 2);");
-
-    /// <summary>Counts the independently managed filtered index in the exact test-owned schema.</summary>
-    protected static Task<int> SimpleFilterIndexCountAsync(
-        string connectionString
-    ) => ScalarIntAsync(
-        connectionString,
-        "SELECT count(*) FROM pg_catalog.pg_indexes "
-        + "WHERE schemaname = 'hierarchy' AND indexname = 'simple_filter_lookup';");
-
     /// <summary>Retains the MatchingDerivedContext CLR identity while feature classes share its model.</summary>
     protected sealed class MatchingDerivedContext(string connectionString) : SafeMigrationDbContext(connectionString);
 
@@ -167,25 +265,24 @@ public abstract partial class PostgreSqlSafeMigrationIntegrationTests : PostgreS
     {
         private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public string ProviderId { get; } = providerId;
-
         public Task Started => _started.Task;
+
+        public string ProviderId { get; } = providerId;
 
         public void ValidateContext(
             DbContext context
-        )
-        {
-            ArgumentNullException.ThrowIfNull(context);
-        }
+        ) => ArgumentNullException.ThrowIfNull(context);
 
+        /// <inheritdoc />
         public Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
             DbContext context,
-            CancellationToken cancellationToken = default
+            CancellationToken cancellationToken
         ) => throw new InvalidOperationException("Analysis scope acquisition must not be reached.");
 
+        /// <inheritdoc />
         public async Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
             DbContext context,
-            CancellationToken cancellationToken = default
+            CancellationToken cancellationToken
         )
         {
             _started.TrySetResult();
@@ -194,16 +291,18 @@ public abstract partial class PostgreSqlSafeMigrationIntegrationTests : PostgreS
             throw new InvalidOperationException("The blocking analyzer completed without cancellation.");
         }
 
+        /// <inheritdoc />
         public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
             DbContext context,
             IReadOnlyList<SafeMigrationOperation> operations,
-            CancellationToken cancellationToken = default
+            CancellationToken cancellationToken
         ) => throw new InvalidOperationException("Operation analysis must not be reached.");
 
+        /// <inheritdoc />
         public Task<IReadOnlyList<SafeMigrationUnexpectedObject>> FindUnexpectedObjectsAsync(
             DbContext context,
             IReadOnlyList<MigrationOperation> operations,
-            CancellationToken cancellationToken = default
+            CancellationToken cancellationToken
         ) => throw new InvalidOperationException("Unexpected-object analysis must not be reached.");
     }
 
@@ -236,49 +335,6 @@ public abstract partial class PostgreSqlSafeMigrationIntegrationTests : PostgreS
         public int Id { get; set; }
     }
 
-    /// <summary>Provides the AppendSideEffectWrite contract shared by PostgreSQL feature tests.</summary>
-    protected static void AppendSideEffectWrite(MigrationBuilder builder, string writeKind)
-    {
-        switch (writeKind)
-        {
-            case "INSERT":
-                builder.EnsureModelManagedDataFromModel(
-                    "side_effect_writes",
-                    ["id"],
-                    ["integer"],
-                    ["id", "managed_value"],
-                    ["integer", "character varying(64)"],
-                    new object?[,] { { 1, "target" } });
-
-                break;
-            case "UPDATE":
-                builder.UpdateModelManagedDataFromModel(
-                    "side_effect_writes",
-                    ["id"],
-                    ["integer"],
-                    new object?[,] { { 1 } },
-                    ["managed_value"],
-                    ["character varying(64)"],
-                    new object?[,] { { "source" } },
-                    new object?[,] { { "target" } });
-
-                break;
-            case "DELETE":
-                builder.DeleteModelManagedDataFromModel(
-                    "side_effect_writes",
-                    ["id"],
-                    ["integer"],
-                    new object?[,] { { 1 } },
-                    ["id", "managed_value"],
-                    ["integer", "character varying(64)"],
-                    new object?[,] { { 1, "source" } });
-
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(writeKind));
-        }
-    }
-
     /// <summary>Retains the StandaloneForeignKeyContext CLR identity while feature classes share its model.</summary>
     protected sealed class StandaloneForeignKeyContext(
         DbContextOptions<StandaloneForeignKeyContext> options
@@ -291,9 +347,12 @@ public abstract partial class PostgreSqlSafeMigrationIntegrationTests : PostgreS
             modelBuilder.Entity<TransitionParent>(entity =>
             {
                 entity.ToTable("transition_parents");
-                entity.HasKey(value => value.Id)
+                entity
+                    .HasKey(value => value.Id)
                     .HasName("pk_transition_parents");
-                entity.Property(value => value.Id)
+
+                entity
+                    .Property(value => value.Id)
                     .HasColumnName("id")
                     .HasColumnType("integer")
                     .ValueGeneratedNever();
@@ -302,16 +361,23 @@ public abstract partial class PostgreSqlSafeMigrationIntegrationTests : PostgreS
             modelBuilder.Entity<TransitionChild>(entity =>
             {
                 entity.ToTable("transition_children");
-                entity.HasKey(value => value.Id)
+                entity
+                    .HasKey(value => value.Id)
                     .HasName("pk_transition_children");
-                entity.Property(value => value.Id)
+
+                entity
+                    .Property(value => value.Id)
                     .HasColumnName("id")
                     .HasColumnType("integer")
                     .ValueGeneratedNever();
-                entity.Property(value => value.ParentId)
+
+                entity
+                    .Property(value => value.ParentId)
                     .HasColumnName("parent_id")
                     .HasColumnType("integer");
-                entity.HasOne<TransitionParent>()
+
+                entity
+                    .HasOne<TransitionParent>()
                     .WithMany()
                     .HasForeignKey(value => value.ParentId)
                     .OnDelete(DeleteBehavior.SetNull)
@@ -334,46 +400,6 @@ public abstract partial class PostgreSqlSafeMigrationIntegrationTests : PostgreS
         public int? ParentId { get; init; }
     }
 
-    /// <summary>Bounds setup commands for the large performance fixtures.</summary>
-    protected const int PerformanceFixtureCommandTimeoutSeconds = 180;
-
-    /// <summary>Provides the PostgreSqlIdentifier contract shared by PostgreSQL feature tests.</summary>
-    protected static string PostgreSqlIdentifier(
-        string value
-    ) => $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
-
-    /// <summary>Provides the SqlColumn contract shared by PostgreSQL feature tests.</summary>
-    protected static SafeMigrationSqlExpression SqlColumn(
-        string name
-    ) => SafeMigrationSql.Identifier(name);
-
-    /// <summary>Provides the SqlBinary contract shared by PostgreSQL feature tests.</summary>
-    protected static SafeMigrationSqlExpression SqlBinary(
-        SafeMigrationSqlExpression left,
-        SafeMigrationSqlBinaryOperator @operator,
-        SafeMigrationSqlExpression right
-    ) => SafeMigrationSql.Binary(left, @operator, right);
-
-    /// <summary>Provides the SqlColumnAndColumn contract shared by PostgreSQL feature tests.</summary>
-    protected static SafeMigrationSqlExpression SqlColumnAndColumn(
-        string left,
-        SafeMigrationSqlBinaryOperator @operator,
-        string right
-    ) => SqlBinary(SqlColumn(left), @operator, SqlColumn(right));
-
-    /// <summary>Provides the SqlColumnAndInt contract shared by PostgreSQL feature tests.</summary>
-    protected static SafeMigrationSqlExpression SqlColumnAndInt(
-        string column,
-        SafeMigrationSqlBinaryOperator @operator,
-        int value
-    ) => SqlBinary(SqlColumn(column), @operator, SafeMigrationSql.Literal(value));
-
-    /// <summary>Provides the SqlFunction contract shared by PostgreSQL feature tests.</summary>
-    protected static SafeMigrationSqlExpression SqlFunction(
-        string name,
-        string column
-    ) => SafeMigrationSql.Function(name, SqlColumn(column));
-
     /// <summary>Retains the UnmappedValue CLR identity while feature classes share its model.</summary>
     protected sealed class UnmappedValue;
 
@@ -393,5 +419,4 @@ public abstract partial class PostgreSqlSafeMigrationIntegrationTests : PostgreS
     {
         public int Id { get; set; }
     }
-
 }

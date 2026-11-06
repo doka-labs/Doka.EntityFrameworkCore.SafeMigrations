@@ -15,27 +15,32 @@ internal static class LivePerformanceEvidence
 {
     private const int SampleCount = 20;
 
-    private static readonly System.Text.Json.JsonSerializerOptions s_serializerOptions = new()
+    private static readonly JsonSerializerOptions s_serializerOptions = new()
     {
         WriteIndented = true,
     };
 
     /// <summary>Warms the action once and captures twenty samples without suppressing execution failures.</summary>
     /// <param name="action">The live analysis whose exceptions and cancellation must propagate.</param>
+    /// <param name="cancellationToken">The caller token forwarded to warmup and every measured analysis.</param>
     /// <returns>The sampled percentiles and final functional report.</returns>
     public static async Task<LivePerformanceMeasurement> MeasureAsync(
-        Func<Task<SafeMigrationRunReport>> action
+        Func<CancellationToken, Task<SafeMigrationRunReport>> action,
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(action);
+        cancellationToken.ThrowIfCancellationRequested();
 
-        _ = await action();
+        _ = await action(cancellationToken);
         var durations = new double[SampleCount];
         SafeMigrationRunReport? lastReport = null;
         for (var sample = 0; sample < SampleCount; sample++)
         {
+            // WHY: Cancellation checks stay outside the measured action interval.
+            cancellationToken.ThrowIfCancellationRequested();
             var started = Stopwatch.GetTimestamp();
-            lastReport = await action();
+            lastReport = await action(cancellationToken);
             durations[sample] = Stopwatch.GetElapsedTime(started)
                 .TotalMilliseconds;
         }
@@ -126,18 +131,23 @@ internal static class LivePerformanceEvidence
             },
         };
 
-        return System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(payload, s_serializerOptions);
+        return JsonSerializer.SerializeToUtf8Bytes(payload, s_serializerOptions);
     }
 
     /// <summary>Rejects invalid observations rather than treating corrupt evidence as a slow measurement.</summary>
     /// <param name="measurement">The sampled duration and final report.</param>
     /// <param name="parameterName">The evidence role to identify in a validation exception.</param>
-    private static void ValidateMeasurement(LivePerformanceMeasurement measurement, string parameterName)
+    private static void ValidateMeasurement(
+        LivePerformanceMeasurement measurement,
+        string parameterName
+    )
     {
         ArgumentNullException.ThrowIfNull(measurement, parameterName);
         ArgumentNullException.ThrowIfNull(measurement.LastReport, parameterName);
-        if (!double.IsFinite(measurement.P50Milliseconds) || !double.IsFinite(measurement.P95Milliseconds)
-            || measurement.P50Milliseconds < 0d || measurement.P95Milliseconds < measurement.P50Milliseconds)
+        if (!double.IsFinite(measurement.P50Milliseconds)
+            || !double.IsFinite(measurement.P95Milliseconds)
+            || measurement.P50Milliseconds < 0d
+            || measurement.P95Milliseconds < measurement.P50Milliseconds)
         {
             throw new ArgumentOutOfRangeException(parameterName, "Timing samples must be finite and ordered.");
         }
@@ -146,9 +156,11 @@ internal static class LivePerformanceEvidence
     /// <summary>Retains the original budget formula and rejects an unrepresentable derived measurement.</summary>
     /// <param name="clean">The valid baseline measurement.</param>
     /// <returns>The informational noisy-p95 budget.</returns>
-    private static double MaximumNoisyP95(LivePerformanceMeasurement clean)
+    private static double MaximumNoisyP95(
+        LivePerformanceMeasurement clean
+    )
     {
-        var maximum = (clean.P95Milliseconds * 2d) + 250d;
+        var maximum = clean.P95Milliseconds * 2d + 250d;
         if (!double.IsFinite(maximum))
         {
             throw new ArgumentOutOfRangeException(nameof(clean), "The derived timing budget must be finite.");

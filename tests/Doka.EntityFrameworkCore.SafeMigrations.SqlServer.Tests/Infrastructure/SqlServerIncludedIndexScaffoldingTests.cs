@@ -18,11 +18,17 @@ public sealed class SqlServerIncludedIndexScaffoldingTests
         using var context = new SqlServerSafeMigrationScaffoldingDbContext(
             "Server=127.0.0.1,1433;Database=scaffolding;User ID=sa;Password=unused;TrustServerCertificate=True");
 
-        var model = context.GetService<IDesignTimeModel>().Model.GetRelationalModel();
+        var model = context
+            .GetService<IDesignTimeModel>()
+            .Model
+            .GetRelationalModel();
+
         var differ = context.GetService<IMigrationsModelDiffer>();
         var operations = differ.GetDifferences(source: null, model);
-        var index = operations.OfType<CreateIndexOperation>()
+        var index = operations
+            .OfType<CreateIndexOperation>()
             .Single(static value => value.Table == "scaffolding_users");
+
         var sourceBuilder = new IndentedStringBuilder();
         var generator = CreateGenerator(context.GetService<ITypeMappingSource>());
 
@@ -35,6 +41,7 @@ public sealed class SqlServerIncludedIndexScaffoldingTests
             index.Table,
             index.Columns[0],
             projection.IncludedColumns!.ToArray());
+
         var safeOperation = (SafeMigrationOperation)migrationBuilder.Operations.Single();
         var intent = (EnsureIndexIntent)safeOperation.Intent;
 
@@ -135,8 +142,7 @@ public sealed class SqlServerIncludedIndexScaffoldingTests
             dependencies,
             new SafeMigrationScaffoldingConfiguration(
                 true,
-                SafeMigrationScaffoldingMode.Strict,
-                SafeMigrationPolicy.ThrowIfDifferent),
+                SafeMigrationScaffoldingMode.Strict),
             [new SqlServerSafeMigrationCreateIndexScaffoldingProjector()],
             []);
     }

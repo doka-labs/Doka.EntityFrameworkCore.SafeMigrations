@@ -3,13 +3,15 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 /// <summary>Fences generated-member dependencies without changing ordinary index or CHECK removal.</summary>
 public sealed partial class PostgreSqlGeneratedDropIntegrationTests : PostgreSqlIntegrationTestBase
 {
-    private readonly Xunit.Abstractions.ITestOutputHelper _output;
+    private readonly ITestOutputHelper _output;
 
     /// <summary>Uses test-local databases on the shared native provider container.</summary>
     /// <param name="fixture">The assembly-owned native provider fixture.</param>
     /// <param name="output">Receives structural command counts, never hardware-dependent pass thresholds.</param>
     public PostgreSqlGeneratedDropIntegrationTests(
-        PostgreSqlContainerFixture fixture, Xunit.Abstractions.ITestOutputHelper output) : base(fixture)
+        PostgreSqlContainerFixture fixture,
+        ITestOutputHelper output
+    ) : base(fixture)
     {
         _output = output;
     }
@@ -27,21 +29,33 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests : PostgreSql
     [InlineData("unrelated", true, false)]
     [InlineData("missing", false, false)]
     public async Task DropChecksNativeGeneratedDependencyBeforeMutation(
-        string column, bool opaque, bool synchronous)
+        string column,
+        bool opaque,
+        bool synchronous
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, opaque
-            ? "CREATE FUNCTION generated_drop_value(integer) RETURNS integer LANGUAGE SQL IMMUTABLE "
-                + "AS $$ SELECT $1 + 1 $$;" : "SELECT 1;");
+        await ExecuteSqlAsync(
+            connectionString,
+            opaque
+                ? "CREATE FUNCTION generated_drop_value(integer) RETURNS integer LANGUAGE SQL IMMUTABLE "
+                + "AS $$ SELECT $1 + 1 $$;"
+                : "SELECT 1;",
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE generated_drop (source integer NOT NULL, unrelated integer, "
             + "derived integer GENERATED ALWAYS AS ("
-            + (opaque ? "generated_drop_value(source)" : "source + 1") + ") STORED, "
+            + (opaque
+                ? "generated_drop_value(source)"
+                : "source + 1")
+            + ") STORED, "
             + "CONSTRAINT ck_generated_drop CHECK(source >= 0)); "
             + "CREATE INDEX ix_generated_drop_source ON generated_drop(source); "
-            + "INSERT INTO generated_drop(source, unrelated) VALUES(2,9);");
+            + "INSERT INTO generated_drop(source, unrelated) VALUES(2,9);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -49,33 +63,74 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests : PostgreSql
         var rejected = column == "source";
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-native-drop"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-native-drop"),
+                CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteDropAsync(context, builder.Operations, synchronous));
-        var columns = await ScalarIntAsync(connectionString,
+        var failure = await Record.ExceptionAsync(() => ExecuteDropAsync(
+            context,
+            builder.Operations,
+            synchronous,
+            cancellationToken: CancellationToken.None));
+
+        var columns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='generated_drop'::regclass "
-            + "AND attnum > 0 AND NOT attisdropped;");
+            + "AND attnum > 0 AND NOT attisdropped;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(rejected || column == "missing" ? 3 : 2, columns);
-        Assert.DoesNotContain(PostgreSqlSafeMigrationCatalogSqlBuilder.EmptyGeneratedDropSetCode,
-            Assert.Single(report.Assessments).AnalysisCode, StringComparison.Ordinal);
+        Assert.Equal(
+            rejected || column == "missing"
+                ? 3
+                : 2,
+            columns);
+
+        Assert.DoesNotContain(
+            PostgreSqlSafeMigrationCatalogSqlBuilder.EmptyGeneratedDropSetCode,
+            Assert.Single(report.Assessments)
+                .AnalysisCode,
+            StringComparison.Ordinal);
+
         if (rejected)
         {
-            Assert.Equal("P1001", Assert.IsType<PostgresException>(failure).SqlState);
+            Assert.Equal("P1001",
+                Assert.IsType<PostgresException>(failure)
+                    .SqlState);
+
             Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-            Assert.Equal("generated_column_drop_dependency", Assert.Single(report.Assessments).AnalysisCode);
-            Assert.Equal("2:9:3", await ScalarStringAsync(connectionString,
-                "SELECT source::text || ':' || unrelated::text || ':' || derived::text FROM generated_drop;"));
+            Assert.Equal("generated_column_drop_dependency",
+                Assert.Single(report.Assessments)
+                    .AnalysisCode);
+
+            Assert.Equal(
+                "2:9:3",
+                await ScalarStringAsync(
+                    connectionString,
+                    "SELECT source::text || ':' || unrelated::text || ':' || derived::text FROM generated_drop;",
+                    cancellationToken: CancellationToken.None));
         }
         else
         {
             Assert.Null(failure);
             Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-            Assert.Equal(column == "missing" ? SafeMigrationAction.NoOp : SafeMigrationAction.Apply,
-                Assert.Single(report.Assessments).Action);
-            Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM generated_drop;"));
+            Assert.Equal(
+                column == "missing"
+                    ? SafeMigrationAction.NoOp
+                    : SafeMigrationAction.Apply,
+                Assert.Single(report.Assessments)
+                    .Action);
+
+            Assert.Equal(
+                1,
+                await ScalarIntAsync(
+                    connectionString,
+                    "SELECT COUNT(*) FROM generated_drop;",
+                    cancellationToken: CancellationToken.None));
         }
     }
 
@@ -84,51 +139,80 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests : PostgreSql
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task AcceptedGeneratedPrefixCannotBorrowInitialMissingForSourceDrop(bool fresh)
+    public async Task AcceptedGeneratedPrefixCannotBorrowInitialMissingForSourceDrop(
+        bool fresh
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         if (!fresh)
         {
-            await ExecuteSqlAsync(connectionString, "CREATE TABLE generated_drop (unrelated integer);");
+            await ExecuteSqlAsync(
+                connectionString,
+                "CREATE TABLE generated_drop (unrelated integer);",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (fresh)
         {
-            builder.CreateTableIfNotExists("generated_drop", table => new
-            {
-                source = table.Column<int>("integer", nullable: true),
-                derived = table.Column<int>("integer", nullable: true,
-                    computedColumnSql: "source + 1", stored: true),
-            });
+            builder.CreateTableIfNotExists(
+                "generated_drop",
+                table => new
+                {
+                    source = table.Column<int>("integer", nullable: true),
+                    derived = table.Column<int>(
+                        "integer",
+                        nullable: true,
+                        computedColumnSql: "source + 1",
+                        stored: true),
+                });
         }
         else
         {
             builder.AddColumnIfNotExists<int>("source", "generated_drop", type: "integer", nullable: true);
             builder.AddColumnIfNotExistsFromModel(operationBuilder => operationBuilder.AddColumn<int>(
-                "derived", "generated_drop", type: "integer", nullable: true,
-                computedColumnSql: "source", stored: true));
+                "derived",
+                "generated_drop",
+                type: "integer",
+                nullable: true,
+                computedColumnSql: "source",
+                stored: true));
         }
 
         builder.DropColumnIfExists("source", "generated_drop");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-prefix-drop"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-prefix-drop"),
+                CancellationToken.None);
 
         // Assert
-        Assert.True(report.Assessments.Take(report.Assessments.Count - 1).All(
-                static assessment => assessment.Action == SafeMigrationAction.Apply),
-            string.Join("; ", report.Assessments.Select(static assessment =>
-                assessment.Action + ":" + assessment.AnalysisCode)));
+        Assert.True(
+            report
+                .Assessments
+                .Take(report.Assessments.Count - 1)
+                .All(static assessment => assessment.Action == SafeMigrationAction.Apply),
+            string.Join(
+                "; ",
+                report.Assessments.Select(static assessment =>
+                    assessment.Action + ":" + assessment.AnalysisCode)));
+
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[^1].Action);
         Assert.Equal("generated_column_drop_dependency", report.Assessments[^1].AnalysisCode);
-        Assert.Equal(0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM information_schema.columns WHERE table_name='generated_drop' "
-            + "AND column_name IN ('source','derived');"));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_name='generated_drop' "
+                + "AND column_name IN ('source','derived');",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Explicit generated-member removal discharges only its current source dependency.</summary>
@@ -136,26 +220,35 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests : PostgreSql
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task GeneratedMemberDropThenSourceDropConvergesAndReplays(bool complete)
+    public async Task GeneratedMemberDropThenSourceDropConvergesAndReplays(
+        bool complete
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE generated_drop (source integer, unrelated integer, "
             + "derived integer GENERATED ALWAYS AS (source + 1) STORED); "
-            + "INSERT INTO generated_drop(source,unrelated) VALUES(2,9);");
+            + "INSERT INTO generated_drop(source,unrelated) VALUES(2,9);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (complete)
         {
-            builder.CreateTableIfNotExists("generated_drop", table => new
-            {
-                source = table.Column<int>("integer", nullable: true),
-                unrelated = table.Column<int>("integer", nullable: true),
-                derived = table.Column<int>("integer", nullable: true,
-                    computedColumnSql: "source + 1", stored: true),
-            });
+            builder.CreateTableIfNotExists(
+                "generated_drop",
+                table => new
+                {
+                    source = table.Column<int>("integer", nullable: true),
+                    unrelated = table.Column<int>("integer", nullable: true),
+                    derived = table.Column<int>(
+                        "integer",
+                        nullable: true,
+                        computedColumnSql: "source + 1",
+                        stored: true),
+                });
         }
 
         builder.DropColumnIfExists("derived", "generated_drop");
@@ -166,25 +259,43 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests : PostgreSql
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-dependent-first-drop"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("generated-dependent-first-drop"),
+            CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var repeated = await runner.AnalyzeAsync(context, replay.Operations,
-            new SafeMigrationRunOptions("generated-dependent-first-drop-replay"), CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var repeated = await runner.AnalyzeAsync(
+            context,
+            replay.Operations,
+            new SafeMigrationRunOptions("generated-dependent-first-drop-replay"),
+            CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, replay.Operations);
+        await ExecuteOperationsAsync(context, replay.Operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[^1].Action);
-        Assert.All(repeated.Assessments,
+        Assert.All(
+            repeated.Assessments,
             static assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
-        Assert.Equal(9, await ScalarIntAsync(connectionString, "SELECT unrelated FROM generated_drop;"));
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='generated_drop'::regclass "
-            + "AND attnum>0 AND NOT attisdropped;"));
+
+        Assert.Equal(
+            9,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT unrelated FROM generated_drop;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='generated_drop'::regclass "
+                + "AND attnum>0 AND NOT attisdropped;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>An initial zero-generated snapshot cannot erase a member added before an unrelated DROP.</summary>
@@ -193,43 +304,74 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests : PostgreSql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE generated_drop (source integer, unrelated integer);");
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE generated_drop (source integer, unrelated integer);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExistsFromModel(operationBuilder => operationBuilder.AddColumn<int>(
-            "derived", "generated_drop", type: "integer", nullable: true,
-            computedColumnSql: "source+1", stored: true));
+            "derived",
+            "generated_drop",
+            type: "integer",
+            nullable: true,
+            computedColumnSql: "source+1",
+            stored: true));
 
         builder.DropColumnIfExists("unrelated", "generated_drop");
         builder.DropColumnIfExists("source", "generated_drop");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-empty-set-expired-prefix"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-empty-set-expired-prefix"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[^1].Action);
         Assert.Equal("generated_column_drop_dependency", report.Assessments[^1].AnalysisCode);
-        Assert.Equal(2, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='generated_drop'::regclass "
-            + "AND attnum>0 AND NOT attisdropped;"));
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='generated_drop'::regclass "
+                + "AND attnum>0 AND NOT attisdropped;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Runs the same generated script through either native command API without requiring preflight.</summary>
+    /// <param name="context">The configured fixture context.</param>
+    /// <param name="operations">The ordered fixture migration operations.</param>
+    /// <param name="synchronous">The fixture's synchronous input.</param>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+    /// <returns>The asynchronous fixture operation or observation.</returns>
     private static async Task ExecuteDropAsync(
-        DbContext context, IReadOnlyList<MigrationOperation> operations, bool synchronous)
+        DbContext context,
+        IReadOnlyList<MigrationOperation> operations,
+        bool synchronous,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (!synchronous)
         {
-            await ExecuteOperationsAsync(context, operations);
+            await ExecuteOperationsAsync(context, operations, cancellationToken);
 
             return;
         }
 
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(operations, context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(operations, context.Model);
+
         var connection = context.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
+        if (connection.State != ConnectionState.Open)
         {
             connection.Open();
         }

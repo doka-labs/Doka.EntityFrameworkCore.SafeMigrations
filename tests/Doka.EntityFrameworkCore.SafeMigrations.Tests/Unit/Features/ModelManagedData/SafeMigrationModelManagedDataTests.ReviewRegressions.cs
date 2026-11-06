@@ -43,10 +43,12 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
         Assert.Equal(repetitions * (int)expectedState, smallResult.StateSum);
         Assert.Equal(smallResult.StateSum, largeResult.StateSum);
+
         // WHY: Compare structural growth, not time or an exact zero-byte result.
         // The allowance tolerates runtime cache refreshes but cannot hide the
         // former 128-element state array allocated on every fallback call.
-        Assert.True(largeResult.Bytes <= smallResult.Bytes + repetitions * 256L,
+        Assert.True(
+            largeResult.Bytes <= smallResult.Bytes + repetitions * 256L,
             $"Empty-cache projection allocated {smallResult.Bytes} bytes for single-row batches "
             + $"and {largeResult.Bytes} bytes for 128-row batches.");
     }
@@ -66,21 +68,38 @@ public sealed partial class SafeMigrationModelManagedDataTests
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        var foreignKey = Operation(new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition(
-            "fk_composite_roles", "user_roles", ["role_id", "tenant_id"], "roles", ["id", "tenant_id"])));
+        var foreignKey = Operation(
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition(
+                    "fk_composite_roles",
+                    "user_roles",
+                    ["role_id", "tenant_id"],
+                    "roles",
+                    ["id", "tenant_id"])));
 
         SideEffectsObserveAcceptedForeignKey(projection, foreignKey, replayedForeignKey: false);
 
-        var deletion = Operation(new DeleteModelManagedDataIntent(
-            "roles", ["id"], ["int"], new object?[,] { { 1 } },
-            ["id", "tenant_id"], ["int", "int"], new object?[,] { { 1, 7 } }, schema: null,
-            foreignKeys:
-            [
-                new ExpectedModelManagedDataForeignKeyDefinition(
-                    "user_roles",
-                    reverseDependent ? ["tenant_id", "role_id"] : ["role_id", "tenant_id"],
-                    reversePrincipal ? ["tenant_id", "id"] : ["id", "tenant_id"]),
-            ]));
+        var deletion = Operation(
+            new DeleteModelManagedDataIntent(
+                "roles",
+                ["id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                ["id", "tenant_id"],
+                ["int", "int"],
+                new object?[,] { { 1, 7 } },
+                schema: null,
+                foreignKeys:
+                [
+                    new ExpectedModelManagedDataForeignKeyDefinition(
+                        "user_roles",
+                        reverseDependent
+                            ? ["tenant_id", "role_id"]
+                            : ["role_id", "tenant_id"],
+                        reversePrincipal
+                            ? ["tenant_id", "id"]
+                            : ["id", "tenant_id"]),
+                ]));
 
         var live = Live(SafeMigrationObservedState.TransitionReady);
 
@@ -110,7 +129,8 @@ public sealed partial class SafeMigrationModelManagedDataTests
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var iteration = 0; iteration < repetitions; iteration++)
         {
-            stateSum += (int)projection.Project(operation, live).ObservedState;
+            stateSum += (int)projection.Project(operation, live)
+                .ObservedState;
         }
 
         return (GC.GetAllocatedBytesForCurrentThread() - before, stateSum);
@@ -135,15 +155,39 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
         return kind switch
         {
-            "ensure" => Operation(new EnsureModelManagedDataIntent(
-                "roles", ["id"], ["int"], ["id", "name"], ["int", "varchar(64)"],
-                values, schema: null, uniqueKeys: null)),
-            "update" => Operation(new UpdateModelManagedDataIntent(
-                "roles", ["id"], ["int"], keys, ["name"], ["varchar(64)"],
-                names, names, schema: null, uniqueKeys: null)),
-            "delete" => Operation(new DeleteModelManagedDataIntent(
-                "roles", ["id"], ["int"], keys, ["id", "name"], ["int", "varchar(64)"],
-                values, schema: null, foreignKeys: null)),
+            "ensure" => Operation(
+                new EnsureModelManagedDataIntent(
+                    "roles",
+                    ["id"],
+                    ["int"],
+                    ["id", "name"],
+                    ["int", "varchar(64)"],
+                    values,
+                    schema: null,
+                    uniqueKeys: null)),
+            "update" => Operation(
+                new UpdateModelManagedDataIntent(
+                    "roles",
+                    ["id"],
+                    ["int"],
+                    keys,
+                    ["name"],
+                    ["varchar(64)"],
+                    names,
+                    names,
+                    schema: null,
+                    uniqueKeys: null)),
+            "delete" => Operation(
+                new DeleteModelManagedDataIntent(
+                    "roles",
+                    ["id"],
+                    ["int"],
+                    keys,
+                    ["id", "name"],
+                    ["int", "varchar(64)"],
+                    values,
+                    schema: null,
+                    foreignKeys: null)),
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
     }

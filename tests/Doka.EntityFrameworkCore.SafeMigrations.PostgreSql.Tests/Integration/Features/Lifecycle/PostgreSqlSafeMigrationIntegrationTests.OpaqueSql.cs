@@ -16,7 +16,8 @@ public sealed class PostgreSqlOpaqueSqlIntegrationTests : PostgreSqlSafeMigratio
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE mixed_records (id integer NOT NULL PRIMARY KEY, code text NOT NULL); "
-            + "INSERT INTO mixed_records VALUES (1, 'duplicate'), (2, 'duplicate');");
+            + "INSERT INTO mixed_records VALUES (1, 'duplicate'), (2, 'duplicate');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -27,14 +28,16 @@ public sealed class PostgreSqlOpaqueSqlIntegrationTests : PostgreSqlSafeMigratio
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("postgresql-opaque-sql"));
+            new SafeMigrationRunOptions("postgresql-opaque-sql"),
+            CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var indexCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM pg_indexes WHERE schemaname = current_schema() "
-            + "AND tablename = 'mixed_records' AND indexname = 'ux_mixed_records_code';");
+            + "AND tablename = 'mixed_records' AND indexname = 'ux_mixed_records_code';",
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
@@ -49,7 +52,8 @@ public sealed class PostgreSqlOpaqueSqlIntegrationTests : PostgreSqlSafeMigratio
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE mixed_records (id integer NOT NULL PRIMARY KEY, code text NOT NULL); "
-            + "INSERT INTO mixed_records VALUES (1, 'first'), (2, 'second');");
+            + "INSERT INTO mixed_records VALUES (1, 'first'), (2, 'second');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -60,15 +64,19 @@ public sealed class PostgreSqlOpaqueSqlIntegrationTests : PostgreSqlSafeMigratio
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("postgresql-opaque-sql-reject"));
+            new SafeMigrationRunOptions("postgresql-opaque-sql-reject"),
+            CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(
-            () => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            CancellationToken.None));
 
         var indexCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM pg_indexes WHERE schemaname = current_schema() "
-            + "AND tablename = 'mixed_records' AND indexname = 'ux_mixed_records_code';");
+            + "AND tablename = 'mixed_records' AND indexname = 'ux_mixed_records_code';",
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
@@ -83,19 +91,21 @@ public sealed class PostgreSqlOpaqueSqlIntegrationTests : PostgreSqlSafeMigratio
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.Sql("SELECT 1;");
-        builder.CreateIndexIfNotExists("ix_unapproved", "missing_table", ["code"])
+        builder
+            .CreateIndexIfNotExists("ix_unapproved", "missing_table", ["code"])
             .Annotation("Unapproved:Test", true);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("postgresql-opaque-unsupported-annotation"));
+            new SafeMigrationRunOptions("postgresql-opaque-unsupported-annotation"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[1].Action);
         Assert.Equal("operation_annotation", preflight.Assessments[1].AnalysisCode);
         Assert.Null(preflight.Assessments[1].DeferredOrigin);
     }
-
 }

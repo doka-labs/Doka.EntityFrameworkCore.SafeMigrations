@@ -71,6 +71,7 @@ public sealed partial class SafeMigrationScaffoldingTests
                 ColumnType = "integer",
                 IsNullable = false,
             });
+
         operation.Columns.Add(
             new AddColumnOperation
             {
@@ -80,6 +81,7 @@ public sealed partial class SafeMigrationScaffoldingTests
                 ColumnType = "integer",
                 IsNullable = false,
             });
+
         operation.ForeignKeys.Add(
             new AddForeignKeyOperation
             {
@@ -173,10 +175,30 @@ public sealed partial class SafeMigrationScaffoldingTests
         var builder = new IndentedStringBuilder();
         MigrationOperation[] operations =
         [
-            new DropPrimaryKeyOperation { Name = "pk_users", Table = "users", Schema = "identity" },
-            new DropUniqueConstraintOperation { Name = "uq_users_email", Table = "users", Schema = "identity" },
-            new DropCheckConstraintOperation { Name = "ck_users_id", Table = "users", Schema = "identity" },
-            new DropForeignKeyOperation { Name = "fk_users_roles", Table = "users", Schema = "identity" },
+            new DropPrimaryKeyOperation
+            {
+                Name = "pk_users",
+                Table = "users",
+                Schema = "identity",
+            },
+            new DropUniqueConstraintOperation
+            {
+                Name = "uq_users_email",
+                Table = "users",
+                Schema = "identity",
+            },
+            new DropCheckConstraintOperation
+            {
+                Name = "ck_users_id",
+                Table = "users",
+                Schema = "identity",
+            },
+            new DropForeignKeyOperation
+            {
+                Name = "fk_users_roles",
+                Table = "users",
+                Schema = "identity",
+            },
         ];
 
         // Act
@@ -259,6 +281,7 @@ public sealed partial class SafeMigrationScaffoldingTests
             PrincipalTable = "roles",
             PrincipalColumns = ["id"],
         };
+
         operation["Provider:PhysicalOption"] = "value";
 
         // Act

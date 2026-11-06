@@ -22,11 +22,13 @@ public sealed class SafeMigrationCatalogQueryLimitsTests
                 SafeMigrationCatalogQueryLimits.MaximumParameters,
                 SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
                 SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes));
+
         Assert.True(
             SafeMigrationCatalogQueryLimits.Exceeded(
                 SafeMigrationCatalogQueryLimits.MaximumParameters + 1,
                 SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
                 SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes));
+
         Assert.True(
             SafeMigrationCatalogQueryLimits.Exceeded(
                 SafeMigrationCatalogQueryLimits.MaximumParameters,

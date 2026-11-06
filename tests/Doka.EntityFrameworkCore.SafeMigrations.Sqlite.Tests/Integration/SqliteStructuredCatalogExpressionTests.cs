@@ -27,27 +27,50 @@ public sealed class SqliteStructuredCatalogExpressionTests : SqliteIntegrationTe
     )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection,
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE expression_nodes (Id INTEGER NOT NULL, Code TEXT NOT NULL, "
-            + "CONSTRAINT ck_expression_nodes CHECK (" + actualSql + "));");
+            + "CONSTRAINT ck_expression_nodes CHECK ("
+            + actualSql
+            + "));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists("ck_expression_nodes", "expression_nodes", expectedSql);
-        var versionBefore = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var versionBefore = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-structured-native-check"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-structured-native-check"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
-        var versionAfter = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            cancellationToken: CancellationToken.None));
+
+        var versionAfter = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
-        Assert.Equal(matching ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
+        Assert.Equal(
+            matching
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different,
             assessment.ObservedState);
+
         Assert.Equal(versionBefore, versionAfter);
         if (matching)
         {
@@ -66,10 +89,12 @@ public sealed class SqliteStructuredCatalogExpressionTests : SqliteIntegrationTe
     public async Task ExplicitOpaqueCheckRetainsItsTextualContract()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection,
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE expression_nodes (Code TEXT NOT NULL, "
-            + "CONSTRAINT ck_expression_nodes CHECK (\"Code\" = 'Active'));");
+            + "CONSTRAINT ck_expression_nodes CHECK (\"Code\" = 'Active'));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -78,8 +103,13 @@ public sealed class SqliteStructuredCatalogExpressionTests : SqliteIntegrationTe
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-opaque-check-boundary"));
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-opaque-check-boundary"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);

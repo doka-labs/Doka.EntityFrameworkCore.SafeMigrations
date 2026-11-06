@@ -18,14 +18,18 @@ public sealed class SqlServerColumnLayoutGuardSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("layout_items",
-            new ExpectedColumnDefinition("Value", typeof(int), nullable, "int"), "dbo"),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "layout_items",
+                new ExpectedColumnDefinition("Value", typeof(int), nullable, "int"),
+                "dbo"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var plan = catalog.Build(operation);
         var runtime = GenerateGuardedCommand(context, operation);
-        var guard = "DECLARE @doka_layout_failure nvarchar(64) = (" + plan.ColumnLayoutFailureExpression
+        var guard = "DECLARE @doka_layout_failure nvarchar(64) = ("
+            + plan.ColumnLayoutFailureExpression
             + ");\nIF @doka_layout_failure IS NOT NULL\nBEGIN\n";
 
         var guardOffset = runtime.IndexOf(guard, StringComparison.Ordinal);
@@ -61,18 +65,25 @@ public sealed class SqlServerColumnLayoutGuardSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var definition = new ExpectedColumnDefinition("Caption", typeof(string), false, "varchar(80)",
+        var definition = new ExpectedColumnDefinition(
+            "Caption",
+            typeof(string),
+            false,
+            "varchar(80)",
             defaultValue: SafeMigrationDefaultValue.Literal("seed"),
             collation: new SafeMigrationCollationIdentifier("Latin1_General_100_CI_AS"));
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("layout_items", definition, "dbo"),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("layout_items", definition, "dbo"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var plan = catalog.Build(operation);
         var runtime = GenerateGuardedCommand(context, operation);
-        var guardOffset = runtime.IndexOf("DECLARE @doka_layout_failure nvarchar(64) = ("
-            + plan.ColumnLayoutFailureExpression + ");",
+        var guardOffset = runtime.IndexOf(
+            "DECLARE @doka_layout_failure nvarchar(64) = ("
+            + plan.ColumnLayoutFailureExpression
+            + ");",
             StringComparison.Ordinal);
 
         var defaultOffset = runtime.IndexOf("DECLARE @doka_default_supported", StringComparison.Ordinal);
@@ -96,8 +107,11 @@ public sealed class SqlServerColumnLayoutGuardSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("layout_items",
-            new ExpectedColumnDefinition("Value", typeof(int), true, "int"), "dbo"),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "layout_items",
+                new ExpectedColumnDefinition("Value", typeof(int), true, "int"),
+                "dbo"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -106,12 +120,21 @@ public sealed class SqlServerColumnLayoutGuardSqlTests
 
         // Assert
         var failureExpression = Assert.IsType<string>(plan.ColumnLayoutFailureExpression);
-        Assert.StartsWith("CASE WHEN EXISTS (SELECT 1 FROM sys.columns c", failureExpression,
+        Assert.StartsWith(
+            "CASE WHEN EXISTS (SELECT 1 FROM sys.columns c",
+            failureExpression,
             StringComparison.Ordinal);
-        Assert.Contains("c.name = N'Value') THEN CONVERT(nvarchar(128), NULL) ELSE (", failureExpression,
+
+        Assert.Contains(
+            "c.name = N'Value') THEN CONVERT(nvarchar(128), NULL) ELSE (",
+            failureExpression,
             StringComparison.Ordinal);
-        Assert.Contains("DECLARE @doka_layout_failure nvarchar(64) = (" + failureExpression + ");",
-            runtime, StringComparison.Ordinal);
+
+        Assert.Contains(
+            "DECLARE @doka_layout_failure nvarchar(64) = (" + failureExpression + ");",
+            runtime,
+            StringComparison.Ordinal);
+
         Assert.Contains("IF @doka_layout_failure IS NOT NULL", runtime, StringComparison.Ordinal);
         Assert.DoesNotContain("IF COALESCE((" + failureExpression, runtime, StringComparison.Ordinal);
         Assert.False(plan.IsStaticallyUnsupported);
@@ -124,7 +147,8 @@ public sealed class SqlServerColumnLayoutGuardSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var operation = new SafeMigrationOperation(new DropTableIntent("layout_items", "dbo"),
+        var operation = new SafeMigrationOperation(
+            new DropTableIntent("layout_items", "dbo"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act

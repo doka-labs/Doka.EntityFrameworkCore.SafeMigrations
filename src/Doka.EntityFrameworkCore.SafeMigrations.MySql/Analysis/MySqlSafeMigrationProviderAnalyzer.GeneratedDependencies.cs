@@ -29,12 +29,16 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             _ => throw new UnreachableException(),
         };
 
-        var prefix = isDrop ? "generated_column_drop_" : "generated_column_rename_";
+        var prefix = isDrop
+            ? "generated_column_drop_"
+            : "generated_column_rename_";
+
         var dependency = (columns as ISafeMigrationProjectedTableSource)?.HasProjectedGeneratedColumnDependency(
             table,
             schema,
             source,
             StringComparer.OrdinalIgnoreCase);
+
         if (dependency == true)
         {
             return projected.ObservedState == SafeMigrationObservedState.Missing
@@ -62,10 +66,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 if (projected.RenameTargetExists is { } occupied)
                 {
                     return new SafeMigrationProviderAnalysis(
-                        occupied ? SafeMigrationObservedState.Different : SafeMigrationObservedState.Matching,
+                        occupied
+                            ? SafeMigrationObservedState.Different
+                            : SafeMigrationObservedState.Matching,
                         SafeMigrationRepairCapability.None,
                         false,
-                        occupied ? "projected_different" : "projected_matching");
+                        occupied
+                            ? "projected_different"
+                            : "projected_matching");
                 }
             }
 
@@ -134,7 +142,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         void Expire(
             string table,
             string? schema
-        ) => (_expiredGeneratedDependencyOwners ??= new(PhysicalOwnerComparer)).Add(
-            (NormalizeProofSchema(schema), table));
+        ) => (_expiredGeneratedDependencyOwners ??= new HashSet<(string? Schema, string Table)>(PhysicalOwnerComparer))
+            .Add(
+                (NormalizeProofSchema(schema), table));
     }
 }
