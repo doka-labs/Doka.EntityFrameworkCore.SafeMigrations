@@ -531,6 +531,16 @@ calls exceeding either bound reject during construction.
 
 ## Expected definitions
 
+Provider-certified table metadata can be captured using
+`CreateTableIfNotExistsFromModel` with an `Action<MigrationBuilder>` factory.
+The factory must append exactly one ordinary table operation, including its
+annotations, before capture. Legacy convergence has a corresponding
+`ConvergeTableFromModel` factory overload with an explicit policy. Existing
+constructors and typed unannotated table builders retain their signatures.
+The [MySQL table contract](mysql-mariadb-ddl-behavior.md#explicit-innodb-table-contracts)
+currently certifies explicit InnoDB storage; no general annotation passthrough
+or cross-provider interpretation is authorized.
+
 | Type | Principal inputs |
 | --- | --- |
 | `ExpectedTableDefinition` | Table/schema, columns, primary key, unique/check/foreign constraints, comment |

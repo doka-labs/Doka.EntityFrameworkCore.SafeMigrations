@@ -1,5 +1,3 @@
-using Microsoft.EntityFrameworkCore.Migrations.Design;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Compiles generated native UUID calls and checks their reconstructed migration contracts.</summary>

@@ -216,6 +216,13 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
             projection.Observe(safeOperation, liveAnalysis, analysis, decision);
             if (decision.Action is SafeMigrationAction.Apply or SafeMigrationAction.Repair)
             {
+                if (_rebuildArtifacts.ElidesRetiringForeignKey(safeOperation))
+                {
+                    // WHY: This exact owner is dropped later in the same owned transaction. Retain its logical
+                    // projection and final postcondition without asking EF to rebuild a discarded missing model.
+                    continue;
+                }
+
                 acceptedOperations.Add(
                     SafeMigrationStandardOperationFactory.Create(
                         safeOperation.Intent,
@@ -373,7 +380,15 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
             ? operations
             : operations.GetRange(start, count);
 
-        var commands = _baselineGenerator.Generate(window, _model, _options, guardedOperations: _operations);
+        if (start != 0)
+        {
+            // WHY: A rare split has already changed the physical catalog within this owned transaction.
+            // The next native rebuild must preserve that new lifetime, not reuse pre-window ordinals.
+            _executionState.Invalidate();
+        }
+
+        var commands = _baselineGenerator.Generate(window, _model, _options, guardedOperations: _operations,
+            snapshot: _executionState.GetSnapshot(connection));
 
         return ExecuteCommands(connection, parameterValues, commands);
     }

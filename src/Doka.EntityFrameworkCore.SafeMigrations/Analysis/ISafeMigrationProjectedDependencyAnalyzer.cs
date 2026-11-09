@@ -31,6 +31,24 @@ internal interface ISafeMigrationProjectedDependencyAnalyzer
         ISafeMigrationProjectedColumnSource columns
     ) => null;
 
+    /// <summary>Qualifies provider-owned table facets against the accepted physical table lifetime.</summary>
+    /// <param name="intent">The target table contract.</param>
+    /// <param name="acceptedAnnotations">The immutable facets of the accepted table definition.</param>
+    /// <param name="newlyCreated">Whether that accepted definition created a new physical table.</param>
+    /// <param name="liveAnalysis">The original catalog analysis of the target.</param>
+    /// <returns>A mandatory refusal, or null when provider facets do not prevent intrinsic shape projection.</returns>
+    SafeMigrationProviderAnalysis? ValidateProjectedTableProviderMetadata(
+        EnsureTableIntent intent,
+        IReadOnlyList<SafeMigrationProviderAnnotation> acceptedAnnotations,
+        bool newlyCreated,
+        SafeMigrationProviderAnalysis liveAnalysis
+    ) => intent.Definition.ProviderAnnotations.Count == 0
+        || SafeMigrationDefinitionEquivalence.ProviderAnnotations(
+            acceptedAnnotations, intent.Definition.ProviderAnnotations)
+            ? null
+            : new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
+                SafeMigrationRepairCapability.None, false, "projected_table_provider_metadata_unproven");
+
     /// <summary>Validates physical dependencies after provider-neutral projection.</summary>
     /// <param name="operation">The operation being assessed.</param>
     /// <param name="projectedAnalysis">The provider-neutral projected assessment.</param>

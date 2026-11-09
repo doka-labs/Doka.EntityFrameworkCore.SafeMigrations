@@ -148,11 +148,13 @@ internal interface ISafeMigrationProjectedColumnAnalyzer
 /// <param name="ProvesEmpty">Whether a current versioned empty-table proof remains valid.</param>
 /// <param name="HasDataMutation">Whether accepted operations invalidated the captured live row proof.</param>
 /// <param name="ColumnWasDropped">Whether accepted absence invalidates an original owned-staging certificate.</param>
+/// <param name="CreationProviderAnnotations">The accepted creation facets, borrowed without copying the table.</param>
 internal readonly record struct SafeMigrationProjectedMissingColumnContext(
     bool TableWasCreated,
     bool ProvesEmpty,
     bool HasDataMutation,
-    bool ColumnWasDropped
+    bool ColumnWasDropped,
+    IReadOnlyList<SafeMigrationProviderAnnotation>? CreationProviderAnnotations = null
 );
 
 /// <summary>Groups physical provenance and row-proof lifetime for one projected transition.</summary>

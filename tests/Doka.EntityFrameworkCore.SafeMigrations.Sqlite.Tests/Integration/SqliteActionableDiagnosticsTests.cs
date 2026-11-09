@@ -670,7 +670,8 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
             IReadOnlyList<MigrationOperation> operations,
             IModel? model = null,
             MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default,
-            IReadOnlyList<MigrationOperation>? guardedOperations = null
+            IReadOnlyList<MigrationOperation>? guardedOperations = null,
+            SqliteCatalogSnapshot? snapshot = null
         ) => [command];
     }
 

@@ -213,7 +213,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
         ArgumentNullException.ThrowIfNull(analysis);
 
         return operation.Intent is DropTableIntent
-            && StringComparer.Ordinal.Equals(analysis.Code, "table_drop_foreign_key_dependency");
+            && (StringComparer.Ordinal.Equals(analysis.Code, "table_drop_foreign_key_dependency")
+                || (_retirementDropAnalyses?.TryGetValue(operation, out var captured) == true
+                    && ReferenceEquals(captured, analysis)));
     }
 
     /// <inheritdoc />
@@ -486,7 +488,8 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
                 rebuildTable,
                 ModelColumnMatches,
                 ModelIndexMatches,
-                ModelExpressionMatches)
+                ModelExpressionMatches,
+                operation)
             : null;
 
         if (unsupportedRebuild is not null)

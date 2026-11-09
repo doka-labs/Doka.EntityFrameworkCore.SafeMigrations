@@ -9,7 +9,7 @@ scope: "SQLite provider integration and atomic model-owned table rebuilds"
 supersedes: []
 superseded-by: []
 amends: [D-001, D-002, D-003, D-004, D-005, D-006, D-008, D-009]
-amended-by: []
+amended-by: [D-020]
 madr-version: "4.0.0"
 doka-profile-version: "1.0"
 ---
@@ -185,6 +185,9 @@ contracts.
   foreign keys and renames, excluded self-references, aligned converted
   backfill defaults with EF provider literals, and completed trivia-aware and
   high-byte identifier parsing.
+- 2026-11-09: Recorded proposed D-020 for exact-window retirement without a
+  fabricated rebuild model. Its architectural approval remains distinct from
+  implementation and test evidence.
 
 ### Implementation References
 

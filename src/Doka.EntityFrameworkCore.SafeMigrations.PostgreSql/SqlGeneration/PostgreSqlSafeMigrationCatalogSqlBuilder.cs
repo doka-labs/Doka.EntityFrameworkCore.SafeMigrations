@@ -232,10 +232,19 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     private string? GetUnsupportedNativeFeature(
         SafeMigrationIntent intent
     )
-        => GetUnsupportedSqlExpressionFeature(intent)
+    {
+        // WHY: A foreign provider's table facets require their own native proof;
+        // expression normalization must not turn them into an ordinary table.
+        if (intent is EnsureTableIntent { Definition.ProviderAnnotations.Count: > 0 })
+        {
+            return "table_annotation";
+        }
+
+        return GetUnsupportedSqlExpressionFeature(intent)
             ?? GetUnsupportedColumnFeature(intent)
             ?? GetUnsupportedIndexFeature(intent)
             ?? GetUnsupportedGeneratedCaseCheckFeature(intent);
+    }
 
     public string RenderExpression(
         SafeMigrationSqlExpression expression

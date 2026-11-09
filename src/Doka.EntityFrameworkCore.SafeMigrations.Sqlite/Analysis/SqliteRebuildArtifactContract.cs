@@ -13,8 +13,12 @@ internal sealed class SqliteRebuildArtifactContract
     private readonly HashSet<SafeMigrationOperation>? _potentialColumnRebuilds;
     private readonly IReadOnlyDictionary<string, RemovedTableArtifacts> _removedArtifacts;
     private readonly IReadOnlySet<string> _removedTables;
+    private readonly SqliteTableRetirementContract _retirement;
     private readonly SqliteTableConstraintTransitions _tableConstraintTransitions;
     private readonly IReadOnlyDictionary<string, RebuildTableContract> _tables;
+    private Dictionary<string, List<string>>? _retirementIncoming;
+    private SqliteCatalogSnapshot? _retirementSnapshot;
+    private Dictionary<string, string?>? _retirementVerdicts;
 
     private SqliteRebuildArtifactContract(
         IReadOnlyDictionary<string, RebuildTableContract> tables,
@@ -31,6 +35,7 @@ internal sealed class SqliteRebuildArtifactContract
         _removedArtifacts = removedArtifacts;
         _removedTables = removedTables;
         _tableConstraintTransitions = new SqliteTableConstraintTransitions(constraintOperations);
+        _retirement = SqliteTableRetirementContract.Capture(tables, constraintOperations);
         _potentialColumnRebuilds = ReadPotentialColumnRebuilds(operations);
     }
 
@@ -173,6 +178,24 @@ internal sealed class SqliteRebuildArtifactContract
         SafeMigrationOperation operation
     )
         => _potentialColumnRebuilds?.Contains(operation) == true;
+
+    /// <summary>Identifies exact FK rebuilds subsumed by the same atomic batch's later owner deletion.</summary>
+    /// <param name="operation">The exact operation after successful live analysis and policy selection.</param>
+    /// <returns>Whether native FK removal is unnecessary because its unchanged owner is explicitly retired.</returns>
+    public bool ElidesRetiringForeignKey(
+        SafeMigrationOperation operation
+    ) => _retirement.Contains(operation);
+
+    /// <summary>Certifies an unchanged terminal owner against its complete native retirement component.</summary>
+    /// <param name="snapshot">The exact immutable catalog used by this analysis boundary.</param>
+    /// <param name="operation">The reference-bound terminal table removal after its certified FK removal.</param>
+    /// <returns>Whether native DROP analysis remains authoritative after independent renames.</returns>
+    public bool PreservesRetirementDropAnalysis(
+        SqliteCatalogSnapshot snapshot,
+        SafeMigrationOperation operation
+    ) => _retirement.ContainsTableDrop(operation)
+        && operation.Intent is DropTableIntent drop
+        && GetUnsupportedRetirementFeature(snapshot, drop.Table) is null;
 
     /// <summary>
     /// Indexes potential ADD-to-DROP transitions once instead of rescanning the stream per absent column.
@@ -526,13 +549,15 @@ internal sealed class SqliteRebuildArtifactContract
     /// <param name="modelExpressionMatches">
     /// The provider's bounded model-expression proof, or null to retain textual comparison.
     /// </param>
+    /// <param name="operation">The exact current operation, or null when no retirement certificate may apply.</param>
     /// <returns>The first unsupported artifact code, or null when every artifact is owned.</returns>
     public string? GetUnsupportedRebuildFeature(
         SqliteCatalogSnapshot snapshot,
         string table,
         Func<SqliteColumnSnapshot, IColumn, bool> columnMatches,
         Func<SqliteIndexSnapshot, ITableIndex, bool> indexMatches,
-        Func<string, string, bool>? modelExpressionMatches = null
+        Func<string, string, bool>? modelExpressionMatches = null,
+        SafeMigrationOperation? operation = null
     )
     {
         ArgumentNullException.ThrowIfNull(columnMatches);
@@ -548,27 +573,15 @@ internal sealed class SqliteRebuildArtifactContract
             return null;
         }
 
-        if (tableSnapshot.IsStrict)
+        if (operation is not null && _retirement.Contains(operation))
         {
-            return "strict_table_rebuild";
+            return GetUnsupportedRetirementFeature(snapshot, table);
         }
 
-        if (tableSnapshot.WithoutRowId)
+        var nativeUnsupported = GetUnsupportedNativeRebuildFeature(snapshot, tableSnapshot);
+        if (nativeUnsupported is not null)
         {
-            return "without_rowid_table_rebuild";
-        }
-
-        if (snapshot.OtherObjects.Any(value => value.Type == "trigger"
-            && (s_identifierComparer.Equals(value.Table, table)
-                || SqliteSqlIdentifierScanner.ReferencesIdentifier(value.Sql, table))))
-        {
-            return "table_rebuild_trigger";
-        }
-
-        if (snapshot.OtherObjects.Any(value => value.Type == "view"
-            && SqliteSqlIdentifierScanner.ReferencesIdentifier(value.Sql, table)))
-        {
-            return "table_rebuild_view";
+            return nativeUnsupported;
         }
 
         if (!_tables.TryGetValue(table, out var expected))
@@ -765,6 +778,197 @@ internal sealed class SqliteRebuildArtifactContract
             && (check.Name is null || added?.Checks.Contains(check.Name) != true)))
         {
             return "table_rebuild_unmodeled_target_check_constraint";
+        }
+
+        return null;
+    }
+
+    /// <summary>Shares physical-shape exclusions between rebuilds and complete retirement components.</summary>
+    private static string? GetUnsupportedNativeRebuildFeature(
+        SqliteCatalogSnapshot snapshot,
+        SqliteTableSnapshot table
+    )
+    {
+        if (table.IsStrict)
+        {
+            return "strict_table_rebuild";
+        }
+
+        if (table.WithoutRowId)
+        {
+            return "without_rowid_table_rebuild";
+        }
+
+        if (snapshot.OtherObjects.Any(value => value.Type == "trigger"
+            && (s_identifierComparer.Equals(value.Table, table.Name)
+                || SqliteSqlIdentifierScanner.ReferencesIdentifier(value.Sql, table.Name))))
+        {
+            return "table_rebuild_trigger";
+        }
+
+        if (snapshot.OtherObjects.Any(value => value.Type == "view"
+            && SqliteSqlIdentifierScanner.ReferencesIdentifier(value.Sql, table.Name)))
+        {
+            return "table_rebuild_view";
+        }
+
+        return null;
+    }
+
+    /// <summary>Validates every retiring owner in the native FK component without inspecting unrelated drops.</summary>
+    private string? GetUnsupportedRetirementFeature(
+        SqliteCatalogSnapshot snapshot,
+        string root
+    )
+    {
+        if (!ReferenceEquals(_retirementSnapshot, snapshot))
+        {
+            // WHY: Each window is exclusive to its DbContext operation. Reuse only its exact immutable
+            // snapshot, and publish the identity last so a failed index capture cannot expose partial evidence.
+            var incoming = ReadRetiringIncomingOwners(snapshot);
+            var verdicts = new Dictionary<string, string?>(s_identifierComparer);
+
+            _retirementIncoming = incoming;
+            _retirementVerdicts = verdicts;
+            _retirementSnapshot = snapshot;
+        }
+
+        if (_retirementVerdicts!.TryGetValue(root, out var known))
+        {
+            return known;
+        }
+
+        var visited = new HashSet<string>(s_identifierComparer);
+        var pending = new Stack<string>();
+        _ = visited.Add(root);
+        pending.Push(root);
+        string? unsupported = null;
+
+        while (pending.TryPop(out var owner))
+        {
+            if (!snapshot.Tables.TryGetValue(owner, out var table))
+            {
+                continue;
+            }
+
+            unsupported ??= GetUnsupportedNativeRebuildFeature(snapshot, table)
+                ?? GetUnsupportedRetirementTableFeature(table);
+
+            // WHY: The immutable native FK list supplies direct indexed neighbor identities.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var index = 0; index < table.ForeignKeys.Count; index++)
+            {
+                AddRetiringOwner(table.ForeignKeys[index].PrincipalTable);
+            }
+
+            // WHY: Removing one edge can make the entire cycle droppable. A child-side unknown artifact
+            // must not disappear merely because its owner never needed a standalone FK-removal command.
+            if (_retirementIncoming!.TryGetValue(owner, out var incoming))
+            {
+                // WHY: This owned adjacency list is stable throughout the current snapshot's graph walk.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
+                for (var index = 0; index < incoming.Count; index++)
+                {
+                    AddRetiringOwner(incoming[index]);
+                }
+            }
+        }
+
+        foreach (var owner in visited)
+        {
+            _retirementVerdicts[owner] = unsupported;
+        }
+
+        return unsupported;
+
+        void AddRetiringOwner(
+            string candidateOwner
+        )
+        {
+            if (!_retirement.Retires(candidateOwner))
+            {
+                return;
+            }
+
+            if (_retirement.ChangesLifetime(candidateOwner))
+            {
+                // WHY: A later renamed/recreated neighbor is not its current native owner. Its old graph
+                // cannot prove artifact safety for the final owner merely because the destination is dropped.
+                unsupported ??= "table_retirement_owner_lifetime";
+
+                return;
+            }
+
+            if (visited.Add(candidateOwner))
+            {
+                pending.Push(candidateOwner);
+            }
+        }
+    }
+
+    /// <summary>Indexes retiring incoming edges once instead of rescanning the catalog per graph vertex.</summary>
+    private Dictionary<string, List<string>> ReadRetiringIncomingOwners(
+        SqliteCatalogSnapshot snapshot
+    )
+    {
+        var incoming = new Dictionary<string, List<string>>(s_identifierComparer);
+        foreach (var table in snapshot.Tables.Values)
+        {
+            if (!_retirement.Retires(table.Name))
+            {
+                continue;
+            }
+
+            // WHY: Preserve each native FK's direct list access while indexing incoming owner identities.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var index = 0; index < table.ForeignKeys.Count; index++)
+            {
+                var foreignKey = table.ForeignKeys[index];
+                if (!_retirement.Retires(foreignKey.PrincipalTable))
+                {
+                    continue;
+                }
+
+                if (!incoming.TryGetValue(foreignKey.PrincipalTable, out var owners))
+                {
+                    owners = [];
+                    incoming.Add(foreignKey.PrincipalTable, owners);
+                }
+
+                owners.Add(table.Name);
+            }
+        }
+
+        return incoming;
+    }
+
+    /// <summary>Retains native-shape exclusions for unmodeled tables whose FK removal is physically subsumed.</summary>
+    private static string? GetUnsupportedRetirementTableFeature(
+        SqliteTableSnapshot table
+    )
+    {
+        if (table.Sql.StartsWith("CREATE VIRTUAL TABLE", StringComparison.OrdinalIgnoreCase))
+        {
+            return "virtual_table";
+        }
+
+        if (table.HasUnmodeledConstraintOptions)
+        {
+            return "table_rebuild_provider_constraint_option";
+        }
+
+        if (table.Columns.Values.Any(static column => column.HiddenKind != 0 || column.GeneratedSql is not null))
+        {
+            return "table_retirement_generated_column";
+        }
+
+        if (table.Indexes.Any(static index =>
+                index.Partial || index.Keys.Any(static key => key.Expression is not null)))
+        {
+            return "table_retirement_index_expression";
         }
 
         return null;

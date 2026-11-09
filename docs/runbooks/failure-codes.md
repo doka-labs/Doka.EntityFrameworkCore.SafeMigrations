@@ -62,6 +62,16 @@ actual captured column/default contract. A target model, future addition or
 matching key shape alone is not native prerequisite evidence. See
 [sparse live prerequisites](../implementation-design.md#sparse-live-constraint-prerequisites).
 
+For an explicitly authored MySQL/MariaDB InnoDB table contract,
+`table_storage_engine_different` means the native storage engine does not
+satisfy that requirement. The `table_storage_engine` difference identifies the
+expected and bounded actual engine; no policy converts it automatically.
+`table_storage_engine_metadata` rejects unsupported or malformed table metadata,
+not application rows. `projected_table_storage_engine_unproven` means a preceding
+unannotated creation does not establish the later explicit engine requirement.
+Declare the engine on the creation rather than weakening policy. See
+[explicit InnoDB contracts](../mysql-mariadb-ddl-behavior.md#explicit-innodb-table-contracts).
+
 `structured_check_operand_type` rejects a PostgreSQL CHECK whose structured
 operand types are independently incompatible. `projected_check_binding_unproven`
 keeps an unresolved sparse binding blocked; a present column does not prove

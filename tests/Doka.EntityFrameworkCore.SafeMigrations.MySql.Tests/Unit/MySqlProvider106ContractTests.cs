@@ -1,5 +1,3 @@
-using Microsoft.EntityFrameworkCore.Migrations.Design;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Preserves published Doka 10.6 physical facets through SafeMigrations' authoring contracts.</summary>

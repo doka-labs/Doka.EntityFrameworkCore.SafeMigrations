@@ -6,6 +6,22 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve explicitly configured InnoDB table metadata through safe scaffolding,
+  immutable capture, native DDL and catalog verification. Strict and legacy
+  convergence retain the authored engine requirement; unrelated provider
+  metadata and unsupported engines remain rejected without automatic conversion.
+  Normalize only certified historical table/key metadata on identity-only
+  DROP/RENAME operations so generated Down and replay remain usable.
+- Support removal of foreign keys on SQLite tables that are proved to retire
+  in the same atomic structural batch, including populated private FK cycles
+  absent from the final target model. Retain policy, surviving-reference,
+  artifact-ownership, rollback and FK-mode restoration checks; unrelated
+  missing-model rebuilds remain unsupported. Safe rebuilds preserve retained
+  native column order unless explicitly overridden by model `ColumnOrder`;
+  fresh/recreated and ordinary EF lifetimes keep native provider semantics.
+
 ## [10.7.0] - 2026-11-06
 
 Version 10.7.0 requires explicit cancellation tokens on owned asynchronous

@@ -5,10 +5,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private static string? GetUnsupportedTableFeature(
         SafeMigrationIntent intent,
         MySqlMigrationFeatureSet features
-    ) => intent is EnsureTableIntent { Definition.CheckConstraints.Count: > 0 }
-        && !Supported(features, MySqlMigrationFeature.CheckConstraints)
-            ? "check_constraint"
-            : null;
+    ) => intent is EnsureTableIntent table
+        ? MySqlSafeMigrationTableMetadata.GetUnsupportedFeature(table.Definition)
+            ?? (table.Definition.CheckConstraints.Count > 0
+                && !Supported(features, MySqlMigrationFeature.CheckConstraints)
+                    ? "check_constraint"
+                    : null)
+        : null;
 
     private MySqlSafeMigrationRuntimePlan BuildEnsureTable(
         EnsureTableIntent intent,
@@ -21,8 +24,16 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var definition = intent.Definition;
         var exists = TableExists(definition.Table);
         var baseTable = BaseTableExists(definition.Table);
-        var matching = intent.Mode == SafeMigrationTableMode.ConvergenceContainer
+        var engineMatches = MySqlSafeMigrationTableMetadata.IsExplicitInnoDb(definition)
+            ? InnoDbEngineMatches(definition.Table)
+            : null;
+
+        var containerMatches = engineMatches is null
             ? baseTable
+            : $"({baseTable} AND {engineMatches})";
+
+        var matching = intent.Mode == SafeMigrationTableMode.ConvergenceContainer
+            ? containerMatches
             : BuildTableMatches(
                 definition,
                 isMariaDb,
@@ -30,7 +41,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 expectedTableConstraints);
 
         var executionPostcondition = intent.Mode == SafeMigrationTableMode.ConvergenceContainer
-            ? baseTable
+            ? containerMatches
             : BuildTableMatches(
                 definition,
                 isMariaDb,
@@ -63,8 +74,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             executionPostcondition = SelectNativeTableContract(executionPostcondition, foldedPostcondition);
         }
 
+        // WHY: A wrong physical engine is outside the certified storage contract,
+        // even under ExistenceOnly. Never reinterpret it as ignorable table drift.
+        var engineGuard = engineMatches is null
+            ? string.Empty
+            : $"WHEN NOT ({engineMatches}) THEN 'unsupported' ";
+
         var state = $"CASE WHEN NOT {exists} THEN 'missing' "
             + $"WHEN NOT {baseTable} THEN 'unsupported' "
+            + engineGuard
             + $"WHEN {matching} THEN 'matching' ELSE 'different' END";
 
         if (nativeAlternative is { IsValid: false })
@@ -78,6 +96,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         return Plan(state, matching) with
         {
             ExecutionPostcondition = executionPostcondition,
+            ClassificationCodeExpression = engineMatches is null
+                ? null
+                : $"CASE WHEN {baseTable} AND NOT ({engineMatches}) "
+                    + "THEN 'table_storage_engine_different' ELSE NULL END",
+            DiagnosticEvidenceExpression = engineMatches is null
+                ? null
+                : BuildEngineDiagnosticEvidence(definition.Table),
         };
     }
 
@@ -159,6 +184,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + $"= {Literal(definition.Comment ?? string.Empty)}",
         };
 
+        if (MySqlSafeMigrationTableMetadata.IsExplicitInnoDb(definition))
+        {
+            conditions.Add(InnoDbEngineMatches(definition.Table));
+        }
+
         if (definition.Columns.Count > 0)
         {
             conditions.Add(BuildAllColumnsMatch(definition.Table, definition, isMariaDb));
@@ -175,6 +205,24 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         return $"({string.Join(" AND ", conditions)})";
     }
+
+    /// <summary>Verifies the explicit engine in the same catalog statement as table classification.</summary>
+    private string InnoDbEngineMatches(
+        string table
+    ) => $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES engine_table "
+        + "WHERE engine_table.TABLE_SCHEMA = DATABASE() "
+        + $"AND engine_table.TABLE_NAME = {Literal(table)} "
+        + "AND LOWER(engine_table.ENGINE) = 'innodb')";
+
+    /// <summary>Captures only the bounded physical engine name in the existing classification query.</summary>
+    private string BuildEngineDiagnosticEvidence(
+        string table
+    ) => "(SELECT "
+        + DiagnosticRecord("LOWER(COALESCE(engine_table.ENGINE, '')) <> 'innodb'", "table_storage_engine",
+            "'InnoDB'", "LEFT(COALESCE(engine_table.ENGINE, 'unknown'), 64)")
+        + " FROM INFORMATION_SCHEMA.TABLES engine_table "
+        + $"WHERE engine_table.TABLE_SCHEMA = DATABASE() AND engine_table.TABLE_NAME = {Literal(table)} "
+        + "AND engine_table.TABLE_TYPE = 'BASE TABLE' LIMIT 1)";
 
     private string BuildPrimaryKeyTransitionMatches(
         ExpectedTableDefinition definition,

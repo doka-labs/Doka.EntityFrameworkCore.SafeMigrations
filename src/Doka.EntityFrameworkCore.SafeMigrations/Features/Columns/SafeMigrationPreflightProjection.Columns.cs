@@ -170,7 +170,11 @@ internal sealed partial class SafeMigrationPreflightProjection
                 TableWasCreated: tableWasCreated,
                 ProvesEmpty: provesEmpty,
                 HasDataMutation: HasUnanalyzedDataChanges(intent.Table, intent.Schema),
-                ColumnWasDropped: IsProjectedColumnMissing(intent.Table, intent.Schema, intent.Definition.Name)),
+                ColumnWasDropped: IsProjectedColumnMissing(intent.Table, intent.Schema, intent.Definition.Name),
+                CreationProviderAnnotations: tableWasCreated
+                    && TryGet(intent.Table, intent.Schema, out var createdTable)
+                    ? createdTable.ProviderAnnotations
+                    : null),
             liveAnalysis,
             projectedAnalysis);
     }

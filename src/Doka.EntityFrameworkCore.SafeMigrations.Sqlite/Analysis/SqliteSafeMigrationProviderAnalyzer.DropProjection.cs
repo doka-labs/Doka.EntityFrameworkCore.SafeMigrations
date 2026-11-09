@@ -8,6 +8,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
     private bool _dropProjectionExpired;
     private SqliteCatalogSnapshot? _dropProjectionSnapshot;
     private int? _rebuildRowMutationOrdinal;
+    private Dictionary<SafeMigrationOperation, SafeMigrationProviderAnalysis>? _retirementDropAnalyses;
 
     /// <inheritdoc />
     public void SetCurrentOperationOrdinal(
@@ -192,6 +193,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         _dropProjectionExpired = false;
         _currentOperationOrdinal = -1;
         _rebuildRowMutationOrdinal = null;
+        _retirementDropAnalyses = null;
     }
 
     /// <summary>Captures immutable native facts without treating existing tables as newly created or empty.</summary>

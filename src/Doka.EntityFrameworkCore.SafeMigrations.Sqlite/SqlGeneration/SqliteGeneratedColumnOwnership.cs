@@ -98,6 +98,28 @@ internal sealed class SqliteGeneratedColumnOwnership
         IReadOnlyList<MigrationOperation> rewritten
     )
     {
+        var rebuilt = ResolveRebuiltCreators(rewritten);
+        var creators = new HashSet<CreateTableOperation>(_safeCreators, ReferenceEqualityComparer.Instance);
+        foreach (var candidate in rebuilt)
+        {
+            if (_lifetimes.TryGetValue(candidate.Value, out var owned) && owned)
+            {
+                _ = creators.Add(candidate.Key);
+            }
+        }
+
+        return creators;
+    }
+
+    /// <summary>
+    /// Identifies reconstructed creators by exact native-operation identity and generated rename metadata.
+    /// </summary>
+    /// <param name="rewritten">The official provider's rewritten operation stream.</param>
+    /// <returns>Reconstructed creators and their actual final owner names; never original user creators.</returns>
+    public Dictionary<CreateTableOperation, string> ResolveRebuiltCreators(
+        IReadOnlyList<MigrationOperation> rewritten
+    )
+    {
         Dictionary<string, string>? nativeTargets = null;
         foreach (var operation in rewritten)
         {
@@ -112,17 +134,14 @@ internal sealed class SqliteGeneratedColumnOwnership
             }
         }
 
-        var creators = new HashSet<CreateTableOperation>(ReferenceEqualityComparer.Instance);
+        var creators = new Dictionary<CreateTableOperation, string>(ReferenceEqualityComparer.Instance);
         foreach (var operation in rewritten)
         {
             if (operation is CreateTableOperation creator
-                && (_safeCreators.Contains(creator)
-                    || (!_inputs.Contains(creator)
-                        && nativeTargets?.TryGetValue(creator.Name, out var target) == true
-                        && _lifetimes.TryGetValue(target, out var owned)
-                        && owned)))
+                && !_inputs.Contains(creator)
+                && nativeTargets?.TryGetValue(creator.Name, out var target) == true)
             {
-                _ = creators.Add(creator);
+                creators.Add(creator, target);
             }
         }
 

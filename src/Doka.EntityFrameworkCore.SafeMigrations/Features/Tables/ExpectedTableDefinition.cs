@@ -70,6 +70,9 @@ public sealed class ExpectedTableDefinition
         ValidateColumnReferences();
     }
 
+    /// <summary>Gets immutable provider-owned facets whose complete contract the active adapter must certify.</summary>
+    internal IReadOnlyList<SafeMigrationProviderAnnotation> ProviderAnnotations { get; init; } = [];
+
     /// <summary>Gets the table name.</summary>
     public string Table { get; }
 

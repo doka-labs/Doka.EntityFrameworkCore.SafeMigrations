@@ -21,23 +21,32 @@ internal sealed class SqliteSafeMigrationsBaselineSqlGenerator : SqliteMigration
     /// <param name="model">The target relational model, when available.</param>
     /// <param name="options">The native SQL generation options.</param>
     /// <param name="guardedOperations">The original safe/provider stream before safe intent conversion.</param>
+    /// <param name="snapshot">The native pre-window catalog, when executing an owned structural transaction.</param>
     /// <returns>The provider's commands with complete generated-column declarations.</returns>
     public IReadOnlyList<MigrationCommand> GenerateSafe(
         IReadOnlyList<MigrationOperation> operations,
         IModel? model,
         MigrationsSqlGenerationOptions options,
-        IReadOnlyList<MigrationOperation> guardedOperations
+        IReadOnlyList<MigrationOperation> guardedOperations,
+        SqliteCatalogSnapshot? snapshot = null
     )
     {
         ArgumentNullException.ThrowIfNull(guardedOperations);
 
-        if (!CouldContainGeneratedColumns(operations, model))
+        var couldContainGenerated = CouldContainGeneratedColumns(operations, model);
+        if (!couldContainGenerated
+            && (snapshot is null
+                || !operations.Any(SqliteSafeMigrationOperationClassifier.RequiresTableRebuild)))
         {
             return base.Generate(operations, model, options);
         }
 
         var ownership = new SqliteGeneratedColumnOwnership(operations, guardedOperations);
-        if (!ownership.RequiresCompleteDeclarations(model))
+        var columnOrder = snapshot is null
+            ? null
+            : new SqliteRebuildColumnOrder(snapshot, operations, ownership);
+        var completeDeclarations = couldContainGenerated && ownership.RequiresCompleteDeclarations(model);
+        if (!completeDeclarations && columnOrder?.Required != true)
         {
             return base.Generate(operations, model, options);
         }
@@ -57,7 +66,10 @@ internal sealed class SqliteSafeMigrationsBaselineSqlGenerator : SqliteMigration
             // mutation, SQL rewriting, or assumptions about temporary names.
             _ = base.Generate(operations, model, options);
             _capturedOperations = null;
-            _completeCreators = ownership.ResolveCreators(rewritten);
+            _completeCreators = completeDeclarations
+                ? ownership.ResolveCreators(rewritten)
+                : null;
+            columnOrder?.Apply(ownership.ResolveRebuiltCreators(rewritten), model);
             _ownership = ownership;
             Options = options;
             var builder = new MigrationCommandListBuilder(Dependencies);

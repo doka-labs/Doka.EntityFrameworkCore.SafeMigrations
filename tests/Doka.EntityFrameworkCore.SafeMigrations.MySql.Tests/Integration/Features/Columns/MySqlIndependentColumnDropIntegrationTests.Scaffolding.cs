@@ -1,5 +1,3 @@
-using Microsoft.EntityFrameworkCore.Migrations.Design;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 public sealed partial class MySqlIndependentColumnDropIntegrationTests

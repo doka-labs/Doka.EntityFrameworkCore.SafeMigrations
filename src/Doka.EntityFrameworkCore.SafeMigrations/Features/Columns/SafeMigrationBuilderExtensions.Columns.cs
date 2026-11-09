@@ -121,7 +121,7 @@ public static partial class SafeMigrationBuilderExtensions
         SafeMigrationPolicy policy = SafeMigrationPolicy.ThrowIfDifferent
     )
     {
-        var operation = CaptureColumnOperation<AddColumnOperation>(migrationBuilder, operationFactory);
+        var operation = CaptureOperation<AddColumnOperation>(migrationBuilder, operationFactory);
         var definition = SafeMigrationExpectedDefinitionFactory.From(operation);
 
         return migrationBuilder.EnsureColumn(operation.Table, definition, policy, operation.Schema);
@@ -201,7 +201,7 @@ public static partial class SafeMigrationBuilderExtensions
         SafeMigrationPolicy policy = SafeMigrationPolicy.RepairIfSafe
     )
     {
-        var operation = CaptureColumnOperation<AlterColumnOperation>(migrationBuilder, operationFactory);
+        var operation = CaptureOperation<AlterColumnOperation>(migrationBuilder, operationFactory);
         var definition = SafeMigrationExpectedDefinitionFactory.From(operation);
         var oldDefinition = SafeMigrationExpectedDefinitionFactory.From(operation.OldColumn, operation.Name);
 
@@ -213,11 +213,11 @@ public static partial class SafeMigrationBuilderExtensions
             operation.Schema);
     }
 
-    private static TOperation CaptureColumnOperation<TOperation>(
+    private static TOperation CaptureOperation<TOperation>(
         MigrationBuilder migrationBuilder,
         Action<MigrationBuilder> operationFactory
     )
-        where TOperation : ColumnOperation
+        where TOperation : MigrationOperation
     {
         ArgumentNullException.ThrowIfNull(migrationBuilder);
         ArgumentNullException.ThrowIfNull(operationFactory);

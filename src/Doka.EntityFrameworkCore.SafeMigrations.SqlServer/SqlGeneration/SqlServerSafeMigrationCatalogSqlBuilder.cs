@@ -239,6 +239,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         if (operation.Intent is EnsureTableIntent table)
         {
+            // WHY: A foreign provider's table facets have no SQL Server proof,
+            // even when all ordinary column and constraint facets are supported.
+            if (table.Definition.ProviderAnnotations.Count > 0)
+            {
+                return "table_annotation";
+            }
+
             if (table.Definition.Columns.Count > 1024)
             {
                 return "table_column_limit";

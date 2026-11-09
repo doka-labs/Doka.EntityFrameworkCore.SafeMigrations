@@ -44,14 +44,7 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
         var closeParenthesis = FindMatchingParenthesis(source, openParenthesis);
         var argumentIndent = FindArgumentIndent(source, openParenthesis, closeParenthesis);
         var newline = SafeMigrationGeneratedSource.GetConsistentNewLine(source);
-        var policy = _configuration.LegacyConvergencePolicy switch
-        {
-            SafeMigrationPolicy.ThrowIfDifferent => nameof(SafeMigrationPolicy.ThrowIfDifferent),
-            SafeMigrationPolicy.RepairIfSafe => nameof(SafeMigrationPolicy.RepairIfSafe),
-            _ => throw new InvalidOperationException(
-                "The legacy-convergence policy is invalid. Select ThrowIfDifferent or RepairIfSafe "
-                + "through UseLegacyConvergencePolicy before generating migrations."),
-        };
+        var policy = GetLegacyConvergencePolicy().ToString();
 
         // Freeze the policy into generated source. Runtime option changes must
         // never reinterpret a migration that was already reviewed.
@@ -64,6 +57,16 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
                 "policy: global::Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy.",
                 policy));
     }
+
+    /// <summary>Validates the frozen convergence policy for both typed and factory-based table source.</summary>
+    private SafeMigrationPolicy GetLegacyConvergencePolicy() => _configuration.LegacyConvergencePolicy switch
+    {
+        SafeMigrationPolicy.ThrowIfDifferent => SafeMigrationPolicy.ThrowIfDifferent,
+        SafeMigrationPolicy.RepairIfSafe => SafeMigrationPolicy.RepairIfSafe,
+        _ => throw new InvalidOperationException(
+            "The legacy-convergence policy is invalid. Select ThrowIfDifferent or RepairIfSafe "
+            + "through UseLegacyConvergencePolicy before generating migrations."),
+    };
 
     private static int FindMatchingParenthesis(
         string source,

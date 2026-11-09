@@ -1560,13 +1560,14 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
             IReadOnlyList<MigrationOperation> operations,
             IModel? model = null,
             MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default,
-            IReadOnlyList<MigrationOperation>? guardedOperations = null
+            IReadOnlyList<MigrationOperation>? guardedOperations = null,
+            SqliteCatalogSnapshot? snapshot = null
         )
         {
             WasInvoked = true;
             PreserveGeneratedColumnFacets = guardedOperations is not null;
 
-            return inner.Generate(operations, model, options, guardedOperations);
+            return inner.Generate(operations, model, options, guardedOperations, snapshot);
         }
     }
 }

@@ -66,6 +66,59 @@ atomic migration transaction.
 - A failure can occur after earlier DDL committed; retry must converge from the
   observed partial state.
 
+## Explicit InnoDB table contracts
+
+An explicitly mapped `UseStorageEngine("InnoDB")` requirement is retained
+through safe scaffolding, the snapshot, native creation and catalog checks.
+Annotated tables use a complete operation-factory capture so table annotations
+are applied before the immutable expected definition is created. For example:
+
+```csharp
+migrationBuilder.CreateTableIfNotExistsFromModel(
+    operationFactory: static operationBuilder => operationBuilder.CreateTable(
+        name: "EngineNodes",
+        columns: table => new
+        {
+            Id = table.Column<long>(type: "bigint", nullable: false),
+        },
+        constraints: table => table.PrimaryKey("PK_EngineNodes", row => row.Id))
+        .Annotation("Doka:MySql:StorageEngine", "InnoDB"),
+    policy: SafeMigrationPolicy.ThrowIfDifferent);
+```
+
+Legacy scaffolding uses the corresponding `ConvergeTableFromModel` factory
+overload with an explicit policy. Existing unannotated table builders remain
+supported. Attaching arbitrary annotations to an already frozen safe operation
+is not a substitute for complete capture.
+
+Both strict and convergence-container checks enforce the explicit engine.
+An existing same-name MyISAM/Aria table is not accepted as InnoDB, even with
+an existence-only container policy. No policy automatically converts its engine.
+Unknown annotations, malformed storage metadata and unsupported engines remain
+fail-closed. PostgreSQL, SQLite and SQL Server do not accept MySQL storage
+metadata. A table without explicit storage metadata retains its existing
+default-engine behavior; this feature does not change server settings.
+
+The authored engine also governs prerequisites for later projected operations.
+An explicit InnoDB creation is not classified using an unrelated default engine.
+An unannotated projected creation does not itself prove a later explicit engine
+requirement. When its physical engine cannot be established, analysis retains
+`projected_table_storage_engine_unproven` rather than treating the difference
+as ignorable under an existence-only policy. Declare the required engine on
+the creation itself. Certified `InnoDB` case variants are equivalent, and an
+unannotated target imposes no new engine requirement.
+Replay checks the actual engine without adding a separate table-query roundtrip.
+An actual mismatch exposes `table_storage_engine_different` with the bounded
+`table_storage_engine` difference (`InnoDB` versus the native engine name).
+Doka also emits historical engine, charset and collation annotations on table
+DROP/RENAME and removed primary/unique keys. The adapter certifies only these
+known, nonoperative identity facets before normalizing the operation. Identity
+operations do not create or alter those facets and do not gain an implicit
+old-engine precondition. Unknown, malformed or unsupported metadata still
+rejects; creation and table verification retain their explicit engine contract.
+See [the storage-contract decision](decisions/D-019-explicit-table-storage-contracts.md)
+for the architecture and alternatives.
+
 ## Current-database qualification
 
 Doka preserves EF table and view `Schema` metadata as MySQL/MariaDB database

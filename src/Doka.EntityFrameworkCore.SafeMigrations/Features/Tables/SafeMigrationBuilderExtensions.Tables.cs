@@ -57,6 +57,48 @@ public static partial class SafeMigrationBuilderExtensions
             policy);
     }
 
+    /// <summary>Captures a complete annotated EF table before creating its safe contract.</summary>
+    /// <param name="migrationBuilder">The migration builder receiving the safe operation.</param>
+    /// <param name="operationFactory">The callback that appends exactly one annotated EF CreateTable operation.</param>
+    /// <param name="policy">The conflict policy for the complete table contract.</param>
+    /// <param name="mode">The table-definition comparison mode.</param>
+    /// <returns>A builder for the created safe operation; provider metadata belongs inside the callback.</returns>
+    /// <exception cref="ArgumentNullException">A required builder or callback is null.</exception>
+    /// <exception cref="InvalidOperationException">The callback must append exactly one table operation.</exception>
+    public static OperationBuilder<SafeMigrationOperation> CreateTableIfNotExistsFromModel(
+        this MigrationBuilder migrationBuilder,
+        Action<MigrationBuilder> operationFactory,
+        SafeMigrationPolicy policy = SafeMigrationPolicy.ThrowIfDifferent,
+        SafeMigrationTableMode mode = SafeMigrationTableMode.StrictDefinition
+    )
+    {
+        // WHY: Chained EF annotations run after a builder returns. Capture only
+        // after the entire callback so table metadata cannot be silently lost.
+        var operation = CaptureOperation<CreateTableOperation>(migrationBuilder, operationFactory);
+        var definition = SafeMigrationExpectedDefinitionFactory.From(operation);
+
+        return Add(migrationBuilder, new EnsureTableIntent(definition, mode), policy);
+    }
+
+    /// <summary>Captures an annotated EF table before emitting its object-granular convergence baseline.</summary>
+    /// <param name="migrationBuilder">The migration builder receiving the safe operations.</param>
+    /// <param name="operationFactory">The callback that appends exactly one complete EF CreateTable operation.</param>
+    /// <param name="policy">The conflict policy for granular convergence operations.</param>
+    /// <returns>A builder for the convergence-container operation.</returns>
+    /// <exception cref="ArgumentNullException">A required builder or callback is null.</exception>
+    /// <exception cref="InvalidOperationException">The callback must append exactly one table operation.</exception>
+    public static OperationBuilder<SafeMigrationOperation> ConvergeTableFromModel(
+        this MigrationBuilder migrationBuilder,
+        Action<MigrationBuilder> operationFactory,
+        SafeMigrationPolicy policy
+    )
+    {
+        var operation = CaptureOperation<CreateTableOperation>(migrationBuilder, operationFactory);
+        var definition = SafeMigrationExpectedDefinitionFactory.From(operation);
+
+        return AddConvergenceOperations(migrationBuilder, definition, [], policy);
+    }
+
     /// <summary>
     /// Creates a typed EF table definition and emits an object-granular legacy
     /// convergence baseline without requiring a hand-written expected model.

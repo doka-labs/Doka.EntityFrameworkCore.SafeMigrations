@@ -1674,10 +1674,11 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             IReadOnlyList<MigrationOperation> operations,
             IModel? model = null,
             MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default,
-            IReadOnlyList<MigrationOperation>? guardedOperations = null
+            IReadOnlyList<MigrationOperation>? guardedOperations = null,
+            SqliteCatalogSnapshot? snapshot = null
         )
         {
-            var commands = inner.Generate(operations, model, options, guardedOperations);
+            var commands = inner.Generate(operations, model, options, guardedOperations, snapshot);
             var mutation = inner.Generate([new SqlOperation { Sql = sql }], model, options);
             MutationGenerated = true;
 
@@ -1702,9 +1703,10 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             IReadOnlyList<MigrationOperation> operations,
             IModel? model = null,
             MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default,
-            IReadOnlyList<MigrationOperation>? guardedOperations = null
+            IReadOnlyList<MigrationOperation>? guardedOperations = null,
+            SqliteCatalogSnapshot? snapshot = null
         ) => inner
-            .Generate(operations, model, options, guardedOperations)
+            .Generate(operations, model, options, guardedOperations, snapshot)
             .Select(command => new ZeroAffectedCommand(command, context, this))
             .ToArray();
 

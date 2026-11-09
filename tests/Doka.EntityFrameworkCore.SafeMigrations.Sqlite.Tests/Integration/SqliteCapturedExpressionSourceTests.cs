@@ -1031,10 +1031,11 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
             IReadOnlyList<MigrationOperation> operations,
             IModel? model = null,
             MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default,
-            IReadOnlyList<MigrationOperation>? guardedOperations = null
+            IReadOnlyList<MigrationOperation>? guardedOperations = null,
+            SqliteCatalogSnapshot? snapshot = null
         )
         {
-            var commands = inner.Generate(operations, model, options, guardedOperations);
+            var commands = inner.Generate(operations, model, options, guardedOperations, snapshot);
             if (!operations.Any(static operation => operation is RenameColumnOperation))
             {
                 return commands;
