@@ -321,6 +321,10 @@ thresholds, EF CLI/script/bundle gates, package consumers, and SBOM validation.
   mandatory.
 - Keep public XML documentation and update `PublicAPI.Unshipped.txt` for public
   API changes.
+- Fix internally solvable defects through existing public contracts. Do not add
+  public methods, overloads, options or consumer obligations merely to simplify
+  implementation. An unavoidable public API expansion requires demonstrated
+  necessity, reviewed alternatives and explicit agreement before implementation.
 - Add automated tests for major new functionality and regression tests for bug
   fixes, including relevant successful, rejected, and boundary behavior.
 - Do not suppress analyzer or compiler warnings; correct the design.

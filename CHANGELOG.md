@@ -20,7 +20,10 @@ the shared release identity described in [Release process](docs/release-process.
 
 - Preserve explicitly configured InnoDB table metadata through safe scaffolding,
   immutable capture, native DDL and catalog verification. Strict and legacy
-  convergence retain the authored engine requirement; unrelated provider
+  convergence retain the authored engine requirement through the existing typed
+  table callbacks, without adding public factory overloads. Failed callbacks,
+  invalid operation counts and rejected snapshots remove their owned appended
+  operations without discarding an earlier migration prefix. Unrelated provider
   metadata and unsupported engines remain rejected without automatic conversion.
   Normalize only certified historical table/key metadata on identity-only
   DROP/RENAME operations so generated Down and replay remain usable.

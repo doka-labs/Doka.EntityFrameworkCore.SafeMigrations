@@ -124,12 +124,11 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.CreateTableIfNotExistsFromModel(operationBuilder => operationBuilder
-                .CreateTable(target,
-                    table => new { Id = table.Column<int>(type: "int", nullable: false) })
-                .Annotation("Doka:MySql:StorageEngine", "InnoDB"),
-            SafeMigrationPolicy.ExistenceOnly,
-            SafeMigrationTableMode.ConvergenceContainer);
+        builder.CreateTableIfNotExists(target,
+            table => new { Id = table.Column<int>(type: "int", nullable: false) },
+            constraints: table => table.Annotation("Doka:MySql:StorageEngine", "InnoDB"),
+            policy: SafeMigrationPolicy.ExistenceOnly,
+            mode: SafeMigrationTableMode.ConvergenceContainer);
 
         var commands = context
             .GetService<IMigrationsSqlGenerator>()
@@ -420,7 +419,7 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (explicitEngine)
         {
-            builder.CreateTableIfNotExistsFromModel(AppendTable);
+            AppendTable(builder, convergence: false, SafeMigrationPolicy.ThrowIfDifferent);
         }
         else
         {
@@ -495,7 +494,7 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
                 break;
         }
 
-        builder.ConvergeTableFromModel(AppendTable, SafeMigrationPolicy.ThrowIfDifferent);
+        AppendTable(builder, convergence: true, SafeMigrationPolicy.ThrowIfDifferent);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
@@ -556,7 +555,7 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
                 });
         }
 
-        builder.ConvergeTableFromModel(AppendTable, SafeMigrationPolicy.ThrowIfDifferent);
+        AppendTable(builder, convergence: true, SafeMigrationPolicy.ThrowIfDifferent);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
@@ -588,23 +587,17 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.CreateTableIfNotExistsFromModel(operationBuilder => operationBuilder
-            .CreateTable(
-                "items",
-                table => new { Id = table.Column<int>(type: "int", nullable: false) })
-            .Annotation("Doka:MySql:StorageEngine", "innodb"));
+        builder.CreateTableIfNotExists("items",
+            table => new { Id = table.Column<int>(type: "int", nullable: false) },
+            constraints: table => table.Annotation("Doka:MySql:StorageEngine", "innodb"));
 
-        builder.CreateTableIfNotExistsFromModel(operationBuilder =>
+        builder.CreateTableIfNotExists("items",
+            table => new { Id = table.Column<int>(type: "int", nullable: false) },
+            constraints: table =>
             {
-                var operation = operationBuilder.CreateTable("items",
-                    table => new
-                    {
-                        Id = table.Column<int>(type: "int", nullable: false),
-                    });
-
                 if (targetEngine is not null)
                 {
-                    operation.Annotation("Doka:MySql:StorageEngine", targetEngine);
+                    table.Annotation("Doka:MySql:StorageEngine", targetEngine);
                 }
             },
             mode: convergence
@@ -650,17 +643,13 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = CreateBuilder(context, convergence: false, SafeMigrationPolicy.ThrowIfDifferent);
-        builder.CreateTableIfNotExistsFromModel(operationBuilder =>
+        builder.CreateTableIfNotExists("items",
+            table => new { Id = table.Column<int>(type: "int", nullable: false) },
+            constraints: table =>
             {
-                var operation = operationBuilder.CreateTable("items",
-                    table => new
-                    {
-                        Id = table.Column<int>(type: "int", nullable: false),
-                    });
-
                 if (metadata == "unknown")
                 {
-                    operation.Annotation("Unknown:TableFacet", "InnoDB");
+                    table.Annotation("Unknown:TableFacet", "InnoDB");
 
                     return;
                 }
@@ -675,14 +664,14 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
                     _ => throw new ArgumentOutOfRangeException(nameof(metadata)),
                 };
 
-                operation.Annotation("Doka:MySql:StorageEngine", engine);
+                table.Annotation("Doka:MySql:StorageEngine", engine);
                 if (metadata == "extra")
                 {
-                    operation.Annotation("Unknown:TableFacet", true);
+                    table.Annotation("Unknown:TableFacet", true);
                 }
             },
-            SafeMigrationPolicy.ExistenceOnly,
-            convergence
+            policy: SafeMigrationPolicy.ExistenceOnly,
+            mode: convergence
                 ? SafeMigrationTableMode.ConvergenceContainer
                 : SafeMigrationTableMode.StrictDefinition);
 
@@ -709,11 +698,9 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         var builder = CreateBuilder(context, convergence: false, SafeMigrationPolicy.ThrowIfDifferent);
         builder.RenameColumnIfExists("Id", "items", "RenamedId");
         builder.RenameTableIfExists("items", "renamed_items");
-        builder.CreateTableIfNotExistsFromModel(operationBuilder => operationBuilder
-            .CreateTable(
-                "renamed_items",
-                table => new { RenamedId = table.Column<int>(type: "int", nullable: false) })
-            .Annotation("Doka:MySql:StorageEngine", "InnoDB"));
+        builder.CreateTableIfNotExists("renamed_items",
+            table => new { RenamedId = table.Column<int>(type: "int", nullable: false) },
+            constraints: table => table.Annotation("Doka:MySql:StorageEngine", "InnoDB"));
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
@@ -747,8 +734,8 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTableIfExists("items");
-        builder.CreateTableIfNotExistsFromModel(AppendTable);
-        builder.CreateTableIfNotExistsFromModel(AppendTable);
+        AppendTable(builder, convergence: false, SafeMigrationPolicy.ThrowIfDifferent);
+        AppendTable(builder, convergence: false, SafeMigrationPolicy.ThrowIfDifferent);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
@@ -775,21 +762,34 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
     )
     {
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        if (convergence)
-        {
-            builder.ConvergeTableFromModel(AppendTable, policy);
-        }
-        else
-        {
-            builder.CreateTableIfNotExistsFromModel(AppendTable, policy);
-        }
+        AppendTable(builder, convergence, policy);
 
         return builder;
     }
 
+    /// <summary>Places the certified engine inside the existing typed callback before immutable capture.</summary>
+    /// <param name="builder">The migration builder receiving the safe operations.</param>
+    /// <param name="convergence">Whether to use the granular convergence API.</param>
+    /// <param name="policy">The unchanged authored conflict policy.</param>
     private static void AppendTable(
-        MigrationBuilder builder
-    ) => builder
-        .CreateTable("items", table => new { Id = table.Column<int>(type: "int", nullable: false) })
-        .Annotation("Doka:MySql:StorageEngine", "InnoDB");
+        MigrationBuilder builder,
+        bool convergence,
+        SafeMigrationPolicy policy
+    )
+    {
+        if (convergence)
+        {
+            builder.ConvergeTableFromModel("items",
+                table => new { Id = table.Column<int>(type: "int", nullable: false) },
+                constraints: table => table.Annotation("Doka:MySql:StorageEngine", "InnoDB"),
+                policy: policy);
+
+            return;
+        }
+
+        builder.CreateTableIfNotExists("items",
+            table => new { Id = table.Column<int>(type: "int", nullable: false) },
+            constraints: table => table.Annotation("Doka:MySql:StorageEngine", "InnoDB"),
+            policy: policy);
+    }
 }

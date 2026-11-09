@@ -26,12 +26,18 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="name">The table name.</param>
     /// <param name="columns">The callback that defines the typed EF Core table columns.</param>
     /// <param name="schema">The schema name, or null for the provider default.</param>
-    /// <param name="constraints">The callback that configures table constraints.</param>
+    /// <param name="constraints">
+    /// Configures table constraints and provider-owned table annotations before immutable capture.
+    /// </param>
     /// <param name="comment">The expected database comment, or null when unspecified.</param>
     /// <param name="policy">The conflict policy for the operation.</param>
     /// <param name="mode">The table-definition comparison mode.</param>
     /// <typeparam name="TColumns">The anonymous type that exposes the configured table columns.</typeparam>
-    /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+    /// <returns>A builder for wrapper annotations, not for changing the frozen expected table.</returns>
+    /// <remarks>
+    /// Apply physical table annotations to the typed table builder inside <paramref name="constraints" />.
+    /// Chaining an annotation on the returned safe-operation builder does not update its captured definition.
+    /// </remarks>
     /// <exception cref="ArgumentNullException">
     /// <paramref name="migrationBuilder" /> or <paramref name="columns" /> is null.
     /// </exception>
@@ -57,48 +63,6 @@ public static partial class SafeMigrationBuilderExtensions
             policy);
     }
 
-    /// <summary>Captures a complete annotated EF table before creating its safe contract.</summary>
-    /// <param name="migrationBuilder">The migration builder receiving the safe operation.</param>
-    /// <param name="operationFactory">The callback that appends exactly one annotated EF CreateTable operation.</param>
-    /// <param name="policy">The conflict policy for the complete table contract.</param>
-    /// <param name="mode">The table-definition comparison mode.</param>
-    /// <returns>A builder for the created safe operation; provider metadata belongs inside the callback.</returns>
-    /// <exception cref="ArgumentNullException">A required builder or callback is null.</exception>
-    /// <exception cref="InvalidOperationException">The callback must append exactly one table operation.</exception>
-    public static OperationBuilder<SafeMigrationOperation> CreateTableIfNotExistsFromModel(
-        this MigrationBuilder migrationBuilder,
-        Action<MigrationBuilder> operationFactory,
-        SafeMigrationPolicy policy = SafeMigrationPolicy.ThrowIfDifferent,
-        SafeMigrationTableMode mode = SafeMigrationTableMode.StrictDefinition
-    )
-    {
-        // WHY: Chained EF annotations run after a builder returns. Capture only
-        // after the entire callback so table metadata cannot be silently lost.
-        var operation = CaptureOperation<CreateTableOperation>(migrationBuilder, operationFactory);
-        var definition = SafeMigrationExpectedDefinitionFactory.From(operation);
-
-        return Add(migrationBuilder, new EnsureTableIntent(definition, mode), policy);
-    }
-
-    /// <summary>Captures an annotated EF table before emitting its object-granular convergence baseline.</summary>
-    /// <param name="migrationBuilder">The migration builder receiving the safe operations.</param>
-    /// <param name="operationFactory">The callback that appends exactly one complete EF CreateTable operation.</param>
-    /// <param name="policy">The conflict policy for granular convergence operations.</param>
-    /// <returns>A builder for the convergence-container operation.</returns>
-    /// <exception cref="ArgumentNullException">A required builder or callback is null.</exception>
-    /// <exception cref="InvalidOperationException">The callback must append exactly one table operation.</exception>
-    public static OperationBuilder<SafeMigrationOperation> ConvergeTableFromModel(
-        this MigrationBuilder migrationBuilder,
-        Action<MigrationBuilder> operationFactory,
-        SafeMigrationPolicy policy
-    )
-    {
-        var operation = CaptureOperation<CreateTableOperation>(migrationBuilder, operationFactory);
-        var definition = SafeMigrationExpectedDefinitionFactory.From(operation);
-
-        return AddConvergenceOperations(migrationBuilder, definition, [], policy);
-    }
-
     /// <summary>
     /// Creates a typed EF table definition and emits an object-granular legacy
     /// convergence baseline without requiring a hand-written expected model.
@@ -107,15 +71,19 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="name">The table name.</param>
     /// <param name="columns">The callback that defines the typed EF Core table columns.</param>
     /// <param name="schema">The schema name, or null for the provider default.</param>
-    /// <param name="constraints">The callback that configures table constraints.</param>
+    /// <param name="constraints">
+    /// Configures table constraints and provider-owned table annotations before immutable capture.
+    /// </param>
     /// <param name="comment">The expected database comment, or null when unspecified.</param>
     /// <param name="policy">The conflict policy for granular convergence operations.</param>
     /// <typeparam name="TColumns">The anonymous type that exposes the configured table columns.</typeparam>
     /// <returns>
-    /// A builder for annotations on the convergence-container operation.
-    /// Providers validate operation-level annotations and fail closed when an
-    /// annotation cannot be compared safely with live catalog state.
+    /// A builder for wrapper annotations on the convergence container, not for changing its frozen expected table.
     /// </returns>
+    /// <remarks>
+    /// Apply physical table annotations to the typed table builder inside <paramref name="constraints" />.
+    /// The active provider must certify their complete contract before database work can proceed.
+    /// </remarks>
     /// <exception cref="ArgumentNullException">
     /// <paramref name="migrationBuilder" /> or <paramref name="columns" /> is null.
     /// </exception>
@@ -233,16 +201,25 @@ public static partial class SafeMigrationBuilderExtensions
         // validation. SafeMigrations replaces only the resulting operation
         // after it has captured that complete provider-owned definition.
         var operationCount = migrationBuilder.Operations.Count;
-        _ = migrationBuilder.CreateTable(table, columns, schema, constraints, comment);
-
-        if (migrationBuilder.Operations.Count != operationCount + 1
-            || migrationBuilder.Operations[^1] is not CreateTableOperation operation)
+        try
         {
-            throw new InvalidOperationException("EF Core did not append exactly one CreateTableOperation.");
-        }
+            _ = migrationBuilder.CreateTable(table, columns, schema, constraints, comment);
 
-        migrationBuilder.Operations.RemoveAt(operationCount);
-        return SafeMigrationExpectedDefinitionFactory.From(operation);
+            if (migrationBuilder.Operations.Count != operationCount + 1
+                || migrationBuilder.Operations[^1] is not CreateTableOperation operation)
+            {
+                throw new InvalidOperationException("EF Core did not append exactly one CreateTableOperation.");
+            }
+
+            return SafeMigrationExpectedDefinitionFactory.From(operation);
+        }
+        finally
+        {
+            // WHY: User callbacks can append operations before throwing, and
+            // immutable capture can reject nested metadata. Neither failure
+            // may leave raw EF work behind or remove the preexisting prefix.
+            RemoveCapturedOperations(migrationBuilder, operationCount);
+        }
     }
 
     /// <summary>Drops a table when it exists.</summary>

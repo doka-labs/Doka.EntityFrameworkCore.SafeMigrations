@@ -275,12 +275,104 @@ public sealed class MySqlInnoDbTableScaffoldingTests
             source,
             StringComparison.Ordinal);
 
-        Assert.Contains("operationFactory:", source, StringComparison.Ordinal);
+        Assert.Contains(mode == SafeMigrationScaffoldingMode.Strict
+                ? ".CreateTableIfNotExists("
+                : ".ConvergeTableFromModel(",
+            source,
+            StringComparison.Ordinal);
+
+        Assert.Contains("constraints: table =>", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("operationFactory:", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("CreateTableIfNotExistsFromModel", source, StringComparison.Ordinal);
         Assert.Empty(table.GetAnnotations());
         var reconstructed = Assert.IsType<CreateTableOperation>(
             SafeMigrationStandardOperationFactory.Create(table.Intent));
 
         Assert.Equal("InnoDB", reconstructed["Doka:MySql:StorageEngine"]);
+    }
+
+    /// <summary>Native provider metadata survives empty callbacks and syntax-looking comment/default values.</summary>
+    /// <param name="mode">The selected strict or legacy authoring mode.</param>
+    /// <param name="policy">The frozen legacy convergence policy.</param>
+    /// <param name="hasPrimaryKey">Whether EF renders an existing primary-key statement in the callback.</param>
+    /// <param name="comment">The exact optional comment after the native constraints block.</param>
+    [Theory]
+    [InlineData(SafeMigrationScaffoldingMode.Strict, SafeMigrationPolicy.ThrowIfDifferent, false, null)]
+    [InlineData(SafeMigrationScaffoldingMode.Strict, SafeMigrationPolicy.ThrowIfDifferent, true, "")]
+    [InlineData(SafeMigrationScaffoldingMode.Strict,
+        SafeMigrationPolicy.ThrowIfDifferent,
+        false,
+        "} )\nconstraints: table =>\n.CreateTable(\n.Annotation(\"quoted\", \\\"value\\\")")]
+    [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence, SafeMigrationPolicy.ThrowIfDifferent, false, null)]
+    [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence, SafeMigrationPolicy.RepairIfSafe, true, "")]
+    [InlineData(SafeMigrationScaffoldingMode.LegacyConvergence,
+        SafeMigrationPolicy.RepairIfSafe,
+        false,
+        "} )\r\nconstraints: table =>\r\n.CreateTable(\r\n.Annotation(\"quoted\", \\\"value\\\")")]
+    public void ExistingTableCallbacksRetainNativeEngineAndLiteralOwnership(
+        SafeMigrationScaffoldingMode mode,
+        SafeMigrationPolicy policy,
+        bool hasPrimaryKey,
+        string? comment
+    )
+    {
+        // Arrange
+        var original = CreateTable("InnoDB");
+        original.Comment = comment;
+        if (!hasPrimaryKey)
+        {
+            original.PrimaryKey = null;
+        }
+
+        original.Columns.Add(new AddColumnOperation
+        {
+            Name = "class",
+            Table = original.Name,
+            ClrType = typeof(string),
+            ColumnType = "varchar(255)",
+            IsNullable = false,
+            DefaultValue = "literal ) } .CreateTable( .Annotation( constraints: table => \\value\"",
+        });
+
+        using var services = CreateServices();
+        var generator = CreateGenerator(services, mode, policy);
+        var output = new IndentedStringBuilder();
+
+        // Act
+        generator.Generate("migrationBuilder", [original], output);
+        var source = output.ToString();
+        var reloaded = Reload(source);
+        var safe = reloaded
+            .Operations
+            .OfType<SafeMigrationOperation>()
+            .Single(static candidate => candidate.Intent is EnsureTableIntent);
+
+        var captured = (CreateTableOperation)SafeMigrationStandardOperationFactory.Create(safe.Intent);
+
+        // Assert
+        Assert.DoesNotContain("operationFactory:", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("CreateTableIfNotExistsFromModel", source, StringComparison.Ordinal);
+        Assert.Empty(safe.GetAnnotations());
+        Assert.Equal("InnoDB", captured["Doka:MySql:StorageEngine"]);
+        Assert.Equal(comment, captured.Comment);
+        Assert.Equal(hasPrimaryKey, captured.PrimaryKey is not null);
+        Assert.Equal(original.Columns[1].Name, captured.Columns[1].Name);
+        Assert.Equal(original.Columns[1].DefaultValue, captured.Columns[1].DefaultValue);
+        Assert.Single(original.GetAnnotations());
+        Assert.Equal("InnoDB", original["Doka:MySql:StorageEngine"]);
+
+        if (mode == SafeMigrationScaffoldingMode.LegacyConvergence)
+        {
+            Assert.All(reloaded
+                    .Operations
+                    .OfType<SafeMigrationOperation>()
+                    .Where(operation => operation != safe),
+                operation => Assert.Equal(policy, operation.Policy));
+        }
+        else
+        {
+            Assert.Single(reloaded.Operations);
+        }
     }
 
     /// <summary>Unknown or nontransactional table metadata cannot become a certified table contract.</summary>
@@ -419,10 +511,11 @@ public sealed class MySqlInnoDbTableScaffoldingTests
 
     private static SafeMigrationCSharpMigrationOperationGenerator CreateGenerator(
         IServiceProvider services,
-        SafeMigrationScaffoldingMode mode
+        SafeMigrationScaffoldingMode mode,
+        SafeMigrationPolicy legacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent
     ) => new(
         services.GetRequiredService<CSharpMigrationOperationGeneratorDependencies>(),
-        new SafeMigrationScaffoldingConfiguration(true, mode),
+        new SafeMigrationScaffoldingConfiguration(true, mode, legacyConvergencePolicy),
         [new MySqlSafeMigrationCreateIndexScaffoldingProjector()],
         [MySqlSafeMigrationProviderOperationAdapter.Instance]);
 

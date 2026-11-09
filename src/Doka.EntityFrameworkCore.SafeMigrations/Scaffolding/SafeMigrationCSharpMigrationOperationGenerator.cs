@@ -129,15 +129,6 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator : C
         }
 
         ValidateSafeCompatibility(operation);
-        if (operation
-            .GetAnnotations()
-            .Any())
-        {
-            GenerateCapturedTableOperation(operation, builder);
-
-            return;
-        }
-
         var replacement = _configuration.Mode switch
         {
             SafeMigrationScaffoldingMode.Strict => ".CreateTableIfNotExists(",
@@ -153,6 +144,13 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator : C
         base.Generate(operation, baseline);
 
         var source = ReplaceCompositePrincipalColumnArrays(operation, baseline.ToString());
+        if (operation
+            .GetAnnotations()
+            .Any())
+        {
+            source = MoveTableAnnotationsIntoConstraints(operation, source, builder.IndentCount);
+        }
+
         if (_configuration.Mode == SafeMigrationScaffoldingMode.LegacyConvergence)
         {
             source = AppendLegacyConvergencePolicy(source);

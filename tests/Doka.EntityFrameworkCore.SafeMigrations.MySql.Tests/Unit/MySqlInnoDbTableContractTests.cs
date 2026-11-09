@@ -17,50 +17,150 @@ public sealed class MySqlInnoDbTableContractTests : IDisposable
     /// <summary>Disposes owned runtime services after the test's contexts have completed.</summary>
     public void Dispose() => _services.Dispose();
 
-    /// <summary>Capture happens after annotations and does not observe later EF-operation mutation.</summary>
-    [Fact]
-    public void FactoryCapturesAndReconstructsAnIndependentEngineSnapshot()
+    /// <summary>Existing typed callbacks preserve the operation prefix and an independent engine snapshot.</summary>
+    /// <param name="convergence">Whether to use the granular convergence API.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TypedCallbackCapturesAndReconstructsAnIndependentEngineSnapshot(
+        bool convergence
+    )
     {
         // Arrange
         var builder = new MigrationBuilder("Doka.EntityFrameworkCore.MySql");
+        var prefix = new SqlOperation { Sql = "SELECT 42" };
+        builder.Operations.Add(prefix);
         CreateTableOperation? captured = null;
 
         // Act
-        builder.CreateTableIfNotExistsFromModel(operationFactory: operationBuilder =>
-        {
-            operationBuilder
-                .CreateTable("items", table => new { Id = table.Column<int>(type: "int") })
-                .Annotation("Doka:MySql:StorageEngine", "InnoDB");
+        AppendTable(builder,
+            convergence,
+            SafeMigrationPolicy.ThrowIfDifferent,
+            configure: nativeTable => captured = nativeTable);
 
-            captured = (CreateTableOperation)operationBuilder.Operations.Single();
-        });
+        var operation = builder
+            .Operations
+            .OfType<SafeMigrationOperation>()
+            .Single(candidate => candidate.Intent is EnsureTableIntent);
 
-        var operation = (SafeMigrationOperation)builder.Operations.Single();
         captured!["Doka:MySql:StorageEngine"] = "MyISAM";
         var reconstructed = (CreateTableOperation)SafeMigrationStandardOperationFactory.Create(operation.Intent);
 
         // Assert
+        Assert.Same(prefix, builder.Operations[0]);
+        Assert.Equal(convergence
+                ? 3
+                : 2,
+            builder.Operations.Count);
+
+        Assert.All(builder.Operations.Skip(1), static added => Assert.IsType<SafeMigrationOperation>(added));
         Assert.Equal("InnoDB", reconstructed["Doka:MySql:StorageEngine"]);
         Assert.Empty(operation.GetAnnotations());
     }
 
-    /// <summary>A rejected multi-operation factory cannot leave ordinary unguarded operations behind.</summary>
-    [Fact]
-    public void InvalidFactoryRollsBackEveryAppendedOperation()
+    /// <summary>
+    /// A throwing typed callback removes its own appended operations and retains the original failure.
+    /// </summary>
+    /// <param name="convergence">Whether to use the granular convergence API.</param>
+    /// <param name="callback">The callback that appends an operation before throwing.</param>
+    [Theory]
+    [InlineData(false, "columns")]
+    [InlineData(false, "constraints")]
+    [InlineData(true, "columns")]
+    [InlineData(true, "constraints")]
+    public void ThrowingTypedCallbackRemovesOwnedOperationsAndPreservesPrefix(
+        bool convergence,
+        string callback
+    )
     {
         // Arrange
         var builder = new MigrationBuilder("Doka.EntityFrameworkCore.MySql");
+        var prefix = new SqlOperation { Sql = "SELECT 42" };
+        builder.Operations.Add(prefix);
+        var failure = new InvalidOperationException("Expected callback failure.");
 
         // Act
-        var exception = Record.Exception(() => builder.CreateTableIfNotExistsFromModel(operationBuilder =>
+        var exception = Record.Exception(() => AppendTable(builder,
+            convergence,
+            SafeMigrationPolicy.ThrowIfDifferent,
+            beforeColumns: callback == "columns"
+                ? AppendAndThrow
+                : null,
+            configure: callback == "constraints"
+                ? _ => AppendAndThrow()
+                : null));
+
+        // Assert
+        Assert.Same(failure, exception);
+        Assert.Same(prefix, Assert.Single(builder.Operations));
+
+        void AppendAndThrow()
         {
-            operationBuilder.CreateTable("first", table => new { Id = table.Column<int>(type: "int") });
-            operationBuilder.Sql("SELECT 1");
-        }));
+            builder.Sql("SELECT 1");
+
+            throw failure;
+        }
+    }
+
+    /// <summary>Unexpected callback additions cannot escape rejection as ordinary unguarded operations.</summary>
+    /// <param name="convergence">Whether to use the granular convergence API.</param>
+    /// <param name="callback">The callback that appends the unexpected operation.</param>
+    [Theory]
+    [InlineData(false, "columns")]
+    [InlineData(false, "constraints")]
+    [InlineData(true, "columns")]
+    [InlineData(true, "constraints")]
+    public void ExtraTypedCallbackOperationsAreRejectedWithoutRemovingPrefix(
+        bool convergence,
+        string callback
+    )
+    {
+        // Arrange
+        var builder = new MigrationBuilder("Doka.EntityFrameworkCore.MySql");
+        var prefix = new SqlOperation { Sql = "SELECT 42" };
+        builder.Operations.Add(prefix);
+
+        // Act
+        var exception = Record.Exception(() => AppendTable(builder,
+            convergence,
+            SafeMigrationPolicy.ThrowIfDifferent,
+            beforeColumns: callback == "columns"
+                ? AppendUnexpectedOperation
+                : null,
+            configure: callback == "constraints"
+                ? _ => AppendUnexpectedOperation()
+                : null));
 
         // Assert
         Assert.IsType<InvalidOperationException>(exception);
-        Assert.Empty(builder.Operations);
+        Assert.Same(prefix, Assert.Single(builder.Operations));
+
+        void AppendUnexpectedOperation() => builder.Sql("SELECT 1");
+    }
+
+    /// <summary>Immutable-capture rejection never leaves a native table operation behind the existing prefix.</summary>
+    /// <param name="convergence">Whether to use the granular convergence API.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RejectedTypedSnapshotPreservesOnlyExistingOperations(
+        bool convergence
+    )
+    {
+        // Arrange
+        var builder = new MigrationBuilder("Doka.EntityFrameworkCore.MySql");
+        var prefix = new SqlOperation { Sql = "SELECT 42" };
+        builder.Operations.Add(prefix);
+
+        // Act
+        var exception = Record.Exception(() => AppendTable(builder,
+            convergence,
+            SafeMigrationPolicy.ThrowIfDifferent,
+            configure: operation => operation.AddAnnotation("Unknown:Mutable", new List<int> { 1 })));
+
+        // Assert
+        Assert.IsType<NotSupportedException>(exception);
+        Assert.Same(prefix, Assert.Single(builder.Operations));
     }
 
     /// <summary>Nested provider annotations cannot disappear while the outer engine metadata is captured.</summary>
@@ -84,58 +184,74 @@ public sealed class MySqlInnoDbTableContractTests : IDisposable
         var builder = new MigrationBuilder("Doka.EntityFrameworkCore.MySql");
 
         // Act
-        var exception = Record.Exception(() =>
-        {
-            if (convergence)
-            {
-                builder.ConvergeTableFromModel(AppendAnnotatedTable, SafeMigrationPolicy.ThrowIfDifferent);
-            }
-            else
-            {
-                builder.CreateTableIfNotExistsFromModel(AppendAnnotatedTable);
-            }
-        });
+        var exception = Record.Exception(() => AppendTable(builder,
+            convergence,
+            SafeMigrationPolicy.ThrowIfDifferent,
+            configure: ConfigureConstraint));
 
         // Assert
         Assert.IsType<NotSupportedException>(exception);
         Assert.Empty(builder.Operations);
 
-        void AppendAnnotatedTable(
-            MigrationBuilder operationBuilder
-        ) => operationBuilder
-            .CreateTable("items",
-                table => new { Id = table.Column<int>(type: "int") },
-                constraints: table =>
-                {
-                    switch (kind)
+        void ConfigureConstraint(
+            CreateTableOperation operation
+        )
+        {
+            MigrationOperation constraint;
+            switch (kind)
+            {
+                case "primary":
+                    var primary = new AddPrimaryKeyOperation
                     {
-                        case "primary":
-                            table
-                                .PrimaryKey("PK_items", value => value.Id)
-                                .Annotation("Unknown:ConstraintOption", true);
+                        Name = "PK_items",
+                        Table = operation.Name,
+                        Columns = ["Id"],
+                    };
 
-                            break;
-                        case "unique":
-                            table
-                                .UniqueConstraint("UQ_items", value => value.Id)
-                                .Annotation("Unknown:ConstraintOption", true);
+                    operation.PrimaryKey = primary;
+                    constraint = primary;
+                    break;
+                case "unique":
+                    var unique = new AddUniqueConstraintOperation
+                    {
+                        Name = "UQ_items",
+                        Table = operation.Name,
+                        Columns = ["Id"],
+                    };
 
-                            break;
-                        case "check":
-                            table
-                                .CheckConstraint("CK_items", "Id >= 0")
-                                .Annotation("Unknown:ConstraintOption", true);
+                    operation.UniqueConstraints.Add(unique);
+                    constraint = unique;
+                    break;
+                case "check":
+                    var check = new AddCheckConstraintOperation
+                    {
+                        Name = "CK_items",
+                        Table = operation.Name,
+                        Sql = "Id >= 0",
+                    };
 
-                            break;
-                        case "foreign":
-                            table
-                                .ForeignKey("FK_items", value => value.Id, "parents", "Id")
-                                .Annotation("Unknown:ConstraintOption", true);
+                    operation.CheckConstraints.Add(check);
+                    constraint = check;
+                    break;
+                case "foreign":
+                    var foreign = new AddForeignKeyOperation
+                    {
+                        Name = "FK_items",
+                        Table = operation.Name,
+                        Columns = ["Id"],
+                        PrincipalTable = "parents",
+                        PrincipalColumns = ["Id"],
+                    };
 
-                            break;
-                    }
-                })
-            .Annotation("Doka:MySql:StorageEngine", "InnoDB");
+                    operation.ForeignKeys.Add(foreign);
+                    constraint = foreign;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(kind));
+            }
+
+            constraint.AddAnnotation("Unknown:ConstraintOption", true);
+        }
     }
 
     /// <summary>Provider metadata changes fingerprints and complete table equivalence, not empty contracts.</summary>
@@ -177,14 +293,11 @@ public sealed class MySqlInnoDbTableContractTests : IDisposable
         // Arrange
         using var context = CreateContext();
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        if (convergence)
-        {
-            builder.ConvergeTableFromModel(AppendTable, SafeMigrationPolicy.RepairIfSafe);
-        }
-        else
-        {
-            builder.CreateTableIfNotExistsFromModel(AppendTable, SafeMigrationPolicy.ExistenceOnly);
-        }
+        AppendTable(builder,
+            convergence,
+            convergence
+                ? SafeMigrationPolicy.RepairIfSafe
+                : SafeMigrationPolicy.ExistenceOnly);
 
         // Act
         var commands = context
@@ -200,7 +313,61 @@ public sealed class MySqlInnoDbTableContractTests : IDisposable
         Assert.DoesNotContain("ALTER TABLE `items` ENGINE", sql, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Unknown provider metadata remains unsupported even when authored through the public factory.</summary>
+    /// <summary>
+    /// A late safe-wrapper annotation cannot masquerade as captured table metadata or emit native creation.
+    /// </summary>
+    /// <param name="convergence">Whether the existing typed API emits granular convergence operations.</param>
+    /// <param name="options">The runtime command or generated-script render path.</param>
+    [Theory]
+    [InlineData(false, MigrationsSqlGenerationOptions.Default)]
+    [InlineData(true, MigrationsSqlGenerationOptions.Default)]
+    [InlineData(false, MigrationsSqlGenerationOptions.Script)]
+    [InlineData(true, MigrationsSqlGenerationOptions.Script)]
+    public void LateEngineAnnotationRemainsUnsupportedWithoutNativeCreate(
+        bool convergence,
+        MigrationsSqlGenerationOptions options
+    )
+    {
+        // Arrange
+        using var context = CreateContext();
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        var returned = convergence
+            ? builder.ConvergeTableFromModel("items",
+                table => new { Id = table.Column<int>(type: "int") },
+                policy: SafeMigrationPolicy.ThrowIfDifferent)
+            : builder.CreateTableIfNotExists("items", table => new { Id = table.Column<int>(type: "int") });
+
+        returned.Annotation("Doka:MySql:StorageEngine", "InnoDB");
+        var tableOperation = builder
+            .Operations
+            .OfType<SafeMigrationOperation>()
+            .Single(candidate => candidate.Intent is EnsureTableIntent);
+
+        var definition = ((EnsureTableIntent)tableOperation.Intent).Definition;
+
+        // Act
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([tableOperation], context.Model, options);
+
+        var sql = string.Join("\n", commands.Select(static command => command.CommandText));
+
+        // Assert
+        Assert.Equal("InnoDB", tableOperation["Doka:MySql:StorageEngine"]);
+        Assert.Empty(definition.ProviderAnnotations);
+        Assert.Contains("unsupported", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("CREATE TABLE ", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ENGINE = InnoDB", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Convert.ToHexString(Encoding.UTF8.GetBytes("CREATE TABLE ")),
+            sql,
+            StringComparison.Ordinal);
+
+        Assert.DoesNotContain(Convert.ToHexString(Encoding.UTF8.GetBytes("ENGINE = InnoDB")),
+            sql,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>Unknown provider metadata remains unsupported through the existing typed table callback.</summary>
     /// <param name="includeEngine">Whether a valid engine annotation accompanies the unknown metadata.</param>
     [Theory]
     [InlineData(false)]
@@ -212,16 +379,17 @@ public sealed class MySqlInnoDbTableContractTests : IDisposable
         // Arrange
         using var context = CreateContext();
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.CreateTableIfNotExistsFromModel(operationBuilder =>
-        {
-            var operation = operationBuilder.CreateTable("items", table => new { Id = table.Column<int>(type: "int") });
-            if (includeEngine)
+        builder.CreateTableIfNotExists("items",
+            table => new { Id = table.Column<int>(type: "int") },
+            constraints: table =>
             {
-                operation.Annotation("Doka:MySql:StorageEngine", "InnoDB");
-            }
+                if (includeEngine)
+                {
+                    table.Annotation("Doka:MySql:StorageEngine", "InnoDB");
+                }
 
-            operation.Annotation("Unknown:TableOption", "value");
-        });
+                table.Annotation("Unknown:TableOption", "value");
+            });
 
         // Act
         var sql = string.Join("\n",
@@ -242,7 +410,7 @@ public sealed class MySqlInnoDbTableContractTests : IDisposable
         var builder = new MigrationBuilder("Doka.EntityFrameworkCore.MySql");
         if (annotated)
         {
-            builder.CreateTableIfNotExistsFromModel(AppendTable);
+            AppendTable(builder, convergence: false, SafeMigrationPolicy.ThrowIfDifferent);
         }
         else
         {
@@ -252,11 +420,53 @@ public sealed class MySqlInnoDbTableContractTests : IDisposable
         return builder;
     }
 
+    /// <summary>Exercises only the existing typed public APIs while placing metadata before snapshot capture.</summary>
+    /// <param name="builder">The migration builder whose existing operation prefix remains owned by the caller.</param>
+    /// <param name="convergence">Whether to use the granular convergence API.</param>
+    /// <param name="policy">The unchanged authored conflict policy.</param>
+    /// <param name="beforeColumns">Optional work executed by the existing typed columns callback.</param>
+    /// <param name="configure">Optional native-table metadata applied before immutable capture.</param>
     private static void AppendTable(
-        MigrationBuilder builder
-    ) => builder
-        .CreateTable("items", table => new { Id = table.Column<int>(type: "int") })
-        .Annotation("Doka:MySql:StorageEngine", "InnoDB");
+        MigrationBuilder builder,
+        bool convergence,
+        SafeMigrationPolicy policy,
+        Action? beforeColumns = null,
+        Action<CreateTableOperation>? configure = null
+    )
+    {
+        if (convergence)
+        {
+            builder.ConvergeTableFromModel("items",
+                table =>
+                {
+                    beforeColumns?.Invoke();
+
+                    return new { Id = table.Column<int>(type: "int") };
+                },
+                constraints: table =>
+                {
+                    table.Annotation("Doka:MySql:StorageEngine", "InnoDB");
+                    configure?.Invoke(table.GetInfrastructure());
+                },
+                policy: policy);
+
+            return;
+        }
+
+        builder.CreateTableIfNotExists("items",
+            table =>
+            {
+                beforeColumns?.Invoke();
+
+                return new { Id = table.Column<int>(type: "int") };
+            },
+            constraints: table =>
+            {
+                table.Annotation("Doka:MySql:StorageEngine", "InnoDB");
+                configure?.Invoke(table.GetInfrastructure());
+            },
+            policy: policy);
+    }
 
     private DbContext CreateContext()
     {
