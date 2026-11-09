@@ -6,6 +6,13 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+### Changed
+
+- Update SHA-pinned setup-dotnet to 6.1.0 and CodeQL SARIF upload to 4.39.3.
+  Refresh the rebuilt MySQL and PostgreSQL image digests while preserving
+  server patch versions, supported engine lines and required qualification gates.
+  Keep serviced dependency floors, provider isolation and SDK selection unchanged.
+
 ### Fixed
 
 - Preserve explicitly configured InnoDB table metadata through safe scaffolding,
