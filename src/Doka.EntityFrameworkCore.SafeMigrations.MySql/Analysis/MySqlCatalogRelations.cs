@@ -81,8 +81,7 @@ internal static class MySqlCatalogRelations
 
     private static bool IsIdentifierCharacter(
         char character
-    ) => character is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '_' or '$'
-        || character >= '\u0080';
+    ) => character is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '_' or '$' or >= '\u0080';
 
     /// <summary>Retains lexical context while a template is rendered in spans separated by values.</summary>
     /// <remarks>

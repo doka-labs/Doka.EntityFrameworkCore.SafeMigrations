@@ -280,7 +280,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         // Assert
         Assert.True(
-            nativeFailure is null || nativeFailure is MySqlException,
+            nativeFailure is null or MySqlException,
             nativeFailure?.ToString());
 
         Assert.Equal(IsMySqlEngine() || stored, nativeFailure is not null);
@@ -341,7 +341,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
                 CancellationToken.None);
 
         // Assert
-        Assert.True(nativeFailure is null || nativeFailure is MySqlException, nativeFailure?.ToString());
+        Assert.True(nativeFailure is null or MySqlException, nativeFailure?.ToString());
         Assert.Equal(
             nativeFailure is null
                 ? SafeMigrationReportStatus.Ready

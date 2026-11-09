@@ -143,9 +143,8 @@ internal static partial class SafeMigrationStandardOperationFactory
     {
         ArgumentNullException.ThrowIfNull(intent);
 
-        var providerMetadataIsRepairable = providerRepairValidator is null
-            ? intent.Definition.ProviderAnnotations.Count == 0
-            : providerRepairValidator(intent.Definition);
+        var providerMetadataIsRepairable = providerRepairValidator?.Invoke(intent.Definition)
+            ?? intent.Definition.ProviderAnnotations.Count == 0;
 
         // WHY: A provider may narrow repair eligibility for its own metadata, but
         // it cannot override Core's intrinsic exclusions for computed,

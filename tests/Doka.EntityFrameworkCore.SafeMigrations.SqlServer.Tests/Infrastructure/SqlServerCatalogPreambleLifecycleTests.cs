@@ -447,6 +447,7 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
     [InlineData("login")]
     [InlineData("collation")]
     [InlineData("unproven")]
+    [InlineData("unproven-principal")]
     [InlineData("dml_triggers")]
     public async Task FreshEnvironment_GatesActualIdentifierProbeReuse(
         string change
@@ -481,6 +482,9 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
                 break;
             case "unproven":
                 connection.LoginSid = null;
+                break;
+            case "unproven-principal":
+                connection.PrincipalId = null;
                 break;
             case "dml_triggers":
                 connection.HasEnabledDmlTriggers = true;
@@ -804,12 +808,8 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
                     connection.DefaultSchema == "dbo"
                         ? 1
                         : 0,
-                    connection.PrincipalId is { } principal
-                        ? principal
-                        : DBNull.Value,
-                    connection.LoginSid is { } sid
-                        ? sid
-                        : DBNull.Value,
+                    (object?)connection.PrincipalId ?? DBNull.Value,
+                    (object?)connection.LoginSid ?? DBNull.Value,
                     0,
                     1,
                     connection.HasEnabledDmlTriggers

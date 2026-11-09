@@ -597,10 +597,10 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
 
         return !IsMain(qualifier)
             || (intent is EnsureTableIntent table
-                && table.Definition.ForeignKeys.Any(foreignKey => !IsMain(foreignKey.PrincipalSchema)))
+                && table.Definition.ForeignKeys.Any(tableForeignKey => !IsMain(tableForeignKey.PrincipalSchema)))
             || (intent is EnsureForeignKeyIntent foreignKey && !IsMain(foreignKey.Definition.PrincipalSchema))
             || (intent is DeleteModelManagedDataIntent deletion
-                && deletion.ForeignKeys.Any(foreignKey => !IsMain(foreignKey.Schema)));
+                && deletion.ForeignKeys.Any(seedForeignKey => !IsMain(seedForeignKey.Schema)));
     }
 
     private static bool IsMain(

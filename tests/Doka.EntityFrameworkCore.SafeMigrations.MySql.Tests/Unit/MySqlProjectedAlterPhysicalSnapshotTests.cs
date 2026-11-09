@@ -1131,11 +1131,12 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             columnAliases
                 ? "VALUE"
                 : "value",
-            boundary == "row"
-                ? 8000
-                : boundary == "key"
-                    ? 900
-                    : 200);
+            boundary switch
+            {
+                "row" => 8000,
+                "key" => 900,
+                _ => 200,
+            });
 
         var table = new TableView(
             source,

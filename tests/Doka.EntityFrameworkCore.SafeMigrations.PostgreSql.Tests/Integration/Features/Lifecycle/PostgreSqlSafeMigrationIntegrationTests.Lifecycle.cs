@@ -274,12 +274,15 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
                 .PostconditionSatisfied);
     }
 
+    /// <summary>Reports the complete missing table shape without creating the pending migration's table.</summary>
     [Fact]
     public async Task PendingPreflight_ProjectsACompleteMissingConvergenceTable()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzePendingMigrationsAsync(
@@ -287,26 +290,33 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
                 new SafeMigrationRunOptions("test-instance"),
                 CancellationToken.None);
 
+        var tables = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM pg_catalog.pg_class c "
+            + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
+            + "WHERE n.nspname = current_schema() AND c.relname = 'pipeline_state';",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, report.Status);
         Assert.Contains(
             report.Assessments,
-            assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureTable
-                && assessment.ObservedState == SafeMigrationObservedState.Missing);
+            assessment => assessment is
+            {
+                OperationKind: SafeMigrationOperationKind.EnsureTable,
+                ObservedState: SafeMigrationObservedState.Missing,
+            });
 
         Assert.Contains(
             report.Assessments,
-            assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureColumn
-                && assessment.ObservedState == SafeMigrationObservedState.Missing
-                && assessment.Code == "projected_missing");
+            assessment => assessment is
+            {
+                OperationKind: SafeMigrationOperationKind.EnsureColumn,
+                ObservedState: SafeMigrationObservedState.Missing,
+                Code: "projected_missing",
+            });
 
-        Assert.Equal(
-            0,
-            await ScalarIntAsync(
-                connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_class c "
-                + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-                + "WHERE n.nspname = current_schema() AND c.relname = 'pipeline_state';",
-                cancellationToken: CancellationToken.None));
+        Assert.Equal(0, tables);
     }
 
     [Fact]

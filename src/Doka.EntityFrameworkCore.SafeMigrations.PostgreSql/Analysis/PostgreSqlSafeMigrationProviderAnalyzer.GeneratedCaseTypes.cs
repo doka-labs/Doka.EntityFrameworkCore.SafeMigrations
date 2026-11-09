@@ -291,10 +291,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     {
         var requalify = _projectedOperationOrdinal is { } ordinal
             && _generatedCaseRequalificationCandidates?.Contains(ordinal) == true
-            && ((analysis.ObservedState == SafeMigrationObservedState.Unsupported
-                    && analysis.Code is "generated_case_operand_type" or "structured_check_operand_type")
-                || (analysis.ObservedState == SafeMigrationObservedState.PrerequisiteMissing
-                    && analysis.Code == "projected_structure_state_unknown"));
+            && analysis.ObservedState switch
+            {
+                SafeMigrationObservedState.Unsupported
+                    => analysis.Code is "generated_case_operand_type" or "structured_check_operand_type",
+                SafeMigrationObservedState.PrerequisiteMissing => analysis.Code == "projected_structure_state_unknown",
+                _ => false,
+            };
 
         if (requalify
             && operation.Intent is EnsureCheckConstraintIntent check
@@ -368,7 +371,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     /// <summary>Distinguishes a mutable live input mismatch from an invalid authored CASE definition.</summary>
     private static bool IsDynamicGeneratedCaseRejection(
         SafeMigrationProviderAnalysis analysis
-    ) => analysis.ObservedState == SafeMigrationObservedState.Unsupported
-        && !analysis.IsInvariantUnsupported
-        && analysis.Code is "generated_case_operand_type" or "structured_check_operand_type";
+    ) => analysis.ObservedState switch
+    {
+        SafeMigrationObservedState.Unsupported => analysis is
+        {
+            IsInvariantUnsupported: false,
+            Code: "generated_case_operand_type" or "structured_check_operand_type",
+        },
+        _ => false,
+    };
 }

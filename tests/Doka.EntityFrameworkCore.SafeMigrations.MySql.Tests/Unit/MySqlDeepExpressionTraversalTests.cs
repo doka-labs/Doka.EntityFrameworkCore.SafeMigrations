@@ -202,17 +202,19 @@ public sealed class MySqlDeepExpressionTraversalTests
         // Arrange
         using var context = CreateContext();
         var expression = Build(shape, SafeMigrationSql.Literal(1));
-        var prefix = shape == "case"
-            ? "case when 1 then "
-            : shape == "right"
-                ? "1 + "
-                : "";
+        var prefix = shape switch
+        {
+            "case" => "case when 1 then ",
+            "right" => "1 + ",
+            _ => "",
+        };
 
-        var suffix = shape == "case"
-            ? " else 1 end"
-            : shape == "left"
-                ? " + 1"
-                : "";
+        var suffix = shape switch
+        {
+            "case" => " else 1 end",
+            "left" => " + 1",
+            _ => "",
+        };
 
         var grouping = !isMariaDb || shape == "right";
         var expected = new StringBuilder();

@@ -338,9 +338,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Contains(
             report.Assessments,
-            static assessment =>
-                assessment.ObservedState == SafeMigrationObservedState.Unsupported
-                && assessment.Code is "generated_column_nullability" or "generated_column_dependency_missing");
+            static assessment => assessment is
+            {
+                ObservedState: SafeMigrationObservedState.Unsupported,
+                Code: "generated_column_nullability" or "generated_column_dependency_missing",
+            });
 
         Assert.Equal(0, tables);
     }

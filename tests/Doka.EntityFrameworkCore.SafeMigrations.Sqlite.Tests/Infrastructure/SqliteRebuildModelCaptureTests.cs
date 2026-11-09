@@ -387,6 +387,7 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
     }
 
     /// <summary>Observes the catalog boundary on this connection without changing production instrumentation.</summary>
+    /// <param name="connection">The caller-owned open connection on which sqlite_version calls are counted.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task<Func<int>> ObserveCatalogCapturesAsync(
         SqliteConnection connection,
@@ -482,6 +483,7 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
     ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     /// <summary>Creates one small table whose legacy column is deliberately absent from the target model.</summary>
+    /// <param name="connection">The caller-owned connection receiving the physical window-entity table.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static Task CreateWindowTableAsync(
         SqliteConnection connection,

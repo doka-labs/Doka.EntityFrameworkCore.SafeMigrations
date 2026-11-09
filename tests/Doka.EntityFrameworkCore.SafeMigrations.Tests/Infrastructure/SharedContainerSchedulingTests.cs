@@ -118,8 +118,8 @@ public sealed class SharedContainerSchedulingTests
         var active = 0;
         var started = 0;
         var maximumActive = 0;
-        var activeBeforeRelease = 0;
-        var startedBeforeRelease = 0;
+        int activeBeforeRelease;
+        int startedBeforeRelease;
 
         async Task<int> RunCollectionAsync(
             CancellationToken cancellationToken

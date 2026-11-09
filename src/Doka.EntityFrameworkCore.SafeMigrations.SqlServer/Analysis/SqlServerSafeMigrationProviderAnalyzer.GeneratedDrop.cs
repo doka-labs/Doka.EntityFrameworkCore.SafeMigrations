@@ -593,7 +593,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             && !knownCurrentIndex
             && (proof.Code == "column_drop_candidate_dependency" || dependency == false)
             && (proof.HasUnprovenIndexMutation
-                || (proof.Invalidated && proof.InvalidatedOriginOrdinal is not null)))
+                || proof is { Invalidated: true, InvalidatedOriginOrdinal: not null }))
         {
             // A removed old dependency is not evidence that later DDL
             // uses this source. Preserve the actual mutation's runtime
@@ -822,9 +822,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                         foreignKey.Definition.PrincipalSchema,
                         source))
                 || (operation.Intent is EnsureTableIntent table
-                    && table.Definition.ForeignKeys.Any(foreignKey => SameComputedDropOwner(
-                        foreignKey.PrincipalTable,
-                        foreignKey.PrincipalSchema,
+                    && table.Definition.ForeignKeys.Any(tableForeignKey => SameComputedDropOwner(
+                        tableForeignKey.PrincipalTable,
+                        tableForeignKey.PrincipalSchema,
                         source)))
                 || proof.Constraints.Any(constraint => ConstraintDropCandidateWasReplaced(
                     constraint.Operation.Intent,

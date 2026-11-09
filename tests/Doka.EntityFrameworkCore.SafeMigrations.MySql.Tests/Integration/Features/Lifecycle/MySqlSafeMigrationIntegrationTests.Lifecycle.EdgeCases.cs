@@ -734,18 +734,21 @@ public sealed class MySqlLifecycleEdgeCasesIntegrationTests : MySqlSafeMigration
 
         Assert.Contains(
             report.UnexpectedObjects,
-            value => value.ObjectKind == SafeMigrationDatabaseObjectKind.UniqueConstraint
-                && value.Name == "uq_inventory_code");
+            value => value is
+            {
+                ObjectKind: SafeMigrationDatabaseObjectKind.UniqueConstraint, Name: "uq_inventory_code",
+            });
 
         Assert.Contains(
             report.UnexpectedObjects,
-            value => value.ObjectKind == SafeMigrationDatabaseObjectKind.CheckConstraint
-                && value.Name == "ck_inventory_quantity");
+            value => value is
+            {
+                ObjectKind: SafeMigrationDatabaseObjectKind.CheckConstraint, Name: "ck_inventory_quantity",
+            });
 
         Assert.Contains(
             report.UnexpectedObjects,
-            value => value.ObjectKind == SafeMigrationDatabaseObjectKind.ForeignKey
-                && value.Name == "fk_inventory_parent");
+            value => value is { ObjectKind: SafeMigrationDatabaseObjectKind.ForeignKey, Name: "fk_inventory_parent" });
 
         Assert.Equal(
             4,

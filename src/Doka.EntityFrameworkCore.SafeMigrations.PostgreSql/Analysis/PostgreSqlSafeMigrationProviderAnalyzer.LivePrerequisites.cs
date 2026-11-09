@@ -204,11 +204,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             }
 
             void Occupy(
-                string name,
+                string constraintName,
                 string kind
             )
             {
-                var occupied = LiveForeignKeyName(table.Definition.Table, table.Definition.Schema, name);
+                var occupied = LiveForeignKeyName(table.Definition.Table, table.Definition.Schema, constraintName);
                 if (_requestedLiveConstraintNames.Contains(occupied))
                 {
                     (_occupiedProjectedConstraintNames ??= [])[occupied] = kind;
@@ -223,8 +223,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         ISafeMigrationProjectedColumnSource columns
     ) => columns is ISafeMigrationProjectedTableSource tables
         && tables.TryGetProjectedTableState(definition.Table, definition.Schema, out var state)
-        && state.IsNewlyCreated
-        && !state.HasUnknownStructure;
+        && state is { IsNewlyCreated: true, HasUnknownStructure: false };
 
     /// <summary>Resolves an owned FK symbol through the same proven schema normalization as its catalog row.</summary>
     private LiveForeignKeyNameIdentity LiveForeignKeyName(
@@ -379,9 +378,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
                     if (request is LiveForeignKeyRequest)
                     {
-                        if ((!reader.IsDBNull(2) && (reader.GetValue(2) is not long dependentOid || dependentOid <= 0))
+                        if ((!reader.IsDBNull(2) && reader.GetValue(2) is not (long and > 0))
                             || (!reader.IsDBNull(3)
-                                && (reader.GetValue(3) is not long principalOid || principalOid <= 0))
+                                && reader.GetValue(3) is not (long and > 0))
                             || !reader.IsDBNull(8))
                         {
                             throw InvalidLivePrerequisiteEvidence();
@@ -843,8 +842,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             }
 
             AddColumns(owner.Table!, owner.Schema, local);
-            if (intent is EnsureCheckConstraintIntent check
-                && check.Definition.Expression is { } expression)
+            if (intent is EnsureCheckConstraintIntent { Definition.Expression: { } expression })
             {
                 foreach (var type in CheckExpressionTypeIdentities(expression))
                 {

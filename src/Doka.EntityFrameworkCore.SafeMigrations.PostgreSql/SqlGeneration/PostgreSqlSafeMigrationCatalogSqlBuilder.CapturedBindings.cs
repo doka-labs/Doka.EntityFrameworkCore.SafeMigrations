@@ -140,8 +140,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             {
                 switch (node)
                 {
-                    case SafeMigrationSqlBinaryExpression binary when binary.Operator
-                        is not (SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or):
+                    case SafeMigrationSqlBinaryExpression
+                    {
+                        Operator: not (SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or),
+                    } binary:
                         (operators ??= []).Add((CapturedOperatorName(binary.Operator), false));
                         break;
                     case SafeMigrationSqlUnaryExpression { Operator: SafeMigrationSqlUnaryOperator.Negate }:

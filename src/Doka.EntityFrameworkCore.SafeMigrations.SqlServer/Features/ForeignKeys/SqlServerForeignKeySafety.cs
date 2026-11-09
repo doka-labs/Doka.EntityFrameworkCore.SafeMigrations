@@ -214,8 +214,7 @@ internal static class SqlServerForeignKeySafety
                         && !column.IsNullable)
                     || ((foreignKey.OnDelete == ReferentialAction.SetDefault
                             || foreignKey.OnUpdate == ReferentialAction.SetDefault)
-                        && !column.IsNullable
-                        && column.DefaultValue.Kind == SafeMigrationDefaultValueKind.None))
+                        && column is { IsNullable: false, DefaultValue.Kind: SafeMigrationDefaultValueKind.None }))
                 {
                     return "1 = 0";
                 }

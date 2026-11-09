@@ -258,8 +258,7 @@ public sealed class SqliteParallelTestContractTests : SqliteIntegrationTestBase
     private static Type[] CatalogFeatureClasses() => typeof(SqliteSafeMigrationCatalogIntegrationTests)
         .Assembly
         .GetTypes()
-        .Where(type => type.IsClass
-            && !type.IsAbstract
+        .Where(type => type is { IsClass: true, IsAbstract: false }
             && typeof(SqliteSafeMigrationCatalogIntegrationTests).IsAssignableFrom(type))
         .ToArray();
 

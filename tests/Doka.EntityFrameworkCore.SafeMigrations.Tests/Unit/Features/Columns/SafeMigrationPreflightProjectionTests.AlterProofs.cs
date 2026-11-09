@@ -266,11 +266,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         // Assert
         Assert.Equal(
-            destinationExists == false
-                ? SafeMigrationObservedState.Matching
-                : destinationExists == true
-                    ? SafeMigrationObservedState.Different
-                    : SafeMigrationObservedState.PrerequisiteMissing,
+            destinationExists switch
+            {
+                false => SafeMigrationObservedState.Matching,
+                true => SafeMigrationObservedState.Different,
+                null => SafeMigrationObservedState.PrerequisiteMissing,
+            },
             result.ObservedState);
     }
 

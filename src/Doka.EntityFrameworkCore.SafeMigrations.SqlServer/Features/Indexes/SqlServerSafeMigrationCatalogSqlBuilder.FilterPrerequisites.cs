@@ -208,9 +208,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             if (IsAnsiManagedStoreType(canonical)
                 && literal.Value is string or char)
             {
-                var text = literal.Value is string value
-                    ? value
-                    : ((char)literal.Value).ToString();
+                var text = literal.Value as string ?? ((char)literal.Value).ToString();
 
                 if (text.Any(static character => character > 127))
                 {

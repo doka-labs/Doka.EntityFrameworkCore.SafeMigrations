@@ -53,11 +53,12 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
             new[,]
             {
                 {
-                    boundary == "key_value"
-                        ? 2
-                        : boundary == "key_type"
-                            ? (object)1L
-                            : 1,
+                    boundary switch
+                    {
+                        "key_value" => 2,
+                        "key_type" => (object)1L,
+                        _ => 1,
+                    },
                 },
             },
             boundary == "schema"

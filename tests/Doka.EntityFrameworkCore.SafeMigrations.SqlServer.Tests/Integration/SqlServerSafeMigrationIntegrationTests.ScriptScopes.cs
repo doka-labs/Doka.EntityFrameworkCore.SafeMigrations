@@ -592,6 +592,8 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
     }
 
     /// <summary>Executes generated fixture scripts with GO batch boundaries on one client session.</summary>
+    /// <param name="connectionString">The database for the short-lived session shared by all script batches.</param>
+    /// <param name="script">The generated fixture script containing client-side GO separator lines.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task ExecuteGeneratedScriptAsync(
         string connectionString,
@@ -627,6 +629,8 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
     }
 
     /// <summary>Executes a nonempty script batch and clears only the completed client-side buffer.</summary>
+    /// <param name="connection">The caller-owned open session preserving script transaction and history state.</param>
+    /// <param name="batch">The caller-owned SQL buffer, cleared only after successful batch execution.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task ExecuteScriptBatchAsync(
         SqlConnection connection,

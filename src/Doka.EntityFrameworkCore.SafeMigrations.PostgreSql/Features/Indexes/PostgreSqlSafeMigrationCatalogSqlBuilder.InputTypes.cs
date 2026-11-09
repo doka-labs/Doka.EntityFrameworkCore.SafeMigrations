@@ -180,19 +180,19 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     internal string IndexMemberOwnerPredicate(
         ExpectedIndexDefinition definition,
         PostgreSqlIndexPhysicalMember member
-    ) => member.PartCount == 1
-        ? "TRUE"
-        : member.PartCount == 2
-            ? Literal(member.Table!) + " = " + Literal(definition.Table)
-            : member.PartCount == 3
-                ? Literal(member.Table!)
-                + " = "
-                + Literal(definition.Table)
-                + " AND "
-                + Literal(member.Schema!)
-                + " = "
-                + SchemaExpression(definition.Schema)
-                : "FALSE";
+    ) => member.PartCount switch
+    {
+        1 => "TRUE",
+        2 => Literal(member.Table!) + " = " + Literal(definition.Table),
+        3 => Literal(member.Table!)
+            + " = "
+            + Literal(definition.Table)
+            + " AND "
+            + Literal(member.Schema!)
+            + " = "
+            + SchemaExpression(definition.Schema),
+        _ => "FALSE",
+    };
 
     /// <summary>Stops native data SQL from binding before a Missing index's inputs are proven executable.</summary>
     private PostgreSqlSafeMigrationRuntimePlan AddIndexInputRuntimeGuard(

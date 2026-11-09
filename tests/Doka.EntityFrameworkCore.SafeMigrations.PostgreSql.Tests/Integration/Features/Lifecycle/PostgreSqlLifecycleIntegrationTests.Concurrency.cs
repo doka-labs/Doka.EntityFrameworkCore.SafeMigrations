@@ -25,8 +25,8 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
 
         await using var first = CreateAdmissionContext(connectionString, barrier);
         await using var second = CreateContext(secondConnection);
-        var waiterObserved = false;
-        var secondIncomplete = false;
+        bool waiterObserved;
+        bool secondIncomplete;
 
         // Act
         var firstMigration = first.Database.MigrateAsync(token);
@@ -78,7 +78,7 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
         var barrier = new MigrationAdmissionBarrier(expectedArrivals: 2);
         await using var left = CreateAdmissionContext(leftConnectionString, barrier);
         await using var right = CreateAdmissionContext(rightConnectionString, barrier);
-        var bothIncomplete = false;
+        bool bothIncomplete;
 
         // Act
         var leftMigration = left.Database.MigrateAsync(token);

@@ -67,8 +67,7 @@ public sealed class ExpectedColumnDefinition
             throw new ArgumentOutOfRangeException(nameof(scale), "Scale must not be negative.");
         }
 
-        if (precision is not null
-            && scale > precision)
+        if (scale > precision)
         {
             throw new ArgumentException("Scale must not exceed precision.", nameof(scale));
         }

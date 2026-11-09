@@ -75,11 +75,12 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
         {
             {
                 2,
-                boundary == "key_type"
-                    ? (object)1L
-                    : boundary == "key_value"
-                        ? 9
-                        : 1,
+                boundary switch
+                {
+                    "key_type" => (object)1L,
+                    "key_value" => 9,
+                    _ => 1,
+                },
             },
         };
 
@@ -217,11 +218,12 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
     )
     {
         // Arrange
-        string[] columns = shape == "single"
-            ? ["Id"]
-            : shape == "sorted"
-                ? ["Code", "Id"]
-                : ["Id", "Code"];
+        string[] columns = shape switch
+        {
+            "single" => ["Id"],
+            "sorted" => ["Code", "Id"],
+            _ => ["Id", "Code"],
+        };
 
         string[] expected = shape == "single"
             ? ["Id"]

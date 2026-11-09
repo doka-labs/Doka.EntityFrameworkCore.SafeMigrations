@@ -110,11 +110,12 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
             builder.Sql("SELECT 1;");
         }
 
-        var target = scenario == 2
-            ? "Payload"
-            : scenario == 3
-                ? flag.Name
-                : "L";
+        var target = scenario switch
+        {
+            2 => "Payload",
+            3 => flag.Name,
+            _ => "L",
+        };
 
         builder.DropColumnIfExists(target, "drop_nodes");
 

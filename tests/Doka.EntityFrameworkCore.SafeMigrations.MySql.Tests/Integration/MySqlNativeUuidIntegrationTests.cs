@@ -895,11 +895,12 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
             Name = "id",
             ClrType = typeof(Guid),
             ColumnType = GuidStoreType(target),
-            MaxLength = target == DokaMySqlGuidFormat.Uuid
-                ? null
-                : target == DokaMySqlGuidFormat.Char36
-                    ? 36
-                    : 16,
+            MaxLength = target switch
+            {
+                DokaMySqlGuidFormat.Uuid => null,
+                DokaMySqlGuidFormat.Char36 => 36,
+                _ => 16,
+            },
             IsFixedLength = target == DokaMySqlGuidFormat.Uuid
                 ? null
                 : true,

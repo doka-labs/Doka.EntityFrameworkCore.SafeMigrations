@@ -153,6 +153,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     }
 
     /// <summary>Seeds independent physical owners without supplying a complete generated-owner model.</summary>
+    /// <param name="connectionString">The database receiving the generated owner, rename source and seed rows.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task SeedGeneratedAnalysisScopeOwnersAsync(
         string connectionString,

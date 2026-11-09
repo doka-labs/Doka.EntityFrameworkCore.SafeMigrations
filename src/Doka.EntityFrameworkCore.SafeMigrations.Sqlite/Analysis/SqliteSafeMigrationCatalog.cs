@@ -115,7 +115,7 @@ internal static partial class SqliteSafeMigrationCatalog
             var uniqueIndex = uniqueIndexes[index];
             var uniqueColumns = uniqueIndex
                 .Keys
-                .Where(static value => value.IsKey && value.Column is not null)
+                .Where(static value => value is { IsKey: true, Column: not null })
                 .OrderBy(static value => value.Ordinal)
                 .Select(static value => value.Column!)
                 .ToArray();

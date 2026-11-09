@@ -376,6 +376,7 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
     }
 
     /// <summary>Reads the physical key's ordered members without relying on the provider's generated name.</summary>
+    /// <param name="connectionString">The test database whose replacement table's primary-key members are read.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static Task<string> ReadReplacementPrimaryAsync(
         string connectionString,

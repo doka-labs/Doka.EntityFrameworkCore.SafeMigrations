@@ -132,6 +132,43 @@ public sealed class SqlServerSafeMigrationSqlExpressionRendererTests
         Assert.Throws<NotSupportedException>(() => renderer.Render(expression));
     }
 
+    /// <summary>BETWEEN validation checks its operand and both bounds, allowing only fully supported trees.</summary>
+    /// <param name="unsupportedRole">The unsupported child index, or minus one for an entirely supported tree.</param>
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void BetweenValidationVisitsEveryRole(
+        int unsupportedRole
+    )
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var renderer = CreateRenderer(context);
+        var unsupported = SafeMigrationSql.Opaque("unknown_sql");
+        var expression = SafeMigrationSql.Between(
+            unsupportedRole == 0
+                ? unsupported
+                : SafeMigrationSql.Identifier("Value"),
+            unsupportedRole == 1
+                ? unsupported
+                : SafeMigrationSql.Literal(1),
+            unsupportedRole == 2
+                ? unsupported
+                : SafeMigrationSql.Literal(3));
+
+        // Act
+        var feature = renderer.GetUnsupportedFeature(expression);
+
+        // Assert
+        Assert.Equal(
+            unsupportedRole < 0
+                ? null
+                : "opaque_sql_expression",
+            feature);
+    }
+
     private static SqlServerSafeMigrationSqlExpressionRenderer CreateRenderer(
         DbContext context
     ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());

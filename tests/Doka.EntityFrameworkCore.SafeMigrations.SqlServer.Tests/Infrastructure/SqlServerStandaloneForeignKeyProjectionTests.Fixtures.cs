@@ -206,18 +206,20 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
                             keyKind == "PK-default"
                                 ? "PK_parent"
                                 : "IX_parent",
-                            keyKind == "IX"
-                                ? DBNull.Value
-                                : keyKind == "PK-default"
-                                    ? "PK_parent"
-                                    : keyKind + "_parent",
+                            keyKind switch
+                            {
+                                "IX" => DBNull.Value,
+                                "PK-default" => "PK_parent",
+                                _ => keyKind + "_parent",
+                            },
                             names[ordinal],
                             ordinal + 7,
-                            keyKind == "IX"
-                                ? DBNull.Value
-                                : keyKind == "PK-default"
-                                    ? "PK"
-                                    : keyKind);
+                            keyKind switch
+                            {
+                                "IX" => DBNull.Value,
+                                "PK-default" => "PK",
+                                _ => keyKind,
+                            });
                     }
                 }
             }

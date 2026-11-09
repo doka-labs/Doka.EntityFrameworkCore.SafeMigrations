@@ -113,10 +113,12 @@ public sealed class SqlServerFullCatalogCaptureTests
 
             // WHY: The diagnostic fixture initially owns exactly these three tables. Production reads
             // occupancy first; generating full absent-table matchers here would measure a different path.
-            var absent = operation.Intent is EnsureTableIntent target
-                && target.Definition.Table is not ("sqlserver_stress_target"
-                    or "sqlserver_stress_alter"
-                    or "sqlserver_stress_managed");
+            var absent = operation.Intent is EnsureTableIntent
+            {
+                Definition.Table: not ("sqlserver_stress_target"
+                or "sqlserver_stress_alter"
+                or "sqlserver_stress_managed"),
+            };
 
             var plan = builder.Build(operation, expected, absent);
             if (plan.IsStaticallyUnsupported)

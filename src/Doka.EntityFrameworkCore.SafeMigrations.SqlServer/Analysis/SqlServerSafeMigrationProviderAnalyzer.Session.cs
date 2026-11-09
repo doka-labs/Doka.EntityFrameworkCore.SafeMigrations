@@ -147,7 +147,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         catch (Exception cleanupFailure)
         {
             QuarantineConnection();
-            var recoveryStatus = "connection_quarantined";
+            string recoveryStatus;
             try
             {
                 using var closeTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));

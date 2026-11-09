@@ -201,9 +201,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 && lineage.Seeds.Count != 0)
             {
                 var columns = UniqueKeyColumns(operation.Intent);
-                var capturedMetadataMatches = lineage.Seeds.All(seed =>
-                    seed.KeyColumns.SequenceEqual(columns, StringComparer.Ordinal)
-                    || seed.UniqueKeys.Any(key => key.Columns.SequenceEqual(columns, StringComparer.Ordinal)));
+                var capturedMetadataMatches = lineage.Seeds.All(capturedSeed =>
+                    capturedSeed.KeyColumns.SequenceEqual(columns, StringComparer.Ordinal)
+                    || capturedSeed.UniqueKeys.Any(key => key.Columns.SequenceEqual(columns, StringComparer.Ordinal)));
 
                 var filter = operation.Intent is EnsureIndexIntent index
                     ? SqlServerSafeMigrationCatalogSqlBuilder.GetStructuredIndexFilter(index.Definition)

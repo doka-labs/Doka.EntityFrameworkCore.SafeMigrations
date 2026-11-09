@@ -49,9 +49,7 @@ internal static class SafeMigrationModelManagedDataOwnershipFilter
             retained?.Add(operation);
         }
 
-        return retained is null
-            ? operations
-            : retained.AsReadOnly();
+        return retained?.AsReadOnly() ?? operations;
     }
 
     private static Dictionary<TableIdentity, bool> IndexTables(

@@ -830,9 +830,11 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             .Where(static assessment => !assessment.IsSafeOperation)
             .ToArray();
 
-        var indexAssessment = preflight.Assessments.Single(assessment =>
-            assessment.OperationKind == SafeMigrationOperationKind.EnsureIndex
-            && assessment.ObjectName == "ix_seed_journey_dependents_principal_id");
+        var indexAssessment = preflight.Assessments.Single(assessment => assessment is
+        {
+            OperationKind: SafeMigrationOperationKind.EnsureIndex,
+            ObjectName: "ix_seed_journey_dependents_principal_id",
+        });
 
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, preflight.Status);
         Assert.Equal(3, providerAssessments.Length);
@@ -1138,7 +1140,7 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
 
         Assert.Contains(
             report.UnexpectedObjects,
-            value => value.ObjectKind == SafeMigrationDatabaseObjectKind.Table && value.Name == "legacy_extra");
+            value => value is { ObjectKind: SafeMigrationDatabaseObjectKind.Table, Name: "legacy_extra" });
 
         Assert.Contains(
             report.UnexpectedObjects,
@@ -1149,7 +1151,7 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
 
         Assert.Contains(
             report.UnexpectedObjects,
-            value => value.ObjectKind == SafeMigrationDatabaseObjectKind.Index && value.Name == "ix_inventory_legacy");
+            value => value is { ObjectKind: SafeMigrationDatabaseObjectKind.Index, Name: "ix_inventory_legacy" });
 
         Assert.Equal(
             1,

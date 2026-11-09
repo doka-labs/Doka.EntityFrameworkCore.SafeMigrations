@@ -1215,6 +1215,10 @@ public sealed class MySqlMultiValuedIndexLifetimesIntegrationTests : MySqlSafeMi
     }
 
     /// <summary>Executes the same independently guarded sparse stream through either emission path.</summary>
+    /// <param name="context">The caller-owned context supplying migration execution and SQL generation.</param>
+    /// <param name="connectionString">The test database used by the generated-script execution path.</param>
+    /// <param name="operations">The ordered sparse operation stream to execute.</param>
+    /// <param name="script">Whether to execute generated script text rather than provider migration commands.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static Task ExecuteRetiredColumnStreamAsync(
         DbContext context,

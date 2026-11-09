@@ -248,7 +248,10 @@ public sealed class SqlServerTemporaryTableIsolationTests : SqlServerIntegration
     }
 
     /// <summary>Executes authored setup or actual provider statements on one retained native session.</summary>
+    /// <param name="connection">The caller-owned open session retaining the temporary objects under test.</param>
+    /// <param name="sql">The trusted setup or provider SQL to execute on the retained session.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
+    /// <param name="transaction">The caller-owned transaction to enlist in, or null for execution without one.</param>
     private static async Task ExecuteSessionSqlAsync(
         SqlConnection connection,
         string sql,
@@ -265,7 +268,10 @@ public sealed class SqlServerTemporaryTableIsolationTests : SqlServerIntegration
     }
 
     /// <summary>Reads a scalar without opening another session or enumerating unrelated metadata.</summary>
+    /// <param name="connection">The caller-owned open session retaining the temporary objects under test.</param>
+    /// <param name="sql">The trusted scalar query whose result is converted to an integer.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
+    /// <param name="transaction">The caller-owned transaction to enlist in, or null for execution without one.</param>
     private static async Task<int> ReadSessionIntAsync(
         SqlConnection connection,
         string sql,

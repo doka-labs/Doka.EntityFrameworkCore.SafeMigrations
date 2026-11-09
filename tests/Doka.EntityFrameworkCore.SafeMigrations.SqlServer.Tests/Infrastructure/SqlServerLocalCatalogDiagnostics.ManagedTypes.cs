@@ -2,7 +2,12 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 internal static partial class SqlServerLocalCatalogDiagnostics
 {
-    /// <summary>Checks metadata refusals on the explicit diagnostic engine without bypassing native test gates.</summary>
+    /// <summary>
+    /// Checks metadata refusals on the explicit diagnostic engine without bypassing native test gates.
+    /// </summary>
+    /// <param name="root">The caller-owned administrative session used to create and remove the probe database.</param>
+    /// <param name="rootString">The local server connection settings used for the isolated managed-type probes.</param>
+    /// <param name="output">The diagnostic directory receiving managed-type guard evidence.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task VerifyManagedTypesAsync(
         SqlConnection root,
@@ -164,11 +169,12 @@ internal static partial class SqlServerLocalCatalogDiagnostics
 
                 if (dependent.Mode != "missing_table")
                 {
-                    var column = dependent.Mode == "missing_column"
-                        ? "OtherId int"
-                        : dependent.Mode == "wrong_type"
-                            ? "ReferenceId bigint"
-                            : "ReferenceId int";
+                    var column = dependent.Mode switch
+                    {
+                        "missing_column" => "OtherId int",
+                        "wrong_type" => "ReferenceId bigint",
+                        _ => "ReferenceId int",
+                    };
 
                     await ExecuteAsync(
                         connection,
@@ -227,6 +233,9 @@ internal static partial class SqlServerLocalCatalogDiagnostics
     }
 
     /// <summary>Fails on missing, NULL or contradictory physical guard evidence.</summary>
+    /// <param name="connection">The caller-owned open session containing the current managed-type fixture.</param>
+    /// <param name="guard">The generated scalar guard expression evaluated against the physical fixture.</param>
+    /// <param name="expected">Whether the physical fixture is expected to satisfy the guard.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task VerifyManagedGuardAsync(
         SqlConnection connection,

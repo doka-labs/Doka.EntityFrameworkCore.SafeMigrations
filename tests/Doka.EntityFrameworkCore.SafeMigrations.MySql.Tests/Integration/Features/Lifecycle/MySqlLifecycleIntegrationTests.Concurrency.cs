@@ -23,7 +23,7 @@ public sealed partial class MySqlLifecycleIntegrationTests
         // no duration or relative execution-speed assertion is used.
         using var watchdog = new CancellationTokenSource(TimeSpan.FromMinutes(2));
         var secondMigration = Task.CompletedTask;
-        var secondEnteredBeforeRelease = false;
+        bool secondEnteredBeforeRelease;
 
         // Act.
         var firstMigration = first.Database.MigrateAsync(cancellationToken: watchdog.Token);

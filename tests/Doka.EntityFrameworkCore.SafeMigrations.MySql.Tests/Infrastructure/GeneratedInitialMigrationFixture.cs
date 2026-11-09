@@ -65,6 +65,9 @@ public sealed class GeneratedInitialMigrationFixture
     }
 
     /// <summary>Captures the original lifecycle before independent discriminator probes add mutable rows.</summary>
+    /// <param name="connectionVariable">The environment variable holding the profile connection string.</param>
+    /// <param name="migrationName">The scaffolded migration to analyze, apply, replay and verify.</param>
+    /// <param name="createContext">Creates the profile context, owned and disposed by this initializer.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<GeneratedInitialMigrationObservation> InitializeAsync(
         string connectionVariable,
@@ -166,6 +169,8 @@ public sealed class GeneratedInitialMigrationFixture
     }
 
     /// <summary>Runs the generated operation stream without replacing the provider's native commands.</summary>
+    /// <param name="context">The caller-owned context supplying the model, generator and relational connection.</param>
+    /// <param name="operations">The ordered migration operations to generate and execute.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task ExecuteOperationsAsync(
         DbContext context,
@@ -186,6 +191,8 @@ public sealed class GeneratedInitialMigrationFixture
     }
 
     /// <summary>Reads the source-controlled seed without retaining a connection outside its setup context.</summary>
+    /// <param name="context">The caller-owned context whose connection is opened if necessary.</param>
+    /// <param name="sql">The scalar query returning the seed count.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<int> ScalarIntAsync(
         DbContext context,

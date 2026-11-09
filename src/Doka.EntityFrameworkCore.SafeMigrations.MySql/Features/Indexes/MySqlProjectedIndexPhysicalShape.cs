@@ -347,8 +347,7 @@ internal static class MySqlProjectedIndexPhysicalShape
     {
         if (prefixLength is { } prefix)
         {
-            if (declaredLength is not null
-                && prefix > declaredLength)
+            if (prefix > declaredLength)
             {
                 return KeyWidth.PrefixExceedsTargetColumn;
             }
@@ -445,9 +444,7 @@ internal static class MySqlProjectedIndexPhysicalShape
     private static int? DivideRoundUp(
         int? value,
         int divisor
-    ) => value is null
-        ? null
-        : (value.Value + divisor - 1) / divisor;
+    ) => (value + divisor - 1) / divisor;
 
     private static int FractionalSeconds(
         int? precision

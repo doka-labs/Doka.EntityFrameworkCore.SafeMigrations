@@ -29,9 +29,9 @@ public partial class SqlServerColumnAttribution
         WriteJson(Path.Combine(output, "initial-repair-analysis.json"), analyses);
         ExecuteGenerated(connection, commands, scenario);
         var after = Snapshot(connection, scenario);
-        if (before
+        if (!before
             .AsSpan(0, 64)
-            .SequenceEqual(after.AsSpan(0, 64)) is false)
+            .SequenceEqual(after.AsSpan(0, 64)))
         {
             throw new InvalidOperationException("The initial safe repair changed fixture row data.");
         }

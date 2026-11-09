@@ -165,11 +165,12 @@ public sealed class MySqlColumnsApprovedBackfillConcurrencyIntegrationTests : My
         Assert.Equal(ApprovedBackfillPreservedValue(storageContract), preserved);
         Assert.Equal(0, nullable);
         Assert.Equal(
-            storageContract == "guid"
-                ? 36
-                : storageContract == "integer"
-                    ? 0
-                    : 32,
+            storageContract switch
+            {
+                "guid" => 36,
+                "integer" => 0,
+                _ => 32,
+            },
             targetWidth);
     }
 
@@ -266,11 +267,12 @@ public sealed class MySqlColumnsApprovedBackfillConcurrencyIntegrationTests : My
         Assert.Equal(1, lateNulls);
         Assert.Equal(1, nullable);
         Assert.Equal(
-            storageContract == "guid"
-                ? 36
-                : storageContract == "integer"
-                    ? 0
-                    : 16,
+            storageContract switch
+            {
+                "guid" => 36,
+                "integer" => 0,
+                _ => 16,
+            },
             sourceWidth);
     }
 

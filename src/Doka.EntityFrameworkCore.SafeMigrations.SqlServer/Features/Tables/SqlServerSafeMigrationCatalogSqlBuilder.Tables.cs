@@ -178,12 +178,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var predicates = new List<string>();
         if (definition.PrimaryKey is { } primary)
         {
-            Add(primary.Columns, primary: true);
+            Add(primary.Columns, isPrimaryKey: true);
         }
 
         foreach (var unique in definition.UniqueConstraints)
         {
-            Add(unique.Columns, primary: false);
+            Add(unique.Columns, isPrimaryKey: false);
         }
 
         return predicates.Count == 0
@@ -195,7 +195,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         void Add(
             IReadOnlyList<string> names,
-            bool primary
+            bool isPrimaryKey
         )
         {
             foreach (var name in names)
@@ -207,7 +207,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 }
 
                 predicates.Add(ComputedVariable(column, "indexable") + "=1");
-                if (primary)
+                if (isPrimaryKey)
                 {
                     // WHY: A logical finite non-null proof does not turn the
                     // native nullable catalog facet into a legal primary-key operand.

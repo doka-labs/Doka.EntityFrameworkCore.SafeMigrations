@@ -256,6 +256,7 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Acquires a real held row lock whose interrupted wait cannot complete like the SLEEP function.</summary>
+    /// <param name="connectionString">The database in which the returned owner holds a row-lock transaction.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     protected static async Task<RuntimeSetupLock> AcquireRuntimeSetupLockAsync(
         string connectionString,
@@ -334,6 +335,8 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     }
 
     /// <summary>Runs isolated databases repeatedly while preserving one execution measurement per sample.</summary>
+    /// <param name="initialState">The fixture catalog state to establish before each measured migration.</param>
+    /// <param name="samples">The caller-owned list receiving application, replay and engine-work measurements.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private async Task<List<RuntimeVerification>> MeasureRuntimeSamplesAsync(
         string initialState,
@@ -424,6 +427,8 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     }
 
     /// <summary>Creates generic legacy tables without altering default engine durability settings.</summary>
+    /// <param name="connectionString">The isolated database receiving the legacy catalog and original rows.</param>
+    /// <param name="initialState">Selects empty, widening, partial or matching catalog setup for the workload.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task PrepareRuntimeCatalogAsync(
         string connectionString,
@@ -485,6 +490,7 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     }
 
     /// <summary>Checks catalog, history, and preserved-row totals outside the timed pipeline.</summary>
+    /// <param name="connectionString">The workload database whose schema, history and rows are verified.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<RuntimeVerification> ReadRuntimeVerificationAsync(
         string connectionString,
@@ -552,6 +558,7 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     }
 
     /// <summary>Counts all rows and exact original values through one bounded verification connection.</summary>
+    /// <param name="connectionString">The workload database whose runtime-table rows are aggregated.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<(int Total, int Preserved)> ReadRuntimeRowsAsync(
         string connectionString,
@@ -688,6 +695,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Captures default server durability settings separately from the timed migration workflow.</summary>
+    /// <param name="connectionString">The workload server connection used to observe durability settings.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<object> ReadRuntimeEngineSettingsAsync(
         string connectionString,
@@ -721,6 +729,10 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     }
 
     /// <summary>Observes authoritative row rejection and same-session retry after test-owned repair.</summary>
+    /// <param name="context">The caller-owned migration context retained across rejection and retry.</param>
+    /// <param name="connectionString">The database connection used to repair the blocking row independently.</param>
+    /// <param name="table">The runtime fixture table containing the blocking row and target constraint.</param>
+    /// <param name="violation">Selects the duplicate-key repair or the foreign-key repair probe.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<RuntimeDataRecovery> RejectAndRecoverRuntimeDataAsync(
         MySqlRuntimePerformanceDbContext context,
@@ -802,6 +814,7 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     }
 
     /// <summary>Captures live rejection after raw DML, then retries only the remaining pending migration.</summary>
+    /// <param name="context">The caller-owned fresh-state context used for rejection, row repair and retry.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<RuntimeDataRecovery> RejectAndRecoverFreshRuntimeDataAsync(
         MySqlRuntimeFreshStateDbContext context,
@@ -925,6 +938,7 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
     }
 
     /// <summary>Reads the entire ordered physical column contract without a server-side concatenation limit.</summary>
+    /// <param name="connectionString">The database whose workload schema contracts are read in full.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<string> ReadRuntimeSchemaAsync(
         string connectionString,

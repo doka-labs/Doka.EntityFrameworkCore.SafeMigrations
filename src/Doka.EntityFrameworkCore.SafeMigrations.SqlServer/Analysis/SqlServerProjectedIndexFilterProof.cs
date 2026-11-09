@@ -262,8 +262,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         {
             var recreated = source is ISafeMigrationProjectedTableSource tables
                 && tables.TryGetProjectedTableState(index.Definition.Table, index.Definition.Schema, out var state)
-                && state.IsNewlyCreated
-                && !state.HasUnknownStructure;
+                && state is { IsNewlyCreated: true, HasUnknownStructure: false };
 
             return proof.AllColumnsMutated || recreated
                 ? new SafeMigrationProviderAnalysis(

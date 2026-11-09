@@ -324,19 +324,20 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var before = caseId == "domain"
-            ? "CREATE DOMAIN guarded_integer AS integer; "
-            : caseId == "inherited-child"
-                ? "CREATE TABLE inherited_base (value integer NOT NULL); "
-                : string.Empty;
+        var before = caseId switch
+        {
+            "domain" => "CREATE DOMAIN guarded_integer AS integer; ",
+            "inherited-child" => "CREATE TABLE inherited_base (value integer NOT NULL); ",
+            _ => string.Empty,
+        };
 
-        var columns = caseId == "domain"
-            ? "value guarded_integer NOT NULL, payload text NOT NULL"
-            : caseId == "inherited-child"
-                ? "payload text NOT NULL"
-                : caseId == "foreign-key-inbound"
-                    ? "value integer NOT NULL PRIMARY KEY, payload text NOT NULL"
-                    : "value integer NOT NULL, payload text NOT NULL";
+        var columns = caseId switch
+        {
+            "domain" => "value guarded_integer NOT NULL, payload text NOT NULL",
+            "inherited-child" => "payload text NOT NULL",
+            "foreign-key-inbound" => "value integer NOT NULL PRIMARY KEY, payload text NOT NULL",
+            _ => "value integer NOT NULL, payload text NOT NULL",
+        };
 
         var inheritance = caseId == "inherited-child"
             ? " INHERITS (inherited_base)"

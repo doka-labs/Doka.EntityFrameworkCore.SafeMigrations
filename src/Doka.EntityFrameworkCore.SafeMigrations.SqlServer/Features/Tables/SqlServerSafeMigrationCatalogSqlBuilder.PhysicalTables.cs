@@ -106,8 +106,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         var predicates = identities
             .Distinct()
-            .Select(identity =>
-                $"({BuildPhysicalTableSupportExpression(identity.Table, identity.Schema)}) = 1")
+            .Select(tableIdentity =>
+                $"({BuildPhysicalTableSupportExpression(tableIdentity.Table, tableIdentity.Schema)}) = 1")
             .ToList();
 
         if (intent is DropForeignKeyIntent dropForeignKey)

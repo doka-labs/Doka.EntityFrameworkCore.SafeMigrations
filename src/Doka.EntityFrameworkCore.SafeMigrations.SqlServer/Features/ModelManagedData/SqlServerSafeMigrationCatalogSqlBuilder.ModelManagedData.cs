@@ -757,7 +757,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 : 8_000;
 
             return int.TryParse(args, NumberStyles.None, CultureInfo.InvariantCulture, out var length)
-                && length is > 0
+                && length > 0
                 && length <= maximum;
         }
 

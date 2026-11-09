@@ -148,14 +148,12 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
             .ToList();
 
         var snapshot = operations.ToArray();
-        var currentResult = Array.Empty<SafeMigrationOperation>();
-        var originalResult = Array.Empty<SafeMigrationOperation>();
 
         // WHY: The source list, intents and exact preflight count are prepared
         // before measuring. Only extraction is counted, and both code paths are
         // warmed so first-use initialization cannot masquerade as a saving.
-        currentResult = SqlServerSafeMigrationsSqlGenerator.ExtractSafeOperations(operations, operationCount);
-        originalResult = operations
+        var currentResult = SqlServerSafeMigrationsSqlGenerator.ExtractSafeOperations(operations, operationCount);
+        var originalResult = operations
             .OfType<SafeMigrationOperation>()
             .ToArray();
 

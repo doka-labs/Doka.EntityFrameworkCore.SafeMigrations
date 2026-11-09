@@ -448,8 +448,7 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
         var resultLength = expression.Length;
         var sourceOffset = 0;
         var hasMarkers = false;
-        while (FindNextPlaceholder(expression.AsSpan(), sourceOffset) is var marker
-            && marker.Index >= 0)
+        while (FindNextPlaceholder(expression.AsSpan(), sourceOffset) is { Index: >= 0 } marker)
         {
             hasMarkers = true;
             var replacement = replacements.ForKind(marker.Kind);

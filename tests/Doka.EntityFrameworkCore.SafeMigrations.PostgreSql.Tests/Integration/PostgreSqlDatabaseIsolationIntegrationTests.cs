@@ -70,10 +70,8 @@ public sealed class PostgreSqlDatabaseIsolationIntegrationTests : PostgreSqlInte
             }
         }
 
-        /// <summary>Writes an isolated value and waits for the peer barrier before reading it.</summary>
-        /// <param name="connectionString">The isolated fixture database connection string.</param>
-        /// <param name="value">The fixture's value input.</param>
-        /// <returns>The asynchronous fixture operation or observation.</returns>
+        // Writes the supplied value to its isolated fixture database, then waits for the peer
+        // barrier before reading the stored value so both database lifetimes overlap.
         async Task<int> WriteAndReadAsync(
             string connectionString,
             int value

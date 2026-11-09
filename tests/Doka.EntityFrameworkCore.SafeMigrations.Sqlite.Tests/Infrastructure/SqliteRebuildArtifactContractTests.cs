@@ -191,7 +191,7 @@ public sealed class SqliteRebuildArtifactContractTests
     ) => new(
         ordinal,
         name,
-        name == "Id" || name == "ParentId"
+        name is "Id" or "ParentId"
             ? "INTEGER"
             : "TEXT",
         isNullable,

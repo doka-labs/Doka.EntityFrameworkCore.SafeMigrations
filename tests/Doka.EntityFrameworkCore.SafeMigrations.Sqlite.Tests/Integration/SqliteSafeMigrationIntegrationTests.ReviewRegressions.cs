@@ -496,8 +496,11 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
 
         var principalDrop = Assert.Single(
             report.Assessments,
-            static value => value.OperationKind == SafeMigrationOperationKind.DropTable
-                && value.ObjectName == "projected_drop_parent");
+            static value => value is
+            {
+                OperationKind: SafeMigrationOperationKind.DropTable,
+                ObjectName: "projected_drop_parent",
+            });
 
         Assert.Equal(SafeMigrationAction.Apply, principalDrop.Action);
     }

@@ -818,6 +818,10 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
     }
 
     /// <summary>Executes the same guarded SQL through either supported emission path.</summary>
+    /// <param name="context">The caller-owned context supplying runtime execution or script generation.</param>
+    /// <param name="connectionString">The test database connection used when executing a generated script.</param>
+    /// <param name="operations">The ordered guarded operations to execute.</param>
+    /// <param name="script">Whether to generate and execute a script instead of provider migration commands.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static Task ExecuteIndependentDropAsync(
         DbContext context,

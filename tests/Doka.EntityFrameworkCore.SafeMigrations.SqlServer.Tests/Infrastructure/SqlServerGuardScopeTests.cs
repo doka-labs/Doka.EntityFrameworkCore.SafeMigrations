@@ -119,6 +119,8 @@ public sealed class SqlServerGuardScopeTests
     [Theory]
     [InlineData("DECLARE @doka_state nvarchar(32);")]
     [InlineData("EXEC sys.sp_executesql N'SELECT 1;")]
+    [InlineData("EXEC sys.sp_executesql N'SELECT 1;'")]
+    [InlineData("EXEC sys.sp_executesql N'SELECT 1;';;")]
     [InlineData("EXEC sys.sp_executesql N'SELECT 1;'; DECLARE @doka_state int;")]
     public void ScopeDecoder_RejectsUnisolatedOrIncompleteCommands(
         string command
@@ -132,5 +134,24 @@ public sealed class SqlServerGuardScopeTests
 
         // Assert
         Assert.IsType<InvalidOperationException>(failure);
+    }
+
+    /// <summary>The complete outer terminator permits whitespace but no additional executable content.</summary>
+    /// <param name="suffix">The complete command suffix following the closing quote.</param>
+    [Theory]
+    [InlineData(";")]
+    [InlineData(" \t;\r\n")]
+    public void ScopeDecoder_AcceptsOnlyTheCompleteTerminator(
+        string suffix
+    )
+    {
+        // Arrange
+        var command = "EXEC sys.sp_executesql N'SELECT 1;'" + suffix;
+
+        // Act
+        var decoded = SqlServerGuardedSqlTestContract.DecodeScope(command);
+
+        // Assert
+        Assert.Equal("SELECT 1;", decoded);
     }
 }

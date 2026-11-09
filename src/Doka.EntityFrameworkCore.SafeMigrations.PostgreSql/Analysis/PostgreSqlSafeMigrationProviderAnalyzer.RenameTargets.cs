@@ -137,8 +137,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     }
 
                     var intent = operations[candidates[offset + row]].Intent;
-                    var hasIntermediate = intent is RenameTableIntent table
-                        && table.NewName is not null
+                    var hasIntermediate = intent is RenameTableIntent { NewName: not null } table
                         && table.NewName != table.Name
                         && table.NewSchema is not null
                         && table.NewSchema != table.Schema;

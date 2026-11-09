@@ -94,10 +94,7 @@ internal static class SafeMigrationModelManagedKeyIdentity
                 }
             }
 
-            if (normalized is not null)
-            {
-                normalized[index] = canonical;
-            }
+            normalized?[index] = canonical;
         }
 
         return normalized ?? columns;

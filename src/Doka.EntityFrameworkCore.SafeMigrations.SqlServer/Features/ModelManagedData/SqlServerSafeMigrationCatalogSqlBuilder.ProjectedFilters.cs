@@ -377,12 +377,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                         {
                             Left: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 },
                             Right: SafeMigrationSqlLiteralExpression { Value: not null } literal,
-                        } comparison when comparison.Operator is SafeMigrationSqlBinaryOperator.Equal
+                            Operator: SafeMigrationSqlBinaryOperator.Equal
                             or SafeMigrationSqlBinaryOperator.NotEqual
                             or SafeMigrationSqlBinaryOperator.LessThan
                             or SafeMigrationSqlBinaryOperator.LessThanOrEqual
                             or SafeMigrationSqlBinaryOperator.GreaterThan
-                            or SafeMigrationSqlBinaryOperator.GreaterThanOrEqual
+                            or SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+                        }
                         => literal.StoreType is null || IsManagedValueRepresentable(literal.Value, literal.StoreType),
                     SafeMigrationSqlInExpression
                     {

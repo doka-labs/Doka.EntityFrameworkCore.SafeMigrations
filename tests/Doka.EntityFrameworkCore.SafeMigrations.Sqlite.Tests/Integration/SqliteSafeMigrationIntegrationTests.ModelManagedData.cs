@@ -290,6 +290,7 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
     }
 
     /// <summary>Creates the original small dependency fixture independently for each rejection contract.</summary>
+    /// <param name="connection">The caller-owned connection receiving roles, assignments and their dependency.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static Task CreateManagedRoleDependencyFixtureAsync(
         SqliteConnection connection,

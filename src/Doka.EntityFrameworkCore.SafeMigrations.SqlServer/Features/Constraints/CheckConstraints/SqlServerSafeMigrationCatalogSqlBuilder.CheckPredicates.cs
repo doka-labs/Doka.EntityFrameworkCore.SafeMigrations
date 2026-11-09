@@ -113,11 +113,17 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         {
             SafeMigrationSqlUnaryExpression { Operator: SafeMigrationSqlUnaryOperator.Not } unary
                 => IsSafeIntegerCheckPredicate(unary.Operand, depth + 1),
-            SafeMigrationSqlBinaryExpression binary when binary.Operator is SafeMigrationSqlBinaryOperator.And
-                    or SafeMigrationSqlBinaryOperator.Or => IsSafeIntegerCheckPredicate(binary.Left, depth + 1)
+            SafeMigrationSqlBinaryExpression
+                {
+                    Operator: SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or,
+                } binary
+                => IsSafeIntegerCheckPredicate(binary.Left, depth + 1)
                 && IsSafeIntegerCheckPredicate(binary.Right, depth + 1),
-            SafeMigrationSqlBinaryExpression binary when binary.Operator is >= SafeMigrationSqlBinaryOperator.Equal
-                    and <= SafeMigrationSqlBinaryOperator.GreaterThanOrEqual
+            SafeMigrationSqlBinaryExpression
+                {
+                    Operator: >= SafeMigrationSqlBinaryOperator.Equal
+                    and <= SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+                } binary
                 => IsSafeIntegerCheckScalar(binary.Left) && IsSafeIntegerCheckScalar(binary.Right),
             SafeMigrationSqlNullTestExpression nullTest => IsSafeIntegerCheckScalar(nullTest.Operand),
             _ => false,
@@ -143,13 +149,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         {
             value = -positive;
 
-            return value >= long.MinValue && value <= long.MaxValue;
+            return value is >= long.MinValue and <= long.MaxValue;
         }
 
         if (expression is SafeMigrationSqlLiteralExpression { StoreType: null } literal
             && TryGetUnsignedCheckLiteral(literal, out value))
         {
-            return value >= long.MinValue && value <= long.MaxValue;
+            return value is >= long.MinValue and <= long.MaxValue;
         }
 
         value = 0;

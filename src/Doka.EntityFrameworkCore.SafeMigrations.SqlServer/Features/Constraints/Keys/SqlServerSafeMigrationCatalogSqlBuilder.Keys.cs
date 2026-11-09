@@ -22,9 +22,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 return false;
             }
 
-            var bytes = type.Length is { } length
-                ? length
-                : type.Name switch
+            var bytes = type.Length
+                ?? type.Name switch
                 {
                     "bigint" or "datetime" or "datetime2" or "float" or "money" or "timestamp" => 8,
                     "datetimeoffset" => 10,

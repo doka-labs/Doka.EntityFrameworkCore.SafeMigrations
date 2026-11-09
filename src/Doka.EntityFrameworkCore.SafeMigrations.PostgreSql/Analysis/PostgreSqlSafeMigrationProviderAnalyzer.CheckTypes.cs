@@ -14,7 +14,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         if (analysis.ObservedState != SafeMigrationObservedState.Missing
             || operation.Intent is not EnsureCheckConstraintIntent check
             || _sparseCheckTypeFacts?.Checks.Contains(check.Definition) != true
-            || check.Definition.Expression is not { } expression)
+            || check.Definition.Expression is null)
         {
             return null;
         }
@@ -39,7 +39,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             return null;
         }
 
-        expression = SafeMigrationCapturedExpressionNormalization.NormalizeCheck(check.Definition, true)
+        var expression = SafeMigrationCapturedExpressionNormalization.NormalizeCheck(check.Definition, true)
             .Expression!;
 
         var resolved = ResolveCheckExpression(expression, check.Definition, columns);
@@ -122,7 +122,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             cancellationToken.ThrowIfCancellationRequested();
             if (results[ordinal].ObservedState != SafeMigrationObservedState.PrerequisiteMissing
                 || operations[ordinal].Intent is not EnsureCheckConstraintIntent check
-                || check.Definition.Expression is not { } expression
+                || check.Definition.Expression is null
                 || !NativePrerequisiteColumns(check)
                     .Any(column => members.Contains(
                         LiveColumnKey(check.Definition.Table, check.Definition.Schema, column))))
@@ -131,7 +131,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             }
 
             checks.Add(check.Definition);
-            expression = SafeMigrationCapturedExpressionNormalization.NormalizeCheck(
+            var expression = SafeMigrationCapturedExpressionNormalization.NormalizeCheck(
                     check.Definition,
                     true)
                 .Expression!;
@@ -140,8 +140,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             {
                 var identity = node switch
                 {
-                    SafeMigrationSqlBinaryExpression binary when binary.Operator
-                            is not (SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or)
+                    SafeMigrationSqlBinaryExpression
+                        {
+                            Operator: not (SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or),
+                        } binary
                         => new CheckCallableIdentity(CheckOperator(binary.Operator), 2, Function: false),
                     SafeMigrationSqlUnaryExpression { Operator: SafeMigrationSqlUnaryOperator.Negate }
                         => new CheckCallableIdentity("-", 1, Function: false),
@@ -1286,22 +1288,28 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             SafeMigrationSqlUnaryExpression
                 {
                     Operator: SafeMigrationSqlUnaryOperator.Negate,
-                    Operand: SafeMigrationSqlLiteralExpression { Value: long value } literal,
+                    Operand: SafeMigrationSqlLiteralExpression
+                    {
+                        Value: long value, NumericSourceToken.IsEmpty: false,
+                    },
                 }
-                when !literal.NumericSourceToken.IsEmpty && value == 2147483648L => "integer",
+                when value == 2147483648L => "integer",
             SafeMigrationSqlUnaryExpression
                 {
                     Operator: SafeMigrationSqlUnaryOperator.Negate,
-                    Operand: SafeMigrationSqlLiteralExpression { Value: ulong value } literal,
+                    Operand: SafeMigrationSqlLiteralExpression
+                    {
+                        Value: ulong value, NumericSourceToken.IsEmpty: false,
+                    },
                 }
-                when !literal.NumericSourceToken.IsEmpty && value == 9223372036854775808UL => "bigint",
+                when value == 9223372036854775808UL => "bigint",
             SafeMigrationSqlCastExpression cast => _typeMappingSource.FindMapping(cast.StoreType)
                 ?.StoreTypeNameBase,
             SafeMigrationSqlLiteralExpression { StoreType: { } storeType }
                 => _typeMappingSource.FindMapping(storeType)
                     ?.StoreTypeNameBase,
-            SafeMigrationSqlLiteralExpression literal when !literal.NumericSourceToken.IsEmpty
-                && literal.NumericSourceToken.Span.ContainsAny('.', 'e', 'E') => "numeric",
+            SafeMigrationSqlLiteralExpression { NumericSourceToken.IsEmpty: false } literal
+                when literal.NumericSourceToken.Span.ContainsAny('.', 'e', 'E') => "numeric",
             SafeMigrationSqlLiteralExpression { Value: bool } => "boolean",
             SafeMigrationSqlLiteralExpression { Value: byte or sbyte or short or ushort or int } => "integer",
             SafeMigrationSqlLiteralExpression { Value: long value }

@@ -1394,11 +1394,12 @@ public sealed class MySqlForeignKeysProjectedLivePrerequisitesIntegrationTests :
         await ExecuteSqlAsync(
             connectionString,
             "CREATE INDEX `ix_child_cover` ON `live_child` (`parent_id`"
-            + (shape == "descending"
-                ? " DESC"
-                : shape == "trailing_descending"
-                    ? ", `id` DESC"
-                    : string.Empty)
+            + shape switch
+            {
+                "descending" => " DESC",
+                "trailing_descending" => ", `id` DESC",
+                _ => string.Empty,
+            }
             + ");",
             cancellationToken: CancellationToken.None);
 

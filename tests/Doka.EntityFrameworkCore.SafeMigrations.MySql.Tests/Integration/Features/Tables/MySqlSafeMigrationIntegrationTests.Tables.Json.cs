@@ -96,7 +96,9 @@ public sealed class MySqlTablesJsonIntegrationTests : MySqlSafeMigrationIntegrat
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Contains(
             report.UnexpectedObjects,
-            value => value.ObjectKind == SafeMigrationDatabaseObjectKind.CheckConstraint
-                && value.Name == "ck_json_check_drift_id");
+            value => value is
+            {
+                ObjectKind: SafeMigrationDatabaseObjectKind.CheckConstraint, Name: "ck_json_check_drift_id",
+            });
     }
 }

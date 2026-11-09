@@ -608,6 +608,9 @@ public sealed class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeMigration
     }
 
     /// <summary>Executes generated command ownership unchanged on either supported managed path.</summary>
+    /// <param name="context">The caller-owned context supplying the relational connection.</param>
+    /// <param name="commands">The ordered provider commands whose ownership behavior is under test.</param>
+    /// <param name="synchronous">Whether to execute commands synchronously instead of using their async path.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task ExecuteDiagnosticCommandsAsync(
         DbContext context,
@@ -633,6 +636,8 @@ public sealed class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeMigration
     }
 
     /// <summary>Consumes the actual script result stream instead of treating SQL comments as diagnostics.</summary>
+    /// <param name="connectionString">The test database on which a short-lived script session is opened.</param>
+    /// <param name="sql">The generated script whose diagnostic result and terminal failure are captured.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<DiagnosticScriptResult> ReadDiagnosticScriptFailureAsync(
         string connectionString,

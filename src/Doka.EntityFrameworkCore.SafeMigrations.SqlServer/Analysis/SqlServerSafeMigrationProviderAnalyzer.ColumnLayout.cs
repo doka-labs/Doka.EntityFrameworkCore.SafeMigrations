@@ -479,9 +479,12 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             return analysis;
         }
 
-        var structureUnknown = analysis.IsOpaqueProjectionUnknown
-            && analysis.ObservedState == SafeMigrationObservedState.PrerequisiteMissing
-            && analysis.Code == "projected_structure_state_unknown";
+        var structureUnknown = analysis is
+        {
+            IsOpaqueProjectionUnknown: true,
+            ObservedState: SafeMigrationObservedState.PrerequisiteMissing,
+            Code: "projected_structure_state_unknown",
+        };
 
         if (!structureUnknown
             && (analysis.IsOpaqueProjectionUnknown

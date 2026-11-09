@@ -24,11 +24,12 @@ internal sealed class SqliteTableConstraintTransitions
 
         foreach (var operation in operations)
         {
-            var table = operation is SafeMigrationOperation { Intent: EnsureTableIntent ensure }
-                ? ensure.Definition.Table
-                : operation is CreateTableOperation create
-                    ? create.Name
-                    : null;
+            var table = operation switch
+            {
+                SafeMigrationOperation { Intent: EnsureTableIntent ensure } => ensure.Definition.Table,
+                CreateTableOperation create => create.Name,
+                _ => null,
+            };
 
             if (!SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(operation)
                 || operation is DropTableOperation or RenameTableOperation

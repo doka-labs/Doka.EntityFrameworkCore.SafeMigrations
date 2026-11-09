@@ -51,10 +51,12 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
             bindsInitial,
             results[0]
                 .TableConstraintIdentities
-                ?.Any(binding =>
-                    binding.Kind == SafeMigrationDatabaseObjectKind.PrimaryKey
-                    && binding.AuthoredName == "logical_initial_pk"
-                    && binding.PhysicalName == "physical_current_pk")
+                ?.Any(binding => binding is
+                {
+                    Kind: SafeMigrationDatabaseObjectKind.PrimaryKey,
+                    AuthoredName: "logical_initial_pk",
+                    PhysicalName: "physical_current_pk",
+                })
             ?? false);
     }
 

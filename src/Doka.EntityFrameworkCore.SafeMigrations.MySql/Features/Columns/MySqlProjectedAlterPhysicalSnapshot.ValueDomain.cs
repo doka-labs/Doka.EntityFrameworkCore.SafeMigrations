@@ -62,8 +62,7 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot
         // larger domain. Retaining the original VARCHAR character ceiling (or
         // TEXT byte ceiling) proves a later target only when Core has certified
         // that every intervening operation preserved these original values.
-        var originalVarchar = original.StoreTypeFamily == "varchar"
-            && original.IndexShape.MaximumPrefixUnits is > 0;
+        var originalVarchar = original is { StoreTypeFamily: "varchar", IndexShape.MaximumPrefixUnits: > 0 };
 
         var originalText = MySqlSafeMigrationCatalogSqlBuilder.TryGetTextCapacity(
             original.StoreTypeFamily,

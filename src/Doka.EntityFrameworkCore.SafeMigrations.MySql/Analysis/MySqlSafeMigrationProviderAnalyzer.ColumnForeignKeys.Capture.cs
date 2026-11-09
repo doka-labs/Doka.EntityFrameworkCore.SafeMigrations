@@ -74,9 +74,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             requests.Add(new MySqlColumnDependencyRequest(operation, table, column.Name, column.IsNullable, ordinal));
         }
 
-        return (requests is null
-            ? []
-            : requests, aliases);
+        return ((IReadOnlyList<MySqlColumnDependencyRequest>?)requests ?? [], aliases);
     }
 
     /// <summary>Reads bounded dependency facts, including an explicit absence sentinel for every request.</summary>
@@ -356,14 +354,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         return value switch
         {
             bool boolean => boolean,
-            sbyte number when number is 0 or 1 => number == 1,
-            byte number when number is 0 or 1 => number == 1,
-            short number when number is 0 or 1 => number == 1,
-            ushort number when number is 0 or 1 => number == 1,
-            int number when number is 0 or 1 => number == 1,
-            uint number when number is 0 or 1 => number == 1,
-            long number when number is 0 or 1 => number == 1,
-            ulong number when number is 0 or 1 => number == 1,
+            sbyte number and (0 or 1) => number == 1,
+            byte number and (0 or 1) => number == 1,
+            short number and (0 or 1) => number == 1,
+            ushort number and (0 or 1) => number == 1,
+            int number and (0 or 1) => number == 1,
+            uint number and (0 or 1) => number == 1,
+            long number and (0 or 1) => number == 1,
+            ulong number and (0 or 1) => number == 1,
             _ => throw InvalidColumnDependencyResult(),
         };
     }

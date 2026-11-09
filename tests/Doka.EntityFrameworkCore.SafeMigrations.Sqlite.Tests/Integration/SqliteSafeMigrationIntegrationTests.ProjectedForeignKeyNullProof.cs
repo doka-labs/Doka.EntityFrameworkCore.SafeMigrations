@@ -785,6 +785,7 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
     }
 
     /// <summary>Creates an isolated populated live child without the future FK column.</summary>
+    /// <param name="connection">The caller-owned connection receiving parent and child before the FK ADD.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static Task CreateProjectedForeignKeyTablesAsync(
         DbConnection connection,

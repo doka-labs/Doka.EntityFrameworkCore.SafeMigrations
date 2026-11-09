@@ -57,8 +57,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         string column
     ) => _dependencyGraph?.HasLiveColumn(table, schema, column) == true
         || (_projectedKeyTables.TryGetValue((schema ?? "dbo", table), out var snapshot)
-            && snapshot.Exists
-            && snapshot.PhysicalSupported
+            && snapshot is { Exists: true, PhysicalSupported: true }
             && snapshot.Columns.ContainsKey(column));
 
     /// <inheritdoc />

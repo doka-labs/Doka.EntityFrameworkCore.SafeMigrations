@@ -3,6 +3,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
 {
     /// <summary>Captures the same compact key/storage inputs while keeping this unit fixture catalog-only.</summary>
+    /// <param name="connection">The caller-owned synthetic catalog connection supplying the dependency rows.</param>
+    /// <param name="operations">The ordered operations whose projected dependency graph is captured.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task<SqlServerProjectedDependencyGraph> ReadGraph(
         GraphConnection connection,

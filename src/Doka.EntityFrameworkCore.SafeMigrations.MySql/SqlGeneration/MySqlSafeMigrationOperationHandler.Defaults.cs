@@ -119,9 +119,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
             return;
         }
 
-        var value = literal is string text
-            ? text
-            : ((char)literal).ToString();
+        var value = literal as string ?? ((char)literal).ToString();
 
         operation.DefaultValue = null;
         operation.DefaultValueSql = MySqlSafeMigrationSqlExpressionRenderer.RenderStringDefault(value);

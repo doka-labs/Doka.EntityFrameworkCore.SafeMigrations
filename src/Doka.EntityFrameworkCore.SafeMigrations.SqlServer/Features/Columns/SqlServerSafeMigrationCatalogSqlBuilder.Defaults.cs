@@ -465,7 +465,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     )
     {
         if (expression is SafeMigrationSqlLiteralExpression { Value: null }
-            || expression is SafeMigrationSqlCastExpression
+            or SafeMigrationSqlCastExpression
             {
                 Operand: SafeMigrationSqlLiteralExpression { Value: null },
             })

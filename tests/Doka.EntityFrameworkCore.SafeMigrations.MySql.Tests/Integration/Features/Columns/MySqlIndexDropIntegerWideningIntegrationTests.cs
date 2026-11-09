@@ -661,29 +661,33 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
         // the referencing database before its principal, without disabling FKs.
         var childConnection = await CreateDatabaseAsync(CancellationToken.None);
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var sourceType = family == "integer"
-            ? "int"
-            : family == "varchar"
-                ? "varchar(10)"
-                : "bit(1)";
+        var sourceType = family switch
+        {
+            "integer" => "int",
+            "varchar" => "varchar(10)",
+            _ => "bit(1)",
+        };
 
-        var targetType = family == "integer"
-            ? "bigint"
-            : family == "varchar"
-                ? "varchar(20)"
-                : "tinyint(1)";
+        var targetType = family switch
+        {
+            "integer" => "bigint",
+            "varchar" => "varchar(20)",
+            _ => "tinyint(1)",
+        };
 
-        var seedRows = family == "integer"
-            ? "(1,-2147483648),(2,0)"
-            : family == "varchar"
-                ? "(1,'a'),(2,'b')"
-                : "(1,b'0'),(2,b'1')";
+        var seedRows = family switch
+        {
+            "integer" => "(1,-2147483648),(2,0)",
+            "varchar" => "(1,'a'),(2,'b')",
+            _ => "(1,b'0'),(2,b'1')",
+        };
 
-        var referencedValue = family == "integer"
-            ? "0"
-            : family == "varchar"
-                ? "'a'"
-                : "b'0'";
+        var referencedValue = family switch
+        {
+            "integer" => "0",
+            "varchar" => "'a'",
+            _ => "b'0'",
+        };
 
         await ExecuteSqlAsync(
             connectionString,
@@ -714,11 +718,12 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
                     Table,
                     new ExpectedColumnDefinition(
                         "left_value",
-                        family == "integer"
-                            ? typeof(long)
-                            : family == "varchar"
-                                ? typeof(string)
-                                : typeof(bool),
+                        family switch
+                        {
+                            "integer" => typeof(long),
+                            "varchar" => typeof(string),
+                            _ => typeof(bool),
+                        },
                         false,
                         targetType,
                         maxLength: family == "varchar"
@@ -726,11 +731,12 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
                             : null),
                     new ExpectedColumnDefinition(
                         "left_value",
-                        family == "integer"
-                            ? typeof(int)
-                            : family == "varchar"
-                                ? typeof(string)
-                                : typeof(bool),
+                        family switch
+                        {
+                            "integer" => typeof(int),
+                            "varchar" => typeof(string),
+                            _ => typeof(bool),
+                        },
                         false,
                         sourceType,
                         maxLength: family == "varchar"
@@ -790,6 +796,8 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
     }
 
     /// <summary>Reproduces nontransactional interruption without inventing an EF history row.</summary>
+    /// <param name="connectionString">The test database containing the integer-upgrade fixture.</param>
+    /// <param name="count">The number of leading columns to widen in left, right, then position order.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task ApplyNativeWideningPrefixAsync(
         string connectionString,

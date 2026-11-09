@@ -2,6 +2,67 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed partial class SafeMigrationDefinitionTests
 {
+    /// <summary>Unknown nullable facets do not invent a scale-versus-precision conflict.</summary>
+    /// <param name="precision">The optional declared precision.</param>
+    /// <param name="scale">The independent optional scale.</param>
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData(null, 3)]
+    [InlineData(3, null)]
+    [InlineData(3, 0)]
+    [InlineData(3, 3)]
+    [InlineData(int.MaxValue, int.MaxValue)]
+    public void ColumnDefinitionPreservesIndependentNullablePrecisionAndScale(
+        int? precision,
+        int? scale
+    )
+    {
+        // Arrange: The theory supplies the independent nullable facets.
+
+        // Act
+        var column = new ExpectedColumnDefinition(
+            "amount",
+            typeof(decimal),
+            isNullable: false,
+            precision: precision,
+            scale: scale);
+
+        // Assert
+        Assert.Equal(precision, column.Precision);
+        Assert.Equal(scale, column.Scale);
+    }
+
+    /// <summary>A known precision still bounds scale, including the largest supported CLR facet.</summary>
+    /// <param name="precision">The known positive precision.</param>
+    /// <param name="scale">The scale that exceeds that precision.</param>
+    [Theory]
+    [InlineData(1, 2)]
+    [InlineData(10, 11)]
+    [InlineData(int.MaxValue - 1, int.MaxValue)]
+    public void ColumnDefinitionRejectsScaleBeyondKnownPrecision(
+        int precision,
+        int scale
+    )
+    {
+        // Arrange: The theory supplies precision and an incompatible scale.
+
+        // Act
+        var exception = Record.Exception(() =>
+        {
+            _ = new ExpectedColumnDefinition(
+                "amount",
+                typeof(decimal),
+                isNullable: false,
+                precision: precision,
+                scale: scale);
+        });
+
+        // Assert
+        Assert.Equal("scale",
+            Assert.IsType<ArgumentException>(exception)
+                .ParamName);
+    }
+
     [Fact]
     public void DefaultValueSupportsEveryDocumentedLiteralFamily()
     {

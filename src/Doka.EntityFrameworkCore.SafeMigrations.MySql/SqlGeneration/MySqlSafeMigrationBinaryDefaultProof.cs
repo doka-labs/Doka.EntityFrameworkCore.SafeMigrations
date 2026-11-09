@@ -174,8 +174,7 @@ internal sealed record MySqlSafeMigrationBinaryDefaultProof(
         StringBuilder? builder = null;
         var copied = 0;
         var position = 0;
-        while (MySqlSafeMigrationRuntimePlan.FindNextProofMarker(sql.AsSpan(), position) is var marker
-            && marker.Index >= 0)
+        while (MySqlSafeMigrationRuntimePlan.FindNextProofMarker(sql.AsSpan(), position) is { Index: >= 0 } marker)
         {
             position = marker.Index + marker.Length;
             if (marker.Kind != 5)

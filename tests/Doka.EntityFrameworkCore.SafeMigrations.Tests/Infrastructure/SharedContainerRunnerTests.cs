@@ -222,8 +222,8 @@ public sealed class SharedContainerRunnerTests
             new RunnerOptions(maximum: 2),
             lifecycle);
 
-        var activeBeforeRelease = 0;
-        var completedBeforeRelease = false;
+        int activeBeforeRelease;
+        bool completedBeforeRelease;
 
         // Act
         var assemblyRun = runner.RunAsync();
@@ -276,7 +276,7 @@ public sealed class SharedContainerRunnerTests
         var normalCompleted = 0;
         var normalActiveAtControlAdmission = -1;
         var normalCompletedAtControlAdmission = -1;
-        var controlActiveBeforeNormalRelease = false;
+        bool controlActiveBeforeNormalRelease;
 
         async Task<RunSummary> HoldNormalAsync(
             object[] arguments,

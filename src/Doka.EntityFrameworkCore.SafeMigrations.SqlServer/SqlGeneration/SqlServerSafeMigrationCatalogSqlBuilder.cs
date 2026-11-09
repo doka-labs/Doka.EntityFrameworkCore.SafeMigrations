@@ -334,8 +334,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return GetUnsupportedColumnFeature(columnIntent.Definition);
         }
 
-        if (operation.Intent is EnsureForeignKeyIntent foreignKeyIntent
-            && foreignKeyIntent.Definition.Columns.Count > 32)
+        if (operation.Intent is EnsureForeignKeyIntent { Definition.Columns.Count: > 32 })
         {
             return "foreign_key_unproven_width";
         }
@@ -381,8 +380,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return checkSourceFeature;
         }
 
-        if (operation.Intent is EnsureCheckConstraintIntent checkIntent
-            && checkIntent.Definition.Expression is { } checkExpression
+        if (operation.Intent is EnsureCheckConstraintIntent { Definition.Expression: { } checkExpression }
             && _expressionRenderer.GetUnsupportedFeature(checkExpression) is not null)
         {
             return "check_expression_unproven";
@@ -607,7 +605,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 return false;
             }
 
-            if (arguments.SequenceEqual("max"))
+            if (arguments is "max")
             {
                 if (name is not ("varchar" or "nvarchar" or "varbinary"))
                 {

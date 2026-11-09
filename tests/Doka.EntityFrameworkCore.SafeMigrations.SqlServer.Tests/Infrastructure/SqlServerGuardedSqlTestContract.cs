@@ -37,10 +37,9 @@ internal static class SqlServerGuardedSqlTestContract
                 continue;
             }
 
-            if (!commandText
+            if (commandText
                 .AsSpan(offset + 1)
-                .Trim()
-                .SequenceEqual(";"))
+                .Trim() is not ";")
             {
                 throw new InvalidOperationException("The guarded command has content outside its dynamic scope.");
             }

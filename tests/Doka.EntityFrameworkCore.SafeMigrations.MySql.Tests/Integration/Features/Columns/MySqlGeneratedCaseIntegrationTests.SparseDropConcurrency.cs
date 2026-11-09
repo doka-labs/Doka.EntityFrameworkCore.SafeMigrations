@@ -123,8 +123,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             ExecuteOperationsAsync(context, builder.Operations, executionCancellation.Token));
 
         Exception? failure;
-        var observed = false;
-        var mutated = false;
+        bool observed;
+        bool mutated;
         try
         {
             await WaitForSparseDropCheckpointAsync(writer, deadline.Token);
@@ -185,6 +185,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     }
 
     /// <summary>Creates anonymous rows and a separately committed checkpoint, never production fixtures.</summary>
+    /// <param name="connectionString">The database receiving the sparse owner and writer checkpoint tables.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static Task SeedSparseDropConcurrencyAsync(
         string connectionString,
@@ -220,6 +221,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     };
 
     /// <summary>Checks every original ordinary value after a refused DROP.</summary>
+    /// <param name="connectionString">The test database whose original sparse-owner rows must remain intact.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static Task<int> SparseDropRetainedOriginalRowsAsync(
         string connectionString,

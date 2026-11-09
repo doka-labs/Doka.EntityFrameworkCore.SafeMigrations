@@ -776,11 +776,12 @@ public sealed partial class SqlServerComputedDropProjectionTests
 
         var mutation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
         var state = Live(
-            scenario == 7
-                ? SafeMigrationObservedState.Different
-                : scenario is 1 or 2
-                    ? SafeMigrationObservedState.Matching
-                    : SafeMigrationObservedState.Missing);
+            scenario switch
+            {
+                7 => SafeMigrationObservedState.Different,
+                1 or 2 => SafeMigrationObservedState.Matching,
+                _ => SafeMigrationObservedState.Missing,
+            });
 
         // Act
         if (scenario == 5)

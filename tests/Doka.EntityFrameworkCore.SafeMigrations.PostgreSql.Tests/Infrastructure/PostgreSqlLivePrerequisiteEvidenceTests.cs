@@ -120,6 +120,12 @@ public sealed class PostgreSqlLivePrerequisiteEvidenceTests
     [InlineData("kind")]
     [InlineData("backing")]
     [InlineData("width")]
+    [InlineData("dependent-oid-int32")]
+    [InlineData("principal-oid-uint64")]
+    [InlineData("principal-oid-float64")]
+    [InlineData("dependent-oid-zero")]
+    [InlineData("principal-oid-negative")]
+    [InlineData("dependent-oid-int64-min")]
     public async Task InvalidEvidencePublishesNothing(
         string fault
     )
@@ -163,6 +169,24 @@ public sealed class PostgreSqlLivePrerequisiteEvidenceTests
                         table
                             .Rows[^1][6] = "unexpected_backing"; break;
                     case "width": table.Columns.Add("unexpected", typeof(int)); break;
+                    case "dependent-oid-int32":
+                        table
+                            .Rows[^1][2] = 2000; break;
+                    case "principal-oid-uint64":
+                        table
+                            .Rows[^1][3] = 1000UL; break;
+                    case "principal-oid-float64":
+                        table
+                            .Rows[^1][3] = 1000D; break;
+                    case "dependent-oid-zero":
+                        table
+                            .Rows[^1][2] = 0L; break;
+                    case "principal-oid-negative":
+                        table
+                            .Rows[^1][3] = -1L; break;
+                    case "dependent-oid-int64-min":
+                        table
+                            .Rows[^1][2] = long.MinValue; break;
                 }
 
                 return table;

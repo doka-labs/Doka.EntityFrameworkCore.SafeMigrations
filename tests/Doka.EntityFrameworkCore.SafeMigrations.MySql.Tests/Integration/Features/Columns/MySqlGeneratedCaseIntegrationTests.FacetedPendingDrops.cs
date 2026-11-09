@@ -275,6 +275,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     }
 
     /// <summary>Seeds native facets independently of EF's candidate model and migration target.</summary>
+    /// <param name="connectionString">The test database receiving the native generated-column fixture.</param>
+    /// <param name="comment">The trusted fixture comment written on the generated column.</param>
+    /// <param name="collation">The native collation token selected by the test for the generated column.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static Task SeedFacetedPendingDropAsync(
         string connectionString,
@@ -307,6 +310,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     }
 
     /// <summary>Counts applied rows without assuming EF has already bootstrapped its history table.</summary>
+    /// <param name="connectionString">The test database whose migration history is counted.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<int> FacetedPendingHistoryRowsAsync(
         string connectionString,
@@ -330,6 +334,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     }
 
     /// <summary>Checks that native DDL did or did not remove the unrelated member.</summary>
+    /// <param name="connectionString">The test database whose unrelated column is located in the catalog.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static Task<int> FacetedPendingUnrelatedColumnsAsync(
         string connectionString,
@@ -341,6 +346,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         cancellationToken: cancellationToken);
 
     /// <summary>Checks row preservation, including unrelated values when the DROP is refused.</summary>
+    /// <param name="connectionString">The test database whose original rows are checked.</param>
+    /// <param name="includeUnrelated">Whether retained rows must also preserve the unrelated column's values.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static Task<int> FacetedPendingRetainedRowsAsync(
         string connectionString,

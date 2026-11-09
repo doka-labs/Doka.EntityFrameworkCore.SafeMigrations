@@ -213,9 +213,12 @@ public sealed class SqlServerRenameDestinationEvidenceTests
         Assert.Contains("[target] TRANSFER [dbo].[destination]", runtime, StringComparison.Ordinal);
         Assert.Contains(
             identifiers,
-            static identifier => identifier.Scope == SqlServerIdentifierScope.SchemaObject
-                && identifier.Schema == "dbo"
-                && identifier.Name == "destination");
+            static identifier => identifier is
+            {
+                Scope: SqlServerIdentifierScope.SchemaObject,
+                Schema: "dbo",
+                Name: "destination",
+            });
     }
 
     private static Task<SqlServerProjectedDependencyGraph> ReadGraphAsync(

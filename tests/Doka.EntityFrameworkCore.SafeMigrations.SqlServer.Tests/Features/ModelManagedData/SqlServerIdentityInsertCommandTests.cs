@@ -1136,8 +1136,7 @@ public sealed class SqlServerIdentityInsertCommandTests
                 throw new InvalidOperationException("identity acquisition is unproven");
             }
 
-            if (_connection.FailCleanup
-                && _connection.IdentityPhase == 2)
+            if (_connection is { FailCleanup: true, IdentityPhase: 2 })
             {
                 throw new InvalidOperationException("cleanup cannot recover this session");
             }

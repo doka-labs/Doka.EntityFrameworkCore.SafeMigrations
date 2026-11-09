@@ -6,10 +6,12 @@ internal sealed class SqliteSafeMigrationsOptionsExtension : IDbContextOptionsEx
 {
     private DbContextOptionsExtensionInfo? _info;
 
-    /// <inheritdoc />
+    /// <summary>Gets the baseline generator type registered for ordinary SQLite migration operations.</summary>
     public Type BaselineGeneratorType { get; private init; } = typeof(SqliteMigrationsSqlGenerator);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the context type owning migration discovery and history, or null to use the runtime context.
+    /// </summary>
     public Type? CanonicalContextType { get; private init; }
 
     /// <inheritdoc />

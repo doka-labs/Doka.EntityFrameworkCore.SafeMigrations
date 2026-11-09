@@ -620,8 +620,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
                     if (common == GeneratedCaseCategory.Unknown
                         && declared is null
-                        && binary.Left is SafeMigrationSqlIdentifierExpression first
-                        && binary.Right is SafeMigrationSqlIdentifierExpression second)
+                        && binary is
+                        {
+                            Left: SafeMigrationSqlIdentifierExpression,
+                            Right: SafeMigrationSqlIdentifierExpression,
+                        })
                     {
                         frame = new GeneratedCaseOperandFrame(
                             expression,
@@ -750,8 +753,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     SafeMigrationSqlNullTestExpression => GeneratedCaseCategory.Boolean,
                     SafeMigrationSqlUnaryExpression { Operator: SafeMigrationSqlUnaryOperator.Not }
                         => GeneratedCaseCategory.Boolean,
-                    SafeMigrationSqlBinaryExpression binary when binary.Operator
-                        is <= SafeMigrationSqlBinaryOperator.GreaterThanOrEqual => GeneratedCaseCategory.Boolean,
+                    SafeMigrationSqlBinaryExpression
+                        {
+                            Operator: <= SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+                        }
+                        => GeneratedCaseCategory.Boolean,
                     SafeMigrationSqlCastExpression cast => GeneratedCaseStoreCategory(cast.StoreType),
                     _ => GeneratedCaseCategory.Unknown,
                 };

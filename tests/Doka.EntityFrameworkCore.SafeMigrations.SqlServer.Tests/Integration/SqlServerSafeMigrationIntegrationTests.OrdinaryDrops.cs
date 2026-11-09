@@ -531,11 +531,12 @@ public sealed class SqlServerSafeMigrationOrdinaryDropIntegrationTests : SqlServ
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn("ordinary_drop_nodes", definition, SafeMigrationPolicy.ThrowIfDifferent);
         builder.DropIndexIfExists(
-            scenario == 0
-                ? "IX_missing"
-                : scenario == 4
-                    ? "PK_ordinary_L"
-                    : "IX_ordinary_L",
+            scenario switch
+            {
+                0 => "IX_missing",
+                4 => "PK_ordinary_L",
+                _ => "IX_ordinary_L",
+            },
             scenario == 1
                 ? "other_nodes"
                 : "ordinary_drop_nodes");

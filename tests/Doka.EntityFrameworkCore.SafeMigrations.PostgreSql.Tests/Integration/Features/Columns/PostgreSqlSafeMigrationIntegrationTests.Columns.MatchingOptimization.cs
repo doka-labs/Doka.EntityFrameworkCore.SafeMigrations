@@ -71,12 +71,11 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
             [operation],
             CancellationToken.None));
 
-        var replayFailure = failure is null
-            ? await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+        var replayFailure = failure
+            ?? await Record.ExceptionAsync(() => ExecuteOperationsAsync(
                 context,
                 [operation],
-                CancellationToken.None))
-            : failure;
+                CancellationToken.None));
 
         var analysis = await context
             .GetService<ISafeMigrationProviderAnalyzer>()

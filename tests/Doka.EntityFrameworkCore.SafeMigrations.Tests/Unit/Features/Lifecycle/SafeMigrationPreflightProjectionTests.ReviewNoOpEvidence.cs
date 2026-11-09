@@ -241,6 +241,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
     /// <summary>An accepted standalone CHECK has an owner even without prior table or column convergence.</summary>
     /// <param name="sameExpression">Whether the next request repeats the accepted expression.</param>
+    /// <param name="expectedState">The expected projection state when comparing against the accepted CHECK.</param>
     [Theory]
     [InlineData(false, SafeMigrationObservedState.Different)]
     [InlineData(true, SafeMigrationObservedState.Matching)]

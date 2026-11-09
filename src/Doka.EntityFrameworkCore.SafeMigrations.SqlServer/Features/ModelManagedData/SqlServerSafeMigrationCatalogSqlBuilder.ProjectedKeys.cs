@@ -194,9 +194,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     if (IsAnsiManagedStoreType(mapping.StoreType)
                         && value is string or char)
                     {
-                        var text = value is string stringValue
-                            ? stringValue
-                            : ((char)value).ToString();
+                        var text = value as string ?? ((char)value).ToString();
 
                         if (!AddGuard(
                             ManagedAnsiValueRepresentationGuard(
@@ -383,8 +381,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             : null;
 
         bool AddGuard(
-            string guard
-        ) => !valueGuards.Add(guard) || Accumulate(guard);
+            string valueGuard
+        ) => !valueGuards.Add(valueGuard) || Accumulate(valueGuard);
 
         bool Accumulate(
             string fragment

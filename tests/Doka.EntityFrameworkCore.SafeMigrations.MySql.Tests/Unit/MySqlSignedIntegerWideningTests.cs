@@ -75,11 +75,12 @@ public sealed class MySqlSignedIntegerWideningTests
             comment: facet == "comment"
                 ? "changed"
                 : null,
-            defaultValue: facet == "default"
-                ? SafeMigrationDefaultValue.Literal(1L)
-                : facet == "sql_default"
-                    ? SafeMigrationDefaultValue.Sql("1")
-                    : null,
+            defaultValue: facet switch
+            {
+                "default" => SafeMigrationDefaultValue.Literal(1L),
+                "sql_default" => SafeMigrationDefaultValue.Sql("1"),
+                _ => null,
+            },
             computedColumnSql: facet == "computed"
                 ? "1"
                 : null)

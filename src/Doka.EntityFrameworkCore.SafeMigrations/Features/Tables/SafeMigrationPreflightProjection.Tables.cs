@@ -29,18 +29,18 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (IsProjectedTableStructureUnknown(intent.Definition.Table, intent.Definition.Schema))
         {
-            return intent.Mode == SafeMigrationTableMode.ConvergenceContainer
-                && intent.Definition.ProviderAnnotations.Count == 0
-                    ? Analysis(SafeMigrationObservedState.Matching)
-                    : StructureStateUnknown();
+            return intent is
+                { Mode: SafeMigrationTableMode.ConvergenceContainer, Definition.ProviderAnnotations.Count: 0 }
+                ? Analysis(SafeMigrationObservedState.Matching)
+                : StructureStateUnknown();
         }
 
         if (!TryGet(intent.Definition.Table, intent.Definition.Schema, out var table))
         {
             if (_prerequisites.TryGetValue(key, out var prerequisites))
             {
-                if (intent.Mode == SafeMigrationTableMode.ConvergenceContainer
-                    && intent.Definition.ProviderAnnotations.Count == 0)
+                if (intent is
+                    { Mode: SafeMigrationTableMode.ConvergenceContainer, Definition.ProviderAnnotations.Count: 0 })
                 {
                     return Analysis(SafeMigrationObservedState.Matching);
                 }

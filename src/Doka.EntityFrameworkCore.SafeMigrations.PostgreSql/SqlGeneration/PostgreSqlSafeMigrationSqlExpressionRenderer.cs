@@ -313,8 +313,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
                 if (writer.NativeLiteralForms
                     && value.StoreType is null
-                    && value.Value is long number
-                    && number is < int.MinValue or > int.MaxValue
+                    && value.Value is long and (< int.MinValue or > int.MaxValue)
                     && TryAppendNativeIntegerConstant(
                         writer,
                         new SafeMigrationSqlCastExpression(value, "bigint"),

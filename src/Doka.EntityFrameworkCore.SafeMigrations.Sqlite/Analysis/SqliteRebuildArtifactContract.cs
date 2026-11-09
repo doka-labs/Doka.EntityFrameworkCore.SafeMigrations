@@ -524,16 +524,14 @@ internal sealed class SqliteRebuildArtifactContract
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = currentIndex - 1; index >= 0; index--)
         {
-            switch (_operations[index])
+            result = _operations[index] switch
             {
-                case SafeMigrationOperation { Intent: RenameTableIntent value }
-                    when s_identifierComparer.Equals(value.NewName ?? value.Name, result):
-                    result = value.Name;
-                    break;
-                case RenameTableOperation value when s_identifierComparer.Equals(value.NewName ?? value.Name, result):
-                    result = value.Name;
-                    break;
-            }
+                SafeMigrationOperation { Intent: RenameTableIntent value }
+                    when s_identifierComparer.Equals(value.NewName ?? value.Name, result) => value.Name,
+                RenameTableOperation value
+                    when s_identifierComparer.Equals(value.NewName ?? value.Name, result) => value.Name,
+                _ => result,
+            };
         }
 
         return result;

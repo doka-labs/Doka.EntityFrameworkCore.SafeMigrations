@@ -239,8 +239,11 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             return projectedAnalysis;
         }
 
-        if (projectedAnalysis.ObservedState == SafeMigrationObservedState.Unsupported
-            && projectedAnalysis.Code is not ("generated_column_drop_dependency" or "generated_column_drop_unproven"))
+        if (projectedAnalysis is
+            {
+                ObservedState: SafeMigrationObservedState.Unsupported,
+                Code: not ("generated_column_drop_dependency" or "generated_column_drop_unproven"),
+            })
         {
             return projectedAnalysis;
         }

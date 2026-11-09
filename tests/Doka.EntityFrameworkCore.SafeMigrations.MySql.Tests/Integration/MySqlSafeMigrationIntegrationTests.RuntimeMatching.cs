@@ -594,6 +594,7 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Reads only bounded counters that cleanup intentionally does not own.</summary>
+    /// <param name="context">The caller-owned context retaining the instrumented session's matching counters.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     protected static async Task<RuntimeMatchingVisits> ReadRuntimeMatchingVisitsAsync(
         DbContext context,

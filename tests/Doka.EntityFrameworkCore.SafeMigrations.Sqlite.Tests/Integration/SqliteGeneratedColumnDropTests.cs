@@ -1599,6 +1599,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Creates one physical catalog independently of migration generation or model wishes.</summary>
+    /// <param name="connection">The caller-owned connection receiving the native drop-column fixture.</param>
+    /// <param name="expression">The trusted generated-column expression defining the physical dependency.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static Task CreateNativeTableAsync(
         SqliteConnection connection,
@@ -1613,6 +1615,7 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         cancellationToken: cancellationToken);
 
     /// <summary>Captures the complete native table SQL so refusal cannot silently rebuild the owner.</summary>
+    /// <param name="connection">The caller-owned connection whose drop_nodes table definition is read.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task<string> ReadSchemaAsync(
         SqliteConnection connection,

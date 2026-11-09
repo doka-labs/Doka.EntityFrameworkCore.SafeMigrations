@@ -787,11 +787,12 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         // Assert
         var candidate = Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<SafeMigrationLiveCandidateKey>>(original));
         Assert.Equal(
-            keyKind == "PK"
-                ? SafeMigrationDatabaseObjectKind.PrimaryKey
-                : keyKind == "UQ"
-                    ? SafeMigrationDatabaseObjectKind.UniqueConstraint
-                    : SafeMigrationDatabaseObjectKind.Index,
+            keyKind switch
+            {
+                "PK" => SafeMigrationDatabaseObjectKind.PrimaryKey,
+                "UQ" => SafeMigrationDatabaseObjectKind.UniqueConstraint,
+                _ => SafeMigrationDatabaseObjectKind.Index,
+            },
             candidate.Kind);
 
         Assert.Equal(
@@ -941,17 +942,16 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         Accept(projection, create, Missing());
         foreach (var change in changes)
         {
-            var state = change.Intent is EnsureColumnIntent
-                or EnsurePrimaryKeyIntent
-                or EnsureModelManagedDataIntent
-                ? Missing()
-                : change.Intent is AlterColumnIntent
-                    ? new SafeMigrationProviderAnalysis(
-                        SafeMigrationObservedState.Different,
-                        SafeMigrationRepairCapability.Safe,
-                        false,
-                        "classified_different")
-                    : Live(SafeMigrationObservedState.Matching);
+            var state = change.Intent switch
+            {
+                EnsureColumnIntent or EnsurePrimaryKeyIntent or EnsureModelManagedDataIntent => Missing(),
+                AlterColumnIntent => new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.Different,
+                    SafeMigrationRepairCapability.Safe,
+                    false,
+                    "classified_different"),
+                _ => Live(SafeMigrationObservedState.Matching),
+            };
 
             Accept(projection, change, state);
         }

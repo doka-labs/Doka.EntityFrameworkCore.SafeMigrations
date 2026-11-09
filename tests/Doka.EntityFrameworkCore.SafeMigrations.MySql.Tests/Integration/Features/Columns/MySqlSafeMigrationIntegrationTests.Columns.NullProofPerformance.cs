@@ -185,6 +185,7 @@ public sealed class MySqlColumnsNullProofPerformanceIntegrationTests : MySqlSafe
     }
 
     /// <summary>Reads the selected session's full-scan counter without retaining SQL or connection details.</summary>
+    /// <param name="connection">The caller-owned open session whose row-read counter is sampled.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<long> ReadNullProofHandlerReadsAsync(
         DbConnection connection,
@@ -205,6 +206,8 @@ public sealed class MySqlColumnsNullProofPerformanceIntegrationTests : MySqlSafe
     }
 
     /// <summary>Executes only proof/classification statements against an already qualified synthetic table.</summary>
+    /// <param name="connection">The caller-owned open session used for the measured proof statements.</param>
+    /// <param name="sql">The trusted proof or classification SQL to execute within the measurement window.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task ExecuteNullProofMeasurementSqlAsync(
         DbConnection connection,

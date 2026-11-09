@@ -418,6 +418,8 @@ public sealed class MySqlTablesCatalogSnapshotSafetyIntegrationTests : MySqlSafe
     }
 
     /// <summary>Executes test-owned transaction commands on the exact analyzer connection.</summary>
+    /// <param name="connection">The caller-owned analyzer session on which transaction state is changed.</param>
+    /// <param name="sql">The trusted fixture command controlling the snapshot transaction.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task ExecuteSnapshotCommandAsync(
         DbConnection connection,

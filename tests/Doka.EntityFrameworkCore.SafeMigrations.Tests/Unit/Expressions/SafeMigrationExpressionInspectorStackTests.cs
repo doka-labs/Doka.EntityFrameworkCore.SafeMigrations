@@ -183,11 +183,12 @@ public sealed class SafeMigrationExpressionInspectorStackTests
         var expected = names[..^1]
             .Append("target");
 
-        expected = shape == "in"
-            ? expected.Prepend("operand")
-            : shape == "case"
-                ? expected.Append("fallback")
-                : expected;
+        expected = shape switch
+        {
+            "in" => expected.Prepend("operand"),
+            "case" => expected.Append("fallback"),
+            _ => expected,
+        };
 
         var collected = new RecordingSet();
 

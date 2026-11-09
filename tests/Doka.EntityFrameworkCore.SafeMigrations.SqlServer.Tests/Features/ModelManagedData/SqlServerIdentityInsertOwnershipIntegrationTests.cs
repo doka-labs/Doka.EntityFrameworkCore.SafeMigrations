@@ -583,6 +583,8 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
     }
 
     /// <summary>Executes a caller-state probe directly so provider recovery cannot hide the assertion.</summary>
+    /// <param name="session">The caller-owned open session whose state is probed without provider interception.</param>
+    /// <param name="sql">The trusted fixture statement used to establish or inspect caller session state.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task RunSessionSqlAsync(
         SqlConnection session,
@@ -599,6 +601,7 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
     }
 
     /// <summary>Reads only the ownership marker, without modifying it or testing unrelated session settings.</summary>
+    /// <param name="session">The caller-owned open session whose identity-insert ownership marker is inspected.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task<bool> ReadMarkerIsNullAsync(
         SqlConnection session,

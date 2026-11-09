@@ -259,6 +259,10 @@ public sealed class SqlServerLiveQualificationEvidenceTests
     }
 
     /// <summary>Waits for the peer listener before recording a phase under its own workload trace.</summary>
+    /// <param name="path">The test-owned output path for this workload's captured analysis-stage evidence.</param>
+    /// <param name="operationCount">The operation count attached to the emitted catalog-batch stage.</param>
+    /// <param name="started">Signals listener readiness, or releases the peer with a startup failure.</param>
+    /// <param name="peerStarted">The peer listener's readiness task awaited before emitting the stage.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     /// <param name="createCapture">
     /// An optional isolated constructor-failure probe; otherwise creates the real listener.

@@ -257,6 +257,7 @@ public sealed class SqlServerScalarProofRegressionTests
     }
 
     /// <summary>Skipped classifier and default scopes must not bind missing objects or invalid collations.</summary>
+    /// <param name="connection">The caller-owned open session on which skipped-scope binding is tested.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task VerifyNameAndCollationGatesAsync(
         SqlConnection connection,
@@ -301,6 +302,7 @@ public sealed class SqlServerScalarProofRegressionTests
     }
 
     /// <summary>False or NULL support proofs reject before compiling later proofs.</summary>
+    /// <param name="connection">The caller-owned open session used to execute the support-rejection plans.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task VerifySupportRejectionsAsync(
         SqlConnection connection,
@@ -362,6 +364,7 @@ public sealed class SqlServerScalarProofRegressionTests
     }
 
     /// <summary>Layout outputs retain their declared width, and outer guard failures retain state and code.</summary>
+    /// <param name="connection">The caller-owned open session used to inspect layout and outer-guard results.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task VerifyLayoutAndOuterFallbackAsync(
         SqlConnection connection,
@@ -405,6 +408,8 @@ public sealed class SqlServerScalarProofRegressionTests
     }
 
     /// <summary>Native dispatchers re-evaluate equal templates with private preambles and max sources.</summary>
+    /// <param name="connection">The caller-owned batch-capable session used for native catalog captures.</param>
+    /// <param name="mappings">The provider mappings used to bind distinct numeric and Unicode source values.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task VerifyFreshSourcesAndPrivateScopesAsync(
         SqlConnection connection,
@@ -493,6 +498,8 @@ public sealed class SqlServerScalarProofRegressionTests
     }
 
     /// <summary>Every source participates in a real boundary proof, including the final source.</summary>
+    /// <param name="connection">The caller-owned open session used to execute the maximum-source proof.</param>
+    /// <param name="mappings">The provider mappings used to bind every source in the boundary plan.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task VerifyMaximumSourcesAsync(
         SqlConnection connection,
@@ -525,6 +532,7 @@ public sealed class SqlServerScalarProofRegressionTests
     }
 
     /// <summary>Cancels a running scalar metadata query with one owned session and no time-delay SQL.</summary>
+    /// <param name="connection">The caller-owned open session used to test native scalar-query cancellation.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task VerifyScalarCancellationAsync(
         SqlConnection connection,
@@ -596,6 +604,11 @@ public sealed class SqlServerScalarProofRegressionTests
         => CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
     /// <summary>Executes one complete classifier and checks its single owned raw result.</summary>
+    /// <param name="connection">The caller-owned open session used to execute the delayed classifier.</param>
+    /// <param name="plan">The complete runtime plan supplying classifier SQL and bound source parameters.</param>
+    /// <param name="ordinal">The operation ordinal emitted by the classifier and required in its result.</param>
+    /// <param name="state">The expected raw classifier state.</param>
+    /// <param name="code">The expected raw diagnostic code, or null when no code is expected.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task AssertResultAsync(
         SqlConnection connection,

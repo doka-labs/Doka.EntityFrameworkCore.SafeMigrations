@@ -194,8 +194,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             return;
         }
 
-        if (liveAnalysis.ObservedState == SafeMigrationObservedState.Matching
-            && liveAnalysis.MatchedObjectName is { } physicalName
+        if (liveAnalysis is { ObservedState: SafeMigrationObservedState.Matching, MatchedObjectName: { } physicalName }
             && definitions.BindAlias(name, physicalName, definition))
         {
             return;
@@ -594,8 +593,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         var columns = foreignKey.PrincipalColumns;
-        if (prerequisites.PrimaryKeyCreatedByProjection
-            && prerequisites.PrimaryKey is { } primary
+        if (prerequisites is { PrimaryKeyCreatedByProjection: true, PrimaryKey: { } primary }
             && SameColumns(primary.Columns, columns, _objectIdentityNormalizer))
         {
             return true;

@@ -335,7 +335,12 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     }
 
     /// <summary>Creates independent engine fixtures rather than reproducing the verifier's SQL predicates.</summary>
+    /// <param name="connection">The caller-owned connection receiving tooling tables and migration history.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
+    /// <param name="baselineOnly">Whether to omit transition history and retain the baseline column layout.</param>
+    /// <param name="includeGeneratedTable">Whether to create the generated-column table and supporting index.</param>
+    /// <param name="generatedExpression">The generated expression override, or null for canonical bounds.</param>
+    /// <param name="checkExpression">The bounds CHECK expression, or null to omit that constraint.</param>
     private static async Task CreateFixtureAsync(
         SqliteConnection connection,
         CancellationToken cancellationToken,

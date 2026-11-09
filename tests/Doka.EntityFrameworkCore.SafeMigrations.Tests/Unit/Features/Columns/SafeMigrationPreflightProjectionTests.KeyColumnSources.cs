@@ -401,11 +401,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             ? "ITEMS"
             : "items";
 
-        var schema = boundary == "schema-case"
-            ? "APP"
-            : boundary == "schema-other"
-                ? "archive"
-                : "app";
+        var schema = boundary switch
+        {
+            "schema-case" => "APP",
+            "schema-other" => "archive",
+            _ => "app",
+        };
 
         KeyColumnObserveSources(projection, source, KeyColumnSource("question"), schema: "app");
         ObserveAccepted(
@@ -681,9 +682,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             PreservationQueries++;
 
             return intent is DropForeignKeyIntent or DropPrimaryKeyIntent
-                || (intent is EnsureIndexIntent index
-                    && !index.Definition.Unique
-                    && index.Definition.Method == "BTREE"
+                || (intent is EnsureIndexIntent { Definition: { Unique: false, Method: "BTREE" } } index
                     && index.Definition.Keys.All(static key => key.Column is not null));
         }
 
@@ -733,8 +732,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         {
             ValidationQueries++;
 
-            if (context.HasCompleteTable
-                && context.ProvesEmpty)
+            if (context is { HasCompleteTable: true, ProvesEmpty: true })
             {
                 return projectedAnalysis;
             }
@@ -829,8 +827,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             && SafeMigrationDefinitionEquivalence.Column(source, KeyColumnSource(source.Name, source.IsNullable))
             && (liveAnalysis.ObservedState == SafeMigrationObservedState.Matching
                 ? SafeMigrationDefinitionEquivalence.Column(source, target)
-                : liveAnalysis.ObservedState == SafeMigrationObservedState.Different
-                && liveAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe
+                : liveAnalysis is
+                {
+                    ObservedState: SafeMigrationObservedState.Different,
+                    RepairCapability: SafeMigrationRepairCapability.Safe,
+                }
                 && SafeMigrationDefinitionEquivalence.Column(
                     target,
                     KeyColumnSource(source.Name, !source.IsNullable)));
