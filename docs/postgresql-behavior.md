@@ -1,8 +1,8 @@
 # PostgreSQL behavior
 
-Version 10.7.0 retains the certified generated/CHECK contracts and native
+Version 10.7.1 retains the certified generated/CHECK contracts and native
 generated-source DROP guards introduced in 10.6.0. Review the
-[current upgrade notes](support-and-qualification.md#upgrade-to-1070) for required
+[current upgrade notes](support-and-qualification.md#upgrade-to-1071) for required
 cancellation arguments and dependency floors, and the earlier
 [10.6.0 contract changes](support-and-qualification.md#upgrade-to-1060) for
 conditional fingerprint approvals and conservative boundaries.

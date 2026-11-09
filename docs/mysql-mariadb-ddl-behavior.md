@@ -1,9 +1,10 @@
 # MySQL and MariaDB DDL behavior
 
-Version 10.7.0 retains the certified generated/CHECK contracts and native
-independent DROP proofs introduced in 10.6.0. Review the
-[current upgrade notes](support-and-qualification.md#upgrade-to-1070) for required
-cancellation arguments and dependency floors, and the earlier
+Version 10.7.1 preserves explicit InnoDB table contracts through existing typed
+table callbacks and retains the certified generated/CHECK contracts
+and native independent DROP proofs introduced in 10.6.0. Review the
+[current upgrade notes](support-and-qualification.md#upgrade-to-1071) for table
+metadata, required cancellation arguments and dependency floors, and the earlier
 [10.6.0 contract changes](support-and-qualification.md#upgrade-to-1060) for
 conditional fingerprint approvals and conservative boundaries.
 
@@ -70,23 +71,26 @@ atomic migration transaction.
 
 An explicitly mapped `UseStorageEngine("InnoDB")` requirement is retained
 through safe scaffolding, the snapshot, native creation and catalog checks.
-Annotated tables use a complete operation-factory capture so table annotations
-are applied before the immutable expected definition is created. For example:
+The internal scaffolder places table annotations inside the existing typed
+`constraints` callback so they are applied before the immutable expected
+definition is created. No public overload is added. For example:
 
 ```csharp
-migrationBuilder.CreateTableIfNotExistsFromModel(
-    operationFactory: static operationBuilder => operationBuilder.CreateTable(
-        name: "EngineNodes",
-        columns: table => new
-        {
-            Id = table.Column<long>(type: "bigint", nullable: false),
-        },
-        constraints: table => table.PrimaryKey("PK_EngineNodes", row => row.Id))
-        .Annotation("Doka:MySql:StorageEngine", "InnoDB"),
+migrationBuilder.CreateTableIfNotExists(
+    name: "EngineNodes",
+    columns: table => new
+    {
+        Id = table.Column<long>(type: "bigint", nullable: false),
+    },
+    constraints: table =>
+    {
+        table.PrimaryKey("PK_EngineNodes", row => row.Id);
+        table.Annotation("Doka:MySql:StorageEngine", "InnoDB");
+    },
     policy: SafeMigrationPolicy.ThrowIfDifferent);
 ```
 
-Legacy scaffolding uses the corresponding `ConvergeTableFromModel` factory
+Legacy scaffolding uses the existing typed `ConvergeTableFromModel` callback
 overload with an explicit policy. Existing unannotated table builders remain
 supported. Attaching arbitrary annotations to an already frozen safe operation
 is not a substitute for complete capture.

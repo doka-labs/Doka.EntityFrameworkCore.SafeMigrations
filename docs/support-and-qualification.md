@@ -2,12 +2,15 @@
 
 ## Support contract
 
-Version 10.7.0 requires explicit cancellation tokens on owned asynchronous
-APIs and uses BenchmarkDotNet for engineering measurements. It retains
-.NET/EF Core 10, migration policies, SQL, report/fingerprint formats and
-historical migrations. This source/API contract change is intentionally
-released within 10.x; it is not strictly SemVer-compatible. No additional
-database schema migration is required solely for this upgrade.
+Version 10.7.1 corrects explicit InnoDB contracts and atomic SQLite
+retirement/rebuild behavior through the existing public APIs. It retains
+.NET/EF Core 10, public signatures, report schemas and fingerprint formats.
+Review the [10.7.1 upgrade](#upgrade-to-1071) for the provider boundaries.
+
+Version 10.7.0 introduced required cancellation tokens on owned asynchronous
+APIs and BenchmarkDotNet for engineering measurements. Removing public optional-
+token defaults was an intentional source-breaking exception within 10.x, not a
+strictly SemVer-compatible change. Version 10.7.1 retains those requirements.
 
 Version 10.6.0 introduced public CASE expressions, certified generated-column
 and CHECK support, lossless signed-integer upgrades, ordered projection/DROP
@@ -23,6 +26,51 @@ MySQL/MariaDB callers must account for the owned-guard outer exception type;
 see [diagnostic compatibility](diagnostics.md#runtime-provider-differences).
 Native qualification still requires the complete blocking matrix; ARM SQL Server
 skips and offline SQL-shape tests are not substitutes for its x64 cells.
+
+## Upgrade to 10.7.1
+
+Keep every installed SafeMigrations package on version 10.7.1 and install only
+the adapters needed by the application. The MySQL/MariaDB adapter requires
+Doka `[10.6.5,10.7.0)` and retains MySqlConnector minimum 2.6.2. EF Core,
+dependency-injection and SQL Server transport floors are unchanged from 10.7.0;
+provider dependencies remain isolated.
+
+Public APIs and their shipped baselines remain unchanged from 10.7.0. The
+internal scaffolder places certified table annotations inside the existing
+typed `constraints` callback before immutable capture. The existing
+`CreateTableIfNotExists<TColumns>` and `ConvergeTableFromModel<TColumns>` methods
+retain their signatures and policy defaults. No new callback, factory overload,
+configuration option or application wrapper is required.
+
+MySQL/MariaDB now preserves an explicitly authored InnoDB requirement through
+safe scaffolding, capture, DDL, projection and catalog checks. Unrelated provider
+metadata and unsupported storage engines remain rejected; no existing table is
+automatically converted. Review newly scaffolded annotation placement and its
+captured contract rather than rewriting deployed migration history. An explicitly
+captured engine participates in the authored contract fingerprint; an unchanged
+fingerprint format is not permission to reuse an approval for a changed contract.
+See [explicit InnoDB contracts](mysql-mariadb-ddl-behavior.md#explicit-innodb-table-contracts).
+
+SQLite can remove an explicitly dropped FK on an owner certified to retire
+within the same atomic structural window, including private populated cycles
+absent from the final model. Surviving references, unsupported artifacts and
+unmodeled retained owners still block. Safe rebuilds preserve native retained
+column order unless explicitly overridden by model `ColumnOrder`; fresh owners
+and ordinary EF lifetimes keep their provider semantics. See
+[retiring-table foreign keys](sqlite-behavior.md#foreign-keys-on-retiring-tables).
+
+PostgreSQL and SQL Server migration contracts are unchanged by these fixes.
+Report schemas, diagnostic transport and fingerprint formats remain unchanged;
+newly authored metadata is still part of its captured contract. Updating packages
+alone requires no additional database migration or approval bypass. Runtime
+guards, recovery, history, native qualification and coverage remain mandatory.
+Action/image updates retain the existing engine lines and required checks;
+C# cleanup claims no measured performance improvement.
+
+Applications upgrading from before 10.7.0 must also apply its
+[required-token source changes](#upgrade-to-1070), including the documented
+SemVer exception. Earlier [10.6.0 approval boundaries](#upgrade-to-1060) still
+apply; never reuse an obsolete approval or rewrite historical evidence.
 
 ## Upgrade to 10.7.0
 
@@ -92,7 +140,7 @@ gates remain mandatory; see the [publication runbook](operations/release-publica
 ## Upgrade to 10.6.0
 
 The 10.6.0 minor release introduced the following boundaries. They also apply
-when upgrading an older application directly to 10.7.0. Keep all installed
+when upgrading an older application directly to 10.7.1. Keep all installed
 SafeMigrations packages on the selected shared version and review newly
 scaffolded implicit index-length changes without rewriting historical migrations.
 
@@ -254,12 +302,14 @@ The SQL Server project supplies the fifth lockfile. Releases 10.4.2 through
 10.4.5 contain four package artifacts; their inventory remains unchanged.
 
 The five-package set began with stable 10.4.6, including the optional SQL Server
-provider. Version 10.7.0 retains that inventory and the SQL Server-only PKCS
+provider. Version 10.7.1 retains that inventory and the SQL Server-only PKCS
 minimum of 9.0.22. The Core API baseline includes the additive
 CASE surface introduced in 10.6.0; the diagnostic surface began in 10.5.0.
 Version 10.7.0 replaces ten optional-token declarations with required-token
 declarations in the shipped baseline; it does not add an overload or restore
-the removed defaults. The current Doka
+the removed defaults. Version 10.7.1 retains that shipped baseline exactly;
+its table metadata correction adds no public declaration.
+The current Doka
 dependency contract is the 10.6 line above. Qualification requires the blocking
 workflow, including all three native x86-64 SQL Server cells. The
 [publication runbook](operations/release-publication.md) owns the five-package

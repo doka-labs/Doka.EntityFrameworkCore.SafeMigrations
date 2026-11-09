@@ -6,6 +6,17 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [10.7.1] - 2026-11-09
+
+Version 10.7.1 preserves explicit InnoDB contracts and corrects atomic SQLite
+table retirement and rebuild order. All five packages retain .NET/EF Core 10.
+The fixes use existing public APIs; public signatures, cancellation requirements,
+report schemas and fingerprint formats remain unchanged from 10.7.0. The
+MySQL/MariaDB adapter requires Doka 10.6.5.
+Review the [upgrade notes](docs/support-and-qualification.md#upgrade-to-1071)
+before deploying existing or newly scaffolded migrations. Updating the packages
+alone does not require an additional database migration or rewrite history.
+
 ### Changed
 
 - Raise the MySQL/MariaDB provider's Doka dependency to `[10.6.5,10.7.0)`
@@ -15,6 +26,11 @@ the shared release identity described in [Release process](docs/release-process.
   Refresh the rebuilt MySQL and PostgreSQL image digests while preserving
   server patch versions, supported engine lines and required qualification gates.
   Keep serviced dependency floors, provider isolation and SDK selection unchanged.
+- Align Rider formatting and simplify verified C# patterns, conditionals,
+  reference qualification and redundant initialization across Core, providers,
+  tests and benchmarks. Complete XML documentation and preserve linked-source
+  compilation, exact numeric/nullable semantics and cleanup ownership. This
+  cleanup claims no measured performance improvement or migration-policy change.
 
 ### Fixed
 

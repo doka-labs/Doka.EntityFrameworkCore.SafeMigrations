@@ -16,16 +16,17 @@ SafeMigrations publishes these package IDs at one version:
 - `Doka.EntityFrameworkCore.SafeMigrations.SqlServer`.
 
 Stable 10.4.6 introduced this five-package inventory; releases 10.4.2 through
-10.4.5 retain their historical four-package set. Version 10.7.0 keeps the shared
-.NET/EF Core 10 identity, requires explicit cancellation arguments and uses
-BenchmarkDotNet for engineering measurements. The
-[changelog](../CHANGELOG.md#1070---2026-11-06) and
-[upgrade notes](support-and-qualification.md#upgrade-to-1070) record current
-consumer requirements. Removing public optional-token defaults is a deliberate
-source-breaking exception within 10.x, not a strictly SemVer-compatible minor
-change. CLR method signatures, migration policies, report schemas and
-fingerprint formats remain. Applications upgrading from before 10.6.0 must
-still review its
+10.4.5 retain their historical four-package set. Version 10.7.1 keeps the shared
+.NET/EF Core 10 identity and corrects table metadata and SQLite retirement
+internally, without changing existing public APIs. It retains explicit
+cancellation arguments and BenchmarkDotNet for engineering measurements. The
+[changelog](../CHANGELOG.md#1071---2026-11-09) and
+[upgrade notes](support-and-qualification.md#upgrade-to-1071) record current
+consumer requirements. The earlier removal of public optional-token defaults in
+10.7.0 is a deliberate source-breaking exception within 10.x, not a strictly
+SemVer-compatible minor change. Existing CLR method signatures, migration
+policies, report schemas and fingerprint formats remain. Applications upgrading
+from before 10.6.0 must still review its
 [computed/CHECK approval boundaries](support-and-qualification.md#upgrade-to-1060).
 Do not carry an obsolete contract approval forward or rewrite historical
 migrations. Timing comparisons stay informational; functional and evidence

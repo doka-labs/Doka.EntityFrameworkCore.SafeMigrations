@@ -132,6 +132,12 @@ break within the retained 10.x line, not a claim of strict SemVer compatibility.
 See the [10.7.0 upgrade notes](support-and-qualification.md#upgrade-to-1070).
 Framework-owned overrides, report schemas and fingerprint formats are unchanged.
 
+Version 10.7.1 retains the 10.7.0 public API and shipped baselines. Its internal
+table-scaffolding correction uses the existing typed `constraints` callback
+to apply certified annotations before immutable capture. No public factory
+overload, constructor parameter or configuration option is added. See the
+[10.7.1 upgrade notes](support-and-qualification.md#upgrade-to-1071).
+
 The current MySQL/MariaDB adapter requires Doka `[10.6.5,10.7.0)` and
 MySqlConnector minimum 2.6.2; EF Core and dependency-injection minimums are
 10.0.14. SQL Server requires SqlClient minimum 6.1.8 and PKCS minimum 9.0.22.
@@ -473,6 +479,13 @@ same object-granular contract without a hand-authored
 EF's generated single- or multi-column index call. They remain public so
 scaffolded migration source has a stable package target. Hand-written
 migrations normally use `CreateIndexIfNotExists` or `EnsureIndex` for indexes.
+For certified table metadata, the generated typed `constraints` callback applies
+annotations to its EF `CreateTableBuilder<TColumns>` before immutable capture.
+Annotations appended after the safe method returns are on the outer safe
+operation, not on that captured table definition. Generated legacy convergence
+continues to freeze its selected policy explicitly. See the
+[explicit InnoDB example](mysql-mariadb-ddl-behavior.md#explicit-innodb-table-contracts).
+
 The two prefix-aware methods accept exactly one non-negative entry per key.
 Zero captures a complete key and a positive value becomes the key's explicit
 prefix length. They exist so provider-projected migration source does not leak
@@ -531,12 +544,12 @@ calls exceeding either bound reject during construction.
 
 ## Expected definitions
 
-Provider-certified table metadata can be captured using
-`CreateTableIfNotExistsFromModel` with an `Action<MigrationBuilder>` factory.
-The factory must append exactly one ordinary table operation, including its
-annotations, before capture. Legacy convergence has a corresponding
-`ConvergeTableFromModel` factory overload with an explicit policy. Existing
-constructors and typed unannotated table builders retain their signatures.
+Provider-certified table metadata is captured through the existing typed
+`constraints` callbacks of `CreateTableIfNotExists<TColumns>` and
+`ConvergeTableFromModel<TColumns>`. Set the annotation on the callback's EF
+table builder before the method freezes its expected definition; do not append
+it to the outer safe-operation builder after capture. Existing constructors,
+public signatures and policy defaults remain unchanged.
 The [MySQL table contract](mysql-mariadb-ddl-behavior.md#explicit-innodb-table-contracts)
 currently certifies explicit InnoDB storage; no general annotation passthrough
 or cross-provider interpretation is authorized.

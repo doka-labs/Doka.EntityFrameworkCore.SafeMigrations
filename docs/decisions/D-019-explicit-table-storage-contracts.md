@@ -48,10 +48,12 @@ contract. This record proposes the implementation architecture for review;
 implementation authorization does not itself establish architectural approval.
 
 Reuse Core's immutable provider-annotation representation on expected tables.
-Capture the complete annotated operation through an operation-factory table
-builder before freezing the definition. Reconstruct native annotations from
-that owned snapshot, and preserve them across expression normalization,
-renames and ordered projection. Fingerprint extensions are conditional on
+Apply certified table annotations inside the existing typed `constraints`
+callback before freezing the definition. The internal source generator retains
+EF's annotation-literal rendering and moves its complete table annotations into
+that callback; it adds no public overload or consumer obligation. Reconstruct
+native annotations from that owned snapshot, and preserve them across expression
+normalization, renames and ordered projection. Fingerprint extensions are conditional on
 nonempty metadata, preserving the existing empty-contract encoding.
 
 The MySQL adapter certifies the bounded InnoDB annotation only. Its table
@@ -73,8 +75,9 @@ This bounded identity normalization does not weaken table creation or matching.
 - Good, because the same storage promise governs scaffold, apply and replay.
 - Good, because the existing table predicate can verify the engine without an
   additional per-table database roundtrip.
-- Bad, because source generation needs factory capture instead of appending an
-  annotation after the definition was frozen.
+- Bad, because internal source generation must validate EF's native source shape
+  before relocating annotations into the existing callback; an annotation on
+  the later safe-operation wrapper cannot change its frozen definition.
 - Bad, because engines outside the explicitly certified set remain unsupported.
 
 ### Confirmation
@@ -86,9 +89,12 @@ must reject non-InnoDB owners, malformed/unknown annotations and foreign-provide
 use. Core tests must retain metadata through copies and preserve historical
 unannotated fingerprint fixtures. Run affected provider suites and CLI/bundle
 and package-consumer checks. Compile complete scaffolded Up/Down, execute Down
-and replay, and retain negative historical-annotation probes. These are
-acceptance procedures, not claims that
-the present proposal has completed native or hosted qualification.
+and replay, and retain negative historical-annotation probes. Also require
+public API parity with 10.7.0, annotation/literal/comment
+counterprobes, empty and populated constraints, and callback-failure cleanup
+that preserves earlier operations without leaving unguarded appended work.
+These are acceptance procedures, not claims that the present proposal has
+completed native or hosted qualification.
 
 ## Pros and Cons of the Options
 
@@ -122,6 +128,10 @@ server-default mutation or new engine-repair permission.
 ### Decision History
 
 - 2026-11-09: Decision recorded with status proposed.
+- 2026-11-09: Replace the unreleased operation-factory capture design with
+  internal annotation relocation into the existing typed constraints callbacks.
+  Preserve complete storage verification without adding public APIs. This
+  implementation revision does not change the architectural approval status.
 
 ### Implementation References
 
@@ -136,4 +146,10 @@ server-default mutation or new engine-repair permission.
 - [MySQL 8.4 CREATE TABLE](https://docs.oracle.com/cd/E17952_01/mysql-8.4-en/create-table.html)
   (primary source; retrieved 2026-11-09)
 - [MariaDB CREATE TABLE](https://mariadb.com/docs/server/server-usage/tables/create-table.md)
+  (primary source; retrieved 2026-11-09)
+- [EF Core 10.0.14 typed table callback](https://github.com/dotnet/efcore/blob/v10.0.14/src/EFCore.Relational/Migrations/MigrationBuilder.cs#L818-L823)
+  (primary source; retrieved 2026-11-09)
+- [EF Core 10.0.14 table annotation builder](https://github.com/dotnet/efcore/blob/v10.0.14/src/EFCore.Relational/Migrations/Operations/Builders/CreateTableBuilder.cs#L160-L167)
+  (primary source; retrieved 2026-11-09)
+- [EF Core 10.0.14 table source generation](https://github.com/dotnet/efcore/blob/v10.0.14/src/EFCore.Design/Migrations/Design/CSharpMigrationOperationGenerator.cs#L1093-L1222)
   (primary source; retrieved 2026-11-09)
