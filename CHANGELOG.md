@@ -8,6 +8,9 @@ the shared release identity described in [Release process](docs/release-process.
 
 ### Changed
 
+- Raise the MySQL/MariaDB provider's Doka dependency to `[10.6.5,10.7.0)`
+  and restore the published maintenance package. Retain the public migration
+  SPI, transport minimums, provider isolation, GUID storage and migration history.
 - Update SHA-pinned setup-dotnet to 6.1.0 and CodeQL SARIF upload to 4.39.3.
   Refresh the rebuilt MySQL and PostgreSQL image digests while preserving
   server patch versions, supported engine lines and required qualification gates.

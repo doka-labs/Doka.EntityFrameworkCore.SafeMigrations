@@ -132,7 +132,7 @@ break within the retained 10.x line, not a claim of strict SemVer compatibility.
 See the [10.7.0 upgrade notes](support-and-qualification.md#upgrade-to-1070).
 Framework-owned overrides, report schemas and fingerprint formats are unchanged.
 
-The current MySQL/MariaDB adapter requires Doka `[10.6.4,10.7.0)` and
+The current MySQL/MariaDB adapter requires Doka `[10.6.5,10.7.0)` and
 MySqlConnector minimum 2.6.2; EF Core and dependency-injection minimums are
 10.0.14. SQL Server requires SqlClient minimum 6.1.8 and PKCS minimum 9.0.22.
 These promoted transport floors belong only to their respective providers.

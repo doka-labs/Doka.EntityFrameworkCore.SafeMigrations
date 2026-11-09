@@ -10,7 +10,7 @@ inventory introduced in 10.4.6. Review the
 [10.7.0 compatibility notes](../../CHANGELOG.md#1070---2026-11-06) and
 [upgrade procedure](../support-and-qualification.md#upgrade-to-1070), including
 the explicit-token source break and approved SemVer exception, and the
-Doka 10.6.4, MySqlConnector 2.6.2, EF 10.0.14, SqlClient 6.1.8 and PKCS
+Doka 10.6.5, MySqlConnector 2.6.2, EF 10.0.14, SqlClient 6.1.8 and PKCS
 9.0.22 floors and retained strict release audits. Review the
 [transport rollout boundaries](../efcore-provider-upgrade-risk.md#sql-server-boundary),
 including corrected explicit certificate-name validation.

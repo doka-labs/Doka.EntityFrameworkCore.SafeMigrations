@@ -147,7 +147,7 @@ with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 | Package | Runtime dependency contract |
 | --- | --- |
 | Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.14,10.1.0)` |
-| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.6.4,10.7.0)`; `MySqlConnector` minimum `2.6.2` |
+| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.6.5,10.7.0)`; `MySqlConnector` minimum `2.6.2` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
 | SQLite | EF Core SQLite Core `[10.0.14,10.1.0)`; application-owned native bundle |
 | SQL Server (available since 10.4.6) | `Microsoft.EntityFrameworkCore.SqlServer` `[10.0.14,10.1.0)`; `Microsoft.Data.SqlClient` minimum `6.1.8`; `System.Security.Cryptography.Pkcs` minimum `9.0.22` |
@@ -178,13 +178,13 @@ The minimum is not an exact version lock or a claim that every higher major
 version is patched. Consumers selecting PKCS 10.x must use 10.0.13 or later
 for these advisories; NuGet audit remains enabled for the actual resolved graph.
 
-The current MySQL/MariaDB package requires Doka 10.6.4 or a compatible later 10.6 patch
+The current MySQL/MariaDB package requires Doka 10.6.5 or a compatible later 10.6 patch
 release and rejects the next minor line. This boundary avoids an exact
 transitive pin without claiming compatibility across an unqualified behavioral
 SPI revision. CI does not build Doka and never uses a cross-repository
 ProjectReference. The MySQL/MariaDB package lockfile resolves the public
-Doka 10.6.4 package. Its NuGet repository metadata identifies source commit
-`581047a524d25163818fd144146440ea4440a838`. The complete package, engine,
+Doka 10.6.5 package. Its NuGet repository metadata identifies source commit
+`10a1f19c63633881f99b8a81b12a5a82fc5fb7f7`. The complete package, engine,
 tooling, coverage, and performance matrix remains the SafeMigrations release
 gate; a local Doka ProjectReference or locally packed candidate is not release
 evidence.
@@ -1009,6 +1009,9 @@ and release-asset verification.
 - [Doka 10.6.4 package metadata](https://api.nuget.org/v3-flatcontainer/doka.entityframeworkcore.mysql/10.6.4/doka.entityframeworkcore.mysql.nuspec),
   retrieved 2026-11-05. The bug-fix release retains the same EF Core,
   MySqlConnector and System.IO.Hashing dependency ranges.
+- [Doka 10.6.5 package metadata](https://api.nuget.org/v3-flatcontainer/doka.entityframeworkcore.mysql/10.6.5/doka.entityframeworkcore.mysql.nuspec),
+  retrieved 2026-11-09. The maintenance release retains those dependency ranges,
+  the public migration SPI and the existing storage defaults.
 - [MySQL 8.4 InnoDB limits](https://dev.mysql.com/doc/refman/8.4/en/innodb-limits.html),
   [MySQL 8.4 CREATE INDEX](https://dev.mysql.com/doc/refman/8.4/en/create-index.html),
   [MySQL 8.4 invisible indexes](https://dev.mysql.com/doc/refman/8.4/en/invisible-indexes.html),
