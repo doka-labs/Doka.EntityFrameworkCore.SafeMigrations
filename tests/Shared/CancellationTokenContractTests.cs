@@ -348,6 +348,10 @@ internal static class CancellationTokenContract
         // are not exceptions; each owner/signature must be reviewed as a resource-recovery boundary.
         return (identity, method.Name, parameters) switch
         {
+            ("Doka.EntityFrameworkCore.SafeMigrations.Testing.OwnedTestOperationCleanup",
+                "CompleteAsync", "System.Exception,System.Threading.Tasks.Task,"
+                + "System.Func`1[System.Threading.Tasks.Task],System.Threading.CancellationTokenSource,"
+                + "System.Func`1[System.Threading.Tasks.Task]") => true,
             ("Doka.EntityFrameworkCore.SafeMigrations.MySql.MySqlCatalogSnapshot",
                 "DisposeAfterFailureAsync", "System.Exception") => true,
             ("Doka.EntityFrameworkCore.SafeMigrations.MySql.MySqlCatalogSnapshot",
@@ -376,7 +380,8 @@ internal static class CancellationTokenContract
             ("Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.MySqlGeneratedCaseIntegrationTests",
                 "ReleaseSparseDropGateAsync", "MySqlConnector.MySqlConnection,System.String") => true,
             ("Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.MySqlSafeMigrationIntegrationTests",
-                "FinishAtomicAddConcurrentAttemptAsync", "System.Threading.Tasks.Task`1[System.Exception],"
+                "FinishAtomicAddConcurrentAttemptAsync",
+                "System.Exception,System.Threading.Tasks.Task,"
                 + "System.Threading.CancellationTokenSource,MySqlConnector.MySqlTransaction,"
                 + "System.Boolean") => true,
             ("Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.PostgreSqlContainerFixture",

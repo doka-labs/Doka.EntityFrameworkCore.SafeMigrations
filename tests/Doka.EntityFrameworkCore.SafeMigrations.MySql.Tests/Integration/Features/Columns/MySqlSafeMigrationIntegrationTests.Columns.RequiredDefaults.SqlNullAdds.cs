@@ -493,7 +493,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     }
 }
 
-public sealed partial class MySqlColumnsRequiredDefaultsSqlNullAddsIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlColumnsRequiredDefaultsSqlNullAddsIntegrationTests
 {
     /// <summary>Captures a SQL NULL expression without confusing it with a rejected CLR literal NULL default.</summary>
     /// <returns>The immutable required integer addition under explicit repair policy.</returns>

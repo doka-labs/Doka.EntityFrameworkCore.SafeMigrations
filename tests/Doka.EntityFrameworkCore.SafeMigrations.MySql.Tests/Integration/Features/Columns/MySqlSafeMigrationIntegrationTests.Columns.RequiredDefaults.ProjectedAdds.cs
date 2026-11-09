@@ -208,7 +208,7 @@ public sealed partial class
 }
 
 public sealed partial class
-    MySqlColumnsRequiredDefaultsProjectedAddsIntegrationTests : MySqlSafeMigrationIntegrationTests
+    MySqlColumnsRequiredDefaultsProjectedAddsIntegrationTests
 {
     /// <summary>Fresh MariaDB owners cannot certify a no-default add with session CHECK protection disabled.</summary>
     [AtomicAddMariaDbFact]
@@ -259,7 +259,7 @@ public sealed partial class
 }
 
 public sealed partial class
-    MySqlColumnsRequiredDefaultsProjectedAddsIntegrationTests : MySqlSafeMigrationIntegrationTests
+    MySqlColumnsRequiredDefaultsProjectedAddsIntegrationTests
 {
     /// <summary>
     /// A dropped matching TIMESTAMP target cannot borrow its former completion for an unavailable required add.

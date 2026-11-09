@@ -78,7 +78,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         ISafeMigrationProjectedColumnSource columns
     )
     {
-        var orderedAnalysis = _dependencyGraph?.ValidateOpaqueProviderPostcondition(operation, liveAnalysis, columns);
+        var orderedAnalysis = _dependencyGraph?.ValidateOpaqueGraphPostcondition(operation, liveAnalysis, columns);
         if (orderedAnalysis is null)
         {
             return null;

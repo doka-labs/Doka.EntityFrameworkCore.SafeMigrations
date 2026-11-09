@@ -60,7 +60,7 @@ public sealed partial class MySqlRuntimeRecoveryIntegrationTests : MySqlSafeMigr
                 provider => provider
                     .MigrationsAssembly(typeof(MySqlRuntimeCompactedSetupProbeDbContext).Assembly.FullName)
                     .MigrationsHistoryTable("__RuntimeWorkloadHistory"))
-            .UseMySqlSafeMigrations<MySqlRuntimeCompactedSetupProbeDbContext>()
+            .UseMySqlSafeMigrations()
             .AddInterceptors(observer)
             .Options;
 
@@ -367,7 +367,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     }
 }
 
-public sealed partial class MySqlRuntimeRecoveryIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlRuntimeRecoveryIntegrationTests
 {
     /// <summary>Executes a real synchronous scope and inspects resources before retry.</summary>
     private static RuntimeSynchronousRecovery ExecuteRuntimeSynchronousRecovery(

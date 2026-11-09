@@ -539,27 +539,6 @@ internal static partial class SqliteSafeMigrationCatalog
         || match.Groups[group + "Single"].Success
         || match.Groups[group + "Bare"].Success;
 
-    private static string ReadName(
-        Match match
-    )
-    {
-        var value = match.Groups["name"].Success
-            ? match
-                .Groups["name"]
-                .Value
-                .Replace("\"\"", "\"", StringComparison.Ordinal)
-            : match.Groups["bracket"].Success
-                ? match.Groups["bracket"].Value
-                : match.Groups["backtick"].Success
-                    ? match
-                        .Groups["backtick"]
-                        .Value
-                        .Replace("``", "`", StringComparison.Ordinal)
-                    : match.Groups["bare"].Value;
-
-        return value;
-    }
-
     private static string ReadBalancedParentheses(
         string sql,
         int openParenthesis

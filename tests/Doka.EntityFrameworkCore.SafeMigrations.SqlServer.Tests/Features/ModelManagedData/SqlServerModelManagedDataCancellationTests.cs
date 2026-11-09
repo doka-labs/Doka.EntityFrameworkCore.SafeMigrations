@@ -115,12 +115,11 @@ public sealed partial class SqlServerModelManagedDataCancellationTests : SqlServ
 
         var requiresCallerRecovery = inheritedIdentityInsert && !executeMigrationCommand;
         using var cancellation = new CancellationTokenSource();
-        using var readinessDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
         // Act
         var markerInitiallyAvailable = await pauseInterceptor.CanAcquireMarkerAsync(
             observer,
-            cancellationToken: readinessDeadline.Token);
+            cancellationToken: CancellationToken.None);
 
         var execution = executeMigrationCommand
             ? seedCommand.ExecuteNonQueryAsync(connection, cancellationToken: cancellation.Token)
@@ -128,24 +127,15 @@ public sealed partial class SqlServerModelManagedDataCancellationTests : SqlServ
 
         // WHY: The lock is acquired only after ON, and a separate session observes it without an INFO token.
         // This proves the attention reaches a running identity-enabled batch, not work canceled before ON.
-        var readinessFailure = await Record.ExceptionAsync(() => pauseInterceptor.WaitUntilReadyAsync(
-            observer,
+        var observation = await SqlServerAttentionTestOperation.ObserveAsync(
             execution,
-            readinessDeadline.Token));
+            cancellationToken => pauseInterceptor.WaitUntilReadyAsync(observer, execution, cancellationToken),
+            cancellation,
+            CancellationToken.None);
 
-        var cancelRequestFailure = await Record.ExceptionAsync(() =>
-            cancellation
-                .CancelAsync()
-                .WaitAsync(TimeSpan.FromSeconds(10)));
-
-        var cancellationFailure = await Record.ExceptionAsync(() => execution.WaitAsync(TimeSpan.FromSeconds(30)));
-
-        if (!execution.IsCompleted)
-        {
-            throw new InvalidOperationException(
-                "Client attention did not complete within the recovery deadline.",
-                cancellationFailure);
-        }
+        var readinessFailure = observation.ReadinessFailure;
+        var cancelRequestFailure = observation.CancellationFailure;
+        var cancellationFailure = observation.ExecutionFailure;
 
         // WHY: The operation token is deliberately cancelled. Recovery observations must still complete
         // independently to prove that attention left the caller-owned session in the expected state.

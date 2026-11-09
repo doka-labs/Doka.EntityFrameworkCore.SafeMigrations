@@ -297,7 +297,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     }
 }
 
-public sealed partial class MySqlColumnsNullProofEligibilityIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlColumnsNullProofEligibilityIntegrationTests
 {
     /// <summary>Creates a generic required varchar(800) or datetime(6) contract.</summary>
     private static SafeMigrationOperation BuildMySqlNullEligibilityOperation(

@@ -560,12 +560,12 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     ) => new(
         new DbContextOptionsBuilder<SafeMigrationDbContext>()
             .UseMySql(connectionString, Fixture.ServerVersion)
-            .UseMySqlSafeMigrations<SafeMigrationDbContext>()
+            .UseMySqlSafeMigrations()
             .AddInterceptors(observer)
             .Options);
 }
 
-public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlRuntimeMatchingIntegrationTests
 {
     /// <summary>Creates a full required scalar contract without an analysis preflight.</summary>
     private static SafeMigrationOperation RuntimeMatchingOperation(
@@ -626,7 +626,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             cancellationToken: cancellationToken));
 }
 
-public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlRuntimeMatchingIntegrationTests
 {
     /// <summary>Rejects vacuous zero counts when a changed SQL shape prevents instrumentation.</summary>
     private static void AssertRuntimeMatchingInstrumentation(

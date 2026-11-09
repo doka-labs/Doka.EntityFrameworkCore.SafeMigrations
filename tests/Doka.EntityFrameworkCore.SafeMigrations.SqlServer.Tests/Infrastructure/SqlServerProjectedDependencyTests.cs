@@ -3,6 +3,80 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// <summary>Verifies accepted-operation dependency transitions independently of the live catalog.</summary>
 public sealed class SqlServerProjectedDependencyTests
 {
+    /// <summary>Interface dispatch must retain the graph's accepted schema-removal proof.</summary>
+    [Fact]
+    public void OpaquePostconditionInterfaceRetainsAcceptedGraphProof()
+    {
+        // Arrange
+        var graph = new SqlServerProjectedDependencyGraph(static (_, _) => true);
+        Accept(graph, new DropSchemaIntent("application"), SafeMigrationObservedState.Matching);
+        var operation = new SafeMigrationOperation(
+            new EnsureSchemaIntent("application"),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        ISafeMigrationProjectedDependencyAnalyzer analyzer = graph;
+        var columns = new EmptyColumns();
+
+        // Act
+        var result = analyzer.ValidateOpaqueProviderPostcondition(
+            operation,
+            Live(SafeMigrationObservedState.Matching),
+            columns);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(SafeMigrationObservedState.Missing, result.ObservedState);
+        Assert.Equal("projected_schema_absent", result.Code);
+        Assert.False(result.PostconditionSatisfied);
+    }
+
+    /// <summary>Interface dispatch never bypasses immutable unsupported or data-blocked evidence.</summary>
+    /// <param name="state">The independently rejected live state.</param>
+    [Theory]
+    [InlineData(SafeMigrationObservedState.Unsupported)]
+    [InlineData(SafeMigrationObservedState.DataBlocked)]
+    public void OpaquePostconditionInterfacePreservesRejectedLiveEvidence(
+        SafeMigrationObservedState state
+    )
+    {
+        // Arrange
+        var graph = new SqlServerProjectedDependencyGraph(static (_, _) => true);
+        var operation = new SafeMigrationOperation(
+            new EnsureSchemaIntent("application"),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        ISafeMigrationProjectedDependencyAnalyzer analyzer = graph;
+
+        // Act
+        var result = analyzer.ValidateOpaqueProviderPostcondition(operation, Live(state), new EmptyColumns());
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    /// <summary>Opaque provider SQL invalidates the same graph for direct and interface consumers.</summary>
+    [Fact]
+    public void OpaquePostconditionInterfaceDoesNotInventProofAfterOpaqueSql()
+    {
+        // Arrange
+        var graph = new SqlServerProjectedDependencyGraph(static (_, _) => true);
+        graph.ObserveProviderOperation(new SqlOperation { Sql = "SELECT 1;" });
+        var operation = new SafeMigrationOperation(
+            new EnsureSchemaIntent("application"),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        ISafeMigrationProjectedDependencyAnalyzer analyzer = graph;
+
+        // Act
+        var result = analyzer.ValidateOpaqueProviderPostcondition(
+            operation,
+            Live(SafeMigrationObservedState.Matching),
+            new EmptyColumns());
+
+        // Assert
+        Assert.Null(result);
+    }
+
     /// <summary>An accepted inline FK prevents dropping its new principal table.</summary>
     [Fact]
     public void InlineForeignKeyPreventsLaterParentDrop()

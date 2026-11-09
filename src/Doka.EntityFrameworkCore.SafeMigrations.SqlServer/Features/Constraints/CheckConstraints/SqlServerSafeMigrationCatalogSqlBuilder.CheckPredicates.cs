@@ -133,11 +133,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private static bool IsSafeIntegerCheckScalar(
         SafeMigrationSqlExpression expression
     ) => expression is SafeMigrationSqlIdentifierExpression { Parts.Count: 1 }
-        || TryGetIntegerCheckLiteral(expression, out _);
+        || IsIntegerCheckLiteral(expression);
 
-    private static bool TryGetIntegerCheckLiteral(
-        SafeMigrationSqlExpression expression,
-        out decimal value
+    /// <summary>Accepts only exact signed-integer literals without exposing an unused parsed value.</summary>
+    private static bool IsIntegerCheckLiteral(
+        SafeMigrationSqlExpression expression
     )
     {
         if (expression is SafeMigrationSqlUnaryExpression
@@ -147,18 +147,16 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             }
             && TryGetUnsignedCheckLiteral(operand, out var positive))
         {
-            value = -positive;
+            var negativeValue = -positive;
 
-            return value is >= long.MinValue and <= long.MaxValue;
+            return negativeValue is >= long.MinValue and <= long.MaxValue;
         }
 
         if (expression is SafeMigrationSqlLiteralExpression { StoreType: null } literal
-            && TryGetUnsignedCheckLiteral(literal, out value))
+            && TryGetUnsignedCheckLiteral(literal, out var value))
         {
             return value is >= long.MinValue and <= long.MaxValue;
         }
-
-        value = 0;
 
         return false;
     }

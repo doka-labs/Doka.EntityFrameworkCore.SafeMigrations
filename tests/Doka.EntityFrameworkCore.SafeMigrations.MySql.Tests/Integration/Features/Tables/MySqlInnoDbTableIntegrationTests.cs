@@ -185,7 +185,7 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        using var runtime = new ServiceCollection()
+        await using var runtime = new ServiceCollection()
             .AddEntityFrameworkDokaMySql()
             .AddEntityFrameworkDokaMySqlSafeMigrations()
             .BuildServiceProvider();

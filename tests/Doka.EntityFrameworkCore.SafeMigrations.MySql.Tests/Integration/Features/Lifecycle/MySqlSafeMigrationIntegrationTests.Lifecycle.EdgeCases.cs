@@ -32,7 +32,7 @@ public sealed class MySqlLifecycleEdgeCasesIntegrationTests : MySqlSafeMigration
                     .MigrationsAssembly(typeof(SafeMigrationDbContext).Assembly.FullName)
                     .MigrationsHistoryTable("__ApplicationDbContextMigrationsHistory"))
             .AddInterceptors(interceptor)
-            .UseMySqlSafeMigrations<SafeMigrationDbContext>()
+            .UseMySqlSafeMigrations()
             .Options;
 
         await using var context = new SafeMigrationDbContext(validOptions);

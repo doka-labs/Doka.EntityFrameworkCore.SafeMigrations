@@ -330,6 +330,6 @@ public sealed class SqliteRetainedColumnOrderTests : SqliteIntegrationTestBase,
 
         protected override bool ExplicitOrder => true;
 
-        protected override string? Schema => "main";
+        protected override string Schema => "main";
     }
 }

@@ -5,7 +5,6 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     private readonly PostgreSqlSafeMigrationSqlExpressionRenderer _expressionRenderer;
     private readonly Func<string, string> _literal;
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
-    private readonly RelationalTypeMapping _stringMapping;
     private readonly IRelationalTypeMappingSource _typeMappingSource;
     private readonly Func<object?, string, string> _valueLiteral;
 
@@ -22,10 +21,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         _typeMappingSource = typeMappingSource;
         _sqlGenerationHelper = sqlGenerationHelper;
         _expressionRenderer = new PostgreSqlSafeMigrationSqlExpressionRenderer(typeMappingSource, sqlGenerationHelper);
-        _stringMapping = typeMappingSource.FindMapping(typeof(string))
+        var stringMapping = typeMappingSource.FindMapping(typeof(string))
             ?? throw new InvalidOperationException("The PostgreSQL provider has no string type mapping.");
 
-        _literal = literal ?? _stringMapping.GenerateSqlLiteral;
+        _literal = literal ?? stringMapping.GenerateSqlLiteral;
         _valueLiteral = valueLiteral ?? RenderValueLiteral;
     }
 
@@ -376,14 +375,6 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     ) => schema is null
         ? _sqlGenerationHelper.DelimitIdentifier(name)
         : _sqlGenerationHelper.DelimitIdentifier(name, schema);
-
-    private string DelimitedPath(
-        string value
-    ) => string.Join(
-        ".",
-        value
-            .Split('.', StringSplitOptions.RemoveEmptyEntries)
-            .Select(_sqlGenerationHelper.DelimitIdentifier));
 
     private string SchemaExpression(
         string? schema

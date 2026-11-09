@@ -537,7 +537,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                 {
                     AddedToExistingTable: true,
                     IsNullable: true,
-                    PreservesNullForExistingRows: true,
+                    PreservesExistingNulls: true,
                     IsComputed: false,
                 })
             {

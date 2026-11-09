@@ -33,10 +33,10 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
         var renderer = CreateRenderer(context);
         Assert.True(SafeMigrationSqlExpressionParser.TryParse("CONVERT(integer, value)", out var expression));
 
-        var feature = renderer.GetUnsupportedFeature(expression!);
+        var feature = renderer.GetUnsupportedFeature(expression);
 
         Assert.Equal("structured_convert_dialect", feature);
-        Assert.Throws<NotSupportedException>(() => renderer.Render(expression!));
+        Assert.Throws<NotSupportedException>(() => renderer.Render(expression));
     }
 
     /// <summary>Rendering retains ordered branches and the implicit SQL NULL when ELSE is omitted.</summary>

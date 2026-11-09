@@ -298,18 +298,6 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
         return expression.Replace(DataProbePlaceholder, replacement, StringComparison.Ordinal);
     }
 
-    private string RenderWithDataProbe(
-        string expression,
-        string dataBlockedExpression
-    )
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(dataBlockedExpression);
-
-        return DataProbe is null
-            ? expression
-            : expression.Replace(DataProbePlaceholder, dataBlockedExpression, StringComparison.Ordinal);
-    }
-
     private string RenderTransitionExpressions(
         string expression,
         bool? dataBlocked,

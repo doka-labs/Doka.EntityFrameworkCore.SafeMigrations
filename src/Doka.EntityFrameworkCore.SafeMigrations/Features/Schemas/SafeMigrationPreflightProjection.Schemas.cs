@@ -2,6 +2,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 internal sealed partial class SafeMigrationPreflightProjection
 {
+    // WHY: These typed hooks keep schema-family dispatch explicit. Schemas
+    // do not mutate Core's table projection; the provider owns their state.
     private static SafeMigrationProviderAnalysis Project(
         EnsureSchemaIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis

@@ -555,7 +555,6 @@ internal sealed class SqlServerCatalogTestConnection : DbConnection
             }
 
             base.Dispose();
-            GC.SuppressFinalize(this);
         }
     }
 
@@ -790,11 +789,7 @@ internal sealed class SqlServerCatalogTestConnection : DbConnection
         protected override DbParameterCollection DbParameterCollection => _parameterHost.Parameters;
 
         /// <inheritdoc />
-        public void Dispose()
-        {
-            _parameterHost.Dispose();
-            GC.SuppressFinalize(this);
-        }
+        public void Dispose() => _parameterHost.Dispose();
     }
 
     private sealed class CatalogBatchCommands : DbBatchCommandCollection

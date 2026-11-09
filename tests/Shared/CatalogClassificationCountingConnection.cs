@@ -639,7 +639,6 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
             }
 
             base.Dispose();
-            GC.SuppressFinalize(this);
         }
 
         /// <inheritdoc />
@@ -658,7 +657,6 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
             finally
             {
                 await base.DisposeAsync();
-                GC.SuppressFinalize(this);
             }
         }
     }

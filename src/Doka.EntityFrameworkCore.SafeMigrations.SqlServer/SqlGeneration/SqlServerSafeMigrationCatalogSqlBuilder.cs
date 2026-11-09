@@ -16,19 +16,16 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
 
     private readonly IRelationalTypeMappingSource _typeMappingSource;
-    private readonly Func<object?, string, string> _valueLiteral;
 
     /// <summary>Initializes the catalog builder with the active provider services.</summary>
     /// <param name="typeMappingSource">The provider's canonical store-type and literal mappings.</param>
     /// <param name="sqlGenerationHelper">The provider's identifier delimiter.</param>
     /// <param name="literal">An optional string-literal renderer for contract probes.</param>
-    /// <param name="valueLiteral">An optional typed-literal renderer for contract probes.</param>
     /// <param name="sourceParameter">An analysis-only lossless scalar binding, before target conversion.</param>
     public SqlServerSafeMigrationCatalogSqlBuilder(
         IRelationalTypeMappingSource typeMappingSource,
         ISqlGenerationHelper sqlGenerationHelper,
         Func<string, string>? literal = null,
-        Func<object?, string, string>? valueLiteral = null,
         Func<object, bool, string>? sourceParameter = null
     )
     {
@@ -39,7 +36,6 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         _sqlGenerationHelper = sqlGenerationHelper;
         _expressionRenderer = new SqlServerSafeMigrationSqlExpressionRenderer(typeMappingSource, sqlGenerationHelper);
         _literal = literal ?? RenderStringLiteral;
-        _valueLiteral = valueLiteral ?? RenderValueLiteral;
         _sourceParameter = sourceParameter;
     }
 
@@ -627,13 +623,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     ? parsed * 2
                     : parsed;
 
-                if (bytes > short.MaxValue)
-                {
-                    type = default;
-
-                    return false;
-                }
-
+                // WHY: The native finite length bounds cap both branches at 8000 bytes.
                 length = (short)bytes;
             }
             else

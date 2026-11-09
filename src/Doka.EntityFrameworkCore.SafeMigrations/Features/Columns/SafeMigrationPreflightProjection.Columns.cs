@@ -973,20 +973,6 @@ internal sealed partial class SafeMigrationPreflightProjection
             Columns[definition.Name] = definition;
         }
 
-        public void RemoveColumn(
-            string name
-        )
-        {
-            if (Columns.Remove(name))
-            {
-                var ordinal = FindColumnOrder(name);
-                if (ordinal >= 0)
-                {
-                    _columnOrder.RemoveAt(ordinal);
-                }
-            }
-        }
-
         public void RenameColumn(
             string source,
             string target

@@ -601,7 +601,7 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await using var connection = new PreambleConnection();
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>()
             .UseSqlServer(connection)
-            .UseSqlServerSafeMigrations<SafeMigrationDbContext>()
+            .UseSqlServerSafeMigrations()
             .Options;
 
         var context = new SafeMigrationDbContext(options);

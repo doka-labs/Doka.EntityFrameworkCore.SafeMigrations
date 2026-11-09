@@ -36,11 +36,11 @@ public sealed class SqlServerSafeMigrationSqlExpressionRendererTests
                 "CONVERT(bit, CASE WHEN [right_bound] > [left_bound] THEN 1 ELSE 0 END)",
                 out var expression));
 
-        var sql = renderer.Render(expression!);
+        var sql = renderer.Render(expression);
 
         Assert.Equal("CAST(CASE WHEN ([right_bound] > [left_bound]) THEN 1 ELSE 0 END AS bit)", sql);
         Assert.DoesNotContain("[bit]", sql, StringComparison.Ordinal);
-        Assert.Null(renderer.GetUnsupportedFeature(expression!));
+        Assert.Null(renderer.GetUnsupportedFeature(expression));
     }
 
     /// <summary>Predicates selected by CASE retain UNKNOWN rather than silently mapping it to false.</summary>

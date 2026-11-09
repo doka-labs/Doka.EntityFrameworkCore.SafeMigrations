@@ -28,8 +28,11 @@ public sealed partial class SafeMigrationScaffoldingTests
     }
 
     /// <summary>Gets source-shape cases whose quoted contents cannot identify callback boundaries.</summary>
-    public static IEnumerable<object?[]> TableMetadataSourceCases()
+    /// <returns>The complete typed strict/legacy, constraint and native-comment matrix.</returns>
+    public static TheoryData<SafeMigrationScaffoldingMode, SafeMigrationPolicy, bool, string?>
+        TableMetadataSourceCases()
     {
+        var cases = new TheoryData<SafeMigrationScaffoldingMode, SafeMigrationPolicy, bool, string?>();
         string?[] comments =
         [
             null,
@@ -59,11 +62,13 @@ public sealed partial class SafeMigrationScaffoldingTests
                 {
                     foreach (var comment in comments)
                     {
-                        yield return [mode, policy, populated, comment];
+                        cases.Add(mode, policy, populated, comment);
                     }
                 }
             }
         }
+
+        return cases;
     }
 
     /// <summary>

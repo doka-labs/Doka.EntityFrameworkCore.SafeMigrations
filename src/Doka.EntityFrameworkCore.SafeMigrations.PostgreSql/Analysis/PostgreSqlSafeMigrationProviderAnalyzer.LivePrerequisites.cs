@@ -405,7 +405,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                         {
                             if (!reader.IsDBNull(5)
                                 || !reader.IsDBNull(6)
-                                || candidates!.Count != 0)
+                                || candidates.Count != 0)
                             {
                                 throw InvalidLivePrerequisiteEvidence();
                             }
@@ -441,7 +441,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                             throw InvalidLivePrerequisiteEvidence();
                         }
 
-                        candidates!.Add(key);
+                        candidates.Add(key);
 
                         continue;
                     }

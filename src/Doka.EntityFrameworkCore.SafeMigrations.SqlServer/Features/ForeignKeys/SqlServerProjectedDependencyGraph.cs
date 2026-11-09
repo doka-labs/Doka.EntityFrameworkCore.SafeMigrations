@@ -181,12 +181,19 @@ internal sealed partial class SqlServerProjectedDependencyGraph : ISafeMigration
         return projectedAnalysis;
     }
 
+    /// <inheritdoc />
+    SafeMigrationProviderAnalysis? ISafeMigrationProjectedDependencyAnalyzer.ValidateOpaqueProviderPostcondition(
+        SafeMigrationOperation operation,
+        SafeMigrationProviderAnalysis liveAnalysis,
+        ISafeMigrationProjectedColumnSource columns
+    ) => ValidateOpaqueGraphPostcondition(operation, liveAnalysis, columns);
+
     /// <summary>Recovers only complete provider graph proofs after an accepted ordinary-table rename.</summary>
     /// <param name="operation">The operation following an opaque generic provider postcondition.</param>
     /// <param name="liveAnalysis">The immutable provider assessment before ordered mutations.</param>
     /// <param name="columns">The surviving accepted authored column contracts.</param>
     /// <returns>A complete ordered assessment, or null when the graph cannot prove it.</returns>
-    internal SafeMigrationProviderAnalysis? ValidateOpaqueProviderPostcondition(
+    internal SafeMigrationProviderAnalysis? ValidateOpaqueGraphPostcondition(
         SafeMigrationOperation operation,
         SafeMigrationProviderAnalysis liveAnalysis,
         ISafeMigrationProjectedColumnSource columns

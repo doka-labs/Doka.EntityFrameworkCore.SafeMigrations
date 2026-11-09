@@ -229,7 +229,7 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
                 provider => provider
                     .MigrationsAssembly(typeof(MySqlRuntimeFreshStateDbContext).Assembly.FullName)
                     .MigrationsHistoryTable("__RuntimeWorkloadHistory"))
-            .UseMySqlSafeMigrations<MySqlRuntimeFreshStateDbContext>()
+            .UseMySqlSafeMigrations()
             .Options;
 
         await using var context = new MySqlRuntimeFreshStateDbContext(options);
@@ -304,7 +304,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
                 provider => provider
                     .MigrationsAssembly(typeof(MySqlRuntimePerformanceDbContext).Assembly.FullName)
                     .MigrationsHistoryTable("__RuntimeWorkloadHistory"))
-            .UseMySqlSafeMigrations<MySqlRuntimePerformanceDbContext>()
+            .UseMySqlSafeMigrations()
             .AddInterceptors(observer)
             .Options;
 
@@ -312,7 +312,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     }
 }
 
-public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlRuntimePerformanceIntegrationTests
 {
     /// <summary>Configures a discovered one-operation migration for actual scope-failure and retry probes.</summary>
     private MySqlRuntimeScopeProbeDbContext CreateRuntimeScopeProbeContext(
@@ -327,7 +327,7 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeM
                 provider => provider
                     .MigrationsAssembly(typeof(MySqlRuntimeScopeProbeDbContext).Assembly.FullName)
                     .MigrationsHistoryTable("__RuntimeWorkloadHistory"))
-            .UseMySqlSafeMigrations<MySqlRuntimeScopeProbeDbContext>()
+            .UseMySqlSafeMigrations()
             .AddInterceptors(observer)
             .Options;
 
@@ -692,7 +692,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     }
 }
 
-public sealed partial class MySqlRuntimePerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlRuntimePerformanceIntegrationTests
 {
     /// <summary>Captures default server durability settings separately from the timed migration workflow.</summary>
     /// <param name="connectionString">The workload server connection used to observe durability settings.</param>

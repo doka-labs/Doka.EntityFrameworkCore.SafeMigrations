@@ -446,7 +446,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         cancellationToken: cancellationToken);
 }
 
-public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTests
 {
     /// <summary>Reads physical PRIMARY membership independently of the logical operation name.</summary>
     /// <param name="connectionString">The isolated test database connection.</param>

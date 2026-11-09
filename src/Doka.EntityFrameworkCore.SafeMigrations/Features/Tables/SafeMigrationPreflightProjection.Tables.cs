@@ -179,7 +179,6 @@ internal sealed partial class SafeMigrationPreflightProjection
         EnsureTableIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis,
         SafeMigrationProviderAnalysis analysis,
-        SafeMigrationDecision decision,
         bool hasExactTargetDefinition
     )
     {

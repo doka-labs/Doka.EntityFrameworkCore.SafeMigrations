@@ -618,7 +618,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 }
 
 public sealed partial class
-    MySqlColumnsRequiredDefaultsEnumCommentModeIntegrationTests : MySqlSafeMigrationIntegrationTests
+    MySqlColumnsRequiredDefaultsEnumCommentModeIntegrationTests
 {
     /// <summary>Reads the complete physical domain display without case folding or mode reinterpretation.</summary>
     /// <param name="connectionString">The isolated test owner.</param>

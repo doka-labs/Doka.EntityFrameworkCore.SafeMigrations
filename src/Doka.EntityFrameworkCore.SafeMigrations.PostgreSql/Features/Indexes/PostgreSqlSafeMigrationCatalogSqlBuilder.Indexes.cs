@@ -666,12 +666,6 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + ")";
     }
 
-    private string Delimited(
-        SafeMigrationCollationIdentifier value
-    ) => value.Schema is null
-        ? _sqlGenerationHelper.DelimitIdentifier(value.Name)
-        : _sqlGenerationHelper.DelimitIdentifier(value.Name, value.Schema);
-
     private string IndexExists(
         string name,
         string? schema

@@ -21,16 +21,23 @@ public abstract class PostgreSqlSafeMigrationIntegrationTests : PostgreSqlIntegr
     ) : base(fixture) { }
 
     /// <summary>Waits for the named narrowing command to reach its server-observed table lock.</summary>
+    /// <param name="connectionString">The independently owned observer connection.</param>
+    /// <param name="table">The bounded fixture table identifier.</param>
+    /// <param name="pending">The actual producer whose completion makes a missing lock proof terminal.</param>
+    /// <param name="cancellationToken">Cancels forward observation without abandoning the producer.</param>
     protected static async Task WaitForBlockedPostgreSqlNarrowingCommandAsync(
         string connectionString,
         string table,
+        Task pending,
         CancellationToken cancellationToken
     )
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
 
-        for (var attempt = 0; attempt < 100; attempt++)
+        // WHY: Slow scheduling is not a failed lock contract. The actual producer
+        // and caller token bound observation, not a fixed number of polling sleeps.
+        while (!pending.IsCompleted)
         {
             await using var command = connection.CreateCommand();
             command.CommandText = "SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_stat_activity "
@@ -53,7 +60,7 @@ public abstract class PostgreSqlSafeMigrationIntegrationTests : PostgreSqlIntegr
             await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken);
         }
 
-        throw new TimeoutException("The PostgreSQL narrowing repair did not reach its blocked table lock.");
+        throw new InvalidOperationException("The PostgreSQL operation completed before its blocked table lock.");
     }
 
     /// <summary>Builds real catalog predicates without retaining a live catalog snapshot.</summary>

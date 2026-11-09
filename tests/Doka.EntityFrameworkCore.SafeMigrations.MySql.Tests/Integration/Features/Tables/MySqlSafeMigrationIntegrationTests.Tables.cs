@@ -389,7 +389,7 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var options = new DbContextOptionsBuilder<StrictUniqueIndexContext>()
             .UseMySql(connectionString, Fixture.ServerVersion)
-            .UseMySqlSafeMigrations<StrictUniqueIndexContext>()
+            .UseMySqlSafeMigrations()
             .Options;
 
         await using var context = new StrictUniqueIndexContext(options);
@@ -563,7 +563,7 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
 
         var options = new DbContextOptionsBuilder<StandaloneForeignKeyContext>()
             .UseMySql(connectionString, Fixture.ServerVersion)
-            .UseMySqlSafeMigrations<StandaloneForeignKeyContext>()
+            .UseMySqlSafeMigrations()
             .Options;
 
         await using var context = new StandaloneForeignKeyContext(options);

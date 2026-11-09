@@ -46,7 +46,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
                     definition.Columns,
                     requireDefaultSortOrder: true))
                 {
-                    Observe(definition.Name, actual.Name, ref exact, ref candidate, ref count);
+                    Observe(definition.Name, actual.Name, ref exact, out candidate, ref count);
                 }
             }
 
@@ -70,7 +70,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
                 if (sql is not null
                     && ExpressionMatches(actual.Expression, sql, definition.Expression))
                 {
-                    Observe(definition.Name, actual.Name, ref exact, ref candidate, ref count);
+                    Observe(definition.Name, actual.Name, ref exact, out candidate, ref count);
                 }
             }
 
@@ -99,7 +99,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
                     definition.OnUpdate,
                     definition.OnDelete))
                 {
-                    Observe(definition.Name, actual.Name, ref exact, ref candidate, ref count);
+                    Observe(definition.Name, actual.Name, ref exact, out candidate, ref count);
                 }
             }
 
@@ -137,13 +137,15 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
     /// <param name="authoredName">The authored alias being resolved.</param>
     /// <param name="actualName">The independently matched catalog name, or null for an anonymous constraint.</param>
     /// <param name="exact">The matching exact-name witness, if present.</param>
-    /// <param name="candidate">The last matching semantic witness.</param>
+    /// <param name="candidate">
+    /// Receives this matching semantic witness without consuming the preceding candidate.
+    /// </param>
     /// <param name="count">The complete number of matching witnesses, including anonymous members.</param>
     private static void Observe(
         string authoredName,
         string? actualName,
         ref string? exact,
-        ref string? candidate,
+        out string? candidate,
         ref int count
     )
     {

@@ -150,7 +150,7 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
 
         // WHY: Reuse the active public mapping source, including its MariaDB
         // profile, instead of constructing or reflecting over Doka internals.
-        services.AddSingleton<ITypeMappingSource>(context.GetService<ITypeMappingSource>());
+        services.AddSingleton(context.GetService<ITypeMappingSource>());
 
         using var provider = services.BuildServiceProvider();
         var generator = new SafeMigrationCSharpMigrationOperationGenerator(

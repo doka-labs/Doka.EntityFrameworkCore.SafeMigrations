@@ -126,7 +126,9 @@ public sealed class SharedContainerRunnerTests
         Assert.DoesNotContain(sink.Messages, message => message is ITestAssemblyCleanupFailure);
     }
 
-    /// <summary>Real xUnit cases invoke both constructors and methods with one fully initialized borrowed fixture.</summary>
+    /// <summary>
+    /// Real xUnit cases invoke both constructors and methods with one fully initialized borrowed fixture.
+    /// </summary>
     [Fact]
     public async Task RunAsync_WithRealCases_InvokesConstructorsWithSameInitializedFixture()
     {
@@ -168,9 +170,14 @@ public sealed class SharedContainerRunnerTests
         Assert.Equal(1, fixture.DisposeCount);
     }
 
-    /// <summary>Gated ordinary collections must both enter before either is released.</summary>
-    [Fact]
-    public async Task RunAsync_WithOrdinaryCollections_AdmitsBothBeforeEitherCompletes()
+    /// <summary>Admitted ordinary collections remain owned even when their admission observer fails.</summary>
+    /// <param name="observerFails">Whether observation fails before the admitted collections are released.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunAsync_WithOrdinaryCollections_AdmitsBothBeforeEitherCompletes(
+        bool observerFails
+    )
     {
         // Arrange
         var fixture = new RunnerFixture();
@@ -179,6 +186,7 @@ public sealed class SharedContainerRunnerTests
         var sink = new RecordingSink();
         var bothAdmitted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var observerFailure = new InvalidOperationException("admission observer failed");
         var active = 0;
         var admitted = 0;
 
@@ -187,24 +195,40 @@ public sealed class SharedContainerRunnerTests
             CancellationToken cancellationToken
         )
         {
-            Assert.Same(fixture, arguments[0]);
-
-            Interlocked.Increment(ref active);
-
-            if (Interlocked.Increment(ref admitted) == 2)
-            {
-                bothAdmitted.SetResult();
-            }
-
             try
             {
-                await release.Task.WaitAsync(cancellationToken);
+                Assert.Same(fixture, arguments[0]);
 
-                return new RunSummary { Total = 1 };
+                Interlocked.Increment(ref active);
+
+                try
+                {
+                    if (Interlocked.Increment(ref admitted) == 2)
+                    {
+                        if (observerFails)
+                        {
+                            bothAdmitted.TrySetException(observerFailure);
+                        }
+                        else
+                        {
+                            bothAdmitted.TrySetResult();
+                        }
+                    }
+
+                    await release.Task.WaitAsync(cancellationToken);
+
+                    return new RunSummary { Total = 1 };
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref active);
+                }
             }
-            finally
+            catch (Exception exception)
             {
-                Interlocked.Decrement(ref active);
+                bothAdmitted.TrySetException(exception);
+
+                throw;
             }
         }
 
@@ -222,30 +246,54 @@ public sealed class SharedContainerRunnerTests
             new RunnerOptions(maximum: 2),
             lifecycle);
 
-        int activeBeforeRelease;
-        bool completedBeforeRelease;
+        var activeBeforeRelease = 0;
+        var completedBeforeRelease = false;
 
         // Act
         var assemblyRun = runner.RunAsync();
 
-        try
+        var observedFailure = await Record.ExceptionAsync(async () =>
         {
-            // WHY: This is a deadlock watchdog, not an elapsed-time budget.
-            // A serial runner cannot reach the two-party admission barrier.
-            await bothAdmitted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Exception? primaryFailure = null;
+            try
+            {
+                await AwaitAdmissionAsync(bothAdmitted.Task, assemblyRun, CancellationToken.None);
+            }
+            catch (Exception exception)
+            {
+                primaryFailure = exception;
 
-            activeBeforeRelease = Volatile.Read(ref active);
-            completedBeforeRelease = assemblyRun.IsCompleted;
-        }
-        finally
-        {
-            release.TrySetResult();
-        }
+                throw;
+            }
+            finally
+            {
+                activeBeforeRelease = Volatile.Read(ref active);
+                completedBeforeRelease = assemblyRun.IsCompleted;
 
-        var summary = await assemblyRun.WaitAsync(TimeSpan.FromSeconds(10));
+                // WHY: A failed observer must release and join every borrower
+                // before the runner or fixture can leave its owner scope.
+                await OwnedTestOperationCleanup.CompleteAsync(
+                    primaryFailure,
+                    assemblyRun,
+                    () =>
+                    {
+                        release.TrySetResult();
+
+                        return Task.CompletedTask;
+                    },
+                    null);
+            }
+        });
+
+        var summary = await assemblyRun;
 
         // Assert
         Assert.Equal(2, activeBeforeRelease);
+        Assert.Same(observerFails
+                ? observerFailure
+                : null,
+            observedFailure);
+
         Assert.False(completedBeforeRelease);
         Assert.Equal(2, summary.Total);
         Assert.Equal(0, summary.Failed);
@@ -255,11 +303,15 @@ public sealed class SharedContainerRunnerTests
 
     /// <summary>The exclusive definition prevents overlap; the same cases without it demonstrate overlap.</summary>
     /// <param name="exclusive">Whether the control case carries the real nonparallel collection definition.</param>
+    /// <param name="observerFails">Whether observation fails while the normal collections remain gated.</param>
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
     public async Task RunAsync_RespectsDefinitionBackedExclusiveCollectionWithOverlappingControl(
-        bool exclusive
+        bool exclusive,
+        bool observerFails
     )
     {
         // Arrange
@@ -271,37 +323,48 @@ public sealed class SharedContainerRunnerTests
         var controlAdmitted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseNormals = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseControl = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var observerFailure = new InvalidOperationException("collection overlap observer failed");
         var normalActive = 0;
         var normalAdmitted = 0;
         var normalCompleted = 0;
         var normalActiveAtControlAdmission = -1;
         var normalCompletedAtControlAdmission = -1;
-        bool controlActiveBeforeNormalRelease;
+        var controlActiveBeforeNormalRelease = false;
 
         async Task<RunSummary> HoldNormalAsync(
             object[] arguments,
             CancellationToken cancellationToken
         )
         {
-            Assert.Same(fixture, arguments[0]);
-
-            Interlocked.Increment(ref normalActive);
-
-            if (Interlocked.Increment(ref normalAdmitted) == 2)
-            {
-                normalsAdmitted.SetResult();
-            }
-
             try
             {
-                await releaseNormals.Task.WaitAsync(cancellationToken);
+                Assert.Same(fixture, arguments[0]);
 
-                return new RunSummary { Total = 1 };
+                Interlocked.Increment(ref normalActive);
+
+                try
+                {
+                    if (Interlocked.Increment(ref normalAdmitted) == 2)
+                    {
+                        normalsAdmitted.TrySetResult();
+                    }
+
+                    await releaseNormals.Task.WaitAsync(cancellationToken);
+
+                    return new RunSummary { Total = 1 };
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref normalActive);
+                    Interlocked.Increment(ref normalCompleted);
+                }
             }
-            finally
+            catch (Exception exception)
             {
-                Interlocked.Decrement(ref normalActive);
-                Interlocked.Increment(ref normalCompleted);
+                normalsAdmitted.TrySetException(exception);
+                controlAdmitted.TrySetException(exception);
+
+                throw;
             }
         }
 
@@ -310,17 +373,26 @@ public sealed class SharedContainerRunnerTests
             CancellationToken cancellationToken
         )
         {
-            Assert.Empty(arguments);
+            try
+            {
+                Assert.Empty(arguments);
 
-            await normalsAdmitted.Task.WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
+                await normalsAdmitted.Task.WaitAsync(cancellationToken);
 
-            normalActiveAtControlAdmission = Volatile.Read(ref normalActive);
-            normalCompletedAtControlAdmission = Volatile.Read(ref normalCompleted);
-            controlAdmitted.SetResult();
+                normalActiveAtControlAdmission = Volatile.Read(ref normalActive);
+                normalCompletedAtControlAdmission = Volatile.Read(ref normalCompleted);
+                controlAdmitted.TrySetResult();
 
-            await releaseControl.Task.WaitAsync(cancellationToken);
+                await releaseControl.Task.WaitAsync(cancellationToken);
 
-            return new RunSummary { Total = 1 };
+                return new RunSummary { Total = 1 };
+            }
+            catch (Exception exception)
+            {
+                controlAdmitted.TrySetException(exception);
+
+                throw;
+            }
         }
 
         IXunitTestCase[] cases =
@@ -346,32 +418,63 @@ public sealed class SharedContainerRunnerTests
         // Act
         var assemblyRun = runner.RunAsync();
 
-        try
+        var observedFailure = await Record.ExceptionAsync(async () =>
         {
-            await normalsAdmitted.Task.WaitAsync(TimeSpan.FromSeconds(10));
-
-            if (!exclusive)
+            Exception? primaryFailure = null;
+            try
             {
-                // WHY: The negative control must enter while both ordinary
-                // collections remain gated; serialization cannot pass this probe.
-                await controlAdmitted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                await AwaitAdmissionAsync(normalsAdmitted.Task, assemblyRun, CancellationToken.None);
+
+                if (!exclusive)
+                {
+                    // WHY: The control must enter while both ordinary collections
+                    // remain gated; serialization cannot satisfy this observation.
+                    await AwaitAdmissionAsync(controlAdmitted.Task, assemblyRun, CancellationToken.None);
+                }
+
+                controlActiveBeforeNormalRelease = controlAdmitted.Task.IsCompleted;
+
+                if (observerFails)
+                {
+                    throw observerFailure;
+                }
+
+                releaseNormals.TrySetResult();
+
+                await AwaitAdmissionAsync(controlAdmitted.Task, assemblyRun, CancellationToken.None);
             }
+            catch (Exception exception)
+            {
+                primaryFailure = exception;
 
-            controlActiveBeforeNormalRelease = controlAdmitted.Task.IsCompleted;
+                throw;
+            }
+            finally
+            {
+                // WHY: Both independent gates must open before the actual
+                // assembly run is joined, including a failed observer path.
+                await OwnedTestOperationCleanup.CompleteAsync(
+                    primaryFailure,
+                    assemblyRun,
+                    () =>
+                    {
+                        releaseNormals.TrySetResult();
+                        releaseControl.TrySetResult();
 
-            releaseNormals.TrySetResult();
+                        return Task.CompletedTask;
+                    },
+                    null);
+            }
+        });
 
-            await controlAdmitted.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        }
-        finally
-        {
-            releaseNormals.TrySetResult();
-            releaseControl.TrySetResult();
-        }
-
-        var summary = await assemblyRun.WaitAsync(TimeSpan.FromSeconds(10));
+        var summary = await assemblyRun;
 
         // Assert
+        Assert.Same(observerFails
+                ? observerFailure
+                : null,
+            observedFailure);
+
         Assert.Equal(!exclusive, controlActiveBeforeNormalRelease);
         Assert.Equal(
             exclusive
@@ -476,7 +579,9 @@ public sealed class SharedContainerRunnerTests
                 .Count());
     }
 
-    /// <summary>Startup errors fail selected tests and cleanup errors produce the normal xUnit cleanup message.</summary>
+    /// <summary>
+    /// Startup errors fail selected tests and cleanup errors produce the normal xUnit cleanup message.
+    /// </summary>
     [Fact]
     public async Task RunAsync_WhenStartupAndCleanupFail_ReportsBothFailuresWithoutThrowingHooks()
     {
@@ -517,9 +622,16 @@ public sealed class SharedContainerRunnerTests
         Assert.Contains("runner cleanup sentinel", cleanupMessage.Messages);
     }
 
-    /// <summary>The fallback waits for an admitted collection and rejects late borrowers before final teardown.</summary>
-    [Fact]
-    public async Task EnsureFixtureDisposedAsync_DrainsAdmittedCollectionsAndRejectsLateArrivals()
+    /// <summary>
+    /// The fallback waits for an admitted collection and rejects late borrowers before final teardown.
+    /// </summary>
+    /// <param name="observerFails">Whether observation fails before the admitted collection is released.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task EnsureFixtureDisposedAsync_DrainsAdmittedCollectionsAndRejectsLateArrivals(
+        bool observerFails
+    )
     {
         // Arrange
         var fixture = new RunnerFixture();
@@ -528,26 +640,27 @@ public sealed class SharedContainerRunnerTests
         var sink = new RecordingSink();
         var admitted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var observerFailure = new InvalidOperationException("fixture teardown observer failed");
         var executed = 0;
         var firstCase = CreateCase<FirstConsumer>(
             assembly,
-            observeArguments: async (arguments, token) =>
+            observeArguments: async (arguments, cancellationToken) =>
             {
                 Assert.Same(fixture, arguments[0]);
 
                 Interlocked.Increment(ref executed);
                 admitted.SetResult();
 
-                await release.Task.WaitAsync(token);
+                await release.Task.WaitAsync(cancellationToken);
 
                 return new RunSummary { Total = 1 };
             });
 
         var lateCase = CreateCase<SecondConsumer>(
             assembly,
-            observeArguments: (_, token) =>
+            observeArguments: (_, cancellationToken) =>
             {
-                token.ThrowIfCancellationRequested();
+                cancellationToken.ThrowIfCancellationRequested();
 
                 Interlocked.Increment(ref executed);
 
@@ -566,30 +679,183 @@ public sealed class SharedContainerRunnerTests
         using var messageBus = new SynchronousMessageBus(sink, stopOnFail: false);
 
         await InvokeStartingHookAsync(runner, cancellation.Token);
+        var disposedWhileCollectionWasActive = -1;
+        var cleanupCompletedBeforeRelease = false;
+        var cleanup = Task.CompletedTask;
+        Task<RunSummary>? lateRun = null;
 
         // Act
         var firstRun = InvokeCollectionRunner(runner, firstCase, messageBus, cancellation, cancellation.Token);
 
-        await admitted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var observedFailure = await Record.ExceptionAsync(async () =>
+        {
+            Exception? primaryFailure = null;
+            try
+            {
+                await AwaitAdmissionAsync(admitted.Task, firstRun, cancellation.Token);
 
-        var cleanup = runner.EnsureFixtureDisposedAsync();
-        var disposedWhileCollectionWasActive = fixture.DisposeCount;
-        var cleanupCompletedBeforeRelease = cleanup.IsCompleted;
-        var lateRun = InvokeCollectionRunner(runner, lateCase, messageBus, cancellation, cancellation.Token);
+                cleanup = runner.EnsureFixtureDisposedAsync();
+                disposedWhileCollectionWasActive = fixture.DisposeCount;
+                cleanupCompletedBeforeRelease = cleanup.IsCompleted;
+                lateRun = InvokeCollectionRunner(runner, lateCase, messageBus, cancellation, cancellation.Token);
 
-        release.SetResult();
+                if (observerFails)
+                {
+                    throw observerFailure;
+                }
+            }
+            catch (Exception exception)
+            {
+                primaryFailure = exception;
 
-        await Task
-            .WhenAll(firstRun, lateRun, cleanup)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+                throw;
+            }
+            finally
+            {
+                // WHY: Observation can fail before teardown starts. Release and
+                // join every known run, then complete the cached fixture teardown
+                // before the enclosing runner, bus and token source are disposed.
+                await OwnedTestOperationCleanup.CompleteAsync(
+                    primaryFailure,
+                    Task.WhenAll(firstRun, (Task?)lateRun ?? Task.CompletedTask, cleanup),
+                    () =>
+                    {
+                        release.TrySetResult();
+
+                        return Task.CompletedTask;
+                    },
+                    null,
+                    runner.EnsureFixtureDisposedAsync);
+            }
+        });
+
+        var lateSummary = lateRun is null
+            ? null
+            : await lateRun;
 
         // Assert
+        Assert.Same(observerFails
+                ? observerFailure
+                : null,
+            observedFailure);
+
         Assert.False(cleanupCompletedBeforeRelease);
         Assert.Equal(0, disposedWhileCollectionWasActive);
         Assert.Equal(1, executed);
         Assert.Equal(1, fixture.InitializeCount);
         Assert.Equal(1, fixture.DisposeCount);
-        Assert.Equal(0, (await lateRun).Total);
+        Assert.NotNull(lateSummary);
+        Assert.Equal(0, lateSummary.Total);
+    }
+
+    /// <summary>Readiness cannot be inferred from a runner completing without its admission signal.</summary>
+    /// <param name="runnerFails">Whether the runner faults instead of returning without admission.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AdmissionObservationRejectsRunnerCompletionWithoutAdmission(
+        bool runnerFails
+    )
+    {
+        // Arrange
+        var admission = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var runnerFailure = new InvalidOperationException("runner failed before admission");
+        var run = runnerFails
+            ? Task.FromException(runnerFailure)
+            : Task.CompletedTask;
+
+        // Act
+        var failure = await Record.ExceptionAsync(() =>
+            AwaitAdmissionAsync(admission.Task, run, CancellationToken.None));
+
+        // Assert
+        if (runnerFails)
+        {
+            Assert.Same(runnerFailure, failure);
+        }
+        else
+        {
+            Assert.Equal(
+                "The runner completed before the required collection admission was observed.",
+                Assert.IsType<InvalidOperationException>(failure)
+                    .Message);
+        }
+
+        Assert.False(admission.Task.IsCompleted);
+    }
+
+    /// <summary>A completed admission remains valid when its runner has already completed too.</summary>
+    [Fact]
+    public async Task AdmissionObservationAcceptsAnAlreadyCompletedAdmission()
+    {
+        // Arrange
+        var admission = Task.CompletedTask;
+        var run = Task.CompletedTask;
+
+        // Act
+        await AwaitAdmissionAsync(admission, run, CancellationToken.None);
+
+        // Assert
+        Assert.True(admission.IsCompletedSuccessfully);
+        Assert.True(run.IsCompletedSuccessfully);
+    }
+
+    /// <summary>Readiness observation preserves its caller's cancellation without taking ownership of work.</summary>
+    [Fact]
+    public async Task AdmissionObservationRetainsTheCallerCancellationToken()
+    {
+        // Arrange
+        var admission = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var run = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        // Act
+        var failure = await Record.ExceptionAsync(() =>
+            AwaitAdmissionAsync(admission.Task, run.Task, cancellation.Token));
+
+        run.SetResult();
+        admission.SetResult();
+        await run.Task;
+
+        // Assert
+        Assert.Equal(cancellation.Token,
+            Assert.IsType<OperationCanceledException>(failure)
+                .CancellationToken);
+
+        Assert.True(run.Task.IsCompletedSuccessfully);
+    }
+
+    /// <summary>
+    /// Observes actual collection admission or an earlier runner completion without a speed threshold.
+    /// </summary>
+    /// <param name="admission">The signal set only after the expected collections enter.</param>
+    /// <param name="run">The real runner operation, which remains owned by its caller.</param>
+    /// <param name="cancellationToken">Cancels forward observation; the caller still protects cleanup.</param>
+    /// <returns>Completion only after the actual admission signal was observed.</returns>
+    private static async Task AwaitAdmissionAsync(
+        Task admission,
+        Task run,
+        CancellationToken cancellationToken
+    )
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        _ = await Task
+            .WhenAny(admission, run)
+            .WaitAsync(cancellationToken);
+
+        if (!admission.IsCompleted)
+        {
+            // WHY: Startup or a collection may fail before signaling readiness.
+            // Observe the actual runner error instead of leaving a gate wait orphaned.
+            await run;
+
+            throw new InvalidOperationException(
+                "The runner completed before the required collection admission was observed.");
+        }
+
+        await admission.WaitAsync(cancellationToken);
     }
 
     private static TestAssembly CreateAssembly() => new(Reflector.Wrap(typeof(SharedContainerRunnerTests).Assembly));

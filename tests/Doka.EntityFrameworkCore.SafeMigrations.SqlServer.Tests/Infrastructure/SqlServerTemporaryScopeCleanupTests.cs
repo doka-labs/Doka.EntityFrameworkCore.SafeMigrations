@@ -5,7 +5,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// </summary>
 public sealed class SqlServerTemporaryScopeCleanupTests
 {
-    private const string ConnectionString =
+    private const string CleanupConnectionString =
         "Server=127.0.0.1,1433;Database=cleanup;"
         + "User ID=sa;Password=unused;TrustServerCertificate=True";
 
@@ -27,7 +27,7 @@ public sealed class SqlServerTemporaryScopeCleanupTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        using var context = new SafeMigrationDbContext(CleanupConnectionString);
         var analyzer = CreateAnalyzer(context);
         await using var connection = new CleanupConnection();
         await using var transaction = new CleanupTransaction(connection);
@@ -74,7 +74,7 @@ public sealed class SqlServerTemporaryScopeCleanupTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        using var context = new SafeMigrationDbContext(CleanupConnectionString);
         var analyzer = CreateAnalyzer(context);
         await using var connection = new CleanupConnection
         {
@@ -146,7 +146,7 @@ public sealed class SqlServerTemporaryScopeCleanupTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        using var context = new SafeMigrationDbContext(CleanupConnectionString);
         var analyzer = CreateAnalyzer(context);
         var cleanupFailure = new InvalidOperationException("Sensitive SQL and identifier sentinel.");
         await using var connection = new CleanupConnection
@@ -201,7 +201,7 @@ public sealed class SqlServerTemporaryScopeCleanupTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        using var context = new SafeMigrationDbContext(CleanupConnectionString);
         var analyzer = CreateAnalyzer(context);
         await using var connection = new CleanupConnection();
 
@@ -230,8 +230,8 @@ public sealed class SqlServerTemporaryScopeCleanupTests
     public async Task QuarantinedAnalyzer_RejectsEveryCatalogEntryPointAndRequiresReplacement()
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
-        using var replacementContext = new SafeMigrationDbContext(ConnectionString);
+        using var context = new SafeMigrationDbContext(CleanupConnectionString);
+        using var replacementContext = new SafeMigrationDbContext(CleanupConnectionString);
         var analyzer = CreateAnalyzer(context);
         var replacement = CreateAnalyzer(replacementContext);
         await using var connection = new CleanupConnection
@@ -391,7 +391,8 @@ public sealed class SqlServerTemporaryScopeCleanupTests
         private ConnectionState _state = ConnectionState.Closed;
 
         [AllowNull]
-        public override string ConnectionString { get; set; } = SqlServerTemporaryScopeCleanupTests.ConnectionString;
+        public override string ConnectionString { get; set; } =
+            CleanupConnectionString;
 
         public override string Database => "cleanup";
         public override string DataSource => "cleanup-fake";

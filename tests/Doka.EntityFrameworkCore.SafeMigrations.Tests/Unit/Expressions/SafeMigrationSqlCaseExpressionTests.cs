@@ -12,7 +12,7 @@ public sealed class SafeMigrationSqlCaseExpressionTests
         using var portableWriter = new CanonicalHashWriter();
         using var convertedWriter = new CanonicalHashWriter();
 
-        var renamed = SafeMigrationSqlExpressionInspector.RenameIdentifier(converted!, "value", "renamed");
+        var renamed = SafeMigrationSqlExpressionInspector.RenameIdentifier(converted, "value", "renamed");
         SafeMigrationSqlExpressionContract.Write(portableWriter, portable);
         SafeMigrationSqlExpressionContract.Write(convertedWriter, converted);
 
@@ -102,7 +102,7 @@ public sealed class SafeMigrationSqlCaseExpressionTests
                 out var expression));
 
         var renamed = SafeMigrationSqlExpressionInspector.RenameColumnIdentifier(
-            expression!,
+            expression,
             "source",
             "target",
             StringComparer.Ordinal);
@@ -153,8 +153,8 @@ public sealed class SafeMigrationSqlCaseExpressionTests
         const string sql = "CASE WHEN a IS NULL THEN 1 ELSE 0 END";
         Assert.True(SafeMigrationSqlExpressionParser.TryParse(sql, out var first));
         Assert.True(SafeMigrationSqlExpressionParser.TryParse(sql, out var second));
-        var left = ExpectedCheckConstraintDefinition.FromExpression("ck_a", "items", first!);
-        var right = ExpectedCheckConstraintDefinition.FromExpression("ck_b", "items", second!);
+        var left = ExpectedCheckConstraintDefinition.FromExpression("ck_a", "items", first);
+        var right = ExpectedCheckConstraintDefinition.FromExpression("ck_b", "items", second);
 
         var equivalent = SafeMigrationSemanticDefinitionComparers.CheckConstraint.Equals(left, right);
 
@@ -175,7 +175,7 @@ public sealed class SafeMigrationSqlCaseExpressionTests
     )
     {
         Assert.True(SafeMigrationSqlExpressionParser.TryParse(sql, out var expression));
-        var candidate = SafeMigrationDefaultValue.Sql(expression!);
+        var candidate = SafeMigrationDefaultValue.Sql(expression);
 
         var proven = SafeMigrationColumnRepairHelper.HasProvablyNonNullDefault(candidate);
 

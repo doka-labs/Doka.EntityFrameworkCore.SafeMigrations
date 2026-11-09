@@ -368,7 +368,6 @@ internal sealed class CatalogProbeTestConnection : DbConnection
             }
 
             base.Dispose();
-            GC.SuppressFinalize(this);
         }
     }
 

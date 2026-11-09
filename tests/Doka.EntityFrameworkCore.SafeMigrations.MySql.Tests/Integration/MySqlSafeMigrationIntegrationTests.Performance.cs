@@ -18,7 +18,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     protected const int PerformanceFixtureCommandTimeoutSeconds = 180;
 }
 
-public sealed partial class MySqlPerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlPerformanceIntegrationTests
 {
     /// <summary>Checks managed-data deferral in several mixed-stream cycles before costly stress qualification.</summary>
     [Fact]
@@ -174,7 +174,7 @@ public sealed partial class MySqlProcessWidePerformanceIntegrationTests : MySqlS
     }
 }
 
-public sealed partial class MySqlPerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlPerformanceIntegrationTests
 {
     [Fact]
     public async Task Analyzer_AppliesConfiguredCommandTimeoutToCatalogBatches()
@@ -384,7 +384,7 @@ public sealed partial class MySqlPerformanceIntegrationTests : MySqlSafeMigratio
             }));
 }
 
-public sealed partial class MySqlProcessWidePerformanceIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlProcessWidePerformanceIntegrationTests
 {
     private static string BuildMySqlModelManagedInitialRows() => string.Join(
         Environment.NewLine,

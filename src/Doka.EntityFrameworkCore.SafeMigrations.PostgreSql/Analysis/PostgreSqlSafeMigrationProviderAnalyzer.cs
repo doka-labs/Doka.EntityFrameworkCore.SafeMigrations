@@ -236,6 +236,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                 // than retaining the complete migration's SQL. The full
                 // transition catalogs and data proofs above remain shared.
                 var plans = new PostgreSqlSafeMigrationRuntimePlan?[operationWindow.Length];
+
+                // WHY: Create evaluates this predicate synchronously and never
+                // retains it; later window-offset changes cannot reach it.
                 var workOrder = SafeMigrationCatalogWorkOrder.Create(
                     operationWindow.Length,
                     ordinal => shortCircuitStates[operationOffset + ordinal] is null,

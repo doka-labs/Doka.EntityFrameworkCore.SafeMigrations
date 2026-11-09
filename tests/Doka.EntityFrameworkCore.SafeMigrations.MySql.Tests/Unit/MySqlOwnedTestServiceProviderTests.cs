@@ -134,7 +134,11 @@ public sealed class MySqlOwnedTestServiceProviderTests
     {
         // Arrange
         var version = MySqlServerVersion.MariaDb(new Version(11, 8, 8));
-        var owned = new GeneratedFacetPendingDropDbContext(
+
+        // WHY: Setup can fail before the explicit disposal Act; the fallback
+        // remains idempotent and owns only this context's private service root.
+        // ReSharper disable once UseAwaitUsing
+        using var owned = new GeneratedFacetPendingDropDbContext(
             "Server=127.0.0.1;Port=1;Database=owned_profile;User ID=test",
             version);
 
@@ -173,5 +177,39 @@ public sealed class MySqlOwnedTestServiceProviderTests
         Assert.NotSame(root, siblingRoot);
         Assert.IsType<ObjectDisposedException>(failure);
         Assert.NotNull(siblingModel.FindEntityType(typeof(GeneratedFacetPendingDropRow)));
+    }
+
+    /// <summary>A setup exception still releases the generated context's privately owned root.</summary>
+    [Fact]
+    public void GeneratedProfileFallbackReleasesItsRootAfterSetupFailure()
+    {
+        // Arrange
+        var version = MySqlServerVersion.MariaDb(new Version(11, 8, 8));
+        var expected = new InvalidOperationException("Controlled generated-profile setup failure.");
+        IServiceProvider? root = null;
+
+        // WHY: A throw-only lambda can bind to xUnit's async overload. This
+        // explicitly synchronous setup exercises the owner's synchronous fallback.
+        var failDuringSetup = () =>
+        {
+            using var owned = new GeneratedFacetPendingDropDbContext(
+                "Server=127.0.0.1;Port=1;Database=owned_profile;User ID=test",
+                version);
+
+            root = owned
+                .GetService<IDbContextOptions>()
+                .FindExtension<CoreOptionsExtension>()!.InternalServiceProvider;
+
+            throw expected;
+        };
+
+        // Act
+        var failure = Record.Exception(failDuringSetup);
+        var disposalFailure = Record.Exception(() => root!.GetService(typeof(IMigrationsSqlGenerator)));
+
+        // Assert
+        Assert.Same(expected, failure);
+        Assert.NotNull(root);
+        Assert.IsType<ObjectDisposedException>(disposalFailure);
     }
 }

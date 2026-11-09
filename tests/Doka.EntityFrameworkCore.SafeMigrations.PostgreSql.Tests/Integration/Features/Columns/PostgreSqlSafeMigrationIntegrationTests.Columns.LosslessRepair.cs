@@ -664,8 +664,9 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
     [Fact]
     public async Task VarcharNarrowing_LocksOutConcurrentWritersBeforeTheFinalProof()
     {
+        // Arrange
         const string concurrentValue = "committed-while-repair-waited";
-        using var testCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var testCancellation = new CancellationTokenSource();
 
         var connectionString = await CreateDatabaseAsync(testCancellation.Token);
         await ExecuteSqlAsync(
@@ -688,8 +689,6 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 new SafeMigrationRunOptions("varchar-narrowing-locked-recheck"),
                 testCancellation.Token);
 
-        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-
         await using var writer = new NpgsqlConnection(connectionString);
         await writer.OpenAsync(testCancellation.Token);
         await using var transaction = await writer.BeginTransactionAsync(testCancellation.Token);
@@ -704,24 +703,22 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             _ = await insert.ExecuteNonQueryAsync(testCancellation.Token);
         }
 
-        // WHY: Run the guarded DDL on the thread pool so the test does not
-        // serialize its observer and blocked command through xUnit's context.
-        var execution = Task.Run(
-            () => ExecuteOperationsAsync(
-                context,
-                builder.Operations,
-                testCancellation.Token),
-            CancellationToken.None);
-
-        await WaitForBlockedPostgreSqlNarrowingCommandAsync(
-            connectionString,
-            "varchar_narrowing_locked_recheck",
+        // Act
+        var failure = await PostgreSqlOwnedConcurrentAttempt.RunAsync(
+            cancellationToken => ExecuteOperationsAsync(context, builder.Operations, cancellationToken),
+            (pending, cancellationToken) => WaitForBlockedPostgreSqlNarrowingCommandAsync(
+                connectionString,
+                "varchar_narrowing_locked_recheck",
+                pending,
+                cancellationToken),
+            cancellationToken => transaction.CommitAsync(cancellationToken),
+            () => transaction.RollbackAsync(CancellationToken.None),
+            testCancellation,
             testCancellation.Token);
 
-        await transaction.CommitAsync(testCancellation.Token);
-
-        var exception = await Assert.ThrowsAsync<PostgresException>(() => execution);
-
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
+        var exception = Assert.IsType<PostgresException>(failure);
         Assert.Equal("P1003", exception.SqlState);
         Assert.StartsWith("doka_sm_data_blocked:", exception.MessageText, StringComparison.Ordinal);
         Assert.Equal(
@@ -788,9 +785,11 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Cancellation drains the blocked analyzer before its context and writer gate leave scope.</summary>
     [Fact]
     public async Task VarcharNarrowing_PropagatesProbeCancellationWithoutMutation()
     {
+        // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -816,23 +815,28 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             "varchar_narrowing_cancellation");
 
         using var cancellation = new CancellationTokenSource();
-        var analysis = context
-            .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(
-                context,
-                builder.Operations,
-                new SafeMigrationRunOptions("varchar-narrowing-cancellation"),
-                cancellation.Token);
 
-        await WaitForBlockedPostgreSqlNarrowingCommandAsync(
-            connectionString,
-            "varchar_narrowing_cancellation",
-            CancellationToken.None);
+        // Act
+        var failure = await PostgreSqlOwnedConcurrentAttempt.RunAsync(
+            cancellationToken => context
+                .GetService<ISafeMigrationRunner>()
+                .AnalyzeAsync(
+                    context,
+                    builder.Operations,
+                    new SafeMigrationRunOptions("varchar-narrowing-cancellation"),
+                    cancellationToken),
+            (pending, cancellationToken) => WaitForBlockedPostgreSqlNarrowingCommandAsync(
+                connectionString,
+                "varchar_narrowing_cancellation",
+                pending,
+                cancellationToken),
+            _ => cancellation.CancelAsync(),
+            () => transaction.RollbackAsync(CancellationToken.None),
+            cancellation,
+            cancellation.Token);
 
-        await cancellation.CancelAsync();
-
-        _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => analysis);
-
+        // Assert
+        Assert.IsAssignableFrom<OperationCanceledException>(failure);
         Assert.Equal(
             40,
             await ScalarIntAsync(

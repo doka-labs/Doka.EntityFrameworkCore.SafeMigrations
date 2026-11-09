@@ -42,8 +42,10 @@ public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMig
     [Fact]
     public async Task ConcurrentMigrators_ConvergeThroughTheEfMigrationLock()
     {
+        // Arrange
         var databasePath = CreateOwnedDatabasePath();
         var connectionString = CreateOwnedFileConnectionString(databasePath);
+        Exception? primaryFailure = null;
 
         try
         {
@@ -54,6 +56,9 @@ public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMig
 
             using var start = new Barrier(2);
 
+            // Act
+            // WHY: SQLite's provider performs synchronous native work even through
+            // async APIs. Separate workers create real overlap, not an async wrapper.
             var results = await Task.WhenAll(
                 Task.Run(() => ExecuteConcurrentMigrationAsync(
                     connectionString,
@@ -66,39 +71,52 @@ public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMig
 
             await using var verification = new SqliteConnection(connectionString);
             await verification.OpenAsync(CancellationToken.None);
+            var payloadColumns = await ScalarIntAsync(
+                verification,
+                "SELECT COUNT(*) FROM pragma_table_xinfo('pipeline_state') WHERE name = 'payload';",
+                cancellationToken: CancellationToken.None);
 
+            var probeTables = await ScalarIntAsync(
+                verification,
+                "SELECT COUNT(*) FROM main.sqlite_schema "
+                + "WHERE type = 'table' AND name = 'pipeline_probe';",
+                cancellationToken: CancellationToken.None);
+
+            var historyRows = await ScalarIntAsync(
+                verification,
+                "SELECT COUNT(*) FROM __EFMigrationsHistory "
+                + $"WHERE MigrationId = '{SqliteCoreConvergenceMigration.MigrationIdentifier}';",
+                cancellationToken: CancellationToken.None);
+
+            // Assert
             Assert.Contains(results, static result => result == ConcurrentExecutionResult.Completed);
             Assert.All(
                 results,
                 static result => Assert.True(
                     result is ConcurrentExecutionResult.Completed or ConcurrentExecutionResult.Busy));
 
-            Assert.Equal(
-                1,
-                await ScalarIntAsync(
-                    verification,
-                    "SELECT COUNT(*) FROM pragma_table_xinfo('pipeline_state') WHERE name = 'payload';",
-                    cancellationToken: CancellationToken.None));
+            Assert.Equal(1, payloadColumns);
+            Assert.Equal(1, probeTables);
+            Assert.Equal(1, historyRows);
+        }
+        catch (Exception exception)
+        {
+            primaryFailure = exception;
 
-            Assert.Equal(
-                1,
-                await ScalarIntAsync(
-                    verification,
-                    "SELECT COUNT(*) FROM main.sqlite_schema "
-                    + "WHERE type = 'table' AND name = 'pipeline_probe';",
-                    cancellationToken: CancellationToken.None));
-
-            Assert.Equal(
-                1,
-                await ScalarIntAsync(
-                    verification,
-                    "SELECT COUNT(*) FROM __EFMigrationsHistory "
-                    + $"WHERE MigrationId = '{SqliteCoreConvergenceMigration.MigrationIdentifier}';",
-                    cancellationToken: CancellationToken.None));
+            throw;
         }
         finally
         {
-            File.Delete(databasePath);
+            await OwnedTestOperationCleanup.CompleteAsync(primaryFailure,
+                null,
+                null,
+                null,
+                afterDrain: () =>
+                {
+                    File.Delete(databasePath);
+
+                    return Task.CompletedTask;
+                });
         }
     }
 
@@ -120,31 +138,47 @@ public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMig
     ) => $"Data Source={databasePath};Mode=ReadWriteCreate;Cache=Private;"
         + "Default Timeout=10;Foreign Keys=True;Pooling=False";
 
+    /// <summary>Admits one independent migrator or withdraws it before its peer can be stranded.</summary>
+    /// <param name="connectionString">The independently owned native database.</param>
+    /// <param name="start">The shared single-phase admission barrier.</param>
+    /// <param name="cancellationToken">Cancellation for initialization, admission and migration.</param>
+    /// <returns>The completed or native-busy result without a scheduling-speed requirement.</returns>
     private static async Task<ConcurrentExecutionResult> ExecuteConcurrentMigrationAsync(
         string connectionString,
         Barrier start,
         CancellationToken cancellationToken
     )
     {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        await using var connection = new SqliteConnection(connectionString);
-        await connection.OpenAsync(cancellationToken);
-        await using var context = CreateContext(connection);
-        if (!start.SignalAndWait(TimeSpan.FromSeconds(10), cancellationToken))
-        {
-            throw new TimeoutException("Concurrent SQLite migrators did not reach the start barrier.");
-        }
-
+        var admitted = false;
         try
         {
-            await context.Database.MigrateAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var connection = new SqliteConnection(connectionString);
+            await connection.OpenAsync(cancellationToken);
+            await using var context = CreateContext(connection);
 
-            return ConcurrentExecutionResult.Completed;
+            // WHY: Admission is a state transition, not a CPU/load budget. A
+            // worker that fails initialization withdraws in finally, so its
+            // peer does not need a timer to escape an impossible rendezvous.
+            start.SignalAndWait(cancellationToken);
+            admitted = true;
+            try
+            {
+                await context.Database.MigrateAsync(cancellationToken);
+
+                return ConcurrentExecutionResult.Completed;
+            }
+            catch (SqliteException exception) when (exception.SqliteErrorCode is 5 or 6)
+            {
+                return ConcurrentExecutionResult.Busy;
+            }
         }
-        catch (SqliteException exception) when (exception.SqliteErrorCode is 5 or 6)
+        finally
         {
-            return ConcurrentExecutionResult.Busy;
+            if (!admitted)
+            {
+                start.RemoveParticipant();
+            }
         }
     }
 

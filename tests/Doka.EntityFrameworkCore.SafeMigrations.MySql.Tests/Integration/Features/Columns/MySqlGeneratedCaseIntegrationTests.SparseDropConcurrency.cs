@@ -104,11 +104,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         builder.DropColumnIfExists("unrelated", "generated_sparse_drop");
         await using var writer = new MySqlConnection(connectionString);
         await writer.OpenAsync(CancellationToken.None);
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
+
+        // WHY: The native checkpoint selects this race independently of machine load.
+        var cancellationToken = CancellationToken.None;
+        using var executionCancellation = new CancellationTokenSource();
         await using var acquire = writer.CreateCommand();
         acquire.CommandText = $"SELECT GET_LOCK('{gateName}', 30);";
-        if (Convert.ToInt32(await acquire.ExecuteScalarAsync(deadline.Token), CultureInfo.InvariantCulture) != 1)
+        if (Convert.ToInt32(await acquire.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture) != 1)
         {
             throw new InvalidOperationException("The independent generated-DROP gate was not acquired.");
         }
@@ -117,33 +119,38 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var controlFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(
             connectionString,
             "ALTER TABLE generated_sparse_control DROP COLUMN unrelated;",
-            cancellationToken: deadline.Token));
+            cancellationToken: cancellationToken));
 
-        var execution = Record.ExceptionAsync(() =>
-            ExecuteOperationsAsync(context, builder.Operations, executionCancellation.Token));
+        var execution = ExecuteOperationsAsync(context, builder.Operations, executionCancellation.Token);
 
-        Exception? failure;
+        Exception? failure = null;
+        Exception? coordinationFailure = null;
         bool observed;
         bool mutated;
         try
         {
-            await WaitForSparseDropCheckpointAsync(writer, deadline.Token);
+            await WaitForSparseDropCheckpointAsync(writer, execution, cancellationToken);
             observed = true;
             await using var mutate = writer.CreateCommand();
             mutate.CommandText = SparseDropConcurrentMutation(mutation);
-            await mutate.ExecuteNonQueryAsync(deadline.Token);
+            await mutate.ExecuteNonQueryAsync(cancellationToken);
             mutated = true;
             await ReleaseSparseDropGateAsync(writer, gateName);
-            failure = await execution.WaitAsync(deadline.Token);
+            failure = await Record.ExceptionAsync(() => execution);
+        }
+        catch (Exception exception)
+        {
+            coordinationFailure = exception;
+
+            throw;
         }
         finally
         {
-            await ReleaseSparseDropGateAsync(writer, gateName);
-            if (!execution.IsCompleted)
-            {
-                await executionCancellation.CancelAsync();
-                _ = await execution.WaitAsync(TimeSpan.FromSeconds(10));
-            }
+            await OwnedTestOperationCleanup.CompleteAsync(
+                coordinationFailure ?? failure,
+                execution,
+                () => ReleaseSparseDropGateAsync(writer, gateName),
+                executionCancellation);
         }
 
         var unrelated = await SparseDropColumnCountAsync(
@@ -233,8 +240,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         cancellationToken: cancellationToken);
 
     /// <summary>Waits for a database-visible marker rather than guessing command duration.</summary>
+    /// <param name="writer">The independent session reading the committed checkpoint.</param>
+    /// <param name="execution">The actual migration whose completion also ends an unsuccessful observation.</param>
+    /// <param name="cancellationToken">The caller's coordination cancellation.</param>
     private static async Task WaitForSparseDropCheckpointAsync(
         MySqlConnection writer,
+        Task execution,
         CancellationToken cancellationToken
     )
     {
@@ -245,6 +256,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             if (Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture) == 1)
             {
                 return;
+            }
+
+            if (execution.IsCompleted)
+            {
+                await execution;
+
+                throw new InvalidOperationException("The generated DROP completed before its checkpoint.");
             }
 
             await Task.Yield();

@@ -1102,7 +1102,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             namesFree.Value,
             ownedCollision!.Value,
             localIndexNameOccupied!.Value,
-            multiValuedIndexRisk!.Value,
+            multiValuedIndexRisk.Value,
             keys is null
                 ? []
                 : keys.ToArray(),

@@ -18,6 +18,15 @@ the shared release identity described in [Release process](docs/release-process.
 
 ### Fixed
 
+- Complete owned concurrent test operations before releasing their contexts,
+  transactions, cancellation sources and fixtures, including observer, rollback,
+  cancellation-callback and post-drain cleanup failures. Retain original failures
+  and additional cleanup causes. Replace load-sensitive admission/coordination
+  cutoffs with actual producer and barrier-state evidence. Correct the existing
+  internal SQL Server dependency-interface dispatch; public APIs remain unchanged.
+- Remove verified private dead state and redundant test declarations while
+  retaining runtime input guards, reflection-based consumers, enum values,
+  exact provider overload selection and native type-size boundaries.
 - Preserve explicitly configured InnoDB table metadata through safe scaffolding,
   immutable capture, native DDL and catalog verification. Strict and legacy
   convergence retain the authored engine requirement through the existing typed

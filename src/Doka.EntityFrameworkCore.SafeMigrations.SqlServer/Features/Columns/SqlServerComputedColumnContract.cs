@@ -138,7 +138,7 @@ internal static class SqlServerComputedColumnContract
         {
             do
             {
-                switch (current.Expression)
+                switch (current.Node)
                 {
                     case SafeMigrationSqlLiteralExpression { Value: null, StoreType: null }
                         when current.AllowNull:
@@ -246,7 +246,7 @@ internal static class SqlServerComputedColumnContract
 
     /// <summary>Retains one branch position and the special untyped-NULL allowance of COALESCE.</summary>
     private readonly record struct FiniteFrame(
-        SafeMigrationSqlExpression Expression,
+        SafeMigrationSqlExpression Node,
         int Index = 0,
         bool AllowNull = false
     );

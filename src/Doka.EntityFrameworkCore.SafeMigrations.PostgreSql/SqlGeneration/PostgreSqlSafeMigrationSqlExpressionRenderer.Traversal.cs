@@ -117,7 +117,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 var binary = (SafeMigrationSqlBinaryExpression)step.Expression;
                 AppendOperator(writer, binary.Operator);
                 pending.Push(TextStep(writer, ")"));
-                ScheduleBinaryOperand(ref pending, writer, binary.Right, binary.Left, binary.Operator, catalogShape);
+                ScheduleBinaryOperand(ref pending, writer, binary.Right, binary.Left, binary.Operator);
                 return;
             case RenderStepKind.NativeBoolean:
                 if (step.Expression is SafeMigrationSqlBinaryExpression flattened
@@ -176,7 +176,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
                 return;
             case RenderStepKind.CaseClauses:
-                ScheduleCaseClause(step, catalogShape, ref pending);
+                ScheduleCaseClause(step, ref pending);
                 return;
             case RenderStepKind.CaseResult:
                 var conditional = (SafeMigrationSqlCaseExpression)step.Expression;
@@ -293,8 +293,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                         writer,
                         binary.Left,
                         binary.Right,
-                        binary.Operator,
-                        catalogShape);
+                        binary.Operator);
                 }
 
                 return;
@@ -421,8 +420,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         IExpressionTextWriter writer,
         SafeMigrationSqlExpression operand,
         SafeMigrationSqlExpression other,
-        SafeMigrationSqlBinaryOperator operation,
-        bool catalogShape
+        SafeMigrationSqlBinaryOperator operation
     )
     {
         if (operation is not (SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or)
@@ -582,7 +580,6 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
     /// <summary>Retains WHEN/THEN/ELSE rendering order and one owned depth-restoration frame per CASE.</summary>
     private static void ScheduleCaseClause(
         RenderStep step,
-        bool catalogShape,
         ref SafeMigrationWorkStack<RenderStep> pending
     )
     {

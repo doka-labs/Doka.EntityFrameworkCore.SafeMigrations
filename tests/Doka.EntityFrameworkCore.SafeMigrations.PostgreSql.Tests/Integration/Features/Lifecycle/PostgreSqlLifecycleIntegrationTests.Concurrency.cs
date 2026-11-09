@@ -125,7 +125,7 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
                 provider => provider
                     .MigrationsAssembly(typeof(SafeMigrationDbContext).Assembly.FullName)
                     .MigrationsHistoryTable("__ApplicationDbContextMigrationsHistory"))
-            .UsePostgreSqlSafeMigrations<SafeMigrationDbContext>()
+            .UsePostgreSqlSafeMigrations()
             .AddInterceptors(barrier)
             .Options;
 

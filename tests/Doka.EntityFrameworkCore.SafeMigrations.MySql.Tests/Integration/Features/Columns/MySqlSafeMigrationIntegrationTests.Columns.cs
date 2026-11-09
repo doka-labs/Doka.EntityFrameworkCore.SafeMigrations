@@ -1257,7 +1257,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     }
 }
 
-public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlColumnsIntegrationTests
 {
     [Fact]
     public async Task UnmappedClrType_IsClassifiedUnsupportedBeforeDdl()

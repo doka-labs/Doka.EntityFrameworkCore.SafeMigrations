@@ -17,7 +17,7 @@ public sealed class CoreOwnershipDesignTimeDbContextFactory
                 .MigrationsAssembly(typeof(CoreOwnershipDbContext).Assembly.FullName!)
                 .MigrationsHistoryTable("__SafeMigrationsCoreHistory"));
 
-        options.UseMySqlSafeMigrations<CoreOwnershipDbContext>();
+        options.UseMySqlSafeMigrations();
 
         return new CoreOwnershipDbContext(options.Options);
     }
@@ -40,7 +40,7 @@ public sealed class CustomOwnershipDesignTimeDbContextFactory
                 .MigrationsAssembly(typeof(CustomOwnershipDbContext).Assembly.FullName!)
                 .MigrationsHistoryTable("__SafeMigrationsCustomHistory"));
 
-        options.UseMySqlSafeMigrations<CustomOwnershipDbContext>(safeMigrations =>
+        options.UseMySqlSafeMigrations(safeMigrations =>
             safeMigrations.ExcludeModelManagedDataForExcludedTables());
 
         return new CustomOwnershipDbContext(options.Options);

@@ -335,7 +335,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     );
 }
 
-public sealed partial class MySqlTablesCatalogSnapshotIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlTablesCatalogSnapshotIntegrationTests
 {
     /// <summary>Reads a status counter from the connection the analyzer used.</summary>
     /// <param name="context">The context whose connection is inspected.</param>

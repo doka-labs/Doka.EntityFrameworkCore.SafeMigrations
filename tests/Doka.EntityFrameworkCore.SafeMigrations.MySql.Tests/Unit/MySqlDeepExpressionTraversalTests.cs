@@ -167,7 +167,7 @@ public sealed class MySqlDeepExpressionTraversalTests
     {
         // Arrange
         using var context = CreateContext();
-        var expression = (SafeMigrationSqlExpression)SafeMigrationSql.Identifier("source");
+        var expression = SafeMigrationSql.Identifier("source");
         for (var index = 0; index < Depth; index++)
         {
             expression = SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Not, expression);
@@ -359,7 +359,7 @@ public sealed class MySqlDeepExpressionTraversalTests
     )
     {
         // Arrange
-        var expression = (SafeMigrationSqlExpression)SafeMigrationSql.Literal(1);
+        var expression = SafeMigrationSql.Literal(1);
         for (var index = 0; index < depth; index++)
         {
             expression = SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Negate, expression);
@@ -469,7 +469,7 @@ public sealed class MySqlDeepExpressionTraversalTests
     {
         // Arrange
         using var context = CreateContext();
-        var expression = (SafeMigrationSqlExpression)SafeMigrationSql.Binary(
+        var expression = SafeMigrationSql.Binary(
             SafeMigrationSql.Binary(
                 SafeMigrationSql.Identifier("a"),
                 SafeMigrationSqlBinaryOperator.Equal,

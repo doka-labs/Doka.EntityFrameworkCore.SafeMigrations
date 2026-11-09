@@ -116,6 +116,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
         Assert.Equal(64, fingerprint.Length);
         Assert.Equal(guid, intent.Values.GetValue(0, 16));
+        Assert.Equal(2, (int)Assert.IsType<ModelManagedDataTestValue>(intent.Values.GetValue(0, 22)));
 
         var unsupported = new object?[,] { { 1, new Uri("https://example.test/secret-value") } };
 
@@ -453,7 +454,6 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
     private enum ModelManagedDataTestValue
     {
-        First = 1,
         Second = 2,
     }
 }

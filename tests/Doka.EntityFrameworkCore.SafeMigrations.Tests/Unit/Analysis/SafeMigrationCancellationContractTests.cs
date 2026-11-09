@@ -118,11 +118,13 @@ public sealed class SafeMigrationCancellationContractTests
         using var cancellation = new CancellationTokenSource();
         var report = MeasurementReport();
         var calls = 0;
+        var observedToken = CancellationToken.None;
 
         // Act
         var failure = await Record.ExceptionAsync(() => LivePerformanceEvidence.MeasureAsync(
-            token =>
+            cancellationToken =>
             {
+                observedToken = cancellationToken;
                 calls++;
                 cancellation.Cancel();
 
@@ -134,6 +136,7 @@ public sealed class SafeMigrationCancellationContractTests
         var canceled = Assert.IsAssignableFrom<OperationCanceledException>(failure);
         Assert.Equal(cancellation.Token, canceled.CancellationToken);
         Assert.Equal(1, calls);
+        Assert.Equal(cancellation.Token, observedToken);
     }
 
     /// <summary>Typed phase measurements retain their functional result and exact caller token.</summary>

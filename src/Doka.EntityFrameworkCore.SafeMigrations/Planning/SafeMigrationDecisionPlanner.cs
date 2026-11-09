@@ -50,7 +50,7 @@ public static class SafeMigrationDecisionPlanner
     {
         var operationFamily = ClassifyOperation(operationKind);
 
-        Validate(operationKind, observedState, policy, repairCapability);
+        Validate(observedState, policy, repairCapability);
 
         return observedState switch
         {
@@ -175,7 +175,6 @@ public static class SafeMigrationDecisionPlanner
     ) => (action, code);
 
     private static void Validate(
-        SafeMigrationOperationKind operationKind,
         SafeMigrationObservedState observedState,
         SafeMigrationPolicy policy,
         SafeMigrationRepairCapability repairCapability
