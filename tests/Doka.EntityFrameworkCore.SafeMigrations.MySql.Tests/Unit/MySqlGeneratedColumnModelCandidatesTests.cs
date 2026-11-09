@@ -224,8 +224,8 @@ public sealed class MySqlGeneratedColumnModelCandidatesTests
     }
 
     /// <summary>Creates a distinct immutable operation reference with the same native owner identity.</summary>
-    private static SafeMigrationOperation Drop() =>
-        new(new DropColumnIntent("unrelated", "model_candidate_facets"), SafeMigrationPolicy.ThrowIfDifferent);
+    private static SafeMigrationOperation Drop() => new(new DropColumnIntent("unrelated", "model_candidate_facets"),
+        SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Exposes complete design-time metadata and its intentionally reduced EF runtime counterpart.</summary>
     private class FacetedCandidateContext : DbContext

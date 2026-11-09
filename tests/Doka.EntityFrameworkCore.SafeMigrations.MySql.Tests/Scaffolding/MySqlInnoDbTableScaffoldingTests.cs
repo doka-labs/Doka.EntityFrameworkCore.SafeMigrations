@@ -17,7 +17,13 @@ public sealed class MySqlInnoDbTableScaffoldingTests
         // Arrange
         using var runtime = CreateRuntimeServices(safeFirst: false);
         using var context = new ExplicitModelContext(CreateOptions(runtime));
-        var table = context.GetService<IDesignTimeModel>().Model.GetRelationalModel().Tables.Single();
+        var table = context
+            .GetService<IDesignTimeModel>()
+            .Model
+            .GetRelationalModel()
+            .Tables
+            .Single();
+
         var annotations = context.GetService<IMigrationsAnnotationProvider>();
         var captured = kind switch
         {
@@ -38,11 +44,15 @@ public sealed class MySqlInnoDbTableScaffoldingTests
 
         // Act
         generator.Generate("migrationBuilder", [operation], builder);
-        var normalized = Assert.IsType<SafeMigrationOperation>(Assert.Single(Reload(builder.ToString()).Operations));
+        var normalized = Assert.IsType<SafeMigrationOperation>(Assert.Single(Reload(builder.ToString())
+            .Operations));
 
         // Assert
         Assert.Equal("InnoDB", operation["Doka:MySql:StorageEngine"]);
-        Assert.Equal(operation.GetType(), SafeMigrationStandardOperationFactory.Create(normalized.Intent).GetType());
+        Assert.Equal(operation.GetType(),
+            SafeMigrationStandardOperationFactory
+                .Create(normalized.Intent)
+                .GetType());
     }
 
     /// <summary>Removal annotations are historical facets, not new physical shape requirements.</summary>
@@ -74,7 +84,10 @@ public sealed class MySqlInnoDbTableScaffoldingTests
         // Assert
         Assert.Equal(operation.GetType(), reconstructed.GetType());
         Assert.Empty(safe.GetAnnotations());
-        Assert.Equal(3, operation.GetAnnotations().Count());
+        Assert.Equal(3,
+            operation
+                .GetAnnotations()
+                .Count());
     }
 
     /// <summary>Identity certification cannot swallow unknown or invalid inherited metadata.</summary>
@@ -131,18 +144,36 @@ public sealed class MySqlInnoDbTableScaffoldingTests
 
         // Act
         var migration = CompileCompleteMigration(context, out var snapshot);
-        var up = migration.UpOperations.OfType<SafeMigrationOperation>().Single();
-        var down = migration.DownOperations.OfType<SafeMigrationOperation>().Single();
-        var snapshotModel = context.GetService<IModelRuntimeInitializer>()
+        var up = migration
+            .UpOperations
+            .OfType<SafeMigrationOperation>()
+            .Single();
+
+        var down = migration
+            .DownOperations
+            .OfType<SafeMigrationOperation>()
+            .Single();
+
+        var snapshotModel = context
+            .GetService<IModelRuntimeInitializer>()
             .Initialize(snapshot.Model, designTime: true);
 
         // Assert
         Assert.IsType<EnsureTableIntent>(up.Intent);
         Assert.IsType<DropTableIntent>(down.Intent);
-        Assert.Equal("InnoDB", SafeMigrationStandardOperationFactory.Create(up.Intent)
-            ["Doka:MySql:StorageEngine"]);
-        Assert.False(context.GetService<IMigrationsModelDiffer>().HasDifferences(
-            snapshotModel.GetRelationalModel(), context.GetService<IDesignTimeModel>().Model.GetRelationalModel()));
+        Assert.Equal("InnoDB",
+            SafeMigrationStandardOperationFactory
+                .Create(up.Intent)
+                ["Doka:MySql:StorageEngine"]);
+
+        Assert.False(context
+            .GetService<IMigrationsModelDiffer>()
+            .HasDifferences(
+                snapshotModel.GetRelationalModel(),
+                context
+                    .GetService<IDesignTimeModel>()
+                    .Model
+                    .GetRelationalModel()));
     }
 
     /// <summary>Real model annotations survive scaffolding in either runtime-registration order.</summary>
@@ -162,9 +193,15 @@ public sealed class MySqlInnoDbTableScaffoldingTests
         using var runtime = CreateRuntimeServices(safeFirst);
         var options = CreateOptions(runtime);
         using var context = new ExplicitModelContext(options);
-        var model = context.GetService<IDesignTimeModel>().Model;
-        var original = context.GetService<IMigrationsModelDiffer>()
-            .GetDifferences(source: null, model.GetRelationalModel()).OfType<CreateTableOperation>().Single();
+        var model = context.GetService<IDesignTimeModel>()
+            .Model;
+
+        var original = context
+            .GetService<IMigrationsModelDiffer>()
+            .GetDifferences(source: null, model.GetRelationalModel())
+            .OfType<CreateTableOperation>()
+            .Single();
+
         using var services = CreateServices();
         var generator = CreateGenerator(services, mode);
         var sourceBuilder = new IndentedStringBuilder();
@@ -172,8 +209,11 @@ public sealed class MySqlInnoDbTableScaffoldingTests
         // Act
         generator.Generate("migrationBuilder", [original], sourceBuilder);
         var reloaded = Reload(sourceBuilder.ToString());
-        var table = reloaded.Operations.OfType<SafeMigrationOperation>()
+        var table = reloaded
+            .Operations
+            .OfType<SafeMigrationOperation>()
             .Single(candidate => candidate.Intent is EnsureTableIntent);
+
         var reconstructed = (CreateTableOperation)SafeMigrationStandardOperationFactory.Create(table.Intent);
 
         // Assert
@@ -193,9 +233,14 @@ public sealed class MySqlInnoDbTableScaffoldingTests
 
         // Act
         var plainHash = SafeMigrationModelFingerprint.Create(
-            plain.GetService<IDesignTimeModel>().Model, "Doka.EntityFrameworkCore.MySql");
+            plain.GetService<IDesignTimeModel>()
+                .Model,
+            "Doka.EntityFrameworkCore.MySql");
+
         var engineHash = SafeMigrationModelFingerprint.Create(
-            explicitEngine.GetService<IDesignTimeModel>().Model, "Doka.EntityFrameworkCore.MySql");
+            explicitEngine.GetService<IDesignTimeModel>()
+                .Model,
+            "Doka.EntityFrameworkCore.MySql");
 
         // Assert
         Assert.NotEqual(plainHash, engineHash);
@@ -220,16 +265,21 @@ public sealed class MySqlInnoDbTableScaffoldingTests
         generator.Generate("migrationBuilder", [operation], sourceBuilder);
         var source = sourceBuilder.ToString();
         var migrationBuilder = Reload(source);
-        var table = migrationBuilder.Operations.OfType<SafeMigrationOperation>()
+        var table = migrationBuilder
+            .Operations
+            .OfType<SafeMigrationOperation>()
             .Single(candidate => candidate.Intent is EnsureTableIntent);
 
         // Assert
-        Assert.Contains(".Annotation(\"Doka:MySql:StorageEngine\", \"InnoDB\")", source,
+        Assert.Contains(".Annotation(\"Doka:MySql:StorageEngine\", \"InnoDB\")",
+            source,
             StringComparison.Ordinal);
+
         Assert.Contains("operationFactory:", source, StringComparison.Ordinal);
         Assert.Empty(table.GetAnnotations());
         var reconstructed = Assert.IsType<CreateTableOperation>(
             SafeMigrationStandardOperationFactory.Create(table.Intent));
+
         Assert.Equal("InnoDB", reconstructed["Doka:MySql:StorageEngine"]);
     }
 
@@ -296,9 +346,21 @@ public sealed class MySqlInnoDbTableScaffoldingTests
     ) => kind switch
     {
         "drop_table" => new DropTableOperation { Name = "EngineNodes" },
-        "rename_table" => new RenameTableOperation { Name = "EngineNodes", NewName = "RenamedNodes" },
-        "drop_primary" => new DropPrimaryKeyOperation { Name = "PK_EngineNodes", Table = "EngineNodes" },
-        "drop_unique" => new DropUniqueConstraintOperation { Name = "UQ_EngineNodes", Table = "EngineNodes" },
+        "rename_table" => new RenameTableOperation
+        {
+            Name = "EngineNodes",
+            NewName = "RenamedNodes",
+        },
+        "drop_primary" => new DropPrimaryKeyOperation
+        {
+            Name = "PK_EngineNodes",
+            Table = "EngineNodes",
+        },
+        "drop_unique" => new DropUniqueConstraintOperation
+        {
+            Name = "UQ_EngineNodes",
+            Table = "EngineNodes",
+        },
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
@@ -317,17 +379,31 @@ public sealed class MySqlInnoDbTableScaffoldingTests
         new MySqlDesignTimeServices().ConfigureDesignTimeServices(services);
         new MySqlSafeMigrationDesignTimeServices().ConfigureDesignTimeServices(services);
         using var design = services.BuildServiceProvider();
-        var scaffold = design.GetRequiredService<IMigrationsScaffolder>()
-            .ScaffoldMigration("EngineLifetime", "GeneratedEngineLifetime",
-                subNamespace: null, language: "C#", dryRun: true);
+        var scaffold = design
+            .GetRequiredService<IMigrationsScaffolder>()
+            .ScaffoldMigration("EngineLifetime",
+                "GeneratedEngineLifetime",
+                subNamespace: null,
+                language: "C#",
+                dryRun: true);
+
         var assembly = MySqlGeneratedMigrationCompiler.Compile(
-            scaffold.MigrationCode, scaffold.MetadataCode, scaffold.SnapshotCode);
+            scaffold.MigrationCode,
+            scaffold.MetadataCode,
+            scaffold.SnapshotCode);
+
         var migration = (Migration)Activator.CreateInstance(
-            assembly.GetTypes().Single(type => type.IsSubclassOf(typeof(Migration))))!;
+            assembly
+                .GetTypes()
+                .Single(type => type.IsSubclassOf(typeof(Migration))))!;
+
         migration.ActiveProvider = context.Database.ProviderName
             ?? throw new InvalidOperationException("The scaffolded context requires a provider.");
+
         snapshot = (ModelSnapshot)Activator.CreateInstance(
-            assembly.GetTypes().Single(type => type.IsSubclassOf(typeof(ModelSnapshot))))!;
+            assembly
+                .GetTypes()
+                .Single(type => type.IsSubclassOf(typeof(ModelSnapshot))))!;
 
         return migration;
     }
@@ -355,24 +431,25 @@ public sealed class MySqlInnoDbTableScaffoldingTests
     )
     {
         var source = $$"""
-                       using System;
-                       using Doka.EntityFrameworkCore.MySql;
-                       using Doka.EntityFrameworkCore.SafeMigrations;
-                       using Microsoft.EntityFrameworkCore.Migrations;
+            using System;
+            using Doka.EntityFrameworkCore.MySql;
+            using Doka.EntityFrameworkCore.SafeMigrations;
+            using Microsoft.EntityFrameworkCore.Migrations;
 
-                       public static class GeneratedEngineMigration
-                       {
-                           public static void Up(MigrationBuilder migrationBuilder)
-                           {
-                               {{operationSource}}
-                           }
-                       }
-                       """;
+            public static class GeneratedEngineMigration
+            {
+                public static void Up(MigrationBuilder migrationBuilder)
+                {
+                    {{operationSource}}
+                }
+            }
+            """;
 
         var assembly = MySqlGeneratedMigrationCompiler.Compile(source);
         var method = assembly.GetType("GeneratedEngineMigration", throwOnError: true)!.GetMethod("Up")!;
         var migrationBuilder = new MigrationBuilder("Doka.EntityFrameworkCore.MySql");
-        method.CreateDelegate<Action<MigrationBuilder>>()(migrationBuilder);
+        method
+            .CreateDelegate<Action<MigrationBuilder>>()(migrationBuilder);
 
         return migrationBuilder;
     }
@@ -404,6 +481,7 @@ public sealed class MySqlInnoDbTableScaffoldingTests
         builder.UseInternalServiceProvider(services);
         builder.UseMySql("Server=localhost;Database=engine_scaffolding;User ID=test;",
             MySqlServerVersion.MariaDb(new Version(12, 3, 3)));
+
         builder.UseMySqlSafeMigrations();
 
         return builder.Options;
@@ -427,7 +505,10 @@ public sealed class MySqlInnoDbTableScaffoldingTests
             var entity = modelBuilder.Entity<EngineRecord>();
             entity.ToTable("EngineNodes");
             entity.HasKey(value => value.Id);
-            entity.Property(value => value.Id).ValueGeneratedNever();
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
+
             if (HasExplicitEngine)
             {
                 entity.UseStorageEngine("InnoDB");

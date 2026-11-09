@@ -431,16 +431,15 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
     private static ExpectedColumnDefinition CaptureProjectionComputed(
         string sql
-    ) =>
-        SafeMigrationExpectedDefinitionFactory.From(
-            new AddColumnOperation
-            {
-                Name = "computed_value",
-                Table = "items",
-                ClrType = typeof(long),
-                IsNullable = true,
-                ComputedColumnSql = sql,
-            });
+    ) => SafeMigrationExpectedDefinitionFactory.From(
+        new AddColumnOperation
+        {
+            Name = "computed_value",
+            Table = "items",
+            ClrType = typeof(long),
+            IsNullable = true,
+            ComputedColumnSql = sql,
+        });
 
     private sealed class CapturedSqlQuoteIdentityNormalizer : ISafeMigrationProviderObjectIdentityNormalizer
     {

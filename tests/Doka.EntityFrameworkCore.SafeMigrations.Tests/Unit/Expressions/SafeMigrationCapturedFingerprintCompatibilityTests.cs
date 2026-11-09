@@ -151,38 +151,34 @@ public sealed class SafeMigrationCapturedFingerprintCompatibilityTests
 
     private static ExpectedColumnDefinition RawComputed(
         string sql
-    ) =>
-        new("computed_value", typeof(long), true, computedColumnSql: sql);
+    ) => new("computed_value", typeof(long), true, computedColumnSql: sql);
 
     private static ExpectedColumnDefinition CaptureColumn(
         string? computedSql = null,
         string? defaultSql = null
-    ) =>
-        SafeMigrationExpectedDefinitionFactory.From(
-            new AddColumnOperation
-            {
-                Name = "computed_value",
-                Table = "items",
-                ClrType = typeof(long),
-                IsNullable = true,
-                ComputedColumnSql = computedSql,
-                DefaultValueSql = defaultSql,
-            });
+    ) => SafeMigrationExpectedDefinitionFactory.From(
+        new AddColumnOperation
+        {
+            Name = "computed_value",
+            Table = "items",
+            ClrType = typeof(long),
+            IsNullable = true,
+            ComputedColumnSql = computedSql,
+            DefaultValueSql = defaultSql,
+        });
 
     private static ExpectedCheckConstraintDefinition CaptureCheck(
         string sql
-    ) =>
-        SafeMigrationExpectedDefinitionFactory.From(
-            new AddCheckConstraintOperation
-            {
-                Name = "ck_items",
-                Table = "items",
-                Sql = sql,
-            });
+    ) => SafeMigrationExpectedDefinitionFactory.From(
+        new AddCheckConstraintOperation
+        {
+            Name = "ck_items",
+            Table = "items",
+            Sql = sql,
+        });
 
     private static string Fingerprint(
         SafeMigrationIntent intent
-    ) =>
-        SafeMigrationContractFingerprint.Create(
-            [new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent)]);
+    ) => SafeMigrationContractFingerprint.Create(
+        [new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent)]);
 }

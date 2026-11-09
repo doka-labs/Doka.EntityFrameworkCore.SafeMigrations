@@ -445,8 +445,8 @@ internal static partial class SqliteSafeMigrationCatalog
         }
     }
 
-    private static InvalidOperationException InvalidMetadata() =>
-        new("SQLite returned missing, inconsistent, or unowned catalog metadata.");
+    private static InvalidOperationException InvalidMetadata()
+        => new("SQLite returned missing, inconsistent, or unowned catalog metadata.");
 
     private sealed class TableBuilder
     {

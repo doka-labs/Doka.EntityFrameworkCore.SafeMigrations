@@ -55,25 +55,22 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         string table,
         string? schema,
         string column
-    )
-        => _dependencyGraph?.HasLiveColumn(table, schema, column) == true
-            || (_projectedKeyTables.TryGetValue((schema ?? "dbo", table), out var snapshot)
-                && snapshot.Exists
-                && snapshot.PhysicalSupported
-                && snapshot.Columns.ContainsKey(column));
+    ) => _dependencyGraph?.HasLiveColumn(table, schema, column) == true
+        || (_projectedKeyTables.TryGetValue((schema ?? "dbo", table), out var snapshot)
+            && snapshot.Exists
+            && snapshot.PhysicalSupported
+            && snapshot.Columns.ContainsKey(column));
 
     /// <inheritdoc />
     public bool RequiresLiveForeignKeyQualification(
         EnsureForeignKeyIntent intent
-    )
-        => _dependencyGraph?.RequiresLiveForeignKeyQualification(intent) == true;
+    ) => _dependencyGraph?.RequiresLiveForeignKeyQualification(intent) == true;
 
     /// <inheritdoc />
     public IReadOnlyList<SafeMigrationLiveCandidateKey>? GetLiveForeignKeyCandidateKeys(
         EnsureForeignKeyIntent intent,
         ISafeMigrationProjectedColumnSource columns
-    )
-        => _dependencyGraph?.GetLiveForeignKeyCandidateKeys(intent, columns);
+    ) => _dependencyGraph?.GetLiveForeignKeyCandidateKeys(intent, columns);
 
     /// <inheritdoc />
     public SafeMigrationProviderAnalysis? ValidateOpaqueProviderPostcondition(
@@ -177,8 +174,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         DbContext context,
         IReadOnlyList<SafeMigrationOperation> operations,
         CancellationToken cancellationToken
-    )
-        => AnalyzeCoreAsync(context, operations, operations, cancellationToken);
+    ) => AnalyzeCoreAsync(context, operations, operations, cancellationToken);
 
     /// <inheritdoc />
     public StringComparer IdentifierComparer => StringComparer.Ordinal;
@@ -199,8 +195,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     /// <inheritdoc />
     public bool IsObjectIdentityMismatch(
         SafeMigrationProviderAnalysis analysis
-    )
-        => analysis.Code is "default_schema_mismatch" or "identifier_collation_unproven";
+    ) => analysis.Code is "default_schema_mismatch" or "identifier_collation_unproven";
 
     /// <inheritdoc />
     public bool PreservesExistingTableState(
@@ -255,8 +250,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     /// <summary>Matches the provider baseline's exact zero-command default-schema exception.</summary>
     private static bool IsZeroCommandSchemaEnsure(
         MigrationOperation operation
-    )
-        => operation is EnsureSchemaOperation schema && StringComparer.OrdinalIgnoreCase.Equals(schema.Name, "dbo");
+    ) => operation is EnsureSchemaOperation schema && StringComparer.OrdinalIgnoreCase.Equals(schema.Name, "dbo");
 
     /// <summary>Classifies the safe subset while retaining the original ordered CHECK declaration boundaries.</summary>
     private async Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeCoreAsync(
@@ -655,11 +649,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
 
     private static SafeMigrationProviderAnalysis Unsupported(
         string code
-    )
-        => new(SafeMigrationObservedState.Unsupported, SafeMigrationRepairCapability.None, false, code)
-        {
-            IsInvariantUnsupported = true,
-        };
+    ) => new(SafeMigrationObservedState.Unsupported, SafeMigrationRepairCapability.None, false, code)
+    {
+        IsInvariantUnsupported = true,
+    };
 
     private static SafeMigrationObservedState ParseState(
         string state

@@ -366,15 +366,14 @@ public sealed class MySqlProvider106ContractTests
     /// <summary>Captures exactly the finalized model that SafeMigrations' design-time pipeline consumes.</summary>
     internal static IReadOnlyList<MigrationOperation> CreateOperations(
         DbContext context
-    ) =>
-        context
-            .GetService<IMigrationsModelDiffer>()
-            .GetDifferences(
-                null,
-                context
-                    .GetService<IDesignTimeModel>()
-                    .Model
-                    .GetRelationalModel());
+    ) => context
+        .GetService<IMigrationsModelDiffer>()
+        .GetDifferences(
+            null,
+            context
+                .GetService<IDesignTimeModel>()
+                .Model
+                .GetRelationalModel());
 
     /// <summary>Creates one physical owner with a deterministic non-generated integer identity.</summary>
     private static EntityTypeBuilder Owner(

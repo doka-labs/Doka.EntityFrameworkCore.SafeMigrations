@@ -1452,20 +1452,19 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         SqliteConnection connection,
         string artifact,
         CancellationToken cancellationToken
-    ) =>
-        ScalarIntAsync(
-            connection,
-            artifact switch
-            {
-                "trigger" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'trigger' "
-                    + "AND name = 'retained_trigger';",
-                "index" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'index' AND name = 'retained_index';",
-                "check" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'table' AND name = 'rebuild_nodes' "
-                    + "AND instr(sql, 'retained_check') > 0;",
-                "foreign_key" => "SELECT COUNT(*) FROM pragma_foreign_key_list('rebuild_nodes');",
-                _ => "SELECT COUNT(*) FROM pragma_table_xinfo('rebuild_nodes') WHERE name = 'retained_payload';",
-            },
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connection,
+        artifact switch
+        {
+            "trigger" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'trigger' "
+                + "AND name = 'retained_trigger';",
+            "index" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'index' AND name = 'retained_index';",
+            "check" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'table' AND name = 'rebuild_nodes' "
+                + "AND instr(sql, 'retained_check') > 0;",
+            "foreign_key" => "SELECT COUNT(*) FROM pragma_foreign_key_list('rebuild_nodes');",
+            _ => "SELECT COUNT(*) FROM pragma_table_xinfo('rebuild_nodes') WHERE name = 'retained_payload';",
+        },
+        cancellationToken: cancellationToken);
 
     /// <summary>Names the exact independent rebuild guard expected for each native artifact.</summary>
     private static string ArtifactCode(

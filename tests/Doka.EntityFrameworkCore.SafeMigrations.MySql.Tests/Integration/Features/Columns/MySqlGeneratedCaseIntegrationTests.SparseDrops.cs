@@ -745,10 +745,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         string connectionString,
         string name,
         CancellationToken cancellationToken
-    )
-        => ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = 'generated_sparse_drop' AND COLUMN_NAME = '{name}';",
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connectionString,
+        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+        + $"AND TABLE_NAME = 'generated_sparse_drop' AND COLUMN_NAME = '{name}';",
+        cancellationToken: cancellationToken);
 }

@@ -10,10 +10,9 @@ internal static class PostgreSqlSafeMigrationSchemaIdentity
     public static string? Normalize(
         string? schema,
         string? currentSchema
-    )
-        => schema is not null && StringComparer.Ordinal.Equals(schema, currentSchema)
-            ? null
-            : schema;
+    ) => schema is not null && StringComparer.Ordinal.Equals(schema, currentSchema)
+        ? null
+        : schema;
 
     /// <summary>Obtains the owner whose native relation lookup must match catalog classification.</summary>
     /// <param name="intent">The immutable provider-neutral intent.</param>
@@ -262,8 +261,7 @@ internal static class PostgreSqlSafeMigrationSchemaIdentity
         static bool IsCurrentAlias(
             string? schema,
             string? candidate
-        )
-            => schema is null || (candidate is not null && StringComparer.Ordinal.Equals(schema, candidate));
+        ) => schema is null || (candidate is not null && StringComparer.Ordinal.Equals(schema, candidate));
     }
 
     /// <summary>Records only actual unqualified bindings; explicit schemas never enter a native-path guard.</summary>

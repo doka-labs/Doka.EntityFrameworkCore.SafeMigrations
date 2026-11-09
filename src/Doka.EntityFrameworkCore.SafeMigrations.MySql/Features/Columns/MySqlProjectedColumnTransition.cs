@@ -211,8 +211,7 @@ internal static class MySqlProjectedColumnTransition
 
     private static bool BooleanDefault(
         SafeMigrationDefaultValue value
-    ) =>
-        value.Kind == SafeMigrationDefaultValueKind.None
+    ) => value.Kind == SafeMigrationDefaultValueKind.None
         || (value.Kind == SafeMigrationDefaultValueKind.Literal && value.GetLiteralValue() is null or bool);
 
     /// <summary>Matches runtime's strict-mode prerequisite for a potentially narrowing string domain.</summary>

@@ -597,14 +597,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         List<MigrationOperation> operations,
         IModel model,
         CancellationToken cancellationToken
-    ) =>
-        ((ISafeMigrationProviderTargetModelAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>()).AnalyzeAsync(
-            context,
-            operations,
-            Enumerable
-                .Repeat<IModel?>(model, operations.Count)
-                .ToArray(),
-            cancellationToken);
+    ) => ((ISafeMigrationProviderTargetModelAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>()).AnalyzeAsync(
+        context,
+        operations,
+        Enumerable
+            .Repeat<IModel?>(model, operations.Count)
+            .ToArray(),
+        cancellationToken);
 
     /// <summary>Exercises ordinary generated commands with the exact complete model passed by a migration.</summary>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>

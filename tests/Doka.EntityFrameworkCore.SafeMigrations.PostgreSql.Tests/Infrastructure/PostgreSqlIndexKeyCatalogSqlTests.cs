@@ -129,8 +129,8 @@ public sealed class PostgreSqlIndexKeyCatalogSqlTests
         Assert.Contains("FROM shape_table LIMIT 0)))::oid", state, StringComparison.Ordinal);
     }
 
-    private static SafeMigrationDbContext CreateContext() =>
-        new(OfflineConnectionString, registerSafeMigrations: false);
+    private static SafeMigrationDbContext CreateContext()
+        => new(OfflineConnectionString, registerSafeMigrations: false);
 
     private static ExpectedIndexKeyDefinition[] PlainKeys(
         int count

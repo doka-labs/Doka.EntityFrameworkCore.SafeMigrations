@@ -44,10 +44,13 @@ internal interface ISafeMigrationProjectedDependencyAnalyzer
         SafeMigrationProviderAnalysis liveAnalysis
     ) => intent.Definition.ProviderAnnotations.Count == 0
         || SafeMigrationDefinitionEquivalence.ProviderAnnotations(
-            acceptedAnnotations, intent.Definition.ProviderAnnotations)
+            acceptedAnnotations,
+            intent.Definition.ProviderAnnotations)
             ? null
             : new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
-                SafeMigrationRepairCapability.None, false, "projected_table_provider_metadata_unproven");
+                SafeMigrationRepairCapability.None,
+                false,
+                "projected_table_provider_metadata_unproven");
 
     /// <summary>Validates physical dependencies after provider-neutral projection.</summary>
     /// <param name="operation">The operation being assessed.</param>

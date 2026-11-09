@@ -55,14 +55,12 @@ internal sealed class MySqlSafeMigrationPlanCapture
     public bool IsActive => _expected is not null && !_completed;
 
     /// <summary>Gets whether runtime SQL generation owns an ordered transition catalog.</summary>
-    public bool HasGenerationContract =>
-        _generationTableConstraints is not null
+    public bool HasGenerationContract => _generationTableConstraints is not null
         && _generationUniqueIndexes is not null
         && _generationDatabaseQualifiers is not null;
 
     /// <summary>Gets every explicit database identity required by runtime generation.</summary>
-    public IReadOnlyList<string> GenerationDatabaseQualifiers =>
-        _generationDatabaseQualifiers
+    public IReadOnlyList<string> GenerationDatabaseQualifiers => _generationDatabaseQualifiers
         ?? throw new InvalidOperationException("No MySQL SafeMigrations runtime generation scope is active.");
 
     /// <summary>Gets whether the active capture requests detailed diagnostic SQL.</summary>

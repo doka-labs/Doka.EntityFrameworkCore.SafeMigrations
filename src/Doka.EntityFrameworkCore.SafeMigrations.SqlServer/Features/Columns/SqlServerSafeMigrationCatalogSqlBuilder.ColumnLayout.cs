@@ -138,15 +138,15 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // and copying that catalog SQL repeatedly for each column addition.
 
         return $"""
-                CASE WHEN {exists} THEN CONVERT(nvarchar(128), NULL) ELSE (SELECT CASE
-                WHEN layout.column_count >= 1024 THEN N'column_limit'
-                WHEN layout.unknown_columns <> 0 OR t.max_column_id_used <> layout.column_count
-                THEN N'column_layout_unproven'
-                WHEN layout.fixed_bytes + {bytes} + (layout.bit_columns + {bit} + 7) / 8
-                + 6 + (layout.column_count + 8) / 8 > 8060
-                THEN N'column_fixed_row_limit' ELSE NULL END FROM sys.tables AS t
-                CROSS APPLY ({ColumnLayoutSchemaQuery}) AS layout WHERE t.object_id = {tableId}) END
-                """;
+            CASE WHEN {exists} THEN CONVERT(nvarchar(128), NULL) ELSE (SELECT CASE
+            WHEN layout.column_count >= 1024 THEN N'column_limit'
+            WHEN layout.unknown_columns <> 0 OR t.max_column_id_used <> layout.column_count
+            THEN N'column_layout_unproven'
+            WHEN layout.fixed_bytes + {bytes} + (layout.bit_columns + {bit} + 7) / 8
+            + 6 + (layout.column_count + 8) / 8 > 8060
+            THEN N'column_fixed_row_limit' ELSE NULL END FROM sys.tables AS t
+            CROSS APPLY ({ColumnLayoutSchemaQuery}) AS layout WHERE t.object_id = {tableId}) END
+            """;
     }
 
     /// <summary>Builds one compact aggregate over documented scalar catalog metadata.</summary>

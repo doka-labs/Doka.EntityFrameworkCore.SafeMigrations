@@ -52,13 +52,12 @@ public sealed class SafeMigrationOperationIdentityAllocationTests
     // elimination from changing the comparison. No timestamps, hardware budgets or database work are involved.
     private static SafeMigrationOperationIdentity FrozenArrayIdentity(
         EnsureColumnIntent intent
-    ) =>
-        SafeMigrationOperationIdentity.CreateKnown(
-            intent.Kind,
-            intent.Schema,
-            intent.Table,
-            intent.ObjectName,
-            Array.AsReadOnly(new[] { intent.ObjectName }));
+    ) => SafeMigrationOperationIdentity.CreateKnown(
+        intent.Kind,
+        intent.Schema,
+        intent.Table,
+        intent.ObjectName,
+        Array.AsReadOnly(new[] { intent.ObjectName }));
 
     /// <summary>Ordinary column families reduce allocation against their original validated captures.</summary>
     /// <param name="kind">The ordinary operation family to measure.</param>

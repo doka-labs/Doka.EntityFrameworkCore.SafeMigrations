@@ -505,20 +505,19 @@ public sealed partial class
     /// <returns>The immutable required target with its exact backslash comment.</returns>
     private static SafeMigrationOperation RequiredDefaultsEnumCommentStandardOnlyOperation(
         bool useSetStorage
-    )
-        => new(
-            new EnsureColumnIntent(
-                "enum_comment_items",
-                new ExpectedColumnDefinition(
-                    "value",
-                    typeof(string),
-                    false,
-                    (useSetStorage
-                        ? "set"
-                        : "enum")
-                    + @"('quo\'te')",
-                    comment: EnumCommentTargetComment)),
-            SafeMigrationPolicy.RepairIfSafe);
+    ) => new(
+        new EnsureColumnIntent(
+            "enum_comment_items",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                false,
+                (useSetStorage
+                    ? "set"
+                    : "enum")
+                + @"('quo\'te')",
+                comment: EnumCommentTargetComment)),
+        SafeMigrationPolicy.RepairIfSafe);
 
     /// <summary>
     /// Creates the exact standard-decoded apostrophe member and one-backslash comment before migration.
@@ -548,20 +547,19 @@ public sealed partial class
     /// <returns>The immutable required target with explicit safe-repair policy.</returns>
     private static SafeMigrationOperation RequiredDefaultsEnumCommentOperation(
         bool useSetStorage
-    )
-        => new(
-            new EnsureColumnIntent(
-                "enum_comment_items",
-                new ExpectedColumnDefinition(
-                    "value",
-                    typeof(string),
-                    false,
-                    (useSetStorage
-                        ? "set"
-                        : "enum")
-                    + @"('slash\\tail')",
-                    comment: EnumCommentTargetComment)),
-            SafeMigrationPolicy.RepairIfSafe);
+    ) => new(
+        new EnsureColumnIntent(
+            "enum_comment_items",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                false,
+                (useSetStorage
+                    ? "set"
+                    : "enum")
+                + @"('slash\\tail')",
+                comment: EnumCommentTargetComment)),
+        SafeMigrationPolicy.RepairIfSafe);
 
     /// <summary>Creates a real standard-mode domain with an independently declared exact or legacy comment.</summary>
     /// <param name="useSetStorage">Whether the physical domain uses SET rather than ENUM.</param>
@@ -629,12 +627,11 @@ public sealed partial class
     private static Task<string> RequiredDefaultsEnumCommentPhysicalTypeAsync(
         string connectionString,
         CancellationToken cancellationToken
-    )
-        => ScalarStringAsync(
-            connectionString,
-            "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'enum_comment_items' AND COLUMN_NAME = 'value';",
-            cancellationToken: cancellationToken);
+    ) => ScalarStringAsync(
+        connectionString,
+        "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+        + "AND TABLE_NAME = 'enum_comment_items' AND COLUMN_NAME = 'value';",
+        cancellationToken: cancellationToken);
 
     /// <summary>Reads exact comment bytes so a fixture escaping error cannot impersonate target ownership.</summary>
     /// <param name="connectionString">The isolated test owner.</param>
@@ -643,10 +640,9 @@ public sealed partial class
     private static Task<string> RequiredDefaultsEnumCommentPhysicalCommentHexAsync(
         string connectionString,
         CancellationToken cancellationToken
-    )
-        => ScalarStringAsync(
-            connectionString,
-            "SELECT HEX(COLUMN_COMMENT) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'enum_comment_items' AND COLUMN_NAME = 'value';",
-            cancellationToken: cancellationToken);
+    ) => ScalarStringAsync(
+        connectionString,
+        "SELECT HEX(COLUMN_COMMENT) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+        + "AND TABLE_NAME = 'enum_comment_items' AND COLUMN_NAME = 'value';",
+        cancellationToken: cancellationToken);
 }

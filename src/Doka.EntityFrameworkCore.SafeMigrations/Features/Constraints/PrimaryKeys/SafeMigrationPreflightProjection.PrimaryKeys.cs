@@ -2,8 +2,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 internal sealed partial class SafeMigrationPreflightProjection
 {
-    private bool PrimaryKeyUsesNameIndependentIdentity =>
-        _projectedKeyAnalyzer?.PrimaryKeyUsesNameIndependentIdentity == true;
+    private bool PrimaryKeyUsesNameIndependentIdentity
+        => _projectedKeyAnalyzer?.PrimaryKeyUsesNameIndependentIdentity == true;
 
     bool? ISafeMigrationProjectedColumnSource.IsProjectedPrimaryKeyColumn(
         string table,

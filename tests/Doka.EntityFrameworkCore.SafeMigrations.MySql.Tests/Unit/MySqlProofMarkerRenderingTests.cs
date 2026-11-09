@@ -519,42 +519,41 @@ public sealed partial class MySqlProofMarkerRenderingTests
     private static MySqlSafeMigrationRuntimePlan CreatePlan(
         string expression,
         string? binding
-    ) =>
-        new(expression, expression, SafeMigrationRepairCapability.Safe, expression)
-        {
-            PrerequisiteExpression = expression,
-            CurrentDatabaseQualificationExpression = expression,
-            StateEvaluationGuardExpression = expression,
-            StateEvaluationGuardFailureExpression = expression,
-            ClassificationCodeExpression = expression,
-            DiagnosticEvidenceExpression = expression,
-            MatchedObjectNameExpression = expression,
-            ModelManagedRowEvidenceExpression = expression,
-            ModelManagedDependencyCountsExpression = expression,
-            ExecutionPostcondition = expression,
-            MutationSql = expression,
-            CapturedSourceSyntaxExpression = expression,
-            IndexNameExistsExpression = expression,
-            DropLeavesNoGeneratedColumnsExpression = expression,
-            BinaryDefaultProofs =
-            [
-                new MySqlSafeMigrationBinaryDefaultProof(
-                    BinaryMarker,
-                    "fresh_catalog",
-                    "SELECT TRUE",
-                    binding),
-            ],
-            RequiredColumnAddPlan = new MySqlSafeMigrationRequiredColumnAddPlan("owned", expression, false),
-            DataProbe = new MySqlSafeMigrationDataProbe(
-                "proof_items",
-                "payload",
-                8,
-                "`proof_items`",
-                expression,
-                expression,
-                expression),
-            NullabilityDataProbe = new MySqlSafeMigrationNullabilityDataProbe(expression, expression, expression),
-        };
+    ) => new(expression, expression, SafeMigrationRepairCapability.Safe, expression)
+    {
+        PrerequisiteExpression = expression,
+        CurrentDatabaseQualificationExpression = expression,
+        StateEvaluationGuardExpression = expression,
+        StateEvaluationGuardFailureExpression = expression,
+        ClassificationCodeExpression = expression,
+        DiagnosticEvidenceExpression = expression,
+        MatchedObjectNameExpression = expression,
+        ModelManagedRowEvidenceExpression = expression,
+        ModelManagedDependencyCountsExpression = expression,
+        ExecutionPostcondition = expression,
+        MutationSql = expression,
+        CapturedSourceSyntaxExpression = expression,
+        IndexNameExistsExpression = expression,
+        DropLeavesNoGeneratedColumnsExpression = expression,
+        BinaryDefaultProofs =
+        [
+            new MySqlSafeMigrationBinaryDefaultProof(
+                BinaryMarker,
+                "fresh_catalog",
+                "SELECT TRUE",
+                binding),
+        ],
+        RequiredColumnAddPlan = new MySqlSafeMigrationRequiredColumnAddPlan("owned", expression, false),
+        DataProbe = new MySqlSafeMigrationDataProbe(
+            "proof_items",
+            "payload",
+            8,
+            "`proof_items`",
+            expression,
+            expression,
+            expression),
+        NullabilityDataProbe = new MySqlSafeMigrationNullabilityDataProbe(expression, expression, expression),
+    };
 
     /// <summary>Dispatches documented consumer names without duplicating their common proof assertions.</summary>
     private static string Render(
@@ -607,6 +606,5 @@ public sealed partial class MySqlProofMarkerRenderingTests
     /// <summary>Rejects accidental parameter materialization in a synthetic value-free template.</summary>
     private static string UnexpectedValue(
         MySqlCatalogParameterValue value
-    ) =>
-        throw new InvalidOperationException("The marker-only fixture has no catalog values.");
+    ) => throw new InvalidOperationException("The marker-only fixture has no catalog values.");
 }

@@ -166,8 +166,7 @@ internal sealed class SqliteRebuildArtifactContract
     /// <returns>The bounded transition contract, or null for a non-table operation.</returns>
     public SafeMigrationExpectedTableConstraints? GetTableConstraintTransitions(
         SafeMigrationOperation operation
-    )
-        => _tableConstraintTransitions.Find(operation);
+    ) => _tableConstraintTransitions.Find(operation);
 
     /// <summary>
     /// Checks whether an earlier authored source addition could make this native-missing DROP execute.
@@ -176,8 +175,7 @@ internal sealed class SqliteRebuildArtifactContract
     /// <returns>Whether row analysis is warranted, never whether execution is authorized.</returns>
     public bool MayRebuildMissingColumn(
         SafeMigrationOperation operation
-    )
-        => _potentialColumnRebuilds?.Contains(operation) == true;
+    ) => _potentialColumnRebuilds?.Contains(operation) == true;
 
     /// <summary>Identifies exact FK rebuilds subsumed by the same atomic batch's later owner deletion.</summary>
     /// <param name="operation">The exact operation after successful live analysis and policy selection.</param>
@@ -573,7 +571,8 @@ internal sealed class SqliteRebuildArtifactContract
             return null;
         }
 
-        if (operation is not null && _retirement.Contains(operation))
+        if (operation is not null
+            && _retirement.Contains(operation))
         {
             return GetUnsupportedRetirementFeature(snapshot, table);
         }
@@ -966,7 +965,7 @@ internal sealed class SqliteRebuildArtifactContract
         }
 
         if (table.Indexes.Any(static index =>
-                index.Partial || index.Keys.Any(static key => key.Expression is not null)))
+            index.Partial || index.Keys.Any(static key => key.Expression is not null)))
         {
             return "table_retirement_index_expression";
         }

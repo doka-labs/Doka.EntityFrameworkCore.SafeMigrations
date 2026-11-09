@@ -229,8 +229,7 @@ internal static class SqlServerIdentifierContract
     public static IReadOnlyList<string> BuildCollisionGuardCommands(
         IReadOnlyList<SqlServerIdentifierReference> references,
         bool throwOnCollision
-    )
-        => BuildCollisionGuardCommands(references, throwOnCollision, out _);
+    ) => BuildCollisionGuardCommands(references, throwOnCollision, out _);
 
     /// <summary>Builds bounded checks and exposes the unique temporary scope for analyzer recovery.</summary>
     /// <param name="references">The physical names collected from the operation stream.</param>
@@ -445,8 +444,7 @@ internal static class SqlServerIdentifierContract
 
     private static string Literal(
         string value
-    )
-        => SqlServerSqlStringLiteral.Render(value);
+    ) => SqlServerSqlStringLiteral.Render(value);
 
     private static void AddTableDefinition(
         HashSet<SqlServerIdentifierReference> names,

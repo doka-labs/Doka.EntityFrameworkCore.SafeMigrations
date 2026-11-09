@@ -281,18 +281,17 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         string comment,
         string collation,
         CancellationToken cancellationToken
-    )
-        => ExecuteSqlAsync(
-            connectionString,
-            $"CREATE TABLE `{GeneratedFacetPendingDropDbContext.TableName}` (id int NOT NULL PRIMARY KEY, "
-            + "unrelated int NULL, result varchar(20) CHARACTER SET utf8mb4 COLLATE "
-            + collation
-            + " GENERATED ALWAYS AS ('fixed') VIRTUAL COMMENT '"
-            + comment
-            + "') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + $"INSERT INTO `{GeneratedFacetPendingDropDbContext.TableName}` (id, unrelated) "
-            + "VALUES (1, 7), (2, NULL);",
-            cancellationToken: cancellationToken);
+    ) => ExecuteSqlAsync(
+        connectionString,
+        $"CREATE TABLE `{GeneratedFacetPendingDropDbContext.TableName}` (id int NOT NULL PRIMARY KEY, "
+        + "unrelated int NULL, result varchar(20) CHARACTER SET utf8mb4 COLLATE "
+        + collation
+        + " GENERATED ALWAYS AS ('fixed') VIRTUAL COMMENT '"
+        + comment
+        + "') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
+        + $"INSERT INTO `{GeneratedFacetPendingDropDbContext.TableName}` (id, unrelated) "
+        + "VALUES (1, 7), (2, NULL);",
+        cancellationToken: cancellationToken);
 
     /// <summary>Reads the actual migration fixture without constructing replacement operations.</summary>
     private static IReadOnlyList<MigrationOperation> FacetedPendingDropOperations(
@@ -335,12 +334,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     private static Task<int> FacetedPendingUnrelatedColumnsAsync(
         string connectionString,
         CancellationToken cancellationToken
-    )
-        => ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.TableName}' AND COLUMN_NAME = 'unrelated';",
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connectionString,
+        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+        + $"AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.TableName}' AND COLUMN_NAME = 'unrelated';",
+        cancellationToken: cancellationToken);
 
     /// <summary>Checks row preservation, including unrelated values when the DROP is refused.</summary>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
@@ -348,13 +346,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         string connectionString,
         bool includeUnrelated,
         CancellationToken cancellationToken
-    )
-        => ScalarIntAsync(
-            connectionString,
-            $"SELECT COUNT(*) FROM `{GeneratedFacetPendingDropDbContext.TableName}` "
-            + "WHERE BINARY result = BINARY 'fixed' "
-            + (includeUnrelated
-                ? "AND ((id = 1 AND unrelated = 7) OR (id = 2 AND unrelated IS NULL));"
-                : "AND id IN (1, 2);"),
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connectionString,
+        $"SELECT COUNT(*) FROM `{GeneratedFacetPendingDropDbContext.TableName}` "
+        + "WHERE BINARY result = BINARY 'fixed' "
+        + (includeUnrelated
+            ? "AND ((id = 1 AND unrelated = 7) OR (id = 2 AND unrelated IS NULL));"
+            : "AND id IN (1, 2);"),
+        cancellationToken: cancellationToken);
 }

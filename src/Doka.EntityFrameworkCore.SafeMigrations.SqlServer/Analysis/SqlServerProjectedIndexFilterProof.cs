@@ -20,11 +20,10 @@ internal sealed record SqlServerProjectedIndexFilterProof(
     /// <returns>True only for the same ordered immutable definition references.</returns>
     internal bool Matches(
         IReadOnlyList<ExpectedColumnDefinition> columns
-    )
-        => Columns.Length == columns.Count
-            && Columns
-                .Select((column, ordinal) => ReferenceEquals(column, columns[ordinal]))
-                .All(static equal => equal);
+    ) => Columns.Length == columns.Count
+        && Columns
+            .Select((column, ordinal) => ReferenceEquals(column, columns[ordinal]))
+            .All(static equal => equal);
 }
 
 internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
@@ -278,10 +277,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         return null;
     }
 
-    private static SafeMigrationProviderAnalysis FilterUnsupported()
-        => new(
-            SafeMigrationObservedState.Unsupported,
-            SafeMigrationRepairCapability.None,
-            false,
-            "index_filter_value_unproven");
+    private static SafeMigrationProviderAnalysis FilterUnsupported() => new(
+        SafeMigrationObservedState.Unsupported,
+        SafeMigrationRepairCapability.None,
+        false,
+        "index_filter_value_unproven");
 }

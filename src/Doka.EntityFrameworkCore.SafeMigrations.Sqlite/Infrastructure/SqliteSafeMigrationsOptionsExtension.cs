@@ -73,8 +73,8 @@ internal sealed class SqliteSafeMigrationsOptionsExtension : IDbContextOptionsEx
 
         public override string LogFragment => "doka-sqlite-safe-migrations ";
 
-        private new SqliteSafeMigrationsOptionsExtension Extension =>
-            (SqliteSafeMigrationsOptionsExtension)base.Extension;
+        private new SqliteSafeMigrationsOptionsExtension Extension
+            => (SqliteSafeMigrationsOptionsExtension)base.Extension;
 
         public override int GetServiceProviderHashCode() => HashCode.Combine(
             Extension.BaselineGeneratorType,

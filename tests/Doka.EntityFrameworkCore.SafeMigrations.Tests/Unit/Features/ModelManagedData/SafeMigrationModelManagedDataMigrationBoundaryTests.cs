@@ -237,8 +237,8 @@ public sealed class SafeMigrationModelManagedDataMigrationBoundaryTests
         }
 
         /// <inheritdoc />
-        public IEnumerator<MigrationOperation> GetEnumerator() =>
-            throw new InvalidOperationException("The provenance count must be checked before enumeration.");
+        public IEnumerator<MigrationOperation> GetEnumerator()
+            => throw new InvalidOperationException("The provenance count must be checked before enumeration.");
 
         /// <inheritdoc />
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();

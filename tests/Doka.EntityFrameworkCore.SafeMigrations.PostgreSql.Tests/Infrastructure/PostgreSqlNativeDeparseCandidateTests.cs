@@ -326,8 +326,7 @@ public sealed class PostgreSqlNativeDeparseCandidateTests
     /// <summary>Uses the provider's actual canonical mappings and identifier formatter.</summary>
     private static PostgreSqlSafeMigrationSqlExpressionRenderer Renderer(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     /// <summary>Encodes candidate text independently from the expression's typed literals.</summary>
     private static string Literal(

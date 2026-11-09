@@ -487,21 +487,20 @@ public sealed class MySqlCatalogTailBatchingTests
     private static Dictionary<string, SafeMigrationExpectedTableInventory> Inventory(
         int count,
         string prefix = ""
-    )
-        => Enumerable
-            .Range(0, count)
-            .Select(index => new SafeMigrationExpectedTableInventory(
-                $"{prefix}tail_{index:D4}",
-                null,
-                [
-                    new KeyValuePair<string, string?>("id", "int"),
-                    new KeyValuePair<string, string?>("json_data", "json")
-                ],
-                [],
-                [],
-                [],
-                []))
-            .ToDictionary(static table => table.Table, StringComparer.Ordinal);
+    ) => Enumerable
+        .Range(0, count)
+        .Select(index => new SafeMigrationExpectedTableInventory(
+            $"{prefix}tail_{index:D4}",
+            null,
+            [
+                new KeyValuePair<string, string?>("id", "int"),
+                new KeyValuePair<string, string?>("json_data", "json"),
+            ],
+            [],
+            [],
+            [],
+            []))
+        .ToDictionary(static table => table.Table, StringComparer.Ordinal);
 
     private static DataTable PhysicalResults(
         string sql,

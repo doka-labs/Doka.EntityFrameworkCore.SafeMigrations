@@ -7,10 +7,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <returns>SQL NULL for independently occupied names, otherwise an internal metadata-fence request.</returns>
     internal string BuildIndexInputRoutingState(
         EnsureIndexIntent intent
-    )
-        => "CASE WHEN "
-            + RelationNameExists(intent.Definition.Name, intent.Definition.Schema)
-            + " THEN NULL::text ELSE 'index_input_required' END";
+    ) => "CASE WHEN "
+        + RelationNameExists(intent.Definition.Name, intent.Definition.Schema)
+        + " THEN NULL::text ELSE 'index_input_required' END";
 
     /// <summary>Folds Missing-only input eligibility into the existing metadata prerequisite statement.</summary>
     /// <param name="intent">The independently authored index contract.</param>
@@ -181,20 +180,19 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     internal string IndexMemberOwnerPredicate(
         ExpectedIndexDefinition definition,
         PostgreSqlIndexPhysicalMember member
-    )
-        => member.PartCount == 1
-            ? "TRUE"
-            : member.PartCount == 2
-                ? Literal(member.Table!) + " = " + Literal(definition.Table)
-                : member.PartCount == 3
-                    ? Literal(member.Table!)
-                    + " = "
-                    + Literal(definition.Table)
-                    + " AND "
-                    + Literal(member.Schema!)
-                    + " = "
-                    + SchemaExpression(definition.Schema)
-                    : "FALSE";
+    ) => member.PartCount == 1
+        ? "TRUE"
+        : member.PartCount == 2
+            ? Literal(member.Table!) + " = " + Literal(definition.Table)
+            : member.PartCount == 3
+                ? Literal(member.Table!)
+                + " = "
+                + Literal(definition.Table)
+                + " AND "
+                + Literal(member.Schema!)
+                + " = "
+                + SchemaExpression(definition.Schema)
+                : "FALSE";
 
     /// <summary>Stops native data SQL from binding before a Missing index's inputs are proven executable.</summary>
     private PostgreSqlSafeMigrationRuntimePlan AddIndexInputRuntimeGuard(

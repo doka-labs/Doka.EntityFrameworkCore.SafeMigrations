@@ -336,11 +336,10 @@ public sealed class MySqlModelManagedDataKeyColumnIdentityIntegrationTests : MyS
     /// <returns>The isolated InnoDB fixture and its explicit original value.</returns>
     private static string ModelManagedKeyColumnIdentityFixtureSql(
         string table
-    )
-        => "CREATE TABLE "
-            + AtomicRequiredAddDelimited(table)
-            + " (`Id` int NOT NULL PRIMARY KEY, `value` varchar(32) NOT NULL) ENGINE=InnoDB; "
-            + "INSERT INTO "
-            + AtomicRequiredAddDelimited(table)
-            + " (`Id`, `value`) VALUES (1, 'old');";
+    ) => "CREATE TABLE "
+        + AtomicRequiredAddDelimited(table)
+        + " (`Id` int NOT NULL PRIMARY KEY, `value` varchar(32) NOT NULL) ENGINE=InnoDB; "
+        + "INSERT INTO "
+        + AtomicRequiredAddDelimited(table)
+        + " (`Id`, `value`) VALUES (1, 'old');";
 }

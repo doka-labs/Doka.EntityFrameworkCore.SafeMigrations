@@ -44,19 +44,18 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
         }
     }
 
-    public IReadOnlyDictionary<string, TypeInfo> Migrations =>
-        _migrations ??= _definedTypes
-            .Where(type => !type.IsAbstract && typeof(Migration).IsAssignableFrom(type))
-            .Select(type => new
-            {
-                Type = type,
-                Context = type.GetCustomAttribute<DbContextAttribute>()
-                    ?.ContextType,
-                Migration = type.GetCustomAttribute<MigrationAttribute>(),
-            })
-            .Where(candidate => candidate.Context == _migrationContextType && candidate.Migration is not null)
-            .OrderBy(candidate => candidate.Migration!.Id, StringComparer.Ordinal)
-            .ToDictionary(candidate => candidate.Migration!.Id, candidate => candidate.Type, StringComparer.Ordinal);
+    public IReadOnlyDictionary<string, TypeInfo> Migrations => _migrations ??= _definedTypes
+        .Where(type => !type.IsAbstract && typeof(Migration).IsAssignableFrom(type))
+        .Select(type => new
+        {
+            Type = type,
+            Context = type.GetCustomAttribute<DbContextAttribute>()
+                ?.ContextType,
+            Migration = type.GetCustomAttribute<MigrationAttribute>(),
+        })
+        .Where(candidate => candidate.Context == _migrationContextType && candidate.Migration is not null)
+        .OrderBy(candidate => candidate.Migration!.Id, StringComparer.Ordinal)
+        .ToDictionary(candidate => candidate.Migration!.Id, candidate => candidate.Type, StringComparer.Ordinal);
 
     public ModelSnapshot? ModelSnapshot
     {

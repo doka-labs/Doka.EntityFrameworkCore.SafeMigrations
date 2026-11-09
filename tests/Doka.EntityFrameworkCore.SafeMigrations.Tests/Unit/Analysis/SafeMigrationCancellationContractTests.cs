@@ -331,16 +331,16 @@ public sealed class SafeMigrationCancellationContractTests
             : string.Empty;
 
         var source = $$"""
-                       using Doka.EntityFrameworkCore.SafeMigrations;
-                       using Microsoft.EntityFrameworkCore;
-                       using Microsoft.EntityFrameworkCore.Migrations.Operations;
-                       public static class Consumer
-                       {
-                           public static object Invoke({{contract}} service, DbContext context, SafeMigrationRunOptions options,
-                               MigrationOperation[] operations, SafeMigrationOperation[] safeOperations)
-                               => service.{{invocation}}{{token}});
-                       }
-                       """;
+            using Doka.EntityFrameworkCore.SafeMigrations;
+            using Microsoft.EntityFrameworkCore;
+            using Microsoft.EntityFrameworkCore.Migrations.Operations;
+            public static class Consumer
+            {
+                public static object Invoke({{contract}} service, DbContext context, SafeMigrationRunOptions options,
+                    MigrationOperation[] operations, SafeMigrationOperation[] safeOperations)
+                    => service.{{invocation}}{{token}});
+            }
+            """;
 
         // Act
         var errors = Compile(source)
@@ -377,11 +377,11 @@ public sealed class SafeMigrationCancellationContractTests
     {
         // Arrange
         var source = $$"""
-                       public static class Consumer
-                       {
-                           public static object Invoke({{contract}} service) => service.{{invocation}};
-                       }
-                       """;
+            public static class Consumer
+            {
+                public static object Invoke({{contract}} service) => service.{{invocation}};
+            }
+            """;
 
         // Act
         var errors = Compile(source)
@@ -733,8 +733,7 @@ public sealed class SafeMigrationCancellationContractTests
         public Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
             DbContext context,
             CancellationToken cancellationToken
-        )
-            => throw new NotSupportedException("The isolated ordered seam performs no database I/O.");
+        ) => throw new NotSupportedException("The isolated ordered seam performs no database I/O.");
 
         /// <inheritdoc />
         public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(

@@ -15,16 +15,14 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         string table,
         string? schema,
         string column
-    )
-        => HasCurrentGeneratedLiveBinding(table, schema, column)
-            && _livePrerequisiteColumns?.ContainsKey(LiveColumnKey(table, schema, column)) == true;
+    ) => HasCurrentGeneratedLiveBinding(table, schema, column)
+        && _livePrerequisiteColumns?.ContainsKey(LiveColumnKey(table, schema, column)) == true;
 
     /// <inheritdoc />
     public bool RequiresLiveForeignKeyQualification(
         EnsureForeignKeyIntent intent
-    )
-        => _liveForeignKeyPrerequisites?.TryGetValue(intent.Definition, out var captured) == true
-            && captured.BothOwnersExist;
+    ) => _liveForeignKeyPrerequisites?.TryGetValue(intent.Definition, out var captured) == true
+        && captured.BothOwnersExist;
 
     /// <inheritdoc />
     public IReadOnlyList<SafeMigrationLiveCandidateKey>? GetLiveForeignKeyCandidateKeys(
@@ -233,8 +231,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         string table,
         string? schema,
         string name
-    )
-        => new(table, PostgreSqlSafeMigrationSchemaIdentity.Normalize(schema, _currentSchema), name);
+    ) => new(table, PostgreSqlSafeMigrationSchemaIdentity.Normalize(schema, _currentSchema), name);
 
     /// <summary>Qualifies native builtin equality families and PostgreSQL's deterministic-collation rule.</summary>
     private static bool ForeignKeyStorageCompatible(
@@ -938,8 +935,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         string table,
         string? schema,
         string column
-    )
-        => new(table, PostgreSqlSafeMigrationSchemaIdentity.Normalize(schema, _currentSchema), column);
+    ) => new(table, PostgreSqlSafeMigrationSchemaIdentity.Normalize(schema, _currentSchema), column);
 
     /// <summary>Maps projected definitions to native OIDs rather than comparing CLR or alias spellings.</summary>
     private LiveColumnTypeIdentity? ProjectedColumnTypeIdentity(
@@ -1127,18 +1123,16 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     private static string LiveSchemaExpression(
         string? schema,
         PostgreSqlCatalogQueryParameters parameters
-    )
-        => schema is null
-            ? "current_schema()"
-            : parameters.AddString(schema);
+    ) => schema is null
+        ? "current_schema()"
+        : parameters.AddString(schema);
 
     /// <summary>Excludes views, partitions and inheritance which need a separate native ownership contract.</summary>
     private static string LiveOrdinaryOwner(
         string alias
-    )
-        => $"{alias}.relkind = 'r' AND NOT {alias}.relispartition AND NOT EXISTS "
-            + $"(SELECT 1 FROM pg_catalog.pg_inherits inheritance WHERE inheritance.inhrelid = {alias}.oid "
-            + $"OR inheritance.inhparent = {alias}.oid)";
+    ) => $"{alias}.relkind = 'r' AND NOT {alias}.relispartition AND NOT EXISTS "
+        + $"(SELECT 1 FROM pg_catalog.pg_inherits inheritance WHERE inheritance.inhrelid = {alias}.oid "
+        + $"OR inheritance.inhparent = {alias}.oid)";
 
     /// <summary>Reports malformed metadata without emitting user identifiers or native SQL.</summary>
     private static InvalidOperationException InvalidLivePrerequisiteEvidence()
@@ -1196,19 +1190,18 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         public bool Equals(
             ExpectedForeignKeyDefinition? left,
             ExpectedForeignKeyDefinition? right
-        )
-            => ReferenceEquals(left, right)
-                || (left is not null
-                    && right is not null
-                    && left.Name == right.Name
-                    && left.Table == right.Table
-                    && left.PrincipalTable == right.PrincipalTable
-                    && PostgreSqlSafeMigrationSchemaIdentity.Normalize(left.Schema, currentSchema)
-                    == PostgreSqlSafeMigrationSchemaIdentity.Normalize(right.Schema, currentSchema)
-                    && PostgreSqlSafeMigrationSchemaIdentity.Normalize(left.PrincipalSchema, currentSchema)
-                    == PostgreSqlSafeMigrationSchemaIdentity.Normalize(right.PrincipalSchema, currentSchema)
-                    && left.Columns.SequenceEqual(right.Columns, StringComparer.Ordinal)
-                    && left.PrincipalColumns.SequenceEqual(right.PrincipalColumns, StringComparer.Ordinal));
+        ) => ReferenceEquals(left, right)
+            || (left is not null
+                && right is not null
+                && left.Name == right.Name
+                && left.Table == right.Table
+                && left.PrincipalTable == right.PrincipalTable
+                && PostgreSqlSafeMigrationSchemaIdentity.Normalize(left.Schema, currentSchema)
+                == PostgreSqlSafeMigrationSchemaIdentity.Normalize(right.Schema, currentSchema)
+                && PostgreSqlSafeMigrationSchemaIdentity.Normalize(left.PrincipalSchema, currentSchema)
+                == PostgreSqlSafeMigrationSchemaIdentity.Normalize(right.PrincipalSchema, currentSchema)
+                && left.Columns.SequenceEqual(right.Columns, StringComparer.Ordinal)
+                && left.PrincipalColumns.SequenceEqual(right.PrincipalColumns, StringComparer.Ordinal));
 
         public int GetHashCode(
             ExpectedForeignKeyDefinition definition

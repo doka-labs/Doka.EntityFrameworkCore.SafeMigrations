@@ -178,15 +178,14 @@ public sealed class PostgreSqlAsyncHelperCancellationTests
         string helper,
         string connectionString,
         CancellationToken cancellationToken
-    )
-        => helper switch
-        {
-            "execute" => HelperAccess.ExecuteFixtureSqlAsync(connectionString, cancellationToken),
-            "integer" => HelperAccess.ReadIntegerAsync(connectionString, cancellationToken),
-            "text" => HelperAccess.ReadTextAsync(connectionString, cancellationToken),
-            "check" => HelperAccess.ReadCheckAsync(connectionString, cancellationToken),
-            _ => throw new ArgumentOutOfRangeException(nameof(helper)),
-        };
+    ) => helper switch
+    {
+        "execute" => HelperAccess.ExecuteFixtureSqlAsync(connectionString, cancellationToken),
+        "integer" => HelperAccess.ReadIntegerAsync(connectionString, cancellationToken),
+        "text" => HelperAccess.ReadTextAsync(connectionString, cancellationToken),
+        "check" => HelperAccess.ReadCheckAsync(connectionString, cancellationToken),
+        _ => throw new ArgumentOutOfRangeException(nameof(helper)),
+    };
 
     /// <summary>Creates valid immutable report data while keeping every test independent of a live provider.</summary>
     /// <returns>The distinct sentinel observation shared by the observers of one initialization.</returns>
@@ -223,8 +222,7 @@ public sealed class PostgreSqlAsyncHelperCancellationTests
         public static Task ExecuteFixtureSqlAsync(
             string connectionString,
             CancellationToken cancellationToken
-        )
-            => ExecuteSqlAsync(connectionString, "SELECT 1;", cancellationToken);
+        ) => ExecuteSqlAsync(connectionString, "SELECT 1;", cancellationToken);
 
         /// <summary>Forwards cancellation to real integer scalar reading.</summary>
         /// <param name="connectionString">The isolated connection configuration.</param>
@@ -233,8 +231,7 @@ public sealed class PostgreSqlAsyncHelperCancellationTests
         public static Task<int> ReadIntegerAsync(
             string connectionString,
             CancellationToken cancellationToken
-        )
-            => ScalarIntAsync(connectionString, "SELECT 1;", cancellationToken);
+        ) => ScalarIntAsync(connectionString, "SELECT 1;", cancellationToken);
 
         /// <summary>Forwards cancellation to real text scalar reading.</summary>
         /// <param name="connectionString">The isolated connection configuration.</param>
@@ -243,8 +240,7 @@ public sealed class PostgreSqlAsyncHelperCancellationTests
         public static Task<string> ReadTextAsync(
             string connectionString,
             CancellationToken cancellationToken
-        )
-            => ScalarStringAsync(connectionString, "SELECT 'value';", cancellationToken);
+        ) => ScalarStringAsync(connectionString, "SELECT 'value';", cancellationToken);
 
         /// <summary>Forwards cancellation to real CHECK catalog reading.</summary>
         /// <param name="connectionString">The isolated connection configuration.</param>
@@ -253,7 +249,6 @@ public sealed class PostgreSqlAsyncHelperCancellationTests
         public static Task<string> ReadCheckAsync(
             string connectionString,
             CancellationToken cancellationToken
-        )
-            => ReadCheckExpressionAsync(connectionString, "ck_probe", cancellationToken);
+        ) => ReadCheckExpressionAsync(connectionString, "ck_probe", cancellationToken);
     }
 }

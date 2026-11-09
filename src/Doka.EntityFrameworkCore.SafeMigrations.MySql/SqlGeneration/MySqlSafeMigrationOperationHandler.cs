@@ -440,8 +440,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     /// <summary>Retains exact generated/CHECK text bytes without relying on session quote interpretation.</summary>
     private string RenderStructuredExpression(
         SafeMigrationSqlExpression expression
-    ) =>
-        MySqlCapturedExpressionContract.RenderExecutable(expression, _expressionRenderer);
+    ) => MySqlCapturedExpressionContract.RenderExecutable(expression, _expressionRenderer);
 
     /// <summary>Renders the canonical decision table, reusing only an exact pure-input assignment.</summary>
     /// <param name="kind">The canonical planner operation family.</param>
@@ -592,12 +591,11 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     private static string BuildPostconditionSuffix(
         MySqlSafeMigrationRuntimeDiagnostic diagnostic,
         bool script
-    ) =>
-        script
-            ? PostconditionAssignmentSuffix
-            + BuildDiagnosticResultSql(diagnostic, postcondition: true)
-            + PostconditionAssertionSql
-            : PostconditionBodySuffix;
+    ) => script
+        ? PostconditionAssignmentSuffix
+        + BuildDiagnosticResultSql(diagnostic, postcondition: true)
+        + PostconditionAssertionSql
+        : PostconditionBodySuffix;
 
     private string Literal(
         string value

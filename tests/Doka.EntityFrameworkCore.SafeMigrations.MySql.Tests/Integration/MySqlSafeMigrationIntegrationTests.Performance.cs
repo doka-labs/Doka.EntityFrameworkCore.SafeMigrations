@@ -306,8 +306,7 @@ public sealed partial class MySqlPerformanceIntegrationTests : MySqlSafeMigratio
         return builder.Operations.ToList();
     }
 
-    private static string BuildLargeMigrationStressCatalog() =>
-        "CREATE TABLE `large_migration_parent` ("
+    private static string BuildLargeMigrationStressCatalog() => "CREATE TABLE `large_migration_parent` ("
         + "`id` int NOT NULL, `tenant_id` int NOT NULL, "
         + "CONSTRAINT `pk_large_migration_parent` PRIMARY KEY (`id`, `tenant_id`)); "
         + "CREATE TABLE `large_migration_secondary_parent` ("
@@ -342,8 +341,7 @@ public sealed partial class MySqlPerformanceIntegrationTests : MySqlSafeMigratio
         + "VALUES (1, 1, 'legacy', NULL, 'wide', 'fits', 'too-long-value', b'1', 1, 1, 1, 1, 1, 1, 1);"
         + BuildLargeMigrationModelManagedRows();
 
-    private static string BuildLargeMigrationModelManagedRows() =>
-        "INSERT INTO `large_migration_target` ("
+    private static string BuildLargeMigrationModelManagedRows() => "INSERT INTO `large_migration_target` ("
         + "`id`, `matching_value`, `repair_value`, `blocked_value`, `indexed_value`, "
         + "`unique_value`, `check_value`, `parent_id`, `parent_tenant_id`, "
         + "`secondary_parent_id`, `secondary_parent_tenant_id`) VALUES "

@@ -368,8 +368,8 @@ public sealed class SqlServerGeneratedHistoryScriptTests
         Assert.Contains("generated_upgrade_nodes", actual.Message, StringComparison.Ordinal);
     }
 
-    private static SqlServerGeneratedUpgradeContext Context()
-        => new("Server=127.0.0.1,1433;Database=offline_history;User ID=sa;Password=unused;TrustServerCertificate=True");
+    private static SqlServerGeneratedUpgradeContext Context() => new(
+        "Server=127.0.0.1,1433;Database=offline_history;User ID=sa;Password=unused;TrustServerCertificate=True");
 }
 
 /// <summary>Discovers isolated multiline-default migrations through the real public EF scripting service.</summary>
@@ -439,8 +439,7 @@ public sealed class SqlServerMultilineInitialMigration : Migration
     /// <inheritdoc />
     protected override void Down(
         MigrationBuilder migrationBuilder
-    )
-        => migrationBuilder.DropTableIfExists("multiline_payload_items");
+    ) => migrationBuilder.DropTableIfExists("multiline_payload_items");
 }
 
 /// <summary>Exercises a later migration's independent dynamic scope with another authored multiline default.</summary>
@@ -473,6 +472,5 @@ public sealed class SqlServerMultilineUpgradeMigration : Migration
     /// <inheritdoc />
     protected override void Down(
         MigrationBuilder migrationBuilder
-    )
-        => migrationBuilder.DropColumnIfExists(ColumnName, "multiline_payload_items");
+    ) => migrationBuilder.DropColumnIfExists(ColumnName, "multiline_payload_items");
 }

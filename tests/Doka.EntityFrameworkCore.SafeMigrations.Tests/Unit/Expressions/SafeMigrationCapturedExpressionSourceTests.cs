@@ -234,25 +234,22 @@ public sealed class SafeMigrationCapturedExpressionSourceTests
 
     private static ExpectedColumnDefinition CaptureColumn(
         string sql
-    ) =>
-        SafeMigrationExpectedDefinitionFactory.From(
-            new AddColumnOperation
-            {
-                Name = "computed_value",
-                Table = "items",
-                ClrType = typeof(long),
-                IsNullable = true,
-                ComputedColumnSql = sql,
-            });
+    ) => SafeMigrationExpectedDefinitionFactory.From(
+        new AddColumnOperation
+        {
+            Name = "computed_value",
+            Table = "items",
+            ClrType = typeof(long),
+            IsNullable = true,
+            ComputedColumnSql = sql,
+        });
 
     private static ExpectedCheckConstraintDefinition CaptureCheck(
         string sql
-    ) =>
-        SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_items", "items", sql, null);
+    ) => SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_items", "items", sql, null);
 
     private static string Fingerprint(
         SafeMigrationIntent intent
-    ) =>
-        SafeMigrationContractFingerprint.Create(
-            [new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent)]);
+    ) => SafeMigrationContractFingerprint.Create(
+        [new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent)]);
 }

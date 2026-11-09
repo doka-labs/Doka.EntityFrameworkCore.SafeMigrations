@@ -884,14 +884,12 @@ public sealed class MySqlGeneratedColumnDependencyContractCatalogTests
     private static ExpectedColumnDefinition Generated(
         string name,
         SafeMigrationSqlExpression expression
-    ) =>
-        new(name, typeof(int), true, "int", computedExpression: expression);
+    ) => new(name, typeof(int), true, "int", computedExpression: expression);
 
     private static SafeMigrationOperation Rename(
         string source,
         string target
-    ) =>
-        Safe(new RenameColumnIntent(source, "rows", target));
+    ) => Safe(new RenameColumnIntent(source, "rows", target));
 
     private static SafeMigrationOperation Table(
         ExpectedColumnDefinition? generated = null,

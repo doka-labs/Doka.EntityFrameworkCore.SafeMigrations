@@ -65,10 +65,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     /// <summary>Passes only exact earlier typed removals into the existing analysis classification statement.</summary>
     private SafeMigrationOperation[]? GetColumnDropConstraintCandidates(
         SafeMigrationOperation operation
-    )
-        => _columnDropConstraintCandidates?.TryGetValue(operation, out var candidates) == true
-            ? candidates.Operations
-            : null;
+    ) => _columnDropConstraintCandidates?.TryGetValue(operation, out var candidates) == true
+        ? candidates.Operations
+        : null;
 
     /// <summary>Routes native FK endpoints before retaining immutable owner-local predecessor prefixes.</summary>
     private void PrepareColumnDropConstraintCandidates(
@@ -224,12 +223,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     private string[]? GetComputedDropIndexCandidateNames(
         SafeMigrationOperation operation,
         IReadOnlyList<SafeMigrationOperation> operations
-    )
-        => _computedDropIndexCandidates?.TryGetValue(operation, out var candidates) == true
-            ? candidates
-                .Select(index => ((DropIndexIntent)operations[index].Intent).Name)
-                .ToArray()
-            : null;
+    ) => _computedDropIndexCandidates?.TryGetValue(operation, out var candidates) == true
+        ? candidates
+            .Select(index => ((DropIndexIntent)operations[index].Intent).Name)
+            .ToArray()
+        : null;
 
     /// <summary>Decodes only exact native DROP completeness and retains original dependency refusals.</summary>
     internal void CaptureProjectedComputedDropRefusals(
@@ -941,30 +939,28 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         string table,
         string? schema,
         DropColumnIntent source
-    )
-        => StringComparer.Ordinal.Equals(table, source.Table)
-            && StringComparer.Ordinal.Equals(schema ?? "dbo", source.Schema ?? "dbo");
+    ) => StringComparer.Ordinal.Equals(table, source.Table)
+        && StringComparer.Ordinal.Equals(schema ?? "dbo", source.Schema ?? "dbo");
 
     private static (string Table, string? Schema)? ComputedDropMutationOwner(
         SafeMigrationIntent intent
-    )
-        => intent switch
-        {
-            EnsureIndexIntent index => (index.Definition.Table, index.Definition.Schema),
-            RenameIndexIntent index => (index.Table, index.Schema),
-            EnsurePrimaryKeyIntent key => (key.Definition.Table, key.Definition.Schema),
-            EnsureUniqueConstraintIntent key => (key.Definition.Table, key.Definition.Schema),
-            EnsureForeignKeyIntent key => (key.Definition.Table, key.Definition.Schema),
-            EnsureCheckConstraintIntent check => (check.Definition.Table, check.Definition.Schema),
-            EnsureColumnIntent column when !SqlServerComputedColumnContract.IsComputed(column.Definition)
-                => (column.Table, column.Schema),
-            AlterColumnIntent column => (column.Table, column.Schema),
-            RenameColumnIntent column => (column.Table, column.Schema),
-            DropTableIntent table => (table.Table, table.Schema),
-            RenameTableIntent table => (table.Name, table.Schema),
-            EnsureTableIntent table => (table.Definition.Table, table.Definition.Schema),
-            _ => null,
-        };
+    ) => intent switch
+    {
+        EnsureIndexIntent index => (index.Definition.Table, index.Definition.Schema),
+        RenameIndexIntent index => (index.Table, index.Schema),
+        EnsurePrimaryKeyIntent key => (key.Definition.Table, key.Definition.Schema),
+        EnsureUniqueConstraintIntent key => (key.Definition.Table, key.Definition.Schema),
+        EnsureForeignKeyIntent key => (key.Definition.Table, key.Definition.Schema),
+        EnsureCheckConstraintIntent check => (check.Definition.Table, check.Definition.Schema),
+        EnsureColumnIntent column when !SqlServerComputedColumnContract.IsComputed(column.Definition)
+            => (column.Table, column.Schema),
+        AlterColumnIntent column => (column.Table, column.Schema),
+        RenameColumnIntent column => (column.Table, column.Schema),
+        DropTableIntent table => (table.Table, table.Schema),
+        RenameTableIntent table => (table.Name, table.Schema),
+        EnsureTableIntent table => (table.Definition.Table, table.Definition.Schema),
+        _ => null,
+    };
 
     private void InvalidateProjectedComputedDropProofs()
     {
@@ -1043,8 +1039,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         /// <summary>Gets stable immutable operations and ordinals without a per-DROP array copy.</summary>
         internal ColumnDropConstraintSnapshot Snapshot(
             IReadOnlyList<SafeMigrationOperation> operations
-        )
-            => _snapshot ??= new ColumnDropConstraintSnapshot(_latest.Values.ToArray(), operations);
+        ) => _snapshot ??= new ColumnDropConstraintSnapshot(_latest.Values.ToArray(), operations);
 
         /// <summary>Expires only this owner's next snapshot; prior captures keep their exact predecessors.</summary>
         internal void Observe(

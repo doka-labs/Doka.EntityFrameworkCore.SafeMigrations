@@ -411,23 +411,21 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         public bool Equals(
             (string? Schema, string Table, string Column, bool Nullable) x,
             (string? Schema, string Table, string Column, bool Nullable) y
-        )
-            => StringComparer.Ordinal.Equals(x.Schema, y.Schema)
-                && StringComparer.Ordinal.Equals(x.Table, y.Table)
-                && StringComparer.OrdinalIgnoreCase.Equals(x.Column, y.Column)
-                && x.Nullable == y.Nullable;
+        ) => StringComparer.Ordinal.Equals(x.Schema, y.Schema)
+            && StringComparer.Ordinal.Equals(x.Table, y.Table)
+            && StringComparer.OrdinalIgnoreCase.Equals(x.Column, y.Column)
+            && x.Nullable == y.Nullable;
 
         /// <inheritdoc />
         public int GetHashCode(
             (string? Schema, string Table, string Column, bool Nullable) value
-        )
-            => HashCode.Combine(
-                value.Schema is null
-                    ? 0
-                    : StringComparer.Ordinal.GetHashCode(value.Schema),
-                StringComparer.Ordinal.GetHashCode(value.Table),
-                StringComparer.OrdinalIgnoreCase.GetHashCode(value.Column),
-                value.Nullable);
+        ) => HashCode.Combine(
+            value.Schema is null
+                ? 0
+                : StringComparer.Ordinal.GetHashCode(value.Schema),
+            StringComparer.Ordinal.GetHashCode(value.Table),
+            StringComparer.OrdinalIgnoreCase.GetHashCode(value.Column),
+            value.Nullable);
     }
 }
 

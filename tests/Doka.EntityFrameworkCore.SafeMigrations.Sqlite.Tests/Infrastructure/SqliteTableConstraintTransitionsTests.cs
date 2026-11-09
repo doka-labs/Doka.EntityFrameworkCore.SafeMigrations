@@ -92,13 +92,12 @@ public sealed class SqliteTableConstraintTransitionsTests
     private static void AddCreator(
         MigrationBuilder builder,
         string tableName
-    )
-        => builder.CreateTableIfNotExists(
-            tableName,
-            table => new
-            {
-                Id = table.Column<int>(type: "INTEGER", nullable: false),
-                ParentId = table.Column<int>(type: "INTEGER", nullable: true),
-            },
-            constraints: table => table.PrimaryKey("pk_children", item => item.Id));
+    ) => builder.CreateTableIfNotExists(
+        tableName,
+        table => new
+        {
+            Id = table.Column<int>(type: "INTEGER", nullable: false),
+            ParentId = table.Column<int>(type: "INTEGER", nullable: true),
+        },
+        constraints: table => table.PrimaryKey("pk_children", item => item.Id));
 }

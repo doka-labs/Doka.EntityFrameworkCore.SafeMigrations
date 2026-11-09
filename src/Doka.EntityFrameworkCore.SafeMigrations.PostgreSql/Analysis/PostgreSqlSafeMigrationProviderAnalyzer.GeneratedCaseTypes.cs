@@ -133,9 +133,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         string table,
         string? schema,
         string column
-    )
-        => _expiredGeneratedLiveColumns?.Contains(LiveColumnKey(table, schema, column)) != true
-            && _expiredGeneratedLiveOwners?.Contains(LiveColumnKey(table, schema, string.Empty)) != true;
+    ) => _expiredGeneratedLiveColumns?.Contains(LiveColumnKey(table, schema, column)) != true
+        && _expiredGeneratedLiveOwners?.Contains(LiveColumnKey(table, schema, string.Empty)) != true;
 
     /// <summary>Restores only a nonunique index over an accepted CASE with current native operand proofs.</summary>
     private SafeMigrationProviderAnalysis? QualifyGeneratedCaseIndex(
@@ -280,9 +279,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     /// <summary>Uses native identifier roles while retaining original definitions as provider evidence keys.</summary>
     private static IReadOnlyList<string> NativePrerequisiteColumns(
         SafeMigrationIntent intent
-    )
-        => SafeMigrationPrerequisiteColumns.Local(
-            SafeMigrationCapturedExpressionNormalization.NormalizeIntent(intent, true));
+    ) => SafeMigrationPrerequisiteColumns.Local(
+        SafeMigrationCapturedExpressionNormalization.NormalizeIntent(intent, true));
 
     /// <summary>Invalidates CASE type proofs when accepted prefix operations replace a source contract.</summary>
     private SafeMigrationProviderAnalysis? QualifyProjectedGeneratedCaseTypes(
@@ -362,17 +360,15 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     private static bool NeedsGeneratedCaseInputCapture(
         SafeMigrationIntent intent,
         SafeMigrationProviderAnalysis analysis
-    )
-        => PostgreSqlSafeMigrationCatalogSqlBuilder.RequiresGeneratedCaseInputCapture(intent)
-            && (analysis.ObservedState is SafeMigrationObservedState.Missing
-                    or SafeMigrationObservedState.PrerequisiteMissing
-                || IsDynamicGeneratedCaseRejection(analysis));
+    ) => PostgreSqlSafeMigrationCatalogSqlBuilder.RequiresGeneratedCaseInputCapture(intent)
+        && (analysis.ObservedState is SafeMigrationObservedState.Missing
+                or SafeMigrationObservedState.PrerequisiteMissing
+            || IsDynamicGeneratedCaseRejection(analysis));
 
     /// <summary>Distinguishes a mutable live input mismatch from an invalid authored CASE definition.</summary>
     private static bool IsDynamicGeneratedCaseRejection(
         SafeMigrationProviderAnalysis analysis
-    )
-        => analysis.ObservedState == SafeMigrationObservedState.Unsupported
-            && !analysis.IsInvariantUnsupported
-            && analysis.Code is "generated_case_operand_type" or "structured_check_operand_type";
+    ) => analysis.ObservedState == SafeMigrationObservedState.Unsupported
+        && !analysis.IsInvariantUnsupported
+        && analysis.Code is "generated_case_operand_type" or "structured_check_operand_type";
 }

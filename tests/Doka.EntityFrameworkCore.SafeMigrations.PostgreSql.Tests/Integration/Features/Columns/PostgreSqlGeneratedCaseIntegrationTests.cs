@@ -1218,12 +1218,11 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         /// <inheritdoc />
         protected override void OnConfiguring(
             DbContextOptionsBuilder optionsBuilder
-        )
-            => optionsBuilder
-                .UseNpgsql(
-                    connectionString,
-                    options => options.MigrationsHistoryTable("__GeneratedScriptHistory"))
-                .UsePostgreSqlSafeMigrations<GeneratedScriptDbContext>();
+        ) => optionsBuilder
+            .UseNpgsql(
+                connectionString,
+                options => options.MigrationsHistoryTable("__GeneratedScriptHistory"))
+            .UsePostgreSqlSafeMigrations<GeneratedScriptDbContext>();
     }
 
     /// <summary>Prevents unrelated model discovery from changing the authored fixture's script contract.</summary>
@@ -1233,8 +1232,7 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         /// <inheritdoc />
         protected override void BuildModel(
             ModelBuilder modelBuilder
-        )
-            => ArgumentNullException.ThrowIfNull(modelBuilder);
+        ) => ArgumentNullException.ThrowIfNull(modelBuilder);
     }
 
     /// <summary>Combines native CASE deparsing with multiline defaults, comments and delimiter-like data.</summary>
@@ -1248,32 +1246,30 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         /// <inheritdoc />
         protected override void Up(
             MigrationBuilder migrationBuilder
-        )
-            => migrationBuilder.CreateTableIfNotExists(
-                "scripted_generated_nodes",
-                table => new
-                {
-                    id = table.Column<int>("integer", nullable: false),
-                    left_bound = table.Column<long>("bigint", nullable: false),
-                    right_bound = table.Column<long>("bigint", nullable: false),
-                    has_descendants = table.Column<bool>(
-                        "boolean",
-                        nullable: false,
-                        computedColumnSql: Expression,
-                        stored: true),
-                    payload = table.Column<string>("text", nullable: false, defaultValue: Payload),
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("pk_scripted_generated_nodes", item => item.id);
-                    table.CheckConstraint("ck_scripted_generated_bounds", "right_bound > left_bound");
-                },
-                comment: Payload);
+        ) => migrationBuilder.CreateTableIfNotExists(
+            "scripted_generated_nodes",
+            table => new
+            {
+                id = table.Column<int>("integer", nullable: false),
+                left_bound = table.Column<long>("bigint", nullable: false),
+                right_bound = table.Column<long>("bigint", nullable: false),
+                has_descendants = table.Column<bool>(
+                    "boolean",
+                    nullable: false,
+                    computedColumnSql: Expression,
+                    stored: true),
+                payload = table.Column<string>("text", nullable: false, defaultValue: Payload),
+            },
+            constraints: table =>
+            {
+                table.PrimaryKey("pk_scripted_generated_nodes", item => item.id);
+                table.CheckConstraint("ck_scripted_generated_bounds", "right_bound > left_bound");
+            },
+            comment: Payload);
 
         /// <inheritdoc />
         protected override void Down(
             MigrationBuilder migrationBuilder
-        )
-            => migrationBuilder.DropTableIfExists("scripted_generated_nodes");
+        ) => migrationBuilder.DropTableIfExists("scripted_generated_nodes");
     }
 }

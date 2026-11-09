@@ -164,19 +164,19 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
         generator.Generate("migrationBuilder", [operation], builder);
         var operationSource = builder.ToString();
         var source = $$"""
-                       using System;
-                       using Doka.EntityFrameworkCore.MySql;
-                       using Doka.EntityFrameworkCore.SafeMigrations;
-                       using Microsoft.EntityFrameworkCore.Migrations;
+            using System;
+            using Doka.EntityFrameworkCore.MySql;
+            using Doka.EntityFrameworkCore.SafeMigrations;
+            using Microsoft.EntityFrameworkCore.Migrations;
 
-                       public static class GeneratedNativeUuidMigration
-                       {
-                           public static void Up(MigrationBuilder migrationBuilder)
-                           {
-                               {{operationSource}}
-                           }
-                       }
-                       """;
+            public static class GeneratedNativeUuidMigration
+            {
+                public static void Up(MigrationBuilder migrationBuilder)
+                {
+                    {{operationSource}}
+                }
+            }
+            """;
 
         var assembly = MySqlGeneratedMigrationCompiler.Compile(source);
         var method = assembly.GetType("GeneratedNativeUuidMigration", throwOnError: true)!.GetMethod("Up")!;

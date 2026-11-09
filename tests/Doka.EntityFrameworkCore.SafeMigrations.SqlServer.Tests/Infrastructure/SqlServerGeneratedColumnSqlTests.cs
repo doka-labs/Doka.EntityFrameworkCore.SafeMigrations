@@ -447,27 +447,24 @@ public sealed class SqlServerGeneratedColumnSqlTests
 
     private static SqlServerSafeMigrationCatalogSqlBuilder CreateCatalog(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private static SafeMigrationSqlExpression ParseRequired(
         string source
-    )
-        => SafeMigrationSqlExpressionParser.TryParse(source, out var expression)
-            ? expression
-            : throw new InvalidOperationException("The test fixture expression must parse.");
+    ) => SafeMigrationSqlExpressionParser.TryParse(source, out var expression)
+        ? expression
+        : throw new InvalidOperationException("The test fixture expression must parse.");
 
     /// <summary>Creates the isolated overflow-guarded finite Boolean flag contract.</summary>
     internal static ExpectedColumnDefinition Flag(
         bool stored = false
-    )
-        => new(
-            "HasChildren",
-            typeof(bool),
-            false,
-            "bit",
-            computedColumnSql:
-            "CONVERT(bit, CASE WHEN [R] > CASE WHEN [L] = 9223372036854775807 "
-            + "THEN [L] ELSE [L] + 1 END THEN 1 ELSE 0 END)",
-            isStored: stored);
+    ) => new(
+        "HasChildren",
+        typeof(bool),
+        false,
+        "bit",
+        computedColumnSql:
+        "CONVERT(bit, CASE WHEN [R] > CASE WHEN [L] = 9223372036854775807 "
+        + "THEN [L] ELSE [L] + 1 END THEN 1 ELSE 0 END)",
+        isStored: stored);
 }

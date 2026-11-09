@@ -414,17 +414,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         SafeMigrationOperationKind kind,
         string name,
         string column = "id"
-    ) =>
-        kind switch
-        {
-            SafeMigrationOperationKind.EnsureUniqueConstraint => new EnsureUniqueConstraintIntent(
-                new ExpectedUniqueConstraintDefinition(name, "items", [column])),
-            SafeMigrationOperationKind.EnsureCheckConstraint => new EnsureCheckConstraintIntent(
-                new ExpectedCheckConstraintDefinition(name, "items", column + " > 0")),
-            SafeMigrationOperationKind.EnsureForeignKey => new EnsureForeignKeyIntent(
-                new ExpectedForeignKeyDefinition(name, "items", [column], "parents", [column])),
-            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-        };
+    ) => kind switch
+    {
+        SafeMigrationOperationKind.EnsureUniqueConstraint => new EnsureUniqueConstraintIntent(
+            new ExpectedUniqueConstraintDefinition(name, "items", [column])),
+        SafeMigrationOperationKind.EnsureCheckConstraint => new EnsureCheckConstraintIntent(
+            new ExpectedCheckConstraintDefinition(name, "items", column + " > 0")),
+        SafeMigrationOperationKind.EnsureForeignKey => new EnsureForeignKeyIntent(
+            new ExpectedForeignKeyDefinition(name, "items", [column], "parents", [column])),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
 
     /// <summary>
     /// Builds an exact-name drop without treating the shape's logical alias as its physical identity.
@@ -435,12 +434,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     private static SafeMigrationIntent ReviewConstraintShapeDrop(
         SafeMigrationOperationKind kind,
         string name
-    ) =>
-        kind switch
-        {
-            SafeMigrationOperationKind.EnsureUniqueConstraint => new DropUniqueConstraintIntent(name, "items"),
-            SafeMigrationOperationKind.EnsureCheckConstraint => new DropCheckConstraintIntent(name, "items"),
-            SafeMigrationOperationKind.EnsureForeignKey => new DropForeignKeyIntent(name, "items"),
-            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-        };
+    ) => kind switch
+    {
+        SafeMigrationOperationKind.EnsureUniqueConstraint => new DropUniqueConstraintIntent(name, "items"),
+        SafeMigrationOperationKind.EnsureCheckConstraint => new DropCheckConstraintIntent(name, "items"),
+        SafeMigrationOperationKind.EnsureForeignKey => new DropForeignKeyIntent(name, "items"),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
 }

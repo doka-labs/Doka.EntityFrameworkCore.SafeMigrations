@@ -520,7 +520,7 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
             report.UnexpectedObjects,
             value => value is
             {
-                ObjectKind: SafeMigrationDatabaseObjectKind.Column, Table: "inventory_target", Name: "legacy_column"
+                ObjectKind: SafeMigrationDatabaseObjectKind.Column, Table: "inventory_target", Name: "legacy_column",
             });
 
         Assert.Contains(

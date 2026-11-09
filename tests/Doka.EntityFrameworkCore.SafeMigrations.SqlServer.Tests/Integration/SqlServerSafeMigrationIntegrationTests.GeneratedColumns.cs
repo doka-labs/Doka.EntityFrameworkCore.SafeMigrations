@@ -1529,7 +1529,7 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         var columns = sensitive
             ? new ExpectedColumnDefinition[]
             {
-                new("L", typeof(int), false, "int"), new("l", typeof(int), false, "int")
+                new("L", typeof(int), false, "int"), new("l", typeof(int), false, "int"),
             }
             :
             [
@@ -2061,9 +2061,8 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
     private static string CompilerScopeName(
         string sql
-    )
-        => Regex.Match(sql, "#doka_sm_computed_[A-F0-9]{24}")
-            .Value;
+    ) => Regex.Match(sql, "#doka_sm_computed_[A-F0-9]{24}")
+        .Value;
 
     private static async Task<bool> CompilerScopeExistsAsync(
         SqlConnection connection,

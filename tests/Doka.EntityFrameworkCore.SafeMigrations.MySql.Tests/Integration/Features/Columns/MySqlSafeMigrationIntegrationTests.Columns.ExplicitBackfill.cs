@@ -1556,14 +1556,13 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
     /// <returns>The isolated schema and deterministic row values.</returns>
     private static string ExplicitBackfillNullableGuidFixture(
         bool includeNull
-    )
-        => "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL, `owner_id` char(36) NULL) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `explicit_backfill_items` (`value`, `owner_id`) "
-            + "VALUES (1, '00000000-0000-0000-0000-000000000002');"
-            + (includeNull
-                ? " INSERT INTO `explicit_backfill_items` (`value`, `owner_id`) VALUES (2, NULL);"
-                : "");
+    ) => "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL, `owner_id` char(36) NULL) "
+        + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
+        + "INSERT INTO `explicit_backfill_items` (`value`, `owner_id`) "
+        + "VALUES (1, '00000000-0000-0000-0000-000000000002');"
+        + (includeNull
+            ? " INSERT INTO `explicit_backfill_items` (`value`, `owner_id`) VALUES (2, NULL);"
+            : "");
 
     /// <summary>Creates a populated NULL-free GUID fixture with explicit compatible FK storage.</summary>
     /// <param name="onDelete">The primary constraint's DELETE action.</param>
@@ -1611,12 +1610,11 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
     private static Task<int> ExplicitBackfillGuidSentinelCountAsync(
         string connectionString,
         CancellationToken cancellationToken
-    )
-        => ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE `value` = 1 "
-            + "AND `owner_id` = '00000000-0000-0000-0000-000000000002';",
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connectionString,
+        "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE `value` = 1 "
+        + "AND `owner_id` = '00000000-0000-0000-0000-000000000002';",
+        cancellationToken: cancellationToken);
 
     /// <summary>Counts actual outgoing FK owners remaining on the fixture table.</summary>
     /// <param name="connectionString">The isolated fixture database connection.</param>
@@ -1625,12 +1623,11 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
     private static Task<int> ExplicitBackfillGuidForeignKeyCountAsync(
         string connectionString,
         CancellationToken cancellationToken
-    )
-        => ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'explicit_backfill_items';",
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connectionString,
+        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
+        + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'explicit_backfill_items';",
+        cancellationToken: cancellationToken);
 
     /// <summary>Reads only catalog nullability, without inspecting confidential row payloads.</summary>
     /// <param name="connectionString">The isolated fixture database connection.</param>
@@ -1641,12 +1638,11 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
         string connectionString,
         string column,
         CancellationToken cancellationToken
-    )
-        => ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'explicit_backfill_items' AND COLUMN_NAME = '"
-            + column
-            + "' AND IS_NULLABLE = 'NO';",
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connectionString,
+        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+        + "AND TABLE_NAME = 'explicit_backfill_items' AND COLUMN_NAME = '"
+        + column
+        + "' AND IS_NULLABLE = 'NO';",
+        cancellationToken: cancellationToken);
 }

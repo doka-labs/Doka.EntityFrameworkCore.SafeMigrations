@@ -815,8 +815,7 @@ public sealed class PostgreSqlLivePrerequisiteEvidenceTests
     /// <summary>Obtains the actual registered provider rather than constructing a relaxed reader test double.</summary>
     private static PostgreSqlSafeMigrationProviderAnalyzer Analyzer(
         DbContext context
-    )
-        => Assert.IsType<PostgreSqlSafeMigrationProviderAnalyzer>(context.GetService<ISafeMigrationProviderAnalyzer>());
+    ) => Assert.IsType<PostgreSqlSafeMigrationProviderAnalyzer>(context.GetService<ISafeMigrationProviderAnalyzer>());
 
     /// <summary>Builds repeated or distinct sparse FK requests with exactly one earlier nullable addition.</summary>
     private static SafeMigrationOperation[] Operations(
@@ -856,25 +855,22 @@ public sealed class PostgreSqlLivePrerequisiteEvidenceTests
     /// <summary>Separates the missing ADD from FK prerequisite rejection without inventing a table model.</summary>
     private static SafeMigrationProviderAnalysis[] Analyses(
         IReadOnlyList<SafeMigrationOperation> operations
-    )
-        => operations
-            .Select(static operation => Live(
-                operation.Intent is EnsureColumnIntent
-                    ? SafeMigrationObservedState.Missing
-                    : SafeMigrationObservedState.PrerequisiteMissing))
-            .ToArray();
+    ) => operations
+        .Select(static operation => Live(
+            operation.Intent is EnsureColumnIntent
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.PrerequisiteMissing))
+        .ToArray();
 
     /// <summary>Creates immutable live classification inputs for the metadata-only phase.</summary>
     private static SafeMigrationProviderAnalysis Live(
         SafeMigrationObservedState state
-    )
-        => new(state, SafeMigrationRepairCapability.None, false, "test");
+    ) => new(state, SafeMigrationRepairCapability.None, false, "test");
 
     /// <summary>Reads only explicit top-level request ordinals, never nested catalog SELECTs.</summary>
     private static MatchCollection RequestOrdinals(
         string sql
-    )
-        => Regex.Matches(sql, @"SELECT (\d+),");
+    ) => Regex.Matches(sql, @"SELECT (\d+),");
 
     /// <summary>Returns native-shaped typed evidence with a separately named constraint backing index.</summary>
     private static DataTable Results(

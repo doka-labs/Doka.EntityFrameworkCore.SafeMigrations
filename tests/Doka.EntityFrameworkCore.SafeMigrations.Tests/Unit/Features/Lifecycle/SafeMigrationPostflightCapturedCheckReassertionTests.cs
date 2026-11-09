@@ -185,8 +185,7 @@ public sealed class SafeMigrationPostflightCapturedCheckReassertionTests
 
     private static SafeMigrationOperation Safe(
         SafeMigrationIntent intent
-    ) =>
-        new(intent, SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(intent, SafeMigrationPolicy.ThrowIfDifferent);
 
     private sealed class NativeCheckIdentity : ISafeMigrationProviderObjectIdentityNormalizer
     {

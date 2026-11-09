@@ -375,8 +375,9 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
         }
 
         if (operation is DropPrimaryKeyOperation or DropUniqueConstraintOperation
-            && SafeMigrationOperationCompatibility.Normalize(operation, _providerOperationAdapter).Kind
-                == SafeMigrationOperationCompatibilityKind.Safe)
+            && SafeMigrationOperationCompatibility.Normalize(operation, _providerOperationAdapter)
+                .Kind
+            == SafeMigrationOperationCompatibilityKind.Safe)
         {
             // WHY: Only the provider adapter may certify inherited removal
             // metadata as nonoperative. New constraints and unknown facets

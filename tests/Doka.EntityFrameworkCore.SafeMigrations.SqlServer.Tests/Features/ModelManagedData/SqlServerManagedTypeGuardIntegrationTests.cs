@@ -249,47 +249,45 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
     /// <summary>Uses the runtime provider services for type parsing and identifier rendering.</summary>
     private static SqlServerSafeMigrationCatalogSqlBuilder CreateCatalog(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     /// <summary>
     /// Captures an identity column without varying the physical type contract between operation kinds.
     /// </summary>
     private static ModelManagedDataIntent CreateIdentityIntent(
         string kind
-    )
-        => kind switch
-        {
-            "ensure" => new EnsureModelManagedDataIntent(
-                "identity_types",
-                ["Id"],
-                ["int"],
-                ["Id"],
-                ["int"],
-                new object?[,] { { 1 } },
-                null,
-                null),
-            "update" => new UpdateModelManagedDataIntent(
-                "identity_types",
-                ["Id"],
-                ["int"],
-                new object?[,] { { 1 } },
-                ["Id"],
-                ["int"],
-                new object?[,] { { 1 } },
-                new object?[,] { { 1 } },
-                null,
-                null),
-            "delete" => new DeleteModelManagedDataIntent(
-                "identity_types",
-                ["Id"],
-                ["int"],
-                new object?[,] { { 1 } },
-                ["Id"],
-                ["int"],
-                new object?[,] { { 1 } },
-                null,
-                []),
-            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-        };
+    ) => kind switch
+    {
+        "ensure" => new EnsureModelManagedDataIntent(
+            "identity_types",
+            ["Id"],
+            ["int"],
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            null,
+            null),
+        "update" => new UpdateModelManagedDataIntent(
+            "identity_types",
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            new object?[,] { { 1 } },
+            null,
+            null),
+        "delete" => new DeleteModelManagedDataIntent(
+            "identity_types",
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            null,
+            []),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
 }

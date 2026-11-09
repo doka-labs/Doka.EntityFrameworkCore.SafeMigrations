@@ -147,14 +147,13 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             SafeMigrationOperation operation,
             SafeMigrationProviderAnalysis projectedAnalysis,
             ISafeMigrationProjectedColumnSource columns
-        )
-            => RejectAfterDrop && Observed is DropCheckConstraintOperation
-                ? new SafeMigrationProviderAnalysis(
-                    SafeMigrationObservedState.Unsupported,
-                    SafeMigrationRepairCapability.None,
-                    false,
-                    "ddl_trigger_unproven")
-                : projectedAnalysis;
+        ) => RejectAfterDrop && Observed is DropCheckConstraintOperation
+            ? new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.Unsupported,
+                SafeMigrationRepairCapability.None,
+                false,
+                "ddl_trigger_unproven")
+            : projectedAnalysis;
 
         public void ObserveAcceptedOperation(
             SafeMigrationOperation operation,

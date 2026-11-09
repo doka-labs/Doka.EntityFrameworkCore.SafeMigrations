@@ -272,8 +272,8 @@ public sealed class PostgreSqlTableDefinitionCatalogSqlTests
         Assert.Contains("pg_catalog.to_regclass(required.principal)", state, StringComparison.Ordinal);
     }
 
-    private static SafeMigrationDbContext CreateContext() =>
-        new(OfflineConnectionString, registerSafeMigrations: false);
+    private static SafeMigrationDbContext CreateContext()
+        => new(OfflineConnectionString, registerSafeMigrations: false);
 
     private static ExpectedColumnDefinition[] ColumnCount(
         int count

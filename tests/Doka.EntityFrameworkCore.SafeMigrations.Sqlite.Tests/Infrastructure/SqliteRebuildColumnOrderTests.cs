@@ -24,31 +24,87 @@ public sealed class SqliteRebuildColumnOrderTests
         var names = new[] { "id", "first", "last" };
         for (var index = 0; index < names.Length; index++)
         {
-            columns.Add(names[index], new SqliteColumnSnapshot(index, names[index], "INTEGER", false,
-                null, index == 0 ? 1 : 0, 0, null, null, false, false));
+            columns.Add(names[index],
+                new SqliteColumnSnapshot(index,
+                    names[index],
+                    "INTEGER",
+                    false,
+                    null,
+                    index == 0
+                        ? 1
+                        : 0,
+                    0,
+                    null,
+                    null,
+                    false,
+                    false));
         }
 
-        var table = new SqliteTableSnapshot("host", string.Empty, columns, [], [], [], ["id"], [], "pk", [],
-            false, false, false);
-        var snapshot = new SqliteCatalogSnapshot("3.46.1", true, false,
-            new Dictionary<string, SqliteTableSnapshot>(SqliteIdentifierComparer.Instance) { ["host"] = table }, []);
+        var table = new SqliteTableSnapshot("host",
+            string.Empty,
+            columns,
+            [],
+            [],
+            [],
+            ["id"],
+            [],
+            "pk",
+            [],
+            false,
+            false,
+            false);
+
+        var snapshot = new SqliteCatalogSnapshot("3.46.1",
+            true,
+            false,
+            new Dictionary<string, SqliteTableSnapshot>(SqliteIdentifierComparer.Instance) { ["host"] = table },
+            []);
 
         var operations = new List<MigrationOperation>();
-        var target = change == "rename-table" ? "renamed_host" : "host";
+        var target = change == "rename-table"
+            ? "renamed_host"
+            : "host";
+
         switch (change)
         {
             case "rename-column":
-                operations.Add(new RenameColumnOperation { Table = "host", Name = "first", NewName = "renamed" });
+                operations.Add(new RenameColumnOperation
+                {
+                    Table = "host",
+                    Name = "first",
+                    NewName = "renamed",
+                });
+
                 break;
             case "rename-table":
-                operations.Add(new RenameTableOperation { Name = "host", NewName = target });
+                operations.Add(new RenameTableOperation
+                {
+                    Name = "host",
+                    NewName = target,
+                });
+
                 break;
             case "replace-column":
-                operations.Add(new DropColumnOperation { Table = "host", Name = "first" });
-                operations.Add(new AddColumnOperation { Table = "host", Name = "first" });
+                operations.Add(new DropColumnOperation
+                {
+                    Table = "host",
+                    Name = "first",
+                });
+
+                operations.Add(new AddColumnOperation
+                {
+                    Table = "host",
+                    Name = "first",
+                });
+
                 break;
             case "add-column":
-                operations.Add(new AddColumnOperation { Table = "host", Name = "new" });
+                operations.Add(new AddColumnOperation
+                {
+                    Table = "host",
+                    Name = "new",
+                });
+
                 break;
             case "recreate":
                 operations.Add(new DropTableOperation { Name = "host" });
@@ -56,21 +112,48 @@ public sealed class SqliteRebuildColumnOrderTests
                 break;
         }
 
-        var drop = new DropUniqueConstraintOperation { Table = target, Name = "independent" };
+        var drop = new DropUniqueConstraintOperation
+        {
+            Table = target,
+            Name = "independent",
+        };
+
         operations.Add(drop);
-        var ownership = new SqliteGeneratedColumnOwnership(operations, change == "ordinary" ? [drop] : []);
+        var ownership = new SqliteGeneratedColumnOwnership(operations,
+            change == "ordinary"
+                ? [drop]
+                : []);
+
         var creator = new CreateTableOperation { Name = "actual_native_name" };
         var destinationNames = change == "add-column"
             ? new[] { "id", "new", "last", "first" }
-            : new[] { "id", "last", change == "rename-column" ? "renamed" : "first" };
+            : new[]
+            {
+                "id",
+                "last",
+                change == "rename-column"
+                    ? "renamed"
+                    : "first",
+            };
 
         foreach (var name in destinationNames)
         {
-            creator.Columns.Add(new AddColumnOperation { Table = creator.Name, Name = name });
+            creator.Columns.Add(new AddColumnOperation
+            {
+                Table = creator.Name,
+                Name = name,
+            });
         }
 
         var originalColumns = creator.Columns.ToArray();
-        MigrationOperation[] rewritten = [creator, new RenameTableOperation { Name = creator.Name, NewName = target }];
+        MigrationOperation[] rewritten =
+        [
+            creator, new RenameTableOperation
+            {
+                Name = creator.Name,
+                NewName = target,
+            },
+        ];
 
         // Act
         var contract = new SqliteRebuildColumnOrder(snapshot, operations, ownership);

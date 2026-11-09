@@ -426,8 +426,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
     private string DatabaseDefaultCollationEquals(
         string collation
-    )
-        => $"CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(), 'Collation')) = {Literal(collation)}";
+    ) => $"CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(), 'Collation')) = {Literal(collation)}";
 
     private static string AuthoredRowFingerprint(
         EnsureModelManagedDataIntent seed,

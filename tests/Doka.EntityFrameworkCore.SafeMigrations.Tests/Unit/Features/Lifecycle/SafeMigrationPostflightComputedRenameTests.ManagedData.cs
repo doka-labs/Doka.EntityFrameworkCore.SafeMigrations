@@ -195,39 +195,38 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         string kind,
         string keyColumn,
         int value = 7
-    )
-        => kind switch
-        {
-            "ensure" => new EnsureModelManagedDataIntent(
-                "source_nodes",
-                [keyColumn],
-                ["int"],
-                [keyColumn, "payload"],
-                ["int", "int"],
-                new object?[,] { { 42, value } },
-                null,
-                [new ExpectedModelManagedDataUniqueKeyDefinition(["payload"])]),
-            "update" => new UpdateModelManagedDataIntent(
-                "source_nodes",
-                [keyColumn],
-                ["int"],
-                new object?[,] { { 42 } },
-                ["payload"],
-                ["int"],
-                new object?[,] { { 6 } },
-                new object?[,] { { value } },
-                null,
-                [new ExpectedModelManagedDataUniqueKeyDefinition(["payload"])]),
-            "delete" => new DeleteModelManagedDataIntent(
-                "source_nodes",
-                [keyColumn],
-                ["int"],
-                new object?[,] { { 42 } },
-                [keyColumn, "payload"],
-                ["int", "int"],
-                new object?[,] { { 42, 6 } },
-                null,
-                [new ExpectedModelManagedDataForeignKeyDefinition("dependents", ["owner"], [keyColumn])]),
-            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-        };
+    ) => kind switch
+    {
+        "ensure" => new EnsureModelManagedDataIntent(
+            "source_nodes",
+            [keyColumn],
+            ["int"],
+            [keyColumn, "payload"],
+            ["int", "int"],
+            new object?[,] { { 42, value } },
+            null,
+            [new ExpectedModelManagedDataUniqueKeyDefinition(["payload"])]),
+        "update" => new UpdateModelManagedDataIntent(
+            "source_nodes",
+            [keyColumn],
+            ["int"],
+            new object?[,] { { 42 } },
+            ["payload"],
+            ["int"],
+            new object?[,] { { 6 } },
+            new object?[,] { { value } },
+            null,
+            [new ExpectedModelManagedDataUniqueKeyDefinition(["payload"])]),
+        "delete" => new DeleteModelManagedDataIntent(
+            "source_nodes",
+            [keyColumn],
+            ["int"],
+            new object?[,] { { 42 } },
+            [keyColumn, "payload"],
+            ["int", "int"],
+            new object?[,] { { 42, 6 } },
+            null,
+            [new ExpectedModelManagedDataForeignKeyDefinition("dependents", ["owner"], [keyColumn])]),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
 }

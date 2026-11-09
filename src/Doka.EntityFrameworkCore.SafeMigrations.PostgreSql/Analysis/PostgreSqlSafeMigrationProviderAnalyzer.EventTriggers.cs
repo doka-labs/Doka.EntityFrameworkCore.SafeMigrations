@@ -159,17 +159,15 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     /// <inheritdoc />
     public bool PreservesUnrelatedColumnAbsence(
         RenameColumnIntent operation
-    )
-        => _eventTriggerRisk == PostgreSqlTriggerRisk.None
-            && !_generatedIndexHasOpaqueBoundary
-            && _triggerOriginOrdinal is null
-            && _schemaIdentityOriginOrdinal is null;
+    ) => _eventTriggerRisk == PostgreSqlTriggerRisk.None
+        && !_generatedIndexHasOpaqueBoundary
+        && _triggerOriginOrdinal is null
+        && _schemaIdentityOriginOrdinal is null;
 
     /// <inheritdoc />
     public bool PreservesExistingTableState(
         MigrationOperation operation
-    )
-        => ProviderOperationPreservesTableState(operation);
+    ) => ProviderOperationPreservesTableState(operation);
 
     /// <summary>Recognizes only Npgsql baselines which preserve every captured table-scoped fact.</summary>
     /// <param name="operation">The ordinary provider operation in the ordered stream.</param>

@@ -176,13 +176,12 @@ public sealed class PostgreSqlMemberRenameEvidenceTests
         Assert.All(analyses, result => Assert.Null(result.RenameTargetExists));
     }
 
-    private static SafeMigrationDbContext Context() =>
-        new("Host=localhost;Database=rename_evidence;Username=unused;Password=unused");
+    private static SafeMigrationDbContext Context()
+        => new("Host=localhost;Database=rename_evidence;Username=unused;Password=unused");
 
     private static PostgreSqlSafeMigrationProviderAnalyzer Analyzer(
         DbContext context
-    ) =>
-        Assert.IsType<PostgreSqlSafeMigrationProviderAnalyzer>(context.GetService<ISafeMigrationProviderAnalyzer>());
+    ) => Assert.IsType<PostgreSqlSafeMigrationProviderAnalyzer>(context.GetService<ISafeMigrationProviderAnalyzer>());
 
     private static SafeMigrationOperation[] Operations(
         int count
@@ -204,8 +203,7 @@ public sealed class PostgreSqlMemberRenameEvidenceTests
 
     private static SafeMigrationProviderAnalysis Live(
         SafeMigrationObservedState state
-    ) =>
-        new(state, SafeMigrationRepairCapability.None, false, "test");
+    ) => new(state, SafeMigrationRepairCapability.None, false, "test");
 
     private static DataTable Results(
         string sql

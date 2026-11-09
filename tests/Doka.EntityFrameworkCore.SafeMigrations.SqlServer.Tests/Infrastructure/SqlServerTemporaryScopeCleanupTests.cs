@@ -376,8 +376,7 @@ public sealed class SqlServerTemporaryScopeCleanupTests
 
     private static SqlServerSafeMigrationProviderAnalyzer CreateAnalyzer(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private sealed record CommandExecution(
         string Sql,
@@ -466,8 +465,7 @@ public sealed class SqlServerTemporaryScopeCleanupTests
 
         protected override DbTransaction BeginDbTransaction(
             IsolationLevel isolationLevel
-        )
-            => Transaction ?? throw new InvalidOperationException("The test did not provide a transaction.");
+        ) => Transaction ?? throw new InvalidOperationException("The test did not provide a transaction.");
 
         protected override DbCommand CreateDbCommand()
         {
@@ -479,14 +477,13 @@ public sealed class SqlServerTemporaryScopeCleanupTests
         public void Record(
             CleanupCommand command,
             CancellationToken cancellationToken
-        )
-            => Executions.Add(
-                new CommandExecution(
-                    command.CommandText,
-                    command.CommandTimeout,
-                    command.Transaction,
-                    cancellationToken.IsCancellationRequested,
-                    cancellationToken));
+        ) => Executions.Add(
+            new CommandExecution(
+                command.CommandText,
+                command.CommandTimeout,
+                command.Transaction,
+                cancellationToken.IsCancellationRequested,
+                cancellationToken));
     }
 
     private sealed class CleanupCommand : DbCommand

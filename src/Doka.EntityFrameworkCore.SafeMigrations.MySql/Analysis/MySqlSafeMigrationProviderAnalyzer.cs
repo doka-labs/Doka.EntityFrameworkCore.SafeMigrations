@@ -7,25 +7,25 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     ISafeMigrationProviderObjectIdentityNormalizer
 {
     private const string MariaDbImplicitJsonCheckInventoryJoins = """
-                                                                  LEFT JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
-                                                                    ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
-                                                                   AND cc.TABLE_NAME = tc.TABLE_NAME
-                                                                   AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
-                                                                  LEFT JOIN INFORMATION_SCHEMA.COLUMNS json_column
-                                                                    ON json_column.TABLE_SCHEMA = tc.CONSTRAINT_SCHEMA
-                                                                   AND json_column.TABLE_NAME = tc.TABLE_NAME
-                                                                   AND json_column.COLUMN_NAME = tc.CONSTRAINT_NAME
-                                                                  """;
+        LEFT JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+          ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
+         AND cc.TABLE_NAME = tc.TABLE_NAME
+         AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+        LEFT JOIN INFORMATION_SCHEMA.COLUMNS json_column
+          ON json_column.TABLE_SCHEMA = tc.CONSTRAINT_SCHEMA
+         AND json_column.TABLE_NAME = tc.TABLE_NAME
+         AND json_column.COLUMN_NAME = tc.CONSTRAINT_NAME
+        """;
 
     private const string MariaDbImplicitJsonCheckInventoryExpression = """
-                                                                       CASE WHEN tc.CONSTRAINT_TYPE = 'CHECK'
-                                                                         AND json_column.DATA_TYPE = 'longtext'
-                                                                         AND LOWER(json_column.COLLATION_NAME) = 'utf8mb4_bin'
-                                                                         AND LOWER(REPLACE(REPLACE(REPLACE(REPLACE(
-                                                                               cc.CHECK_CLAUSE, '`', ''), ' ', ''), '(', ''), ')', ''))
-                                                                             = CONCAT('json_valid', LOWER(json_column.COLUMN_NAME))
-                                                                       THEN TRUE ELSE FALSE END
-                                                                       """;
+        CASE WHEN tc.CONSTRAINT_TYPE = 'CHECK'
+          AND json_column.DATA_TYPE = 'longtext'
+          AND LOWER(json_column.COLLATION_NAME) = 'utf8mb4_bin'
+          AND LOWER(REPLACE(REPLACE(REPLACE(REPLACE(
+                cc.CHECK_CLAUSE, '`', ''), ' ', ''), '(', ''), ')', ''))
+              = CONCAT('json_valid', LOWER(json_column.COLUMN_NAME))
+        THEN TRUE ELSE FALSE END
+        """;
 
     private readonly MySqlSafeMigrationPlanCapture _planCapture;
     private readonly IMigrationsSqlGenerator _sqlGenerator;
@@ -54,10 +54,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     /// <summary>
     /// Uses the independently captured native owner policy without folding mode-zero table identities.
     /// </summary>
-    private StringComparer TableIdentifierComparer =>
-        _tableNamesIgnoreCase
-            ? StringComparer.OrdinalIgnoreCase
-            : StringComparer.Ordinal;
+    private StringComparer TableIdentifierComparer => _tableNamesIgnoreCase
+        ? StringComparer.OrdinalIgnoreCase
+        : StringComparer.Ordinal;
 
     bool ISafeMigrationProjectedKeyAnalyzer.SharesUniqueConstraintAndIndexIdentity => true;
 
@@ -134,18 +133,18 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
     StringComparer ISafeMigrationProviderObjectIdentityNormalizer.IdentifierComparer => TableIdentifierComparer;
 
-    StringComparer ISafeMigrationProviderObjectIdentityNormalizer.ColumnIdentifierComparer =>
-        StringComparer.OrdinalIgnoreCase;
+    StringComparer ISafeMigrationProviderObjectIdentityNormalizer.ColumnIdentifierComparer
+        => StringComparer.OrdinalIgnoreCase;
 
     /// <inheritdoc />
     char? ISafeMigrationProviderObjectIdentityNormalizer.CapturedSqlIdentifierDelimiter => '`';
 
     /// <inheritdoc />
-    StringComparer ISafeMigrationProviderObjectIdentityNormalizer.IndexIdentifierComparer =>
-        StringComparer.OrdinalIgnoreCase;
+    StringComparer ISafeMigrationProviderObjectIdentityNormalizer.IndexIdentifierComparer
+        => StringComparer.OrdinalIgnoreCase;
 
-    StringComparer ISafeMigrationProviderObjectIdentityNormalizer.ForeignKeyIdentifierComparer =>
-        StringComparer.OrdinalIgnoreCase;
+    StringComparer ISafeMigrationProviderObjectIdentityNormalizer.ForeignKeyIdentifierComparer
+        => StringComparer.OrdinalIgnoreCase;
 
     string ISafeMigrationProviderObjectIdentityNormalizer.NormalizeIdentifier(
         string identifier

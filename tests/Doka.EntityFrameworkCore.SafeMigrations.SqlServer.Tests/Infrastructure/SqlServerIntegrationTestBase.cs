@@ -83,8 +83,7 @@ public abstract class SqlServerIntegrationTestBase : IAsyncLifetime, IClassFixtu
     /// </summary>
     protected static SafeMigrationDbContext CreateContext(
         string connectionString
-    )
-        => new(connectionString);
+    ) => new(connectionString);
 
     /// <summary>
     /// Generates and executes migration commands individually for direct provider contracts.

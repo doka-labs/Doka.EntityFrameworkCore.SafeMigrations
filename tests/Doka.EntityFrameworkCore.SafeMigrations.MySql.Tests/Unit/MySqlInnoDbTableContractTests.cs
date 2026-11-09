@@ -28,8 +28,10 @@ public sealed class MySqlInnoDbTableContractTests : IDisposable
         // Act
         builder.CreateTableIfNotExistsFromModel(operationFactory: operationBuilder =>
         {
-            operationBuilder.CreateTable("items", table => new { Id = table.Column<int>(type: "int") })
+            operationBuilder
+                .CreateTable("items", table => new { Id = table.Column<int>(type: "int") })
                 .Annotation("Doka:MySql:StorageEngine", "InnoDB");
+
             captured = (CreateTableOperation)operationBuilder.Operations.Single();
         });
 
@@ -100,26 +102,36 @@ public sealed class MySqlInnoDbTableContractTests : IDisposable
 
         void AppendAnnotatedTable(
             MigrationBuilder operationBuilder
-        ) => operationBuilder.CreateTable("items", table => new { Id = table.Column<int>(type: "int") },
+        ) => operationBuilder
+            .CreateTable("items",
+                table => new { Id = table.Column<int>(type: "int") },
                 constraints: table =>
                 {
                     switch (kind)
                     {
                         case "primary":
-                            table.PrimaryKey("PK_items", value => value.Id)
+                            table
+                                .PrimaryKey("PK_items", value => value.Id)
                                 .Annotation("Unknown:ConstraintOption", true);
+
                             break;
                         case "unique":
-                            table.UniqueConstraint("UQ_items", value => value.Id)
+                            table
+                                .UniqueConstraint("UQ_items", value => value.Id)
                                 .Annotation("Unknown:ConstraintOption", true);
+
                             break;
                         case "check":
-                            table.CheckConstraint("CK_items", "Id >= 0")
+                            table
+                                .CheckConstraint("CK_items", "Id >= 0")
                                 .Annotation("Unknown:ConstraintOption", true);
+
                             break;
                         case "foreign":
-                            table.ForeignKey("FK_items", value => value.Id, "parents", "Id")
+                            table
+                                .ForeignKey("FK_items", value => value.Id, "parents", "Id")
                                 .Annotation("Unknown:ConstraintOption", true);
+
                             break;
                     }
                 })
@@ -144,7 +156,9 @@ public sealed class MySqlInnoDbTableContractTests : IDisposable
         // Assert
         Assert.NotEqual(plainHash, engineHash);
         Assert.False(equivalent);
-        Assert.Equal(plainHash, SafeMigrationContractFingerprint.Create(CreateBuilder(annotated: false).Operations));
+        Assert.Equal(plainHash,
+            SafeMigrationContractFingerprint.Create(CreateBuilder(annotated: false)
+                .Operations));
     }
 
     /// <summary>Both strict and convergence DDL retain engine creation and a mandatory catalog guard.</summary>
@@ -173,8 +187,10 @@ public sealed class MySqlInnoDbTableContractTests : IDisposable
         }
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>()
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
             .Generate(builder.Operations, context.Model, options);
+
         var sql = string.Join("\n", commands.Select(static command => command.CommandText));
 
         // Assert
@@ -208,8 +224,11 @@ public sealed class MySqlInnoDbTableContractTests : IDisposable
         });
 
         // Act
-        var sql = string.Join("\n", context.GetService<IMigrationsSqlGenerator>()
-            .Generate(builder.Operations, context.Model).Select(static command => command.CommandText));
+        var sql = string.Join("\n",
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate(builder.Operations, context.Model)
+                .Select(static command => command.CommandText));
 
         // Assert
         Assert.Contains("unsupported", sql, StringComparison.Ordinal);
@@ -235,7 +254,8 @@ public sealed class MySqlInnoDbTableContractTests : IDisposable
 
     private static void AppendTable(
         MigrationBuilder builder
-    ) => builder.CreateTable("items", table => new { Id = table.Column<int>(type: "int") })
+    ) => builder
+        .CreateTable("items", table => new { Id = table.Column<int>(type: "int") })
         .Annotation("Doka:MySql:StorageEngine", "InnoDB");
 
     private DbContext CreateContext()
@@ -244,6 +264,7 @@ public sealed class MySqlInnoDbTableContractTests : IDisposable
         options.UseInternalServiceProvider(_services);
         options.UseMySql("Server=127.0.0.1;Port=1;User ID=test;Database=test;Allow User Variables=true",
             MySqlServerVersion.MySql(new Version(8, 4, 13)));
+
         options.UseMySqlSafeMigrations();
 
         return new DbContext(options.Options);

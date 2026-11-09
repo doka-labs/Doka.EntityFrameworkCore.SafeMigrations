@@ -7,10 +7,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         MySqlMigrationFeatureSet features
     ) => intent is EnsureTableIntent table
         ? MySqlSafeMigrationTableMetadata.GetUnsupportedFeature(table.Definition)
-            ?? (table.Definition.CheckConstraints.Count > 0
-                && !Supported(features, MySqlMigrationFeature.CheckConstraints)
-                    ? "check_constraint"
-                    : null)
+        ?? (table.Definition.CheckConstraints.Count > 0
+            && !Supported(features, MySqlMigrationFeature.CheckConstraints)
+                ? "check_constraint"
+                : null)
         : null;
 
     private MySqlSafeMigrationRuntimePlan BuildEnsureTable(
@@ -99,7 +99,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             ClassificationCodeExpression = engineMatches is null
                 ? null
                 : $"CASE WHEN {baseTable} AND NOT ({engineMatches}) "
-                    + "THEN 'table_storage_engine_different' ELSE NULL END",
+                + "THEN 'table_storage_engine_different' ELSE NULL END",
             DiagnosticEvidenceExpression = engineMatches is null
                 ? null
                 : BuildEngineDiagnosticEvidence(definition.Table),
@@ -110,8 +110,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private static string SelectNativeTableContract(
         string ordinal,
         string folded
-    ) =>
-        $"(CASE WHEN @@lower_case_table_names = 0 THEN ({ordinal}) "
+    ) => $"(CASE WHEN @@lower_case_table_names = 0 THEN ({ordinal}) "
         + $"WHEN @@lower_case_table_names IN (1, 2) THEN ({folded}) ELSE FALSE END)";
 
     private MySqlSafeMigrationRuntimePlan BuildDropTable(
@@ -209,7 +208,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <summary>Verifies the explicit engine in the same catalog statement as table classification.</summary>
     private string InnoDbEngineMatches(
         string table
-    ) => $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES engine_table "
+    ) => "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES engine_table "
         + "WHERE engine_table.TABLE_SCHEMA = DATABASE() "
         + $"AND engine_table.TABLE_NAME = {Literal(table)} "
         + "AND LOWER(engine_table.ENGINE) = 'innodb')";
@@ -218,8 +217,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private string BuildEngineDiagnosticEvidence(
         string table
     ) => "(SELECT "
-        + DiagnosticRecord("LOWER(COALESCE(engine_table.ENGINE, '')) <> 'innodb'", "table_storage_engine",
-            "'InnoDB'", "LEFT(COALESCE(engine_table.ENGINE, 'unknown'), 64)")
+        + DiagnosticRecord("LOWER(COALESCE(engine_table.ENGINE, '')) <> 'innodb'",
+            "table_storage_engine",
+            "'InnoDB'",
+            "LEFT(COALESCE(engine_table.ENGINE, 'unknown'), 64)")
         + " FROM INFORMATION_SCHEMA.TABLES engine_table "
         + $"WHERE engine_table.TABLE_SCHEMA = DATABASE() AND engine_table.TABLE_NAME = {Literal(table)} "
         + "AND engine_table.TABLE_TYPE = 'BASE TABLE' LIMIT 1)";

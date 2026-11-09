@@ -217,8 +217,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <returns>The SQL Server expression text.</returns>
     public string RenderExpression(
         SafeMigrationSqlExpression expression
-    )
-        => _expressionRenderer.Render(expression);
+    ) => _expressionRenderer.Render(expression);
 
     private string? GetUnsupportedFeature(
         SafeMigrationOperation operation
@@ -762,44 +761,38 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private string TableExists(
         string table,
         string? schema
-    )
-        => $"EXISTS (SELECT 1 FROM sys.tables t WHERE t.object_id = {TableId(table, schema)})";
+    ) => $"EXISTS (SELECT 1 FROM sys.tables t WHERE t.object_id = {TableId(table, schema)})";
 
     private string ObjectExists(
         string table,
         string? schema
-    )
-        => $"EXISTS (SELECT 1 FROM sys.objects o WHERE o.schema_id = SCHEMA_ID({Literal(EffectiveSchema(schema))}) "
-            + $"AND o.name = {Literal(table)})";
+    ) => $"EXISTS (SELECT 1 FROM sys.objects o WHERE o.schema_id = SCHEMA_ID({Literal(EffectiveSchema(schema))}) "
+        + $"AND o.name = {Literal(table)})";
 
     private string ColumnExists(
         string table,
         string? schema,
         string column
-    )
-        => $"EXISTS (SELECT 1 FROM sys.columns c WHERE c.object_id = {TableId(table, schema)} "
-            + $"AND c.name = {Literal(column)})";
+    ) => $"EXISTS (SELECT 1 FROM sys.columns c WHERE c.object_id = {TableId(table, schema)} "
+        + $"AND c.name = {Literal(column)})";
 
     private string ConstraintNameExists(
         string table,
         string? schema,
         string name
-    )
-        => $"EXISTS (SELECT 1 FROM sys.objects o WHERE o.parent_object_id = {TableId(table, schema)} "
-            + $"AND o.name = {Literal(name)} AND o.type IN ('PK', 'UQ', 'C', 'F'))";
+    ) => $"EXISTS (SELECT 1 FROM sys.objects o WHERE o.parent_object_id = {TableId(table, schema)} "
+        + $"AND o.name = {Literal(name)} AND o.type IN ('PK', 'UQ', 'C', 'F'))";
 
     private string ConstraintNameOccupiedInSchema(
         string? schema,
         string name
-    )
-        => $"EXISTS (SELECT 1 FROM sys.objects o WHERE o.schema_id = SCHEMA_ID({Literal(EffectiveSchema(schema))}) "
-            + $"AND o.name = {Literal(name)})";
+    ) => $"EXISTS (SELECT 1 FROM sys.objects o WHERE o.schema_id = SCHEMA_ID({Literal(EffectiveSchema(schema))}) "
+        + $"AND o.name = {Literal(name)})";
 
     private string TableId(
         string table,
         string? schema
-    )
-        => $"OBJECT_ID({Literal(_sqlGenerationHelper.DelimitIdentifier(table, EffectiveSchema(schema)))}, 'U')";
+    ) => $"OBJECT_ID({Literal(_sqlGenerationHelper.DelimitIdentifier(table, EffectiveSchema(schema)))}, 'U')";
 
     private static string EffectiveSchema(
         string? schema
@@ -811,8 +804,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
     private string RenderStringLiteral(
         string value
-    )
-        => SqlServerSqlStringLiteral.Render(value);
+    ) => SqlServerSqlStringLiteral.Render(value);
 
     private string RenderValueLiteral(
         object? value,
@@ -837,16 +829,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string postcondition,
         SafeMigrationRepairCapability repair = SafeMigrationRepairCapability.None,
         string repairPrecondition = "0"
-    )
-        => new(stateExpression, postcondition, repair, repairPrecondition);
+    ) => new(stateExpression, postcondition, repair, repairPrecondition);
 
     private static SqlServerSafeMigrationRuntimePlan Unsupported(
         string code
-    )
-        => new("N'unsupported'", "0", SafeMigrationRepairCapability.None, "0", code)
-        {
-            IsStaticallyUnsupported = true,
-        };
+    ) => new("N'unsupported'", "0", SafeMigrationRepairCapability.None, "0", code)
+    {
+        IsStaticallyUnsupported = true,
+    };
 
     private readonly record struct SqlServerColumnType(
         string Name,

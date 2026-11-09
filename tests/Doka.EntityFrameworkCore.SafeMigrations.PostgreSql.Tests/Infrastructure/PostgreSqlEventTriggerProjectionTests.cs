@@ -187,8 +187,7 @@ public sealed class PostgreSqlEventTriggerProjectionTests
         /// <inheritdoc />
         protected override void OnConfiguring(
             DbContextOptionsBuilder optionsBuilder
-        )
-            => optionsBuilder.UseNpgsql("Host=localhost;Database=event_projection;Username=unused;Password=unused");
+        ) => optionsBuilder.UseNpgsql("Host=localhost;Database=event_projection;Username=unused;Password=unused");
 
         /// <inheritdoc />
         protected override void OnModelCreating(

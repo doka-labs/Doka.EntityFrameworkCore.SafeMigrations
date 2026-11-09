@@ -358,8 +358,7 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
     private static bool IsRejectedBootstrap(
         Exception failure,
         bool providerDispatched
-    )
-        => !providerDispatched && failure is SqlException { Number: 51007 };
+    ) => !providerDispatched && failure is SqlException { Number: 51007 };
 
     /// <summary>Prevents an uncertain active SqlClient lease from returning to its reusable connection pool.</summary>
     private static void DiscardPooledSession(
@@ -452,8 +451,7 @@ internal class SqlServerSafeMigrationGuardedCommand : MigrationCommand
     public override bool TransactionSuppressed => OriginalCommand.TransactionSuppressed;
 
     /// <inheritdoc />
-    public override IRelationalCommandDiagnosticsLogger CommandLogger
-        => OriginalCommand.CommandLogger;
+    public override IRelationalCommandDiagnosticsLogger CommandLogger => OriginalCommand.CommandLogger;
 
     /// <inheritdoc />
     public override int ExecuteNonQuery(

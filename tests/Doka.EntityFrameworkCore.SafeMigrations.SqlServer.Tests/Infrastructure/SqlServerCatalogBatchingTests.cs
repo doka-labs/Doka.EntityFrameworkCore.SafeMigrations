@@ -1188,25 +1188,25 @@ public sealed class SqlServerCatalogBatchingTests
 
     private static SqlServerSafeMigrationRuntimePlan Plan(
         bool delayed
-    )
-        => new("N'missing'", "0", SafeMigrationRepairCapability.None, "0") { RequiresDelayedBinding = delayed };
+    ) => new("N'missing'", "0", SafeMigrationRepairCapability.None, "0") { RequiresDelayedBinding = delayed };
 
     /// <summary>Gives a classifier a distinct immutable diagnostic contract without changing its SQL shape.</summary>
     private static SqlServerSafeMigrationRuntimePlan DistinctPlan(
         SqlServerSafeMigrationRuntimePlan plan,
         int ordinal
-    )
-        => plan with
-        {
-            DifferentDifference = new SafeMigrationFacetDifference(
-                "test_contract",
-                ordinal.ToString(
-                    CultureInfo.InvariantCulture),
-                "actual"),
-        };
+    ) => plan with
+    {
+        DifferentDifference = new SafeMigrationFacetDifference(
+            "test_contract",
+            ordinal.ToString(
+                CultureInfo.InvariantCulture),
+            "actual"),
+    };
 
-    private static SafeMigrationProviderAnalysis Unsupported()
-        => new(SafeMigrationObservedState.Unsupported, SafeMigrationRepairCapability.None, false, "test_unsupported");
+    private static SafeMigrationProviderAnalysis Unsupported() => new(SafeMigrationObservedState.Unsupported,
+        SafeMigrationRepairCapability.None,
+        false,
+        "test_unsupported");
 
     private static SafeMigrationObservedState State(
         int ordinal

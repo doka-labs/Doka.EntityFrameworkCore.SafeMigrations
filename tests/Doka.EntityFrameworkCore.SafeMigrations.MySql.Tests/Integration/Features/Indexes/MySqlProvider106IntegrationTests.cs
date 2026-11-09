@@ -343,22 +343,21 @@ public sealed class MySqlProvider106IntegrationTests : MySqlSafeMigrationIntegra
     /// <summary>Captures the finalized provider model in the same immutable safe contracts as scaffolding.</summary>
     private static MigrationOperation[] SafeModelOperations(
         DbContext context
-    ) =>
-        MySqlProvider106ContractTests
-            .CreateOperations(context)
-            .Where(static operation => operation
-                is CreateTableOperation or CreateIndexOperation or AddForeignKeyOperation)
-            .Select(static operation => operation is CreateTableOperation table
-                ? new SafeMigrationOperation(
-                    new EnsureTableIntent(
-                        SafeMigrationExpectedDefinitionFactory.From(table),
-                        SafeMigrationTableMode.StrictDefinition),
-                    SafeMigrationPolicy.ThrowIfDifferent)
-                : SafeMigrationOperationCompatibility.Normalize(
-                        operation,
-                        MySqlSafeMigrationProviderOperationAdapter.Instance)
-                    .Operation)
-            .ToArray();
+    ) => MySqlProvider106ContractTests
+        .CreateOperations(context)
+        .Where(static operation => operation
+            is CreateTableOperation or CreateIndexOperation or AddForeignKeyOperation)
+        .Select(static operation => operation is CreateTableOperation table
+            ? new SafeMigrationOperation(
+                new EnsureTableIntent(
+                    SafeMigrationExpectedDefinitionFactory.From(table),
+                    SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationPolicy.ThrowIfDifferent)
+            : SafeMigrationOperationCompatibility.Normalize(
+                    operation,
+                    MySqlSafeMigrationProviderOperationAdapter.Instance)
+                .Operation)
+        .ToArray();
 
     /// <summary>Declares a real native decimal fixture, not a mocked catalog or reduced byte limit.</summary>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>

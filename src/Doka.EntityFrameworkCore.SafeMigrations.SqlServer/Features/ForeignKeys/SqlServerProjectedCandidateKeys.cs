@@ -16,8 +16,7 @@ internal sealed class SqlServerProjectedCandidateKeys
         int table,
         string name,
         int index
-    )
-        => _names[new NameIdentity(table, name)] = new KeyIdentity(table, index);
+    ) => _names[new NameIdentity(table, name)] = new KeyIdentity(table, index);
 
     /// <summary>Resolves a catalog-bound name to its exact physical backing index.</summary>
     /// <param name="table">The physical principal table id.</param>
@@ -348,8 +347,7 @@ internal sealed class SqlServerProjectedCandidateKeys
     /// <param name="table">The physical or projected table id.</param>
     public void RemoveTable(
         int table
-    )
-        => _keys.Remove(table);
+    ) => _keys.Remove(table);
 
     private Dictionary<int, List<KeyColumn>> GetTableKeys(
         int table

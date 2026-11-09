@@ -325,28 +325,27 @@ internal sealed class SqliteSafeMigrationSqlExpressionRenderer
     private static SafeMigrationSqlExpression? GetChild(
         SafeMigrationSqlExpression expression,
         int position
-    ) =>
-        expression switch
-        {
-            SafeMigrationSqlUnaryExpression value when position == 0 => value.Operand,
-            SafeMigrationSqlBinaryExpression value when position == 0 => value.Left,
-            SafeMigrationSqlBinaryExpression value when position == 1 => value.Right,
-            SafeMigrationSqlNullTestExpression value when position == 0 => value.Operand,
-            SafeMigrationSqlBetweenExpression value when position == 0 => value.Operand,
-            SafeMigrationSqlBetweenExpression value when position == 1 => value.Lower,
-            SafeMigrationSqlBetweenExpression value when position == 2 => value.Upper,
-            SafeMigrationSqlInExpression value when position == 0 => value.Operand,
-            SafeMigrationSqlInExpression value when position <= value.Values.Count => value.Values[position - 1],
-            SafeMigrationSqlFunctionExpression value when position < value.Arguments.Count => value.Arguments[position],
-            SafeMigrationSqlCastExpression value when position == 0 => value.Operand,
-            SafeMigrationSqlCollateExpression value when position == 0 => value.Operand,
-            SafeMigrationSqlCaseExpression value when position / 2 < value.WhenClauses.Count => position % 2 == 0
-                ? value.WhenClauses[position / 2].Condition
-                : value.WhenClauses[position / 2].Result,
-            SafeMigrationSqlCaseExpression value when position % 2 == 0
-                && position / 2 == value.WhenClauses.Count => value.ElseResult,
-            _ => null,
-        };
+    ) => expression switch
+    {
+        SafeMigrationSqlUnaryExpression value when position == 0 => value.Operand,
+        SafeMigrationSqlBinaryExpression value when position == 0 => value.Left,
+        SafeMigrationSqlBinaryExpression value when position == 1 => value.Right,
+        SafeMigrationSqlNullTestExpression value when position == 0 => value.Operand,
+        SafeMigrationSqlBetweenExpression value when position == 0 => value.Operand,
+        SafeMigrationSqlBetweenExpression value when position == 1 => value.Lower,
+        SafeMigrationSqlBetweenExpression value when position == 2 => value.Upper,
+        SafeMigrationSqlInExpression value when position == 0 => value.Operand,
+        SafeMigrationSqlInExpression value when position <= value.Values.Count => value.Values[position - 1],
+        SafeMigrationSqlFunctionExpression value when position < value.Arguments.Count => value.Arguments[position],
+        SafeMigrationSqlCastExpression value when position == 0 => value.Operand,
+        SafeMigrationSqlCollateExpression value when position == 0 => value.Operand,
+        SafeMigrationSqlCaseExpression value when position / 2 < value.WhenClauses.Count => position % 2 == 0
+            ? value.WhenClauses[position / 2].Condition
+            : value.WhenClauses[position / 2].Result,
+        SafeMigrationSqlCaseExpression value when position % 2 == 0
+            && position / 2 == value.WhenClauses.Count => value.ElseResult,
+        _ => null,
+    };
 
     /// <summary>Checks only the current node so validation retains its original first-failure behavior.</summary>
     private string? LocalUnsupportedFeature(

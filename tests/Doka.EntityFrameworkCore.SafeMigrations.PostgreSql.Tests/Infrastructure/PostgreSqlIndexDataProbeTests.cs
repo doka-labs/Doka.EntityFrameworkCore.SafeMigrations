@@ -217,45 +217,41 @@ public sealed class PostgreSqlIndexDataProbeTests
             StringComparison.Ordinal);
     }
 
-    private static SafeMigrationDbContext Context()
-        => new(
-            "Host=127.0.0.1;Port=1;Database=index_data_probe;Username=test;Password=test",
-            registerSafeMigrations: false);
+    private static SafeMigrationDbContext Context() => new(
+        "Host=127.0.0.1;Port=1;Database=index_data_probe;Username=test;Password=test",
+        registerSafeMigrations: false);
 
     private static PostgreSqlSafeMigrationProviderAnalyzer Analyzer(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private static SafeMigrationOperation[] Operations(
         int count
-    )
-        => Enumerable
-            .Range(0, count)
-            .Select(static ordinal => new SafeMigrationOperation(
-                new EnsureIndexIntent(
-                    new ExpectedIndexDefinition(
-                        "ix_" + ordinal,
-                        "members",
-                        [new ExpectedIndexKeyDefinition("id")],
-                        unique: true)),
-                SafeMigrationPolicy.ThrowIfDifferent))
-            .ToArray();
+    ) => Enumerable
+        .Range(0, count)
+        .Select(static ordinal => new SafeMigrationOperation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ix_" + ordinal,
+                    "members",
+                    [new ExpectedIndexKeyDefinition("id")],
+                    unique: true)),
+            SafeMigrationPolicy.ThrowIfDifferent))
+        .ToArray();
 
     private static SafeMigrationProviderAnalysis[] Analyses(
         int count,
         SafeMigrationObservedState state
-    )
-        => Enumerable
-            .Range(0, count)
-            .Select(_ => new SafeMigrationProviderAnalysis(
-                state,
-                SafeMigrationRepairCapability.None,
-                state == SafeMigrationObservedState.Matching,
-                "initial_state",
-                SafeMigrationOperationalImpact.NotApplicable,
-                [new SafeMigrationFacetDifference("index_key_order", "id", "other")]))
-            .ToArray();
+    ) => Enumerable
+        .Range(0, count)
+        .Select(_ => new SafeMigrationProviderAnalysis(
+            state,
+            SafeMigrationRepairCapability.None,
+            state == SafeMigrationObservedState.Matching,
+            "initial_state",
+            SafeMigrationOperationalImpact.NotApplicable,
+            [new SafeMigrationFacetDifference("index_key_order", "id", "other")]))
+        .ToArray();
 
     /// <summary>Runs the isolated PostgreSQL fixture operation with explicit cancellation.</summary>
     /// <param name="analyzer">The fixture's analyzer input.</param>
@@ -339,9 +335,8 @@ public sealed class PostgreSqlIndexDataProbeTests
 
     private static List<int> Ordinals(
         string sql
-    )
-        => Regex
-            .Matches(sql, @"SELECT (\d+),")
-            .Select(static match => int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture))
-            .ToList();
+    ) => Regex
+        .Matches(sql, @"SELECT (\d+),")
+        .Select(static match => int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture))
+        .ToList();
 }

@@ -245,7 +245,7 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
             "case_result" => SafeMigrationSql.Case([new SafeMigrationSqlCaseWhenClause(one, unsupported)], unknown),
             "case_else" => SafeMigrationSql.Case(
             [
-                new SafeMigrationSqlCaseWhenClause(one, unsupported), new SafeMigrationSqlCaseWhenClause(unknown, one)
+                new SafeMigrationSqlCaseWhenClause(one, unsupported), new SafeMigrationSqlCaseWhenClause(unknown, one),
             ]),
             "cast" => SafeMigrationSql.Cast(unknown, "INTEGER; unsafe"),
             "collate" => SafeMigrationSql.Collate(unknown, "NOCASE", "main"),

@@ -401,12 +401,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             SafeMigrationProviderAnalysis liveAnalysis,
             SafeMigrationProviderAnalysis analysis,
             SafeMigrationDecision decision
-        )
-            => ObservationCount++;
+        ) => ObservationCount++;
 
         public void ObserveProviderOperation(
             MigrationOperation operation
-        )
-            => LastProviderOperation = operation;
+        ) => LastProviderOperation = operation;
     }
 }

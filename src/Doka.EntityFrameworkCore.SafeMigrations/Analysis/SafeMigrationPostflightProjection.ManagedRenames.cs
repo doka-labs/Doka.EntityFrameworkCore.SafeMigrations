@@ -12,7 +12,7 @@ internal sealed partial class SafeMigrationPostflightProjection
         if (!operations.Any(static operation => operation is SafeMigrationOperation { Intent: RenameColumnIntent })
             || !operations.Any(static operation => operation is SafeMigrationOperation
             {
-                Intent: ModelManagedDataIntent
+                Intent: ModelManagedDataIntent,
             }))
         {
             return null;

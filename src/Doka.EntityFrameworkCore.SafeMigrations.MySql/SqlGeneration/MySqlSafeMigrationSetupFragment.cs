@@ -100,10 +100,7 @@ internal readonly struct MySqlSafeMigrationSetupFragment
     /// <param name="text">The existing SQL string.</param>
     public static implicit operator MySqlSafeMigrationSetupFragment(
         string text
-    )
-    {
-        return new MySqlSafeMigrationSetupFragment(text);
-    }
+    ) => new(text);
 
     /// <summary>Defers groupable SQL pieces and materializes large independent fragments once.</summary>
     /// <param name="parts">Raw text or independently UTF-8-encoded hexadecimal pieces, in order.</param>
@@ -326,9 +323,6 @@ internal readonly struct MySqlSafeMigrationSetupFragment
         /// <param name="text">The immutable raw SQL piece.</param>
         public static implicit operator Part(
             string text
-        )
-        {
-            return new Part(text, isHexadecimal: false);
-        }
+        ) => new(text, isHexadecimal: false);
     }
 }

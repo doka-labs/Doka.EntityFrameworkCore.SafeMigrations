@@ -387,7 +387,10 @@ internal sealed class SqliteSafeMigrationBatchCommand : MigrationCommand
             _executionState.Invalidate();
         }
 
-        var commands = _baselineGenerator.Generate(window, _model, _options, guardedOperations: _operations,
+        var commands = _baselineGenerator.Generate(window,
+            _model,
+            _options,
+            guardedOperations: _operations,
             snapshot: _executionState.GetSnapshot(connection));
 
         return ExecuteCommands(connection, parameterValues, commands);

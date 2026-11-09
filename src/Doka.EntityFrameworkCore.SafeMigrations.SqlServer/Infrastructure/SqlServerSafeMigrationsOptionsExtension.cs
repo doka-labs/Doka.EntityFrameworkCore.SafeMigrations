@@ -85,8 +85,8 @@ internal sealed class SqlServerSafeMigrationsOptionsExtension
         /// <inheritdoc />
         public override string LogFragment => "doka-sqlserver-safe-migrations ";
 
-        private new SqlServerSafeMigrationsOptionsExtension Extension =>
-            (SqlServerSafeMigrationsOptionsExtension)base.Extension;
+        private new SqlServerSafeMigrationsOptionsExtension Extension
+            => (SqlServerSafeMigrationsOptionsExtension)base.Extension;
 
         // WHY: The ownership option changes runtime pending-model detection.
         // It must participate in EF's service-provider identity so a context

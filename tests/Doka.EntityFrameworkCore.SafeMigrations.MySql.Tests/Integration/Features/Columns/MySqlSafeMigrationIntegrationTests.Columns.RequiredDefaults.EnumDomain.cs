@@ -197,19 +197,18 @@ public sealed class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTests : MyS
     /// <returns>The immutable target whose uppercase keyword and member values remain authored.</returns>
     private static SafeMigrationOperation RequiredDefaultsEnumDomainOperation(
         bool useSetStorage
-    )
-        => new(
-            new EnsureColumnIntent(
-                "required_enum_domain_items",
-                new ExpectedColumnDefinition(
-                    "value",
-                    typeof(string),
-                    false,
-                    (useSetStorage
-                        ? "SET"
-                        : "ENUM")
-                    + "('Alpha','Beta')")),
-            SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(
+        new EnsureColumnIntent(
+            "required_enum_domain_items",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                false,
+                (useSetStorage
+                    ? "SET"
+                    : "ENUM")
+                + "('Alpha','Beta')")),
+        SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Defines exact live domains independently from the expected target's authored keyword case.</summary>
     /// <param name="useSetStorage">Whether the finite string domain uses SET rather than ENUM.</param>

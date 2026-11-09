@@ -225,37 +225,35 @@ public sealed class MySqlProjectedColumnSessionSafetyTests
         string type,
         bool nullable,
         bool explicitDefault = false
-    ) =>
-        new(
-            "value",
-            typeof(string),
-            nullable,
-            type,
-            defaultValue: explicitDefault
-                ? SafeMigrationDefaultValue.Literal("fixed")
-                : SafeMigrationDefaultValue.None);
+    ) => new(
+        "value",
+        typeof(string),
+        nullable,
+        type,
+        defaultValue: explicitDefault
+            ? SafeMigrationDefaultValue.Literal("fixed")
+            : SafeMigrationDefaultValue.None);
 
     private static ExpectedColumnDefinition Timestamp(
         bool explicitDefault,
         string? comment = null
-    ) =>
-        new(
-            "value",
-            typeof(DateTime),
-            false,
-            "timestamp",
-            comment: comment,
-            defaultValue: explicitDefault
-                ? SafeMigrationDefaultValue.Literal(
-                    new DateTime(
-                        2020,
-                        1,
-                        1,
-                        0,
-                        0,
-                        0,
-                        DateTimeKind.Unspecified))
-                : SafeMigrationDefaultValue.None);
+    ) => new(
+        "value",
+        typeof(DateTime),
+        false,
+        "timestamp",
+        comment: comment,
+        defaultValue: explicitDefault
+            ? SafeMigrationDefaultValue.Literal(
+                new DateTime(
+                    2020,
+                    1,
+                    1,
+                    0,
+                    0,
+                    0,
+                    DateTimeKind.Unspecified))
+            : SafeMigrationDefaultValue.None);
 
     private static SafeMigrationIndexPhysicalEnvironment Environment(
         bool strict

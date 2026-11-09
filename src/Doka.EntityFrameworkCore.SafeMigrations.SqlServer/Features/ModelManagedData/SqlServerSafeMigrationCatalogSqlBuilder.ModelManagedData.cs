@@ -370,8 +370,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + $"AND ({BuildModelManagedDataWritableColumnGuard(intent)})";
     }
 
-    private static string SqlServerCompatibilityLevel() =>
-        "(SELECT compatibility_level FROM sys.databases WHERE name = DB_NAME())";
+    private static string SqlServerCompatibilityLevel()
+        => "(SELECT compatibility_level FROM sys.databases WHERE name = DB_NAME())";
 
     private static string ModelManagedDataGuardFailure(
         string commonGuard

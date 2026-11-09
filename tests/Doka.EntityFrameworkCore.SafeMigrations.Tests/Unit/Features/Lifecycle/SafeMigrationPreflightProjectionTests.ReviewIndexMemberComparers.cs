@@ -188,16 +188,14 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         public StringComparer IdentifierComparer => StringComparer.Ordinal;
 
         /// <inheritdoc />
-        public StringComparer IndexIdentifierComparer =>
-            insensitiveIndexes
-                ? StringComparer.OrdinalIgnoreCase
-                : StringComparer.Ordinal;
+        public StringComparer IndexIdentifierComparer => insensitiveIndexes
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
 
         /// <inheritdoc />
-        public StringComparer ColumnIdentifierComparer =>
-            insensitiveColumns
-                ? StringComparer.OrdinalIgnoreCase
-                : StringComparer.Ordinal;
+        public StringComparer ColumnIdentifierComparer => insensitiveColumns
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
 
         /// <inheritdoc />
         public string NormalizeIdentifier(

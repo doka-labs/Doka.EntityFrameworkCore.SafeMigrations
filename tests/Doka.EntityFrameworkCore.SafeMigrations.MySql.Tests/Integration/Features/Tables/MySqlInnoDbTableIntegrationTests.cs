@@ -22,8 +22,13 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = CreateBuilder(context, convergence, SafeMigrationPolicy.ThrowIfDifferent);
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(
-            builder.Operations, context.Model, MigrationsSqlGenerationOptions.Script);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(
+                builder.Operations,
+                context.Model,
+                MigrationsSqlGenerationOptions.Script);
+
         var script = "SET SESSION default_storage_engine=MyISAM;\n"
             + string.Join(Environment.NewLine, commands.Select(static command => command.CommandText));
 
@@ -34,7 +39,9 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         var engine = await ScalarStringAsync(connectionString,
             "SELECT ENGINE FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='items';",
             CancellationToken.None);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `items` WHERE `Id`=42;",
+
+        var rows = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM `items` WHERE `Id`=42;",
             CancellationToken.None);
 
         // Assert
@@ -56,21 +63,33 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `items` (`Id` int NOT NULL) ENGINE=MyISAM; INSERT INTO `items` VALUES (42);",
             CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
-        var builder = CreateBuilder(context, convergence, convergence
-            ? SafeMigrationPolicy.RepairIfSafe
-            : SafeMigrationPolicy.ExistenceOnly);
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(
-            builder.Operations, context.Model, MigrationsSqlGenerationOptions.Script);
+        var builder = CreateBuilder(context,
+            convergence,
+            convergence
+                ? SafeMigrationPolicy.RepairIfSafe
+                : SafeMigrationPolicy.ExistenceOnly);
+
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(
+                builder.Operations,
+                context.Model,
+                MigrationsSqlGenerationOptions.Script);
+
         var script = string.Join(Environment.NewLine, commands.Select(static command => command.CommandText));
 
         // Act
         var exception = await Record.ExceptionAsync(() =>
             ExecuteMigrationScriptAsync(connectionString, script, CancellationToken.None));
+
         var engine = await ScalarStringAsync(connectionString,
             "SELECT ENGINE FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='items';",
             CancellationToken.None);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `items` WHERE `Id`=42;",
+
+        var rows = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM `items` WHERE `Id`=42;",
             CancellationToken.None);
 
         // Assert
@@ -94,31 +113,49 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var ownerMode = await ScalarIntAsync(connectionString, "SELECT @@lower_case_table_names;",
+        var ownerMode = await ScalarIntAsync(connectionString,
+            "SELECT @@lower_case_table_names;",
             CancellationToken.None);
+
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `items` (`Id` int NOT NULL) ENGINE=InnoDB; INSERT INTO `items` VALUES (41); "
             + "CREATE TABLE `ITEMS` (`Id` int NOT NULL) ENGINE=MyISAM; INSERT INTO `ITEMS` VALUES (42);",
             CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.CreateTableIfNotExistsFromModel(operationBuilder => operationBuilder.CreateTable(target,
-                table => new { Id = table.Column<int>(type: "int", nullable: false) })
-            .Annotation("Doka:MySql:StorageEngine", "InnoDB"), SafeMigrationPolicy.ExistenceOnly,
+        builder.CreateTableIfNotExistsFromModel(operationBuilder => operationBuilder
+                .CreateTable(target,
+                    table => new { Id = table.Column<int>(type: "int", nullable: false) })
+                .Annotation("Doka:MySql:StorageEngine", "InnoDB"),
+            SafeMigrationPolicy.ExistenceOnly,
             SafeMigrationTableMode.ConvergenceContainer);
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(
-            builder.Operations, context.Model, MigrationsSqlGenerationOptions.Script);
+
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(
+                builder.Operations,
+                context.Model,
+                MigrationsSqlGenerationOptions.Script);
+
         var script = string.Join(Environment.NewLine, commands.Select(static command => command.CommandText));
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("case-distinct-engine-owner"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(context,
+            builder.Operations,
+            new SafeMigrationRunOptions("case-distinct-engine-owner"),
+            CancellationToken.None);
+
         var exception = await Record.ExceptionAsync(() =>
             ExecuteMigrationScriptAsync(connectionString, script, CancellationToken.None));
-        var lowerRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `items` WHERE `Id`=41;",
+
+        var lowerRows = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM `items` WHERE `Id`=41;",
             CancellationToken.None);
-        var upperRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `ITEMS` WHERE `Id`=42;",
+
+        var upperRows = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM `ITEMS` WHERE `Id`=42;",
             CancellationToken.None);
 
         // Assert
@@ -127,6 +164,7 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
                 ? SafeMigrationReportStatus.Ready
                 : SafeMigrationReportStatus.Blocked,
             report.Status);
+
         if (accepted)
         {
             Assert.Null(exception);
@@ -148,28 +186,44 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        using var runtime = new ServiceCollection().AddEntityFrameworkDokaMySql()
-            .AddEntityFrameworkDokaMySqlSafeMigrations().BuildServiceProvider();
-        var options = new DbContextOptionsBuilder().UseInternalServiceProvider(runtime)
-            .UseMySql(connectionString, Fixture.ServerVersion).UseMySqlSafeMigrations().Options;
+        using var runtime = new ServiceCollection()
+            .AddEntityFrameworkDokaMySql()
+            .AddEntityFrameworkDokaMySqlSafeMigrations()
+            .BuildServiceProvider();
+
+        var options = new DbContextOptionsBuilder()
+            .UseInternalServiceProvider(runtime)
+            .UseMySql(connectionString, Fixture.ServerVersion)
+            .UseMySqlSafeMigrations()
+            .Options;
+
         await using var context = new MySqlInnoDbTableScaffoldingTests.ExplicitModelContext(options);
         var migration = MySqlInnoDbTableScaffoldingTests.CompileCompleteMigration(context, out _);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
         await ExecuteOperationsAsync(context, migration.UpOperations, CancellationToken.None);
-        var upReport = await runner.VerifyAsync(context, migration.UpOperations,
-            new SafeMigrationRunOptions("engine-full-scaffold-up"), CancellationToken.None);
-        var downPreflight = await runner.AnalyzeAsync(context, migration.DownOperations,
-            new SafeMigrationRunOptions("engine-full-scaffold-down"), CancellationToken.None);
+        var upReport = await runner.VerifyAsync(context,
+            migration.UpOperations,
+            new SafeMigrationRunOptions("engine-full-scaffold-up"),
+            CancellationToken.None);
+
+        var downPreflight = await runner.AnalyzeAsync(context,
+            migration.DownOperations,
+            new SafeMigrationRunOptions("engine-full-scaffold-down"),
+            CancellationToken.None);
+
         await ExecuteOperationsAsync(context, migration.DownOperations, CancellationToken.None);
         await ExecuteOperationsAsync(context, migration.DownOperations, CancellationToken.None);
         await ExecuteOperationsAsync(context, migration.UpOperations, CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("INSERT INTO `EngineNodes` (`Id`) VALUES (42);",
             CancellationToken.None);
+
         await ExecuteOperationsAsync(context, migration.UpOperations, CancellationToken.None);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `EngineNodes` WHERE `Id`=42;",
+        var rows = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM `EngineNodes` WHERE `Id`=42;",
             CancellationToken.None);
+
         var engine = await ScalarStringAsync(connectionString,
             "SELECT ENGINE FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='EngineNodes';",
             CancellationToken.None);
@@ -196,21 +250,30 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("SET SESSION default_storage_engine=MyISAM;",
             CancellationToken.None);
+
         var builder = CreateBuilder(context, convergence, SafeMigrationPolicy.ThrowIfDifferent);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("explicit-engine-create"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(context,
+            builder.Operations,
+            new SafeMigrationRunOptions("explicit-engine-create"),
+            CancellationToken.None);
+
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("INSERT INTO `items` (`Id`) VALUES (42);", CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("explicit-engine-replay"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(context,
+            builder.Operations,
+            new SafeMigrationRunOptions("explicit-engine-replay"),
+            CancellationToken.None);
+
         var engine = await ScalarStringAsync(connectionString,
             "SELECT ENGINE FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='items';",
             CancellationToken.None);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `items` WHERE `Id`=42;",
+
+        var rows = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM `items` WHERE `Id`=42;",
             CancellationToken.None);
 
         // Assert
@@ -239,19 +302,28 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `items` (`Id` int NOT NULL) ENGINE=MyISAM; INSERT INTO `items` VALUES (42);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = CreateBuilder(context, convergence, policy);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("explicit-engine-mismatch"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(context,
+            builder.Operations,
+            new SafeMigrationRunOptions("explicit-engine-mismatch"),
+            CancellationToken.None);
+
         var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
-            context, builder.Operations, CancellationToken.None));
+            context,
+            builder.Operations,
+            CancellationToken.None));
+
         var engine = await ScalarStringAsync(connectionString,
             "SELECT ENGINE FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='items';",
             CancellationToken.None);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `items` WHERE `Id`=42;",
+
+        var rows = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM `items` WHERE `Id`=42;",
             CancellationToken.None);
 
         // Assert
@@ -275,16 +347,22 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("SET SESSION default_storage_engine=MyISAM;",
             CancellationToken.None);
+
         var builder = CreateBuilder(context, convergence: true, SafeMigrationPolicy.ThrowIfDifferent);
         builder.AddColumnIfNotExists<int>("RequiredValue", "items", type: "int", nullable: false);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("explicit-engine-required-add"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(context,
+            builder.Operations,
+            new SafeMigrationRunOptions("explicit-engine-required-add"),
+            CancellationToken.None);
+
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("explicit-engine-required-add-after"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(context,
+            builder.Operations,
+            new SafeMigrationRunOptions("explicit-engine-required-add-after"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -300,20 +378,27 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `parents` (`Id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("SET SESSION default_storage_engine=MyISAM;",
             CancellationToken.None);
+
         var builder = CreateBuilder(context, convergence: false, SafeMigrationPolicy.ThrowIfDifferent);
         builder.AddForeignKeyIfNotExists("fk_items_parents", "items", ["Id"], "parents", ["Id"]);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("explicit-engine-fk"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(context,
+            builder.Operations,
+            new SafeMigrationRunOptions("explicit-engine-fk"),
+            CancellationToken.None);
+
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("explicit-engine-fk-after"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(context,
+            builder.Operations,
+            new SafeMigrationRunOptions("explicit-engine-fk-after"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -339,10 +424,11 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         }
         else
         {
-            builder.CreateTableIfNotExists("items", table => new
-            {
-                Id = table.Column<int>(type: "int", nullable: false),
-            });
+            builder.CreateTableIfNotExists("items",
+                table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false),
+                });
         }
 
         builder.AddColumnIfNotExists<int>("LaterValue", "items", type: "int", nullable: true);
@@ -350,8 +436,10 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
 
         // Act
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var report = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("strict-table-extra-column"), CancellationToken.None);
+        var report = await runner.VerifyAsync(context,
+            builder.Operations,
+            new SafeMigrationRunOptions("strict-table-extra-column"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -375,9 +463,11 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         var source = prior == "rename"
             ? "source_items"
             : "items";
+
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `{source}` (`Id` int NOT NULL) ENGINE=MyISAM; INSERT INTO `{source}` VALUES (42);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         switch (prior)
@@ -386,15 +476,19 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
                 builder.AddColumnIfNotExists<int>("Extra", "items", type: "int", nullable: true);
                 break;
             case "confirm":
-                builder.CreateTableIfNotExists("items", table => new
-                {
-                    Id = table.Column<int>(type: "int", nullable: false),
-                });
+                builder.CreateTableIfNotExists("items",
+                    table => new
+                    {
+                        Id = table.Column<int>(type: "int", nullable: false),
+                    });
+
                 break;
             case "container":
                 builder.EnsureTable(new ExpectedTableDefinition("items",
                         [new ExpectedColumnDefinition("Id", typeof(int), isNullable: false, storeType: "int")]),
-                    SafeMigrationTableMode.ConvergenceContainer, SafeMigrationPolicy.ExistenceOnly);
+                    SafeMigrationTableMode.ConvergenceContainer,
+                    SafeMigrationPolicy.ExistenceOnly);
+
                 break;
             case "rename":
                 builder.RenameTableIfExists("source_items", "items");
@@ -405,8 +499,10 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("engine-proof-lifetime"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(context,
+            builder.Operations,
+            new SafeMigrationRunOptions("engine-proof-lifetime"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -429,7 +525,8 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         if (replaceExisting)
         {
-            await ExecuteSqlAsync(connectionString, "CREATE TABLE `items` (`Id` int NOT NULL) ENGINE=MyISAM;",
+            await ExecuteSqlAsync(connectionString,
+                "CREATE TABLE `items` (`Id` int NOT NULL) ENGINE=MyISAM;",
                 cancellationToken: CancellationToken.None);
         }
 
@@ -437,6 +534,7 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("SET SESSION default_storage_engine=MyISAM;",
             CancellationToken.None);
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (replaceExisting)
         {
@@ -445,23 +543,27 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
 
         if (ordinaryCreate)
         {
-            builder.CreateTable("items", table => new { Id = table.Column<int>(type: "int", nullable: false) })
+            builder
+                .CreateTable("items", table => new { Id = table.Column<int>(type: "int", nullable: false) })
                 .Annotation("Doka:MySql:StorageEngine", "MyISAM");
         }
         else
         {
-            builder.CreateTableIfNotExists("items", table => new
-            {
-                Id = table.Column<int>(type: "int", nullable: false),
-            });
+            builder.CreateTableIfNotExists("items",
+                table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false),
+                });
         }
 
         builder.ConvergeTableFromModel(AppendTable, SafeMigrationPolicy.ThrowIfDifferent);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("unproved-created-engine"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(context,
+            builder.Operations,
+            new SafeMigrationRunOptions("unproved-created-engine"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -486,15 +588,19 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.CreateTableIfNotExistsFromModel(operationBuilder => operationBuilder.CreateTable(
-                "items", table => new { Id = table.Column<int>(type: "int", nullable: false) })
+        builder.CreateTableIfNotExistsFromModel(operationBuilder => operationBuilder
+            .CreateTable(
+                "items",
+                table => new { Id = table.Column<int>(type: "int", nullable: false) })
             .Annotation("Doka:MySql:StorageEngine", "innodb"));
+
         builder.CreateTableIfNotExistsFromModel(operationBuilder =>
             {
-                var operation = operationBuilder.CreateTable("items", table => new
-                {
-                    Id = table.Column<int>(type: "int", nullable: false),
-                });
+                var operation = operationBuilder.CreateTable("items",
+                    table => new
+                    {
+                        Id = table.Column<int>(type: "int", nullable: false),
+                    });
 
                 if (targetEngine is not null)
                 {
@@ -504,11 +610,15 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
             mode: convergence
                 ? SafeMigrationTableMode.ConvergenceContainer
                 : SafeMigrationTableMode.StrictDefinition);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("compatible-created-engine"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(context,
+            builder.Operations,
+            new SafeMigrationRunOptions("compatible-created-engine"),
+            CancellationToken.None);
+
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Assert
@@ -542,10 +652,11 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         var builder = CreateBuilder(context, convergence: false, SafeMigrationPolicy.ThrowIfDifferent);
         builder.CreateTableIfNotExistsFromModel(operationBuilder =>
             {
-                var operation = operationBuilder.CreateTable("items", table => new
-                {
-                    Id = table.Column<int>(type: "int", nullable: false),
-                });
+                var operation = operationBuilder.CreateTable("items",
+                    table => new
+                    {
+                        Id = table.Column<int>(type: "int", nullable: false),
+                    });
 
                 if (metadata == "unknown")
                 {
@@ -574,11 +685,14 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
             convergence
                 ? SafeMigrationTableMode.ConvergenceContainer
                 : SafeMigrationTableMode.StrictDefinition);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("unsupported-created-engine-target"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(context,
+            builder.Operations,
+            new SafeMigrationRunOptions("unsupported-created-engine-target"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -595,17 +709,25 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         var builder = CreateBuilder(context, convergence: false, SafeMigrationPolicy.ThrowIfDifferent);
         builder.RenameColumnIfExists("Id", "items", "RenamedId");
         builder.RenameTableIfExists("items", "renamed_items");
-        builder.CreateTableIfNotExistsFromModel(operationBuilder => operationBuilder.CreateTable(
-                "renamed_items", table => new { RenamedId = table.Column<int>(type: "int", nullable: false) })
+        builder.CreateTableIfNotExistsFromModel(operationBuilder => operationBuilder
+            .CreateTable(
+                "renamed_items",
+                table => new { RenamedId = table.Column<int>(type: "int", nullable: false) })
             .Annotation("Doka:MySql:StorageEngine", "InnoDB"));
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("engine-rename-projection"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(context,
+            builder.Operations,
+            new SafeMigrationRunOptions("engine-rename-projection"),
+            CancellationToken.None);
+
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("engine-rename-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(context,
+            builder.Operations,
+            new SafeMigrationRunOptions("engine-rename-final"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -618,8 +740,10 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `items` (`Id` int NOT NULL) ENGINE=MyISAM;",
+        await ExecuteSqlAsync(connectionString,
+            "CREATE TABLE `items` (`Id` int NOT NULL) ENGINE=MyISAM;",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTableIfExists("items");
@@ -628,11 +752,16 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("engine-replacement"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(context,
+            builder.Operations,
+            new SafeMigrationRunOptions("engine-replacement"),
+            CancellationToken.None);
+
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("engine-replacement-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(context,
+            builder.Operations,
+            new SafeMigrationRunOptions("engine-replacement-final"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -660,6 +789,7 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
 
     private static void AppendTable(
         MigrationBuilder builder
-    ) => builder.CreateTable("items", table => new { Id = table.Column<int>(type: "int", nullable: false) })
+    ) => builder
+        .CreateTable("items", table => new { Id = table.Column<int>(type: "int", nullable: false) })
         .Annotation("Doka:MySql:StorageEngine", "InnoDB");
 }

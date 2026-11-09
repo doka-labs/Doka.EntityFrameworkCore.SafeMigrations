@@ -40,6 +40,7 @@ internal sealed class SqliteTableRetirementContract
 
         HashSet<string>? changedOwners = null;
         HashSet<string>? changedLifetimes = null;
+
         // WHY: Inspect the stable indexed window while collecting owner changes and structural boundaries.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -77,7 +78,8 @@ internal sealed class SqliteTableRetirementContract
                 _ = changedOwners.Add(renamedTarget);
             }
 
-            if (operation is CreateTableOperation or RenameTableOperation
+            if (operation is CreateTableOperation
+                or RenameTableOperation
                 or SafeMigrationOperation { Intent: EnsureTableIntent or RenameTableIntent })
             {
                 changedLifetimes ??= new HashSet<string>(SqliteIdentifierComparer.Instance);
@@ -105,8 +107,14 @@ internal sealed class SqliteTableRetirementContract
             var droppedOwner = operation switch
             {
                 SafeMigrationOperation { Intent: DropTableIntent drop } safe
-                    when IsMain(drop.Schema) && !safe.GetAnnotations().Any() => drop.Table,
-                DropTableOperation drop when IsMain(drop.Schema) && !drop.GetAnnotations().Any() => drop.Name,
+                    when IsMain(drop.Schema)
+                    && !safe
+                        .GetAnnotations()
+                        .Any() => drop.Table,
+                DropTableOperation drop when IsMain(drop.Schema)
+                    && !drop
+                        .GetAnnotations()
+                        .Any() => drop.Name,
                 _ => null,
             };
 
@@ -121,7 +129,7 @@ internal sealed class SqliteTableRetirementContract
                 SafeMigrationOperation { Intent: RenameTableIntent rename } =>
                     (Source: rename.Name, Target: rename.NewName ?? rename.Name),
                 RenameTableOperation rename => (Source: rename.Name, Target: rename.NewName ?? rename.Name),
-                _ => (Source: (string?)null, Target: (string?)null),
+                _ => (Source: null, Target: null),
             };
 
             if (renamedOwner.Source is not null
@@ -135,7 +143,9 @@ internal sealed class SqliteTableRetirementContract
 
             if (operation is not SafeMigrationOperation { Intent: DropForeignKeyIntent foreignKey } safeForeignKey
                 || !IsMain(foreignKey.Schema)
-                || safeForeignKey.GetAnnotations().Any()
+                || safeForeignKey
+                    .GetAnnotations()
+                    .Any()
                 || modeledTables.ContainsKey(foreignKey.Table)
                 || changedOwners?.Contains(foreignKey.Table) == true
                 || retiredOwners?.Contains(foreignKey.Table) != true)
@@ -168,7 +178,9 @@ internal sealed class SqliteTableRetirementContract
 
             if (operations[index] is SafeMigrationOperation { Intent: DropTableIntent table } drop
                 && IsMain(table.Schema)
-                && !drop.GetAnnotations().Any()
+                && !drop
+                    .GetAnnotations()
+                    .Any()
                 && firstRemovals.TryGetValue(table.Table, out var firstRemoval)
                 && index > firstRemoval)
             {

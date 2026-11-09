@@ -401,17 +401,16 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTest
     /// <returns>The isolated native DDL for the requested adversarial mutation.</returns>
     private static string PrimaryKeyRemovalMutationSql(
         string mutation
-    )
-        => mutation switch
-        {
-            "primary" => "ALTER TABLE `key_items` ADD PRIMARY KEY (`question_id`, `user_id`);",
-            "comment" => "ALTER TABLE `key_items` MODIFY COLUMN `user_id` char(36) NOT NULL "
-                + "COMMENT 'source-drift';",
-            "default" => "ALTER TABLE `key_items` MODIFY COLUMN `user_id` char(36) NOT NULL "
-                + "DEFAULT '00000000-0000-0000-0000-000000000003';",
-            "store-type" => "ALTER TABLE `key_items` MODIFY COLUMN `user_id` varchar(36) NOT NULL;",
-            _ => throw new ArgumentOutOfRangeException(nameof(mutation), mutation, "Unknown key-removal mutation."),
-        };
+    ) => mutation switch
+    {
+        "primary" => "ALTER TABLE `key_items` ADD PRIMARY KEY (`question_id`, `user_id`);",
+        "comment" => "ALTER TABLE `key_items` MODIFY COLUMN `user_id` char(36) NOT NULL "
+            + "COMMENT 'source-drift';",
+        "default" => "ALTER TABLE `key_items` MODIFY COLUMN `user_id` char(36) NOT NULL "
+            + "DEFAULT '00000000-0000-0000-0000-000000000003';",
+        "store-type" => "ALTER TABLE `key_items` MODIFY COLUMN `user_id` varchar(36) NOT NULL;",
+        _ => throw new ArgumentOutOfRangeException(nameof(mutation), mutation, "Unknown key-removal mutation."),
+    };
 
     /// <summary>
     /// Reads storage, nullability, default and comment without assuming engine-specific default rendering.
@@ -422,13 +421,12 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTest
     private static Task<string> PrimaryKeyRemovalColumnStateAsync(
         string connectionString,
         CancellationToken cancellationToken
-    )
-        => ScalarStringAsync(
-            connectionString,
-            "SELECT CONCAT(COLUMN_TYPE, '|', IS_NULLABLE, '|', COALESCE(COLUMN_DEFAULT, '<none>'), '|', "
-            + "COLUMN_COMMENT) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'key_items' AND COLUMN_NAME = 'user_id';",
-            cancellationToken: cancellationToken);
+    ) => ScalarStringAsync(
+        connectionString,
+        "SELECT CONCAT(COLUMN_TYPE, '|', IS_NULLABLE, '|', COALESCE(COLUMN_DEFAULT, '<none>'), '|', "
+        + "COLUMN_COMMENT) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+        + "AND TABLE_NAME = 'key_items' AND COLUMN_NAME = 'user_id';",
+        cancellationToken: cancellationToken);
 }
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
@@ -440,13 +438,12 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     protected static Task<int> PrimaryKeyRemovalSentinelCountAsync(
         string connectionString,
         CancellationToken cancellationToken
-    )
-        => ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM `key_items` WHERE `question_id` = "
-            + "'00000000-0000-0000-0000-000000000001' AND `user_id` = "
-            + "'00000000-0000-0000-0000-000000000002' AND `payload` = 'retained';",
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connectionString,
+        "SELECT COUNT(*) FROM `key_items` WHERE `question_id` = "
+        + "'00000000-0000-0000-0000-000000000001' AND `user_id` = "
+        + "'00000000-0000-0000-0000-000000000002' AND `payload` = 'retained';",
+        cancellationToken: cancellationToken);
 }
 
 public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTests : MySqlSafeMigrationIntegrationTests
@@ -458,10 +455,9 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTest
     private static Task<int> PrimaryKeyRemovalUserPrimaryMembershipCountAsync(
         string connectionString,
         CancellationToken cancellationToken
-    )
-        => ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE CONSTRAINT_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'key_items' AND CONSTRAINT_NAME = 'PRIMARY' AND COLUMN_NAME = 'user_id';",
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connectionString,
+        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE CONSTRAINT_SCHEMA = DATABASE() "
+        + "AND TABLE_NAME = 'key_items' AND CONSTRAINT_NAME = 'PRIMARY' AND COLUMN_NAME = 'user_id';",
+        cancellationToken: cancellationToken);
 }

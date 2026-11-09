@@ -656,22 +656,19 @@ public sealed class SqlServerDdlRowFreshnessTests
 
     private static SqlServerSafeMigrationProviderAnalyzer Analyzer(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private static SqlServerSafeMigrationCatalogSqlBuilder Catalog(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private static SafeMigrationProviderAnalysis Analysis(
         SafeMigrationObservedState state
-    )
-        => new(
-            state,
-            SafeMigrationRepairCapability.None,
-            state == SafeMigrationObservedState.Matching,
-            "classified_state");
+    ) => new(
+        state,
+        SafeMigrationRepairCapability.None,
+        state == SafeMigrationObservedState.Matching,
+        "classified_state");
 
     private static void CaptureEmptyLayout(
         SqlServerSafeMigrationProviderAnalyzer analyzer

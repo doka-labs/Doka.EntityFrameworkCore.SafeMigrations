@@ -30,11 +30,16 @@ public sealed class SqliteRetainedColumnOrderTests : SqliteIntegrationTestBase,
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(CancellationToken.None);
-        var constraint = add ? string.Empty : ", CONSTRAINT host_unique UNIQUE (GraphId, Source, Target)";
+        var constraint = add
+            ? string.Empty
+            : ", CONSTRAINT host_unique UNIQUE (GraphId, Source, Target)";
+
         await ExecuteSqlAsync(connection,
             "CREATE TABLE host (Id INTEGER NOT NULL CONSTRAINT host_pk PRIMARY KEY, GraphId INTEGER NOT NULL, "
             + "Source INTEGER NOT NULL, Target INTEGER NOT NULL, Payload TEXT NOT NULL DEFAULT 'retained'"
-            + constraint + "); INSERT INTO host VALUES (1, 2, 3, 4, 'payload');", CancellationToken.None);
+            + constraint
+            + "); INSERT INTO host VALUES (1, 2, 3, 4, 'payload');",
+            CancellationToken.None);
 
         await using HostContext context = add
             ? new WithUniqueContext(connection, _internalServices)
@@ -47,9 +52,15 @@ public sealed class SqliteRetainedColumnOrderTests : SqliteIntegrationTestBase,
             builder.Operations.Add(add
                 ? new AddUniqueConstraintOperation
                 {
-                    Name = "host_unique", Table = "host", Columns = ["GraphId", "Source", "Target"],
+                    Name = "host_unique",
+                    Table = "host",
+                    Columns = ["GraphId", "Source", "Target"],
                 }
-                : new DropUniqueConstraintOperation { Name = "host_unique", Table = "host" });
+                : new DropUniqueConstraintOperation
+                {
+                    Name = "host_unique",
+                    Table = "host",
+                });
         }
         else if (add)
         {
@@ -65,11 +76,19 @@ public sealed class SqliteRetainedColumnOrderTests : SqliteIntegrationTestBase,
         var after = await ReadColumnsAsync(connection, CancellationToken.None);
         var rows = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM host WHERE Id = 1 AND GraphId = 2 AND Source = 3 "
-            + "AND Target = 4 AND Payload = 'payload';", CancellationToken.None);
+            + "AND Target = 4 AND Payload = 'payload';",
+            CancellationToken.None);
 
         // Assert
-        Assert.Equal(safe ? before : [before[0], before[1], "2:Payload:TEXT:1:'retained':0",
-            "3:Source:INTEGER:1:<none>:0", "4:Target:INTEGER:1:<none>:0"], after);
+        Assert.Equal(safe
+                ? before
+                :
+                [
+                    before[0], before[1], "2:Payload:TEXT:1:'retained':0",
+                    "3:Source:INTEGER:1:<none>:0", "4:Target:INTEGER:1:<none>:0",
+                ],
+            after);
+
         Assert.Equal(1, rows);
     }
 
@@ -90,22 +109,30 @@ public sealed class SqliteRetainedColumnOrderTests : SqliteIntegrationTestBase,
             "CREATE TABLE host (Id INTEGER NOT NULL CONSTRAINT host_pk PRIMARY KEY, GraphId INTEGER NOT NULL, "
             + "Source INTEGER NOT NULL, Target INTEGER NOT NULL, Payload TEXT NOT NULL DEFAULT 'retained', "
             + "CONSTRAINT host_unique UNIQUE (GraphId, Source, Target)); "
-            + "INSERT INTO host VALUES (1, 2, 3, 4, 'payload');", CancellationToken.None);
+            + "INSERT INTO host VALUES (1, 2, 3, 4, 'payload');",
+            CancellationToken.None);
 
         await using HostContext context = mainSchema
             ? new OrderedMainContext(connection, _internalServices)
             : new OrderedContext(connection, _internalServices);
 
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.Sqlite");
-        builder.DropUniqueConstraintIfExists("host_unique", "host", schema: mainSchema ? "main" : null);
+        builder.DropUniqueConstraintIfExists("host_unique",
+            "host",
+            schema: mainSchema
+                ? "main"
+                : null);
 
         // Act
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var after = await ReadColumnsAsync(connection, CancellationToken.None);
 
         // Assert
-        Assert.Equal(["0:Id:INTEGER:1:<none>:1", "1:Payload:TEXT:1:'retained':0",
-            "2:Target:INTEGER:1:<none>:0", "3:Source:INTEGER:1:<none>:0", "4:GraphId:INTEGER:1:<none>:0"], after);
+        Assert.Equal([
+                "0:Id:INTEGER:1:<none>:1", "1:Payload:TEXT:1:'retained':0",
+                "2:Target:INTEGER:1:<none>:0", "3:Source:INTEGER:1:<none>:0", "4:GraphId:INTEGER:1:<none>:0",
+            ],
+            after);
     }
 
     /// <summary>A later native failure rolls back the reconstructed host, its exact ordinals, and its key.</summary>
@@ -119,7 +146,8 @@ public sealed class SqliteRetainedColumnOrderTests : SqliteIntegrationTestBase,
             + "Source INTEGER NOT NULL, Target INTEGER NOT NULL, Payload TEXT NOT NULL DEFAULT 'retained', "
             + "CONSTRAINT host_unique UNIQUE (GraphId, Source, Target)); "
             + "INSERT INTO host VALUES (1, 2, 3, 4, 'payload'); "
-            + "CREATE TABLE other (id INTEGER); CREATE INDEX duplicate_index ON other(id);", CancellationToken.None);
+            + "CREATE TABLE other (id INTEGER); CREATE INDEX duplicate_index ON other(id);",
+            CancellationToken.None);
 
         await using var context = new WithoutUniqueContext(connection, _internalServices);
         var before = await ReadColumnsAsync(connection, CancellationToken.None);
@@ -129,15 +157,19 @@ public sealed class SqliteRetainedColumnOrderTests : SqliteIntegrationTestBase,
 
         // Act
         var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
-            context, builder.Operations, CancellationToken.None));
+            context,
+            builder.Operations,
+            CancellationToken.None));
 
         var after = await ReadColumnsAsync(connection, CancellationToken.None);
         var key = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM pragma_index_list('host') WHERE origin = 'u';", CancellationToken.None);
+            "SELECT COUNT(*) FROM pragma_index_list('host') WHERE origin = 'u';",
+            CancellationToken.None);
 
         var rows = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM host WHERE Id = 1 AND GraphId = 2 AND Source = 3 "
-            + "AND Target = 4 AND Payload = 'payload';", CancellationToken.None);
+            + "AND Target = 4 AND Payload = 'payload';",
+            CancellationToken.None);
 
         // Assert
         Assert.IsType<SqliteException>(exception);
@@ -189,35 +221,65 @@ public sealed class SqliteRetainedColumnOrderTests : SqliteIntegrationTestBase,
 
         protected override void OnConfiguring(
             DbContextOptionsBuilder optionsBuilder
-        ) => optionsBuilder.UseSqlite(_connection).UseSqliteSafeMigrations().UseInternalServiceProvider(_services);
+        ) => optionsBuilder
+            .UseSqlite(_connection)
+            .UseSqliteSafeMigrations()
+            .UseInternalServiceProvider(_services);
 
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
         )
         {
-            modelBuilder.Entity("Host", entity =>
-            {
-                entity.ToTable("host", Schema);
-                entity.Property<int>("Id").ValueGeneratedNever();
-                entity.Property<int>("GraphId");
-                entity.Property<int>("Source");
-                entity.Property<int>("Target");
-                entity.Property<string>("Payload").IsRequired().HasDefaultValue("retained");
-                entity.HasKey("Id").HasName("host_pk");
-                if (Unique)
+            modelBuilder.Entity("Host",
+                entity =>
                 {
-                    entity.HasAlternateKey("GraphId", "Source", "Target").HasName("host_unique");
-                }
+                    entity.ToTable("host", Schema);
+                    entity
+                        .Property<int>("Id")
+                        .ValueGeneratedNever();
 
-                if (ExplicitOrder)
-                {
-                    entity.Property<int>("Id").HasColumnOrder(0);
-                    entity.Property<string>("Payload").HasColumnOrder(1);
-                    entity.Property<int>("Target").HasColumnOrder(2);
-                    entity.Property<int>("Source").HasColumnOrder(3);
-                    entity.Property<int>("GraphId").HasColumnOrder(4);
-                }
-            });
+                    entity.Property<int>("GraphId");
+                    entity.Property<int>("Source");
+                    entity.Property<int>("Target");
+                    entity
+                        .Property<string>("Payload")
+                        .IsRequired()
+                        .HasDefaultValue("retained");
+
+                    entity
+                        .HasKey("Id")
+                        .HasName("host_pk");
+
+                    if (Unique)
+                    {
+                        entity
+                            .HasAlternateKey("GraphId", "Source", "Target")
+                            .HasName("host_unique");
+                    }
+
+                    if (ExplicitOrder)
+                    {
+                        entity
+                            .Property<int>("Id")
+                            .HasColumnOrder(0);
+
+                        entity
+                            .Property<string>("Payload")
+                            .HasColumnOrder(1);
+
+                        entity
+                            .Property<int>("Target")
+                            .HasColumnOrder(2);
+
+                        entity
+                            .Property<int>("Source")
+                            .HasColumnOrder(3);
+
+                        entity
+                            .Property<int>("GraphId")
+                            .HasColumnOrder(4);
+                    }
+                });
         }
     }
 
@@ -246,7 +308,10 @@ public sealed class SqliteRetainedColumnOrderTests : SqliteIntegrationTestBase,
     /// <summary>Provides an explicit destination order with its own immutable model-cache identity.</summary>
     private sealed class OrderedContext : HostContext
     {
-        public OrderedContext(SqliteConnection connection, IServiceProvider services) : base(connection, services) { }
+        public OrderedContext(
+            SqliteConnection connection,
+            IServiceProvider services
+        ) : base(connection, services) { }
 
         protected override bool Unique => false;
 

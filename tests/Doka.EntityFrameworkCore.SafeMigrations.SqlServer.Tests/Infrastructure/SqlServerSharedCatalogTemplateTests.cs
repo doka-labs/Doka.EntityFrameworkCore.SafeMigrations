@@ -273,7 +273,7 @@ public sealed class SqlServerSharedCatalogTemplateTests
         var second = first with
         {
             AnalysisParameters = ParameterizedPlan(mappings, 1, 8)
-                .AnalysisParameters
+                .AnalysisParameters,
         };
 
         var expected = Declaration(first) + Invocation(0, "int") + "\n" + Invocation(1, "int");
@@ -485,12 +485,11 @@ public sealed class SqlServerSharedCatalogTemplateTests
     /// <summary>Builds the exact statement-local Unicode literal expected for a complete classifier body.</summary>
     private static string Declaration(
         SqlServerSafeMigrationRuntimePlan plan
-    )
-        => "DECLARE @doka_template0 nvarchar(max) = N'"
-            + SqlServerSafeMigrationProviderAnalyzer
-                .BuildDelayedCatalogTemplate(plan)
-                .Replace("'", "''", StringComparison.Ordinal)
-            + "';\n";
+    ) => "DECLARE @doka_template0 nvarchar(max) = N'"
+        + SqlServerSafeMigrationProviderAnalyzer
+            .BuildDelayedCatalogTemplate(plan)
+            .Replace("'", "''", StringComparison.Ordinal)
+        + "';\n";
 
     /// <summary>Names the ordinal and source parameters belonging to one statement-local dispatcher slot.</summary>
     private static string Invocation(
@@ -512,18 +511,16 @@ public sealed class SqlServerSharedCatalogTemplateTests
     /// <summary>Counts complete outer template declarations rather than dynamic setup variables.</summary>
     private static int DeclarationCount(
         string statement
-    )
-        => statement.Split("DECLARE @doka_template")
-                .Length
-            - 1;
+    ) => statement.Split("DECLARE @doka_template")
+            .Length
+        - 1;
 
     /// <summary>Counts only outer template dispatchers, excluding the nested guarded classifier invocation.</summary>
     private static int InvocationCount(
         string statement
-    )
-        => statement.Split("EXEC sys.sp_executesql @doka_template")
-                .Length
-            - 1;
+    ) => statement.Split("EXEC sys.sp_executesql @doka_template")
+            .Length
+        - 1;
 
     /// <summary>Mirrors the recording connection's original-ordinal classification contract.</summary>
     private static SafeMigrationObservedState State(

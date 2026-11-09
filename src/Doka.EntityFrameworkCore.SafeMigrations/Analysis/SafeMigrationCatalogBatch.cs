@@ -243,6 +243,5 @@ internal sealed class SafeMigrationCatalogCommand
 
     /// <summary>Creates a provider parameter compatible with this statement.</summary>
     /// <returns>A provider-specific parameter that is not yet registered.</returns>
-    public DbParameter CreateParameter() =>
-        ProviderCommand?.CreateParameter() ?? SequentialCommand!.CreateParameter();
+    public DbParameter CreateParameter() => ProviderCommand?.CreateParameter() ?? SequentialCommand!.CreateParameter();
 }

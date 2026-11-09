@@ -190,19 +190,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
     /// <summary>Reports a structural dependency refusal without discarding the authored target.</summary>
     /// <returns>The explicit NOT NULL compatibility rejection.</returns>
-    private static SafeMigrationProviderAnalysis RequiredColumnSetNullDependency()
-        => new(
-            SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.None,
-            postconditionSatisfied: false,
-            "column_set_null_dependency");
+    private static SafeMigrationProviderAnalysis RequiredColumnSetNullDependency() => new(
+        SafeMigrationObservedState.Different,
+        SafeMigrationRepairCapability.None,
+        postconditionSatisfied: false,
+        "column_set_null_dependency");
 
     /// <summary>Refuses nullable-column DDL while a current physical primary key requires NOT NULL.</summary>
     /// <returns>The explicit PRIMARY compatibility rejection.</returns>
-    private static SafeMigrationProviderAnalysis NullableColumnPrimaryKeyDependency()
-        => new(
-            SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.None,
-            postconditionSatisfied: false,
-            "column_primary_key_dependency");
+    private static SafeMigrationProviderAnalysis NullableColumnPrimaryKeyDependency() => new(
+        SafeMigrationObservedState.Different,
+        SafeMigrationRepairCapability.None,
+        postconditionSatisfied: false,
+        "column_primary_key_dependency");
 }

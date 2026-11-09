@@ -543,6 +543,5 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
         string name,
         string? schema = null,
         string table = "items"
-    ) =>
-        new(SafeMigrationDatabaseObjectKind.CheckConstraint, schema, table, name, "unexpected_check_constraint");
+    ) => new(SafeMigrationDatabaseObjectKind.CheckConstraint, schema, table, name, "unexpected_check_constraint");
 }

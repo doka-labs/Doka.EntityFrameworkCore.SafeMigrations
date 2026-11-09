@@ -104,7 +104,7 @@ public sealed class SqlServerModelManagedDataSqlTests
             ["int", "char(1)", "uniqueidentifier", "varbinary(16)"],
             new object?[,]
             {
-                { 1, 'A', Guid.Parse("00000000-0000-0000-0000-000000000001"), new byte[] { 0x01, 0x02 } }
+                { 1, 'A', Guid.Parse("00000000-0000-0000-0000-000000000001"), new byte[] { 0x01, 0x02 } },
             },
             null,
             null);
@@ -549,8 +549,7 @@ public sealed class SqlServerModelManagedDataSqlTests
 
     private static SqlServerSafeMigrationCatalogSqlBuilder CreateCatalog(
         DbContext context
-    )
-        => new(
-            context.GetService<IRelationalTypeMappingSource>(),
-            context.GetService<ISqlGenerationHelper>());
+    ) => new(
+        context.GetService<IRelationalTypeMappingSource>(),
+        context.GetService<ISqlGenerationHelper>());
 }

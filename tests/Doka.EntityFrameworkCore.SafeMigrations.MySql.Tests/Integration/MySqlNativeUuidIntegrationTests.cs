@@ -1154,17 +1154,16 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         string column,
         bool nullable,
         Guid? defaultValue = null
-    )
-        => builder.AddColumnIfNotExistsFromModel(operations => operations
-            .AddColumn<Guid>(
-                column,
-                table,
-                type: "uuid",
-                nullable: nullable,
-                defaultValue: defaultValue)
-            .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Uuid)
-            .Annotation("Doka:MySql:RequiresExplicitBackfill", true)
-            .Annotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None));
+    ) => builder.AddColumnIfNotExistsFromModel(operations => operations
+        .AddColumn<Guid>(
+            column,
+            table,
+            type: "uuid",
+            nullable: nullable,
+            defaultValue: defaultValue)
+        .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Uuid)
+        .Annotation("Doka:MySql:RequiresExplicitBackfill", true)
+        .Annotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None));
 
     /// <summary>Requires the owned safety diagnostic rather than treating any provider failure as rejection.</summary>
     /// <param name="failure">The captured generated-command failure.</param>

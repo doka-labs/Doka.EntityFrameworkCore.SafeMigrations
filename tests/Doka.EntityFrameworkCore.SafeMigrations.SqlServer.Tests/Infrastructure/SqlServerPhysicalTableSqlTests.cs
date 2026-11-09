@@ -295,8 +295,7 @@ public sealed class SqlServerPhysicalTableSqlTests
 
     private static SqlServerSafeMigrationCatalogSqlBuilder CreateCatalog(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     internal static SafeMigrationIntent CreateIntent(
         SafeMigrationOperationKind kind

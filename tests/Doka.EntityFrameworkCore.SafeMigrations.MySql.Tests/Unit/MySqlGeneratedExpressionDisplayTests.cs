@@ -116,8 +116,7 @@ public sealed class MySqlGeneratedExpressionDisplayTests
         SafeMigrationSqlExpression left,
         SafeMigrationSqlBinaryOperator operation,
         SafeMigrationSqlExpression right
-    ) =>
-        SafeMigrationSql.Binary(left, operation, right);
+    ) => SafeMigrationSql.Binary(left, operation, right);
 
     /// <summary>Uses the actual provider's identifier and literal escaping without opening a connection.</summary>
     private static MySqlSafeMigrationSqlExpressionRenderer Renderer(

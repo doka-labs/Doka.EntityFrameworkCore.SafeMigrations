@@ -31,8 +31,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         {
             return intent.Mode == SafeMigrationTableMode.ConvergenceContainer
                 && intent.Definition.ProviderAnnotations.Count == 0
-                ? Analysis(SafeMigrationObservedState.Matching)
-                : StructureStateUnknown();
+                    ? Analysis(SafeMigrationObservedState.Matching)
+                    : StructureStateUnknown();
         }
 
         if (!TryGet(intent.Definition.Table, intent.Definition.Schema, out var table))
@@ -68,7 +68,11 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         var newlyCreated = _prerequisites.TryGetValue(key, out var acceptedLifetime) && acceptedLifetime.NewlyCreated;
         var providerFailure = _projectedDependencyAnalyzer?.ValidateProjectedTableProviderMetadata(
-            intent, table.ProviderAnnotations, newlyCreated, liveAnalysis);
+            intent,
+            table.ProviderAnnotations,
+            newlyCreated,
+            liveAnalysis);
+
         if (providerFailure is not null)
         {
             return providerFailure;
@@ -77,7 +81,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         if (_projectedDependencyAnalyzer is null
             && intent.Definition.ProviderAnnotations.Count > 0
             && !SafeMigrationDefinitionEquivalence.ProviderAnnotations(
-                table.ProviderAnnotations, intent.Definition.ProviderAnnotations))
+                table.ProviderAnnotations,
+                intent.Definition.ProviderAnnotations))
         {
             return StructureStateUnknown();
         }

@@ -811,8 +811,7 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
 
     private static string FixtureSql(
         bool alreadyDropped
-    ) =>
-        "CREATE TABLE `integer_upgrade` (`id` int NOT NULL PRIMARY KEY, `left_value` int NOT NULL, "
+    ) => "CREATE TABLE `integer_upgrade` (`id` int NOT NULL PRIMARY KEY, `left_value` int NOT NULL, "
         + "`right_value` int NOT NULL, `position` int NOT NULL, `payload` varchar(32) NOT NULL"
         + (alreadyDropped
             ? ""
@@ -914,13 +913,11 @@ public sealed class IndexDropIntegerUpgradeMigration : Migration
     /// <inheritdoc />
     protected override void Up(
         MigrationBuilder migrationBuilder
-    ) =>
-        migrationBuilder.Operations.AddRange(
-            MySqlIndexDropIntegerWideningIntegrationTests.UpgradeOperations(dropIndex: true, schema: null));
+    ) => migrationBuilder.Operations.AddRange(
+        MySqlIndexDropIntegerWideningIntegrationTests.UpgradeOperations(dropIndex: true, schema: null));
 
     /// <inheritdoc />
     protected override void Down(
         MigrationBuilder migrationBuilder
-    ) =>
-        throw new NotSupportedException("The isolated upgrade is forward-only.");
+    ) => throw new NotSupportedException("The isolated upgrade is forward-only.");
 }

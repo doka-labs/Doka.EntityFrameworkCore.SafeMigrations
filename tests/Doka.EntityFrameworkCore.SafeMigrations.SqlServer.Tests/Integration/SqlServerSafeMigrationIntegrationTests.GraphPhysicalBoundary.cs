@@ -143,19 +143,18 @@ public sealed class SqlServerSafeMigrationGraphPhysicalBoundaryIntegrationTests 
 
     private static string GraphPhysicalBoundarySetupSql(
         bool cascade
-    )
-        => "CREATE TABLE dbo.graph_sources (Id int NOT NULL PRIMARY KEY, Value int NOT NULL) AS NODE; "
-            + "CREATE TABLE dbo.graph_targets (Id int NOT NULL PRIMARY KEY, Value int NOT NULL) AS NODE; "
-            + "CREATE TABLE dbo.graph_links (Id int NOT NULL PRIMARY KEY, Value int NOT NULL, "
-            + "CONSTRAINT EC_graph_links CONNECTION (dbo.graph_sources TO dbo.graph_targets) ON DELETE "
-            + (cascade
-                ? "CASCADE"
-                : "NO ACTION")
-            + ") AS EDGE; "
-            + "INSERT dbo.graph_sources (Id, Value) VALUES (1, 11); "
-            + "INSERT dbo.graph_targets (Id, Value) VALUES (2, 22); "
-            + "INSERT dbo.graph_links ($from_id, $to_id, Id, Value) "
-            + "SELECT source_node.$node_id, target_node.$node_id, 3, 33 "
-            + "FROM dbo.graph_sources source_node CROSS JOIN dbo.graph_targets target_node "
-            + "WHERE source_node.Id = 1 AND target_node.Id = 2;";
+    ) => "CREATE TABLE dbo.graph_sources (Id int NOT NULL PRIMARY KEY, Value int NOT NULL) AS NODE; "
+        + "CREATE TABLE dbo.graph_targets (Id int NOT NULL PRIMARY KEY, Value int NOT NULL) AS NODE; "
+        + "CREATE TABLE dbo.graph_links (Id int NOT NULL PRIMARY KEY, Value int NOT NULL, "
+        + "CONSTRAINT EC_graph_links CONNECTION (dbo.graph_sources TO dbo.graph_targets) ON DELETE "
+        + (cascade
+            ? "CASCADE"
+            : "NO ACTION")
+        + ") AS EDGE; "
+        + "INSERT dbo.graph_sources (Id, Value) VALUES (1, 11); "
+        + "INSERT dbo.graph_targets (Id, Value) VALUES (2, 22); "
+        + "INSERT dbo.graph_links ($from_id, $to_id, Id, Value) "
+        + "SELECT source_node.$node_id, target_node.$node_id, 3, 33 "
+        + "FROM dbo.graph_sources source_node CROSS JOIN dbo.graph_targets target_node "
+        + "WHERE source_node.Id = 1 AND target_node.Id = 2;";
 }

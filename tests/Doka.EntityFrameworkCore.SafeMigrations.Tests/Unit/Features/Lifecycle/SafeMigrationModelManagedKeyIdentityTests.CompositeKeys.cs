@@ -297,18 +297,17 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
     /// <summary>Reorders labels while independently controlling whether their paired values follow.</summary>
     private static UpdateModelManagedDataIntent CompositeUpdate(
         bool reassociateValues
-    ) =>
-        new(
-            "Items",
-            ["CODE", "ID"],
-            ["int", "int"],
-            reassociateValues
-                ? new object?[,] { { 2, 1 } }
-                : new object?[,] { { 1, 2 } },
-            ["Value"],
-            ["int"],
-            new object?[,] { { 7 } },
-            new object?[,] { { 8 } },
-            schema: null,
-            uniqueKeys: null);
+    ) => new(
+        "Items",
+        ["CODE", "ID"],
+        ["int", "int"],
+        reassociateValues
+            ? new object?[,] { { 2, 1 } }
+            : new object?[,] { { 1, 2 } },
+        ["Value"],
+        ["int"],
+        new object?[,] { { 7 } },
+        new object?[,] { { 8 } },
+        schema: null,
+        uniqueKeys: null);
 }

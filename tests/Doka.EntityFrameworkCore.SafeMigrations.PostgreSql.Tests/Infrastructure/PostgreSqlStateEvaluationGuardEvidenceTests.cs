@@ -157,8 +157,10 @@ public sealed class PostgreSqlStateEvaluationGuardEvidenceTests
     }
 
     /// <summary>Uses two distinct capability families to expose cross-operation proof borrowing.</summary>
-    private static PostgreSqlSafeMigrationProviderAnalyzer.StateEvaluationGuardRequest[] Requests()
-        => [new(0, "structured_check_operand_type", true), new(1, "generated_case_operand_type", false)];
+    private static PostgreSqlSafeMigrationProviderAnalyzer.StateEvaluationGuardRequest[] Requests() =>
+    [
+        new(0, "structured_check_operand_type", true), new(1, "generated_case_operand_type", false),
+    ];
 
     /// <summary>Returns a legitimate source refusal followed by a guard pass with no attached reason.</summary>
     private static DataTable Rows()

@@ -526,11 +526,10 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
     /// </summary>
     private static DbContext CreateRetainedContext(
         SqlConnection session
-    )
-        => new(new DbContextOptionsBuilder()
-            .UseSqlServer(session)
-            .UseSqlServerSafeMigrations()
-            .Options);
+    ) => new(new DbContextOptionsBuilder()
+        .UseSqlServer(session)
+        .UseSqlServerSafeMigrations()
+        .Options);
 
     /// <summary>Generates the actual managed seed wrapper, not the raw SQL-only execution path.</summary>
     private static SqlServerSafeMigrationIdentityInsertCommand CreateSeedCommand(

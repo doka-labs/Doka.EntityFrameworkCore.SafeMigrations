@@ -6,24 +6,21 @@ internal static class SqlServerComputedColumnContract
     /// <summary>Gets the bounded structured form of an authored computed column.</summary>
     internal static SafeMigrationSqlExpression? Expression(
         ExpectedColumnDefinition definition
-    )
-        => definition.ComputedExpression
-            ?? (definition.ComputedColumnSql is { } sql
-                && SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var expression)
-                    ? expression
-                    : null);
+    ) => definition.ComputedExpression
+        ?? (definition.ComputedColumnSql is { } sql
+            && SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var expression)
+                ? expression
+                : null);
 
     /// <summary>Identifies authored generated storage independently of expression support.</summary>
     internal static bool IsComputed(
         ExpectedColumnDefinition definition
-    )
-        => definition.ComputedExpression is not null || definition.ComputedColumnSql is not null;
+    ) => definition.ComputedExpression is not null || definition.ComputedColumnSql is not null;
 
     /// <summary>Requires deterministic scalar syntax before native type and index metadata can be consulted.</summary>
     internal static bool IsDeterministic(
         SafeMigrationSqlExpression expression
-    )
-        => IsDeterministic(expression, 0);
+    ) => IsDeterministic(expression, 0);
 
     private static bool IsDeterministic(
         SafeMigrationSqlExpression expression,
@@ -241,12 +238,11 @@ internal static class SqlServerComputedColumnContract
 
     private static bool IsIntegralBooleanTarget(
         string storeType
-    )
-        => storeType.Equals("bit", StringComparison.OrdinalIgnoreCase)
-            || storeType.Equals("tinyint", StringComparison.OrdinalIgnoreCase)
-            || storeType.Equals("smallint", StringComparison.OrdinalIgnoreCase)
-            || storeType.Equals("int", StringComparison.OrdinalIgnoreCase)
-            || storeType.Equals("bigint", StringComparison.OrdinalIgnoreCase);
+    ) => storeType.Equals("bit", StringComparison.OrdinalIgnoreCase)
+        || storeType.Equals("tinyint", StringComparison.OrdinalIgnoreCase)
+        || storeType.Equals("smallint", StringComparison.OrdinalIgnoreCase)
+        || storeType.Equals("int", StringComparison.OrdinalIgnoreCase)
+        || storeType.Equals("bigint", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Retains one branch position and the special untyped-NULL allowance of COALESCE.</summary>
     private readonly record struct FiniteFrame(

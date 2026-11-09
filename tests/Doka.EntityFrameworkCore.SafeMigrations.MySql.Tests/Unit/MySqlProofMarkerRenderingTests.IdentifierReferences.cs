@@ -118,17 +118,16 @@ public sealed partial class MySqlProofMarkerRenderingTests
     private static MySqlSafeMigrationRuntimePlan CreateIdentifierPlan(
         string sql,
         string? binding
-    ) =>
-        CreatePlan(sql, null) with
-        {
-            BinaryDefaultProofs = [],
-            IdentifierReferenceProofs =
-            [
-                new MySqlSafeMigrationIdentifierReferenceProof(
-                    IdentifierMarker,
-                    "id",
-                    IdentifierScope,
-                    binding),
-            ],
-        };
+    ) => CreatePlan(sql, null) with
+    {
+        BinaryDefaultProofs = [],
+        IdentifierReferenceProofs =
+        [
+            new MySqlSafeMigrationIdentifierReferenceProof(
+                IdentifierMarker,
+                "id",
+                IdentifierScope,
+                binding),
+        ],
+    };
 }

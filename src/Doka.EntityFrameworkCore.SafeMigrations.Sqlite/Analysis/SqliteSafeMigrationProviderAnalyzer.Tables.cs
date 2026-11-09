@@ -196,31 +196,28 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         bool UniqueMatches(
             SqliteUniqueSnapshot actual,
             ExpectedUniqueConstraintDefinition definition
-        )
-            => SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
-                table,
-                actual.Keys,
-                definition.Columns,
-                requireDefaultSortOrder: true);
+        ) => SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
+            table,
+            actual.Keys,
+            definition.Columns,
+            requireDefaultSortOrder: true);
 
         bool ForeignKeyMatches(
             SqliteForeignKeySnapshot actual,
             ExpectedForeignKeyDefinition definition
-        )
-            => SqliteCatalogEquivalence.ForeignKeyMatches(
-                snapshot,
-                actual,
-                definition.PrincipalTable,
-                definition.Columns,
-                definition.PrincipalColumns,
-                definition.OnUpdate,
-                definition.OnDelete);
+        ) => SqliteCatalogEquivalence.ForeignKeyMatches(
+            snapshot,
+            actual,
+            definition.PrincipalTable,
+            definition.Columns,
+            definition.PrincipalColumns,
+            definition.OnUpdate,
+            definition.OnDelete);
 
         bool CheckMatches(
             SqliteCheckSnapshot actual,
             ExpectedCheckConstraintDefinition definition
-        )
-            => RenderCheck(definition) is { } sql && ExpressionMatches(actual.Expression, sql, definition.Expression);
+        ) => RenderCheck(definition) is { } sql && ExpressionMatches(actual.Expression, sql, definition.Expression);
     }
 
     /// <summary>Identifies unsupported table or nested column/check contracts before data probes.</summary>

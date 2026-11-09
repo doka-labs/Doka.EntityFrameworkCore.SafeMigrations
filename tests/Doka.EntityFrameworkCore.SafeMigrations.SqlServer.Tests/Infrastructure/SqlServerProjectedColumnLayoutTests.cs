@@ -437,33 +437,29 @@ public sealed class SqlServerProjectedColumnLayoutTests
 
     private static SqlServerSafeMigrationProviderAnalyzer Analyzer(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private static SafeMigrationOperation Column(
         string name,
         string storeType
-    )
-        => new(
-            new EnsureColumnIntent(
-                "layout_probe",
-                new ExpectedColumnDefinition(name, typeof(string), true, storeType)),
-            SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(
+        new EnsureColumnIntent(
+            "layout_probe",
+            new ExpectedColumnDefinition(name, typeof(string), true, storeType)),
+        SafeMigrationPolicy.ThrowIfDifferent);
 
     private static SafeMigrationProviderAnalysis Live(
         SafeMigrationObservedState state
-    )
-        => new(state, SafeMigrationRepairCapability.None, false, "classified_live");
+    ) => new(state, SafeMigrationRepairCapability.None, false, "classified_live");
 
-    private static SafeMigrationProviderAnalysis Unknown()
-        => new(
-            SafeMigrationObservedState.PrerequisiteMissing,
-            SafeMigrationRepairCapability.None,
-            false,
-            "projected_structure_state_unknown")
-        {
-            IsOpaqueProjectionUnknown = true,
-        };
+    private static SafeMigrationProviderAnalysis Unknown() => new(
+        SafeMigrationObservedState.PrerequisiteMissing,
+        SafeMigrationRepairCapability.None,
+        false,
+        "projected_structure_state_unknown")
+    {
+        IsOpaqueProjectionUnknown = true,
+    };
 
     private static SafeMigrationDecision Decision(
         SafeMigrationOperation operation,

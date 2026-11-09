@@ -341,14 +341,13 @@ public sealed class MySqlIdentifierReferenceProofIntegrationTests : MySqlIntegra
     private static MySqlSafeMigrationIdentifierReferenceProof CreateProof(
         string head,
         string? scope = null
-    ) =>
-        new(
-            MySqlSafeMigrationIdentifierReferenceProof.MarkerPrefix + "0__",
-            head,
-            scope
-            ?? Guid
-                .NewGuid()
-                .ToString("N"));
+    ) => new(
+        MySqlSafeMigrationIdentifierReferenceProof.MarkerPrefix + "0__",
+        head,
+        scope
+        ?? Guid
+            .NewGuid()
+            .ToString("N"));
 
     /// <summary>Performs the execute test operation with explicit cancellation.</summary>
     /// <param name="connection">The connection for this operation.</param>

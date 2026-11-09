@@ -457,14 +457,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
     private static SafeMigrationProviderAnalysis WithEmptyGeneratedSurvivors(
         SafeMigrationProviderAnalysis source
-    )
-        => new(source.ObservedState, source.RepairCapability, source.PostconditionSatisfied, source.Code)
-        {
-            DropLeavesNoGeneratedColumns = true,
-        };
+    ) => new(source.ObservedState, source.RepairCapability, source.PostconditionSatisfied, source.Code)
+    {
+        DropLeavesNoGeneratedColumns = true,
+    };
 
     private static ExpectedColumnDefinition GeneratedDependencyColumn(
         SafeMigrationSqlExpression expression
-    ) =>
-        new("derived", typeof(int), true, "int", computedExpression: expression);
+    ) => new("derived", typeof(int), true, "int", computedExpression: expression);
 }

@@ -172,7 +172,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                 HasDataMutation: HasUnanalyzedDataChanges(intent.Table, intent.Schema),
                 ColumnWasDropped: IsProjectedColumnMissing(intent.Table, intent.Schema, intent.Definition.Name),
                 CreationProviderAnnotations: tableWasCreated
-                    && TryGet(intent.Table, intent.Schema, out var createdTable)
+                && TryGet(intent.Table, intent.Schema, out var createdTable)
                     ? createdTable.ProviderAnnotations
                     : null),
             liveAnalysis,
@@ -924,8 +924,8 @@ internal sealed partial class SafeMigrationPreflightProjection
     ) : ISafeMigrationProjectedAlterTable
     {
         /// <inheritdoc />
-        public IEnumerable<ExpectedColumnDefinition> Columns =>
-            projection._projectedColumnStates.TryGetValue(key, out var columns)
+        public IEnumerable<ExpectedColumnDefinition> Columns
+            => projection._projectedColumnStates.TryGetValue(key, out var columns)
                 ? columns
                     .Values
                     .Where(static value => value.Definition is not null)
@@ -933,20 +933,20 @@ internal sealed partial class SafeMigrationPreflightProjection
                 : [];
 
         /// <inheritdoc />
-        public ExpectedPrimaryKeyDefinition? PrimaryKey =>
-            projection._prerequisites.TryGetValue(key, out var prerequisites)
+        public ExpectedPrimaryKeyDefinition? PrimaryKey
+            => projection._prerequisites.TryGetValue(key, out var prerequisites)
                 ? prerequisites.PrimaryKey
                 : null;
 
         /// <inheritdoc />
-        public IEnumerable<ExpectedUniqueConstraintDefinition> UniqueConstraints =>
-            projection._prerequisites.TryGetValue(key, out var prerequisites)
+        public IEnumerable<ExpectedUniqueConstraintDefinition> UniqueConstraints
+            => projection._prerequisites.TryGetValue(key, out var prerequisites)
                 ? prerequisites.UniqueConstraints.Definitions
                 : [];
 
         /// <inheritdoc />
-        public IEnumerable<ExpectedIndexDefinition> Indexes =>
-            projection._prerequisites.TryGetValue(key, out var prerequisites)
+        public IEnumerable<ExpectedIndexDefinition> Indexes
+            => projection._prerequisites.TryGetValue(key, out var prerequisites)
                 ? prerequisites.Indexes.Definitions
                 : [];
 

@@ -193,8 +193,7 @@ public sealed class MySqlModelManagedDataLiteralTests
         Assert.Equal(insert.Values.GetLength(1), intent.Values.ColumnCount);
     }
 
-    private static DbContext CreateContext()
-        => CreateContext(isMariaDb: false);
+    private static DbContext CreateContext() => CreateContext(isMariaDb: false);
 
     private static DbContext CreateContext(
         bool isMariaDb

@@ -700,8 +700,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         /// <inheritdoc />
         protected override DbTransaction BeginDbTransaction(
             IsolationLevel isolationLevel
-        )
-            => _inner.BeginTransaction(isolationLevel);
+        ) => _inner.BeginTransaction(isolationLevel);
 
         /// <inheritdoc />
         protected override DbCommand CreateDbCommand() => new RequiredAddObservedCommand(this, _inner.CreateCommand());
@@ -828,8 +827,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             /// <inheritdoc />
             public override Task PrepareAsync(
                 CancellationToken cancellationToken = default
-            )
-                => _inner.PrepareAsync(cancellationToken);
+            ) => _inner.PrepareAsync(cancellationToken);
 
             /// <inheritdoc />
             protected override DbParameter CreateDbParameter() => _inner.CreateParameter();
@@ -967,8 +965,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             /// <inheritdoc />
             public override Task PrepareAsync(
                 CancellationToken cancellationToken = default
-            )
-                => _inner.PrepareAsync(cancellationToken);
+            ) => _inner.PrepareAsync(cancellationToken);
 
             /// <inheritdoc />
             public override int ExecuteNonQuery()

@@ -129,7 +129,9 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator : C
         }
 
         ValidateSafeCompatibility(operation);
-        if (operation.GetAnnotations().Any())
+        if (operation
+            .GetAnnotations()
+            .Any())
         {
             GenerateCapturedTableOperation(operation, builder);
 

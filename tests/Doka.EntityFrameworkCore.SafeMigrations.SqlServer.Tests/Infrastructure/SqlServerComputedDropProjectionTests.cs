@@ -815,22 +815,20 @@ public sealed partial class SqlServerComputedDropProjectionTests
 
     private static SafeMigrationProviderAnalysis Live(
         SafeMigrationObservedState state
-    )
-        => new(state,
-            SafeMigrationRepairCapability.None,
-            false,
-            "classified_"
-            + state
-                .ToString()
-                .ToLowerInvariant());
+    ) => new(state,
+        SafeMigrationRepairCapability.None,
+        false,
+        "classified_"
+        + state
+            .ToString()
+            .ToLowerInvariant());
 
-    private static ExpectedColumnDefinition Flag()
-        => new(
-            "HasChildren",
-            typeof(bool),
-            false,
-            "bit",
-            computedColumnSql: "CONVERT(bit,CASE WHEN [L]>0 THEN 1 ELSE 0 END)");
+    private static ExpectedColumnDefinition Flag() => new(
+        "HasChildren",
+        typeof(bool),
+        false,
+        "bit",
+        computedColumnSql: "CONVERT(bit,CASE WHEN [L]>0 THEN 1 ELSE 0 END)");
 
     private static (SafeMigrationOperation Index, SafeMigrationProviderAnalysis Native) CaptureIndexWitness(
         SqlServerSafeMigrationProviderAnalyzer analyzer
@@ -870,10 +868,9 @@ public sealed partial class SqlServerComputedDropProjectionTests
         return (index, native);
     }
 
-    private static SafeMigrationDbContext Context()
-        => new(
-            "Server=127.0.0.1,1433;Database=offline_computed_drop;User ID=sa;"
-            + "Password=unused;TrustServerCertificate=True");
+    private static SafeMigrationDbContext Context() => new(
+        "Server=127.0.0.1,1433;Database=offline_computed_drop;User ID=sa;"
+        + "Password=unused;TrustServerCertificate=True");
 
     private static void Capture(
         SqlServerSafeMigrationProviderAnalyzer analyzer,
@@ -942,15 +939,14 @@ public sealed partial class SqlServerComputedDropProjectionTests
             ExpectedIndexDefinition definition,
             SafeMigrationProviderAnalysis liveAnalysis,
             bool includeConstraintBackingIndexNames = false
-        )
-            => indexState is { } state
-                ? Live(state)
-                : indexMissing is { } missing
-                    ? Live(
-                        missing
-                            ? SafeMigrationObservedState.Missing
-                            : SafeMigrationObservedState.Matching)
-                    : null;
+        ) => indexState is { } state
+            ? Live(state)
+            : indexMissing is { } missing
+                ? Live(
+                    missing
+                        ? SafeMigrationObservedState.Missing
+                        : SafeMigrationObservedState.Matching)
+                : null;
 
         public bool TryGetProjectedColumn(
             string table,

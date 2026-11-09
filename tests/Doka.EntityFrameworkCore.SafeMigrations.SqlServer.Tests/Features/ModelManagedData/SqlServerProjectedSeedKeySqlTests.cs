@@ -265,16 +265,15 @@ public sealed class SqlServerProjectedSeedKeySqlTests
     public void AuthoredRows_ConflictingKeyTypeIsRejectedByTheImmutableIntent()
     {
         // Arrange
-        static EnsureModelManagedDataIntent CreateConflictingTypes()
-            => new(
-                "seed_proofs",
-                ["Id"],
-                ["bigint"],
-                ["Id", "Code"],
-                ["int", "nvarchar(20)"],
-                new object?[,] { { 1, "one" } },
-                schema: null,
-                uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Code"])]);
+        static EnsureModelManagedDataIntent CreateConflictingTypes() => new(
+            "seed_proofs",
+            ["Id"],
+            ["bigint"],
+            ["Id", "Code"],
+            ["int", "nvarchar(20)"],
+            new object?[,] { { 1, "one" } },
+            schema: null,
+            uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Code"])]);
 
         // Act
         var exception = Record.Exception(CreateConflictingTypes);
@@ -286,14 +285,13 @@ public sealed class SqlServerProjectedSeedKeySqlTests
     private static EnsureModelManagedDataIntent Seed(
         int id,
         string? code
-    )
-        => new(
-            "seed_proofs",
-            ["Id"],
-            ["int"],
-            ["Id", "Code"],
-            ["int", "nvarchar(20)"],
-            new object?[,] { { id, code } },
-            schema: null,
-            uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Code"])]);
+    ) => new(
+        "seed_proofs",
+        ["Id"],
+        ["int"],
+        ["Id", "Code"],
+        ["int", "nvarchar(20)"],
+        new object?[,] { { id, code } },
+        schema: null,
+        uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Code"])]);
 }

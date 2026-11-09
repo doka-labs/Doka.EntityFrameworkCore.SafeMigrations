@@ -16,6 +16,7 @@ internal sealed class SqliteRebuildColumnOrder
     )
     {
         var changedLifetimes = new HashSet<string>(SqliteIdentifierComparer.Instance);
+
         // WHY: The accepted structural window is indexed; avoid boxing its interface enumerator.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -27,7 +28,8 @@ internal sealed class SqliteRebuildColumnOrder
                 continue;
             }
 
-            if (ownership.IsProviderOperation(operation) || operation is CreateTableOperation or DropTableOperation)
+            if (ownership.IsProviderOperation(operation)
+                || operation is CreateTableOperation or DropTableOperation)
             {
                 // WHY: A fresh/recreated or explicitly provider-owned lifetime has its own authored order.
                 // A later safe operation cannot borrow the old owner's ordinals after this boundary.
@@ -96,16 +98,21 @@ internal sealed class SqliteRebuildColumnOrder
     {
         foreach (var candidate in creators)
         {
-            if (!_owners.TryGetValue(candidate.Value, out var lifetime) || !lifetime.Rebuilt)
+            if (!_owners.TryGetValue(candidate.Value, out var lifetime)
+                || !lifetime.Rebuilt)
             {
                 continue;
             }
 
             // WHY: The compiler's creator carries the exact accepted model schema. Explicit main and
             // unqualified SQLite owners share physical lookup semantics but not relational-model keys.
-            var table = model?.GetRelationalModel().FindTable(candidate.Value, candidate.Key.Schema);
-            if (table?.Columns.Any(static column => column.PropertyMappings.Any(
-                    static mapping => mapping.Property.GetColumnOrder() is not null)) == true)
+            var table = model
+                ?.GetRelationalModel()
+                .FindTable(candidate.Value, candidate.Key.Schema);
+
+            if (table?.Columns.Any(static column
+                    => column.PropertyMappings.Any(static mapping => mapping.Property.GetColumnOrder() is not null))
+                == true)
             {
                 // WHY: Explicit destination order is an authored contract, not incidental model enumeration.
                 continue;
@@ -114,6 +121,7 @@ internal sealed class SqliteRebuildColumnOrder
             var columns = candidate.Key.Columns;
             var ranks = new Dictionary<string, int>(lifetime.Columns, SqliteIdentifierComparer.Instance);
             var next = lifetime.NextOrdinal;
+
             // WHY: This private declaration list is stable until the separate sort below.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
@@ -128,7 +136,8 @@ internal sealed class SqliteRebuildColumnOrder
 
             // WHY: Only EF-created column declarations move. Named copy projections, physical facets,
             // constraints and caller-owned operation objects remain exactly those produced by EF.
-            columns.Sort((left, right) => ranks[left.Name].CompareTo(ranks[right.Name]));
+            columns.Sort((left, right) => ranks[left.Name]
+                .CompareTo(ranks[right.Name]));
         }
     }
 

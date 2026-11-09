@@ -645,8 +645,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
     private static RenderStep TextStep(
         IExpressionTextWriter writer,
         string text
-    )
-        => new(RenderStepKind.Text, writer, null!, Text: text);
+    ) => new(RenderStepKind.Text, writer, null!, Text: text);
 
     private enum RenderStepKind
     {

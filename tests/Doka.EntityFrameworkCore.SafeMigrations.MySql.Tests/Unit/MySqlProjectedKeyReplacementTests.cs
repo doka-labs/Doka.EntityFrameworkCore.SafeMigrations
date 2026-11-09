@@ -556,9 +556,8 @@ public sealed class MySqlProjectedKeyReplacementTests
     /// <summary>Resolves the real native proof implementation without starting a database.</summary>
     private static ISafeMigrationProjectedKeyAnalyzer KeyAnalyzer(
         DbContext context
-    )
-        => Assert.IsAssignableFrom<ISafeMigrationProjectedKeyAnalyzer>(
-            context.GetService<ISafeMigrationProviderAnalyzer>());
+    ) => Assert.IsAssignableFrom<ISafeMigrationProjectedKeyAnalyzer>(
+        context.GetService<ISafeMigrationProviderAnalyzer>());
 
     /// <summary>Constructs the exact replacement target used by isolated provider contracts.</summary>
     private static EnsurePrimaryKeyIntent Primary()
@@ -567,24 +566,22 @@ public sealed class MySqlProjectedKeyReplacementTests
     /// <summary>Models Core's unproven marker without granting row or table authority.</summary>
     private static SafeMigrationProviderAnalysis Unknown(
         string code = "projected_key_after_column_drop_unproven"
-    )
-        => new(SafeMigrationObservedState.PrerequisiteMissing, SafeMigrationRepairCapability.None, false, code);
+    ) => new(SafeMigrationObservedState.PrerequisiteMissing, SafeMigrationRepairCapability.None, false, code);
 
     /// <summary>Represents independently captured physical width plus an original classifier result.</summary>
     private static SafeMigrationProviderAnalysis Live(
         SafeMigrationObservedState state,
         string code,
         int maximumBytes = 3072
-    )
-        => new(state, SafeMigrationRepairCapability.None, state == SafeMigrationObservedState.Matching, code)
-        {
-            IndexPhysicalEnvironment = new SafeMigrationIndexPhysicalEnvironment(
-                maximumBytes,
-                Columns: new Dictionary<string, SafeMigrationIndexColumnPhysicalShape>(StringComparer.Ordinal)
-                {
-                    ["id"] = new(null, 0, 4, false),
-                }),
-        };
+    ) => new(state, SafeMigrationRepairCapability.None, state == SafeMigrationObservedState.Matching, code)
+    {
+        IndexPhysicalEnvironment = new SafeMigrationIndexPhysicalEnvironment(
+            maximumBytes,
+            Columns: new Dictionary<string, SafeMigrationIndexColumnPhysicalShape>(StringComparer.Ordinal)
+            {
+                ["id"] = new(null, 0, 4, false),
+            }),
+    };
 
     /// <summary>Provides real mappings and capture without opening a native connection.</summary>
     private static DbContext Context(
@@ -669,14 +666,13 @@ public sealed class MySqlProjectedKeyReplacementTests
         /// <summary>Creates a strict source and a real preceding DROP origin.</summary>
         public static Source Create(
             bool valuesPreserved
-        )
-            => new()
+        ) => new()
+        {
+            _valuesPreserved = valuesPreserved,
+            State = new SafeMigrationProjectedTableState(false, false, true, true)
             {
-                _valuesPreserved = valuesPreserved,
-                State = new SafeMigrationProjectedTableState(false, false, true, true)
-                {
-                    ColumnDropOriginOrdinal = 1,
-                },
-            };
+                ColumnDropOriginOrdinal = 1,
+            },
+        };
     }
 }

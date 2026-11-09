@@ -361,6 +361,5 @@ public sealed class SqlServerRenameDestinationEvidenceTests
 
     private static SafeMigrationProviderAnalysis Live(
         SafeMigrationObservedState state
-    )
-        => new(state, SafeMigrationRepairCapability.None, false, "classified_test");
+    ) => new(state, SafeMigrationRepairCapability.None, false, "classified_test");
 }

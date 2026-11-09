@@ -631,14 +631,12 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
 
     private static SafeMigrationDbContext Context(
         PreambleConnection connection
-    )
-        => new(new DbContextOptionsBuilder<SafeMigrationDbContext>().UseSqlServer(connection)
-            .Options);
+    ) => new(new DbContextOptionsBuilder<SafeMigrationDbContext>().UseSqlServer(connection)
+        .Options);
 
     private static SqlServerSafeMigrationProviderAnalyzer Analyzer(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private static SafeMigrationOperation[] AnalysisOperations()
     {
@@ -702,8 +700,7 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
 
         protected override DbTransaction BeginDbTransaction(
             IsolationLevel isolationLevel
-        )
-            => new PreambleTransaction(this);
+        ) => new PreambleTransaction(this);
 
         protected override DbCommand CreateDbCommand() => new PreambleCommand(this);
 

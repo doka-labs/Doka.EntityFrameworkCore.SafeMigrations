@@ -45,8 +45,10 @@ internal sealed class SqliteSafeMigrationsBaselineSqlGenerator : SqliteMigration
         var columnOrder = snapshot is null
             ? null
             : new SqliteRebuildColumnOrder(snapshot, operations, ownership);
+
         var completeDeclarations = couldContainGenerated && ownership.RequiresCompleteDeclarations(model);
-        if (!completeDeclarations && columnOrder?.Required != true)
+        if (!completeDeclarations
+            && columnOrder?.Required != true)
         {
             return base.Generate(operations, model, options);
         }
@@ -69,6 +71,7 @@ internal sealed class SqliteSafeMigrationsBaselineSqlGenerator : SqliteMigration
             _completeCreators = completeDeclarations
                 ? ownership.ResolveCreators(rewritten)
                 : null;
+
             columnOrder?.Apply(ownership.ResolveRebuiltCreators(rewritten), model);
             _ownership = ownership;
             Options = options;

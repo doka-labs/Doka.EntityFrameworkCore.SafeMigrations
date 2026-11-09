@@ -560,8 +560,7 @@ public static partial class SafeMigrationDiagnosticMessages
         string code,
         string reason,
         string nextStep
-    )
-        => new(code, reason, nextStep);
+    ) => new(code, reason, nextStep);
 
     private static SafeMigrationDiagnosticExplanation RequiredColumnReplacementExplanation() => new(
         "required_column_replacement_unproven",

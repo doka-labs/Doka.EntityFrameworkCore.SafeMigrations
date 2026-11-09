@@ -71,33 +71,32 @@ public sealed class SqlServerIntegerCheckLiteralTests
     /// <summary>Produces each exact CLR scalar without a lossy intermediate conversion.</summary>
     private static object? Value(
         string kind
-    )
-        => kind switch
-        {
-            "byte" => byte.MaxValue,
-            "sbyte" => sbyte.MinValue,
-            "short" => short.MinValue,
-            "ushort" => ushort.MaxValue,
-            "int" => int.MinValue,
-            "uint" => uint.MaxValue,
-            "long-min" => long.MinValue,
-            "long-max" => long.MaxValue,
-            "ulong-signed-max" => (ulong)long.MaxValue,
-            "ulong-signed-min-magnitude" => (ulong)long.MaxValue + 1,
-            "ulong-max" => ulong.MaxValue,
-            "decimal-min" => (decimal)long.MinValue,
-            "decimal-max" => (decimal)long.MaxValue,
-            "decimal-positive-overflow" => (decimal)long.MaxValue + 1,
-            "decimal-negative-overflow" => (decimal)long.MinValue - 1,
-            "decimal-fraction" => 0.5m,
-            "decimal-type-max" => decimal.MaxValue,
-            "decimal-type-min" => decimal.MinValue,
-            "double" => 0d,
-            "float" => 0f,
-            "bool" => false,
-            "string" => "0",
-            "null" => null,
-            "cast" => 0,
-            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-        };
+    ) => kind switch
+    {
+        "byte" => byte.MaxValue,
+        "sbyte" => sbyte.MinValue,
+        "short" => short.MinValue,
+        "ushort" => ushort.MaxValue,
+        "int" => int.MinValue,
+        "uint" => uint.MaxValue,
+        "long-min" => long.MinValue,
+        "long-max" => long.MaxValue,
+        "ulong-signed-max" => (ulong)long.MaxValue,
+        "ulong-signed-min-magnitude" => (ulong)long.MaxValue + 1,
+        "ulong-max" => ulong.MaxValue,
+        "decimal-min" => (decimal)long.MinValue,
+        "decimal-max" => (decimal)long.MaxValue,
+        "decimal-positive-overflow" => (decimal)long.MaxValue + 1,
+        "decimal-negative-overflow" => (decimal)long.MinValue - 1,
+        "decimal-fraction" => 0.5m,
+        "decimal-type-max" => decimal.MaxValue,
+        "decimal-type-min" => decimal.MinValue,
+        "double" => 0d,
+        "float" => 0f,
+        "bool" => false,
+        "string" => "0",
+        "null" => null,
+        "cast" => 0,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
 }

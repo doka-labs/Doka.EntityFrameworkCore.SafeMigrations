@@ -31,14 +31,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <returns>The existing or completely parsed AST, or null for opaque syntax.</returns>
     internal static SafeMigrationSqlExpression? GetStructuredCheckExpression(
         ExpectedCheckConstraintDefinition definition
-    )
-        => (definition.CapturedSql ?? definition.Sql) is { } authored && !HasSupportedRawCheckQuoting(authored)
-            ? null
-            : definition.Expression
-            ?? (definition.Sql is { } sql
-                && SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var parsed)
-                    ? parsed
-                    : null);
+    ) => (definition.CapturedSql ?? definition.Sql) is { } authored && !HasSupportedRawCheckQuoting(authored)
+        ? null
+        : definition.Expression
+        ?? (definition.Sql is { } sql
+            && SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var parsed)
+                ? parsed
+                : null);
 
     private static bool HasSupportedRawCheckQuoting(
         string sql
@@ -88,19 +87,17 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <returns>True only when every scalar operand is a column or an uncast signed-integral constant.</returns>
     internal static bool IsSafeIntegerCheckPredicate(
         SafeMigrationSqlExpression expression
-    )
-        => IsSafeIntegerCheckPredicate(expression, 0);
+    ) => IsSafeIntegerCheckPredicate(expression, 0);
 
     /// <summary>Qualifies an accepted authored operand against the native integer CHECK contract.</summary>
     /// <param name="definition">The accepted projected physical column definition.</param>
     /// <returns>Whether comparison is nonthrowing under the same scalar family as live catalog validation.</returns>
     internal bool IsSupportedIntegerCheckColumn(
         ExpectedColumnDefinition definition
-    )
-        => definition.ComputedColumnSql is null
-            && definition.ComputedExpression is null
-            && TryGetColumnType(definition, out var type)
-            && type.Name is "tinyint" or "smallint" or "int" or "bigint";
+    ) => definition.ComputedColumnSql is null
+        && definition.ComputedExpression is null
+        && TryGetColumnType(definition, out var type)
+        && type.Name is "tinyint" or "smallint" or "int" or "bigint";
 
     private static bool IsSafeIntegerCheckPredicate(
         SafeMigrationSqlExpression expression,
@@ -129,9 +126,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
     private static bool IsSafeIntegerCheckScalar(
         SafeMigrationSqlExpression expression
-    )
-        => expression is SafeMigrationSqlIdentifierExpression { Parts.Count: 1 }
-            || TryGetIntegerCheckLiteral(expression, out _);
+    ) => expression is SafeMigrationSqlIdentifierExpression { Parts.Count: 1 }
+        || TryGetIntegerCheckLiteral(expression, out _);
 
     private static bool TryGetIntegerCheckLiteral(
         SafeMigrationSqlExpression expression,

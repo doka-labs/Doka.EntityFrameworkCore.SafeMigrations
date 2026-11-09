@@ -58,11 +58,24 @@ internal static class MySqlSafeMigrationTableMetadata
     /// <summary>Certifies table normalization while keeping constraint annotations fail-closed.</summary>
     internal static bool CanNormalize(
         CreateTableOperation operation
-    ) => operation.GetAnnotations().Count() == 1
+    ) => operation
+            .GetAnnotations()
+            .Count()
+        == 1
         && operation[StorageEngineAnnotation] is string engine
         && StringComparer.OrdinalIgnoreCase.Equals(engine, "InnoDB")
-        && (operation.PrimaryKey is null || !operation.PrimaryKey.GetAnnotations().Any())
-        && operation.UniqueConstraints.All(static value => !value.GetAnnotations().Any())
-        && operation.CheckConstraints.All(static value => !value.GetAnnotations().Any())
-        && operation.ForeignKeys.All(static value => !value.GetAnnotations().Any());
+        && (operation.PrimaryKey is null
+            || !operation
+                .PrimaryKey
+                .GetAnnotations()
+                .Any())
+        && operation.UniqueConstraints.All(static value => !value
+            .GetAnnotations()
+            .Any())
+        && operation.CheckConstraints.All(static value => !value
+            .GetAnnotations()
+            .Any())
+        && operation.ForeignKeys.All(static value => !value
+            .GetAnnotations()
+            .Any());
 }

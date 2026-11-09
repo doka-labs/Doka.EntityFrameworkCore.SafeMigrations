@@ -8,10 +8,20 @@ internal static partial class SafeMigrationExpectedDefinitionFactory
     {
         ArgumentNullException.ThrowIfNull(operation);
 
-        if (operation.PrimaryKey?.GetAnnotations().Any() == true
-            || operation.UniqueConstraints.Any(static value => value.GetAnnotations().Any())
-            || operation.CheckConstraints.Any(static value => value.GetAnnotations().Any())
-            || operation.ForeignKeys.Any(static value => value.GetAnnotations().Any()))
+        if (operation
+                .PrimaryKey
+                ?.GetAnnotations()
+                .Any()
+            == true
+            || operation.UniqueConstraints.Any(static value => value
+                .GetAnnotations()
+                .Any())
+            || operation.CheckConstraints.Any(static value => value
+                .GetAnnotations()
+                .Any())
+            || operation.ForeignKeys.Any(static value => value
+                .GetAnnotations()
+                .Any()))
         {
             // WHY: Table capture must not discard nested provider metadata that
             // the immutable constraint definitions cannot preserve or compare.

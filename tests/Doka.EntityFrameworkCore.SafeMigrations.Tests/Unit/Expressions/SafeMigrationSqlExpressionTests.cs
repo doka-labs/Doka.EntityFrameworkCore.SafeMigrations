@@ -283,7 +283,7 @@ public sealed class SafeMigrationSqlExpressionTests
     public void Inspector_TraversesAndRenamesEveryStructuredNode()
     {
         var source = SafeMigrationSql.Identifier("source");
-        var expressions = new SafeMigrationSqlExpression[]
+        var expressions = new[]
         {
             source,
             SafeMigrationSql.Literal("source"),

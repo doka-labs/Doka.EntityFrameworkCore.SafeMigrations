@@ -511,29 +511,28 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         int offset = 1,
         string storeType = "tinyint(1)",
         string leftColumn = "left_bound"
-    ) =>
-        new(
-            "has_descendants",
-            typeof(bool),
-            false,
-            storeType,
-            computedExpression: SqlBinary(
-                SqlColumn("right_bound"),
-                SafeMigrationSqlBinaryOperator.GreaterThan,
-                SafeMigrationSql.Case(
-                    [
-                        new SafeMigrationSqlCaseWhenClause(
-                            SqlBinary(
-                                SqlColumn(leftColumn),
-                                SafeMigrationSqlBinaryOperator.Equal,
-                                SafeMigrationSql.Literal(long.MaxValue)),
-                            SqlColumn(leftColumn)),
-                    ],
-                    SqlBinary(
-                        SqlColumn(leftColumn),
-                        SafeMigrationSqlBinaryOperator.Add,
-                        SafeMigrationSql.Literal(offset)))),
-            isStored: stored);
+    ) => new(
+        "has_descendants",
+        typeof(bool),
+        false,
+        storeType,
+        computedExpression: SqlBinary(
+            SqlColumn("right_bound"),
+            SafeMigrationSqlBinaryOperator.GreaterThan,
+            SafeMigrationSql.Case(
+                [
+                    new SafeMigrationSqlCaseWhenClause(
+                        SqlBinary(
+                            SqlColumn(leftColumn),
+                            SafeMigrationSqlBinaryOperator.Equal,
+                            SafeMigrationSql.Literal(long.MaxValue)),
+                        SqlColumn(leftColumn)),
+                ],
+                SqlBinary(
+                    SqlColumn(leftColumn),
+                    SafeMigrationSqlBinaryOperator.Add,
+                    SafeMigrationSql.Literal(offset)))),
+        isStored: stored);
 
     /// <summary>Includes both signed extrema and ordinary true/false generated outcomes.</summary>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
@@ -583,11 +582,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         string connectionString,
         string column,
         CancellationToken cancellationToken
-    ) =>
-        ScalarStringAsync(
-            connectionString,
-            "SELECT CONCAT(COLUMN_TYPE, '|', IS_NULLABLE, '|', "
-            + "COALESCE(COLUMN_DEFAULT, '<null>'), '|', GENERATION_EXPRESSION) FROM INFORMATION_SCHEMA.COLUMNS "
-            + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND COLUMN_NAME = '{column}';",
-            cancellationToken: cancellationToken);
+    ) => ScalarStringAsync(
+        connectionString,
+        "SELECT CONCAT(COLUMN_TYPE, '|', IS_NULLABLE, '|', "
+        + "COALESCE(COLUMN_DEFAULT, '<null>'), '|', GENERATION_EXPRESSION) FROM INFORMATION_SCHEMA.COLUMNS "
+        + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND COLUMN_NAME = '{column}';",
+        cancellationToken: cancellationToken);
 }

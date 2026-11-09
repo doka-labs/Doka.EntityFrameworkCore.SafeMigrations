@@ -14,7 +14,9 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
         var source = ReplaceCompositePrincipalColumnArrays(operation, baseline.ToString());
         var invocationStart = source.IndexOf('.', StringComparison.Ordinal);
         if (invocationStart < 0
-            || source.AsSpan(0, invocationStart).ContainsAnyExcept(' ', '\t'))
+            || source
+                .AsSpan(0, invocationStart)
+                .ContainsAnyExcept(' ', '\t'))
         {
             throw new InvalidOperationException("The EF Core C# generator emitted an unexpected CreateTable shape.");
         }

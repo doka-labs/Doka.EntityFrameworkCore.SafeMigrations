@@ -1112,10 +1112,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
     /// <summary>
     /// Rejects malformed native proof rows without copying their untrusted contents into diagnostics.
     /// </summary>
-    private static InvalidOperationException InvalidStateEvaluationGuardEvidence()
-        => new(
-            "The PostgreSQL SafeMigrations state-evaluation guard classifier "
-            + "returned invalid capability evidence.");
+    private static InvalidOperationException InvalidStateEvaluationGuardEvidence() => new(
+        "The PostgreSQL SafeMigrations state-evaluation guard classifier "
+        + "returned invalid capability evidence.");
 
     private static void ApplyCommandTimeout(
         DbCommand command,

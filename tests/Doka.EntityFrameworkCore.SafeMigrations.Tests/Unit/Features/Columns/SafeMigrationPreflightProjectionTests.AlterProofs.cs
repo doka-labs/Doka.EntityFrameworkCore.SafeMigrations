@@ -224,12 +224,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     private static SafeMigrationProviderAnalysis AlterProof(
         bool requiresRows = false,
         bool mutatesData = false
-    ) =>
-        new(SafeMigrationObservedState.Different, SafeMigrationRepairCapability.Safe, false, "alter_proof")
-        {
-            RequiresLiveDataProof = requiresRows,
-            RepairMutatesData = mutatesData,
-        };
+    ) => new(SafeMigrationObservedState.Different, SafeMigrationRepairCapability.Safe, false, "alter_proof")
+    {
+        RequiresLiveDataProof = requiresRows,
+        RepairMutatesData = mutatesData,
+    };
 
     /// <summary>Unknown destination presence cannot authorize a projected new-source rename.</summary>
     /// <param name="destinationExists">The independent provider observation, when available.</param>

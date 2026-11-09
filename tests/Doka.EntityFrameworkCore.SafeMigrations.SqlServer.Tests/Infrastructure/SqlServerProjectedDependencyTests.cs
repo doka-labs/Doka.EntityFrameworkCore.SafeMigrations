@@ -469,12 +469,11 @@ public sealed class SqlServerProjectedDependencyTests
 
     private static SafeMigrationProviderAnalysis Live(
         SafeMigrationObservedState state
-    )
-        => new(
-            state,
-            SafeMigrationRepairCapability.None,
-            state == SafeMigrationObservedState.Matching,
-            "classified_test");
+    ) => new(
+        state,
+        SafeMigrationRepairCapability.None,
+        state == SafeMigrationObservedState.Matching,
+        "classified_test");
 
     private sealed class EmptyColumns : ISafeMigrationProjectedColumnSource
     {

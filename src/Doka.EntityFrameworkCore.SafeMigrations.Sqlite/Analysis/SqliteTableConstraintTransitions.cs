@@ -99,6 +99,5 @@ internal sealed class SqliteTableConstraintTransitions
     /// <returns>The bounded constraint contract, or null when no table creator was captured.</returns>
     public SafeMigrationExpectedTableConstraints? Find(
         SafeMigrationOperation operation
-    )
-        => _tables?.GetValueOrDefault(operation);
+    ) => _tables?.GetValueOrDefault(operation);
 }

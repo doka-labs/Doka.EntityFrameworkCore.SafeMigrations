@@ -1,3 +1,5 @@
+using System.Collections;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
 /// <summary>Constrains retirement certificates to exact references and unchanged atomic owner lifetimes.</summary>
@@ -33,7 +35,11 @@ public sealed class SqliteTableRetirementContractTests
     {
         // Arrange
         var foreignKey = new SafeMigrationOperation(
-            new DropForeignKeyIntent("fk_owner_principal", "owner", variant == "qualified-fk" ? "attached" : null),
+            new DropForeignKeyIntent("fk_owner_principal",
+                "owner",
+                variant == "qualified-fk"
+                    ? "attached"
+                    : null),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var droppedOwner = variant switch
@@ -44,10 +50,18 @@ public sealed class SqliteTableRetirementContractTests
         };
 
         var drop = new SafeMigrationOperation(
-            new DropTableIntent(droppedOwner, variant == "qualified-drop" ? "attached" : null),
+            new DropTableIntent(droppedOwner,
+                variant == "qualified-drop"
+                    ? "attached"
+                    : null),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var operations = new List<MigrationOperation> { foreignKey, drop };
+        var operations = new List<MigrationOperation>
+        {
+            foreignKey,
+            drop,
+        };
+
         var modeled = new Dictionary<string, object>(SqliteIdentifierComparer.Instance);
 
         switch (variant)
@@ -68,19 +82,32 @@ public sealed class SqliteTableRetirementContractTests
                 operations.Insert(1, new SqlOperation { Sql = "SELECT 1;" });
                 break;
             case "insert":
-                operations.Insert(1, new InsertDataOperation
-                {
-                    Table = "unrelated",
-                    Columns = ["id"],
-                    Values = new object[,] { { 1 } },
-                });
+                operations.Insert(1,
+                    new InsertDataOperation
+                    {
+                        Table = "unrelated",
+                        Columns = ["id"],
+                        Values = new object[,] { { 1 } },
+                    });
 
                 break;
             case "rename-source":
-                operations.Insert(1, new RenameTableOperation { Name = "owner", NewName = "renamed" });
+                operations.Insert(1,
+                    new RenameTableOperation
+                    {
+                        Name = "owner",
+                        NewName = "renamed",
+                    });
+
                 break;
             case "rename-target":
-                operations.Insert(1, new RenameTableOperation { Name = "unrelated", NewName = "owner" });
+                operations.Insert(1,
+                    new RenameTableOperation
+                    {
+                        Name = "unrelated",
+                        NewName = "owner",
+                    });
+
                 break;
             case "recreated-before":
                 operations.Insert(0, new CreateTableOperation { Name = "owner" });
@@ -89,10 +116,22 @@ public sealed class SqliteTableRetirementContractTests
                 operations.Add(new CreateTableOperation { Name = "owner" });
                 break;
             case "owner-column":
-                operations.Insert(1, new DropColumnOperation { Table = "owner", Name = "retained" });
+                operations.Insert(1,
+                    new DropColumnOperation
+                    {
+                        Table = "owner",
+                        Name = "retained",
+                    });
+
                 break;
             case "independent-column":
-                operations.Insert(1, new AddColumnOperation { Table = "other", Name = "added" });
+                operations.Insert(1,
+                    new AddColumnOperation
+                    {
+                        Table = "other",
+                        Name = "added",
+                    });
+
                 break;
             case "annotated-fk":
                 foreignKey.AddAnnotation("Unknown", true);
@@ -165,10 +204,12 @@ public sealed class SqliteTableRetirementContractTests
     {
         // Arrange
         var parentKey = new SafeMigrationOperation(
-            new DropForeignKeyIntent("fk_parent_child", "parent"), SafeMigrationPolicy.ThrowIfDifferent);
+            new DropForeignKeyIntent("fk_parent_child", "parent"),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         var childKey = new SafeMigrationOperation(
-            new DropForeignKeyIntent("fk_child_parent", "child"), SafeMigrationPolicy.ThrowIfDifferent);
+            new DropForeignKeyIntent("fk_child_parent", "child"),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         MigrationOperation[] operations =
         [
@@ -185,7 +226,10 @@ public sealed class SqliteTableRetirementContractTests
         });
 
         var firstSnapshot = new SqliteCatalogSnapshot("3.46.1", true, false, tables, []);
-        var changedSnapshot = new SqliteCatalogSnapshot("3.46.1", true, false, tables,
+        var changedSnapshot = new SqliteCatalogSnapshot("3.46.1",
+            true,
+            false,
+            tables,
             [new SqliteSchemaObjectSnapshot("view", "unmanaged_view", "unmanaged_view", "SELECT id FROM child")]);
 
         var contract = SqliteRebuildArtifactContract.FromModel(null, operations);
@@ -233,7 +277,10 @@ public sealed class SqliteTableRetirementContractTests
         });
 
         var original = new SqliteCatalogSnapshot("3.46.1", true, false, tables, []);
-        var changed = new SqliteCatalogSnapshot("3.46.1", true, false, tables,
+        var changed = new SqliteCatalogSnapshot("3.46.1",
+            true,
+            false,
+            tables,
             [new SqliteSchemaObjectSnapshot("view", "new_view", "new_view", "SELECT id FROM child")]);
 
         // Act
@@ -244,7 +291,10 @@ public sealed class SqliteTableRetirementContractTests
 
         // Assert
         Assert.Null(originalCode);
-        Assert.Equal("synthetic-catalog-read-failure", Assert.IsType<InvalidOperationException>(failure).Message);
+        Assert.Equal("synthetic-catalog-read-failure",
+            Assert.IsType<InvalidOperationException>(failure)
+                .Message);
+
         Assert.Equal("table_rebuild_view", retryCode);
         Assert.Equal(3, tables.ValuesReadCount);
     }
@@ -268,12 +318,37 @@ public sealed class SqliteTableRetirementContractTests
         $"CREATE TABLE {owner} (id INTEGER PRIMARY KEY, principal_id INTEGER REFERENCES {principal}(id))",
         new Dictionary<string, SqliteColumnSnapshot>(SqliteIdentifierComparer.Instance)
         {
-            ["id"] = new(0, "id", "INTEGER", false, null, 1, 0, null, null, false, false),
+            ["id"] = new(0,
+                "id",
+                "INTEGER",
+                false,
+                null,
+                1,
+                0,
+                null,
+                null,
+                false,
+                false),
         },
         [],
-        [new SqliteForeignKeySnapshot(0, $"fk_{owner}_{principal}", principal,
-            ["principal_id"], ["id"], ReferentialAction.NoAction, ReferentialAction.NoAction, "NONE")],
-        [], ["id"], [], null, [], false, false, false);
+        [
+            new SqliteForeignKeySnapshot(0,
+                $"fk_{owner}_{principal}",
+                principal,
+                ["principal_id"],
+                ["id"],
+                ReferentialAction.NoAction,
+                ReferentialAction.NoAction,
+                "NONE"),
+        ],
+        [],
+        ["id"],
+        [],
+        null,
+        [],
+        false,
+        false,
+        false);
 
     /// <summary>Counts full-table catalog access independently of machine speed or allocation.</summary>
     private sealed class CountingTables : IReadOnlyDictionary<string, SqliteTableSnapshot>
@@ -311,7 +386,9 @@ public sealed class SqliteTableRetirementContractTests
 
         public int Count => _tables.Count;
 
-        public SqliteTableSnapshot this[string key] => _tables[key];
+        public SqliteTableSnapshot this[
+            string key
+        ] => _tables[key];
 
         public bool ContainsKey(
             string key
@@ -324,6 +401,6 @@ public sealed class SqliteTableRetirementContractTests
 
         public IEnumerator<KeyValuePair<string, SqliteTableSnapshot>> GetEnumerator() => _tables.GetEnumerator();
 
-        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }

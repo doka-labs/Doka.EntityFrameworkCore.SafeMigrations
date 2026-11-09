@@ -117,8 +117,7 @@ public sealed class SqlServerGeneratedInitialMigration : Migration
     /// <inheritdoc />
     protected override void Down(
         MigrationBuilder migrationBuilder
-    )
-        => migrationBuilder.DropTableIfExists("generated_upgrade_nodes");
+    ) => migrationBuilder.DropTableIfExists("generated_upgrade_nodes");
 }
 
 /// <summary>Adds a generated ancestor flag, four independently parsed CHECKs, and its composite index.</summary>

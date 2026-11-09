@@ -137,14 +137,12 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
         /// <inheritdoc />
         protected override void OnConfiguring(
             DbContextOptionsBuilder optionsBuilder
-        ) =>
-            ConfigureConstraintShapeOptions(optionsBuilder);
+        ) => ConfigureConstraintShapeOptions(optionsBuilder);
 
         /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
-        ) =>
-            ConfigureConstraintShapeModel(modelBuilder, SafeMigrationOperationKind.EnsureUniqueConstraint);
+        ) => ConfigureConstraintShapeModel(modelBuilder, SafeMigrationOperationKind.EnsureUniqueConstraint);
     }
 
     /// <summary>Provides the fixed CHECK rebuild contract.</summary>
@@ -162,14 +160,12 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
         /// <inheritdoc />
         protected override void OnConfiguring(
             DbContextOptionsBuilder optionsBuilder
-        ) =>
-            ConfigureConstraintShapeOptions(optionsBuilder);
+        ) => ConfigureConstraintShapeOptions(optionsBuilder);
 
         /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
-        ) =>
-            ConfigureConstraintShapeModel(modelBuilder, SafeMigrationOperationKind.EnsureCheckConstraint);
+        ) => ConfigureConstraintShapeModel(modelBuilder, SafeMigrationOperationKind.EnsureCheckConstraint);
     }
 
     /// <summary>Provides the fixed FK rebuild contract.</summary>
@@ -187,14 +183,12 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
         /// <inheritdoc />
         protected override void OnConfiguring(
             DbContextOptionsBuilder optionsBuilder
-        ) =>
-            ConfigureConstraintShapeOptions(optionsBuilder);
+        ) => ConfigureConstraintShapeOptions(optionsBuilder);
 
         /// <inheritdoc />
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
-        ) =>
-            ConfigureConstraintShapeModel(modelBuilder, SafeMigrationOperationKind.EnsureForeignKey);
+        ) => ConfigureConstraintShapeModel(modelBuilder, SafeMigrationOperationKind.EnsureForeignKey);
     }
 
     /// <summary>Keeps the target rebuild model aligned with an explicit NULL-default ADD.</summary>

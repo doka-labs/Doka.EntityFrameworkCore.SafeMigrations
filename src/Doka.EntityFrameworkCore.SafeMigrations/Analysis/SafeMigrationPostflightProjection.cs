@@ -322,14 +322,13 @@ internal sealed partial class SafeMigrationPostflightProjection
     private static string PhysicalResourceName(
         string authoredName,
         SafeMigrationProviderAnalysis? analysis
-    ) =>
-        analysis is
-        {
-            ObservedState: SafeMigrationObservedState.Matching,
-            MatchedObjectName: { Length: > 0 } physicalName,
-        }
-            ? physicalName
-            : authoredName;
+    ) => analysis is
+    {
+        ObservedState: SafeMigrationObservedState.Matching,
+        MatchedObjectName: { Length: > 0 } physicalName,
+    }
+        ? physicalName
+        : authoredName;
 
     private static string ModelManagedKeySet(
         ModelManagedDataIntent intent,

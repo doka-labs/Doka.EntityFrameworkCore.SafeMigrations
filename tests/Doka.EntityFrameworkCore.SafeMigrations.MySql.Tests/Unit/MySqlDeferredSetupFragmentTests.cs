@@ -853,20 +853,17 @@ public sealed class MySqlDeferredSetupFragmentTests
     /// <summary>Creates raw deferred pieces without changing the materialized reference SQL.</summary>
     private static MySqlSafeMigrationSetupFragment SplitRaw(
         string sql
-    )
-        => MySqlSafeMigrationSetupFragment.Compose(sql[..(sql.Length / 2)], sql[(sql.Length / 2)..]);
+    ) => MySqlSafeMigrationSetupFragment.Compose(sql[..(sql.Length / 2)], sql[(sql.Length / 2)..]);
 
     /// <summary>Uses the production cleanup shape for the existing materialized comparison path.</summary>
     private static IReadOnlyList<string> Compact(
         string[] setup,
         string body
-    )
-        => MySqlSafeMigrationSetupCommandCompactor.Compact(setup, body, ["DO 0;", "DO 0;"], setup.Length, 0);
+    ) => MySqlSafeMigrationSetupCommandCompactor.Compact(setup, body, ["DO 0;", "DO 0;"], setup.Length, 0);
 
     /// <summary>Uses the identical production cleanup shape for the deferred materialization path.</summary>
     private static IReadOnlyList<string> Compact(
         MySqlSafeMigrationSetupFragment[] setup,
         string body
-    )
-        => MySqlSafeMigrationSetupCommandCompactor.Compact(setup, body, ["DO 0;", "DO 0;"], setup.Length, 0);
+    ) => MySqlSafeMigrationSetupCommandCompactor.Compact(setup, body, ["DO 0;", "DO 0;"], setup.Length, 0);
 }

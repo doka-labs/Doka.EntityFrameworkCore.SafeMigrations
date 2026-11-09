@@ -189,15 +189,14 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     private static Task SeedSparseDropConcurrencyAsync(
         string connectionString,
         CancellationToken cancellationToken
-    )
-        => ExecuteSqlAsync(
-            connectionString,
-            "CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, source int NULL, "
-            + "unrelated int NULL, result int GENERATED ALWAYS AS (source + 1) VIRTUAL); "
-            + "INSERT INTO generated_sparse_drop (id, source, unrelated) VALUES (1, 3, 11), (2, 7, 13); "
-            + "CREATE TABLE generated_drop_checkpoint (id int NOT NULL PRIMARY KEY, reached int NOT NULL); "
-            + "INSERT INTO generated_drop_checkpoint VALUES (1, 0);",
-            cancellationToken: cancellationToken);
+    ) => ExecuteSqlAsync(
+        connectionString,
+        "CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, source int NULL, "
+        + "unrelated int NULL, result int GENERATED ALWAYS AS (source + 1) VIRTUAL); "
+        + "INSERT INTO generated_sparse_drop (id, source, unrelated) VALUES (1, 3, 11), (2, 7, 13); "
+        + "CREATE TABLE generated_drop_checkpoint (id int NOT NULL PRIMARY KEY, reached int NOT NULL); "
+        + "INSERT INTO generated_drop_checkpoint VALUES (1, 0);",
+        cancellationToken: cancellationToken);
 
     /// <summary>Describes a committed dependency change without accepting arbitrary fixture SQL.</summary>
     private static string SparseDropConcurrentMutation(
@@ -225,12 +224,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     private static Task<int> SparseDropRetainedOriginalRowsAsync(
         string connectionString,
         CancellationToken cancellationToken
-    )
-        => ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM generated_sparse_drop "
-            + "WHERE (id = 1 AND source = 3 AND unrelated = 11) OR (id = 2 AND source = 7 AND unrelated = 13);",
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connectionString,
+        "SELECT COUNT(*) FROM generated_sparse_drop "
+        + "WHERE (id = 1 AND source = 3 AND unrelated = 11) OR (id = 2 AND source = 7 AND unrelated = 13);",
+        cancellationToken: cancellationToken);
 
     /// <summary>Waits for a database-visible marker rather than guessing command duration.</summary>
     private static async Task WaitForSparseDropCheckpointAsync(

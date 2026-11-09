@@ -280,7 +280,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             foreignKeys:
             [
                 ForeignKey()
-                    .Definition
+                    .Definition,
             ]);
 
         Apply(projection, new EnsureTableIntent(parent, SafeMigrationTableMode.StrictDefinition));
@@ -2146,7 +2146,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             foreignKeys:
             [
                 ForeignKey()
-                    .Definition
+                    .Definition,
             ]);
 
         Apply(projection, new EnsureTableIntent(parent, SafeMigrationTableMode.StrictDefinition));

@@ -734,7 +734,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
                 [
                     .. RoleTable()
                         .Columns,
-                    extra
+                    extra,
                 ],
             checkConstraints: checks);
     }

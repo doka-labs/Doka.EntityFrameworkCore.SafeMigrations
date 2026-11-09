@@ -199,7 +199,7 @@ public sealed class SafeMigrationDiagnosticTruncationTests
     {
         // Arrange
         var operation = new SafeMigrationOperation(
-            new DropTableIntent("Items", null),
+            new DropTableIntent("Items"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var analysis = new SafeMigrationProviderAnalysis(
@@ -229,7 +229,7 @@ public sealed class SafeMigrationDiagnosticTruncationTests
     {
         // Arrange
         var operation = new SafeMigrationOperation(
-            new DropTableIntent("Items", null),
+            new DropTableIntent("Items"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var analysis = new SafeMigrationProviderAnalysis(
@@ -253,7 +253,7 @@ public sealed class SafeMigrationDiagnosticTruncationTests
     {
         // Arrange
         var operation = new SafeMigrationOperation(
-            new DropTableIntent("Items", null),
+            new DropTableIntent("Items"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var native = new InvalidOperationException("native cause");
@@ -275,7 +275,7 @@ public sealed class SafeMigrationDiagnosticTruncationTests
     {
         // Arrange
         var operation = new SafeMigrationOperation(
-            new DropTableIntent("Items", null),
+            new DropTableIntent("Items"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act

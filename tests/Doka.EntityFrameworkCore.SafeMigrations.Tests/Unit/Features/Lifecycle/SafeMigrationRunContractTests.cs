@@ -578,8 +578,8 @@ public sealed partial class SafeMigrationRunContractTests
             ]);
     }
 
-    private static string ModelFingerprint() =>
-        $"safe-relational-model:v1:npgsql_postgresql:sha256:{new string('a', 64)}";
+    private static string ModelFingerprint()
+        => $"safe-relational-model:v1:npgsql_postgresql:sha256:{new string('a', 64)}";
 
     private static JsonDocument LoadReportSchema() => LoadReportSchema(
         SafeMigrationRunReport.CurrentSchemaVersion);

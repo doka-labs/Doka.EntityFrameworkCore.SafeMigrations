@@ -575,16 +575,14 @@ public sealed class SqlServerProjectedKeyTests
 
     private static SafeMigrationIntent CreateKeyIntent(
         bool primaryKey
-    )
-        => primaryKey
-            ? new EnsurePrimaryKeyIntent(new ExpectedPrimaryKeyDefinition("PK_keys", "keys", ["Code"]))
-            : new EnsureUniqueConstraintIntent(
-                new ExpectedUniqueConstraintDefinition("UQ_keys_Code", "keys", ["Code"]));
+    ) => primaryKey
+        ? new EnsurePrimaryKeyIntent(new ExpectedPrimaryKeyDefinition("PK_keys", "keys", ["Code"]))
+        : new EnsureUniqueConstraintIntent(
+            new ExpectedUniqueConstraintDefinition("UQ_keys_Code", "keys", ["Code"]));
 
     private static SafeMigrationProviderAnalysis Analysis(
         SafeMigrationObservedState state
-    )
-        => new(state, SafeMigrationRepairCapability.None, state == SafeMigrationObservedState.Matching, "test_state");
+    ) => new(state, SafeMigrationRepairCapability.None, state == SafeMigrationObservedState.Matching, "test_state");
 
     private sealed class ProjectedSource(
         ExpectedColumnDefinition definition,

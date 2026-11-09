@@ -101,24 +101,24 @@ public sealed partial class SafeMigrationRunContractTests
     }
 
     /// <summary>Gets the stable operation kinds wire mappings as serializable discovery arguments.</summary>
-    public static IEnumerable<object[]> OperationKindCodes =>
-        s_operationKinds.Select(static value => new object[] { value.Value, value.Code });
+    public static IEnumerable<object[]> OperationKindCodes
+        => s_operationKinds.Select(static value => new object[] { value.Value, value.Code });
 
     /// <summary>Gets the stable states wire mappings as serializable discovery arguments.</summary>
-    public static IEnumerable<object[]> ObservedStateCodes =>
-        s_states.Select(static value => new object[] { value.Value, value.Code });
+    public static IEnumerable<object[]> ObservedStateCodes
+        => s_states.Select(static value => new object[] { value.Value, value.Code });
 
     /// <summary>Gets the stable actions wire mappings as serializable discovery arguments.</summary>
-    public static IEnumerable<object[]> ActionCodes =>
-        s_actions.Select(static value => new object[] { value.Value, value.Code });
+    public static IEnumerable<object[]> ActionCodes
+        => s_actions.Select(static value => new object[] { value.Value, value.Code });
 
     /// <summary>Gets the stable operational impacts wire mappings as serializable discovery arguments.</summary>
-    public static IEnumerable<object[]> OperationalImpactCodes =>
-        s_operationalImpacts.Select(static value => new object[] { value.Value, value.Code });
+    public static IEnumerable<object[]> OperationalImpactCodes
+        => s_operationalImpacts.Select(static value => new object[] { value.Value, value.Code });
 
     /// <summary>Gets the stable object kinds wire mappings as serializable discovery arguments.</summary>
-    public static IEnumerable<object[]> DatabaseObjectKindCodes =>
-        s_objectKinds.Select(static value => new object[] { value.Value, value.Code });
+    public static IEnumerable<object[]> DatabaseObjectKindCodes
+        => s_objectKinds.Select(static value => new object[] { value.Value, value.Code });
 
     /// <summary>Requires the wire fixtures to cover every value in each closed public enum family.</summary>
     [Fact]

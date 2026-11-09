@@ -363,44 +363,41 @@ public sealed class PostgreSqlModelManagedDataSideEffectsIntegrationTests : Post
     private static void AppendSideEffectEnsure(
         MigrationBuilder builder,
         string table
-    )
-        => builder.EnsureModelManagedDataFromModel(
-            table,
-            ["id"],
-            ["integer"],
-            ["id", "managed_value"],
-            ["integer", "character varying(64)"],
-            new object?[,] { { 1, "expected" } });
+    ) => builder.EnsureModelManagedDataFromModel(
+        table,
+        ["id"],
+        ["integer"],
+        ["id", "managed_value"],
+        ["integer", "character varying(64)"],
+        new object?[,] { { 1, "expected" } });
 
     private static void AppendSideEffectChildDelete(
         MigrationBuilder builder,
         int id
-    )
-        => builder.DeleteModelManagedDataFromModel(
-            "side_effect_children",
-            ["id"],
-            ["integer"],
-            new object?[,] { { id } },
-            ["id", "parent_id"],
-            ["integer", "integer"],
-            new object?[,] { { id, 1 } });
+    ) => builder.DeleteModelManagedDataFromModel(
+        "side_effect_children",
+        ["id"],
+        ["integer"],
+        new object?[,] { { id } },
+        ["id", "parent_id"],
+        ["integer", "integer"],
+        new object?[,] { { id, 1 } });
 
     private static void AppendSideEffectParentDelete(
         MigrationBuilder builder
-    )
-        => builder.DeleteModelManagedDataFromModel(
-            "side_effect_parents",
-            ["id"],
-            ["integer"],
-            new object?[,] { { 1 } },
-            ["id"],
-            ["integer"],
-            new object?[,] { { 1 } },
-            foreignKeys:
-            [
-                new ExpectedModelManagedDataForeignKeyDefinition(
-                    "side_effect_children",
-                    ["parent_id"],
-                    ["id"]),
-            ]);
+    ) => builder.DeleteModelManagedDataFromModel(
+        "side_effect_parents",
+        ["id"],
+        ["integer"],
+        new object?[,] { { 1 } },
+        ["id"],
+        ["integer"],
+        new object?[,] { { 1 } },
+        foreignKeys:
+        [
+            new ExpectedModelManagedDataForeignKeyDefinition(
+                "side_effect_children",
+                ["parent_id"],
+                ["id"]),
+        ]);
 }

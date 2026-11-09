@@ -118,8 +118,8 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
 
     /// <summary>Renders the state expression for runtime execution.</summary>
     /// <returns>The rendered expression.</returns>
-    public string RenderStateExpression() =>
-        RenderTransitionExpressions(StateExpression, dataBlocked: null, transitionEligible: null);
+    public string RenderStateExpression()
+        => RenderTransitionExpressions(StateExpression, dataBlocked: null, transitionEligible: null);
 
     /// <summary>Renders the state expression with an already resolved analysis probe.</summary>
     /// <param name="dataBlocked">Whether the grouped analysis probe found blocking data.</param>
@@ -161,8 +161,8 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
 
     /// <summary>Renders the repair precondition for runtime execution.</summary>
     /// <returns>The rendered expression.</returns>
-    public string RenderRepairPrecondition() =>
-        RenderTransitionExpressions(RepairPrecondition, dataBlocked: null, transitionEligible: null);
+    public string RenderRepairPrecondition()
+        => RenderTransitionExpressions(RepairPrecondition, dataBlocked: null, transitionEligible: null);
 
     /// <summary>Renders the repair precondition with an already resolved analysis probe.</summary>
     /// <param name="dataBlocked">Whether the grouped analysis probe found blocking data.</param>

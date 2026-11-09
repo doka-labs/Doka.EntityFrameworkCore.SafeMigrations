@@ -601,13 +601,11 @@ public sealed class SqlServerStackSafeExpressionTests
 
     private static SqlServerSafeMigrationSqlExpressionRenderer Renderer(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private static SqlServerSafeMigrationCatalogSqlBuilder Catalog(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private static string Repeat(
         string text,

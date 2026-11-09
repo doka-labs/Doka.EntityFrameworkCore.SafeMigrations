@@ -12,8 +12,8 @@ public class SqlServerGenerationBenchmarks : IDisposable
     [Params(1, 100, 1000)]
     public int OperationCount { get; set; }
 
-    private SqlServerGenerationContext Context =>
-        _context ?? throw new InvalidOperationException("Setup has not completed.");
+    private SqlServerGenerationContext Context
+        => _context ?? throw new InvalidOperationException("Setup has not completed.");
 
     /// <summary>Releases the context owned by this benchmark instance.</summary>
     public void Dispose()
@@ -120,8 +120,8 @@ public class SqlServerRepairBenchmarks : IDisposable
     private IMigrationsSqlGenerator? _generator;
     private IReadOnlyList<MigrationOperation> _operations = [];
 
-    private SqlServerGenerationContext Context =>
-        _context ?? throw new InvalidOperationException("Setup has not completed.");
+    private SqlServerGenerationContext Context
+        => _context ?? throw new InvalidOperationException("Setup has not completed.");
 
     /// <summary>Releases the context owned by this benchmark instance.</summary>
     public void Dispose()
@@ -195,8 +195,8 @@ public class SqlServerModelManagedDataBenchmarks : IDisposable
     private IMigrationsSqlGenerator? _generator;
     private IReadOnlyList<MigrationOperation> _operations = [];
 
-    private SqlServerGenerationContext Context =>
-        _context ?? throw new InvalidOperationException("Setup has not completed.");
+    private SqlServerGenerationContext Context
+        => _context ?? throw new InvalidOperationException("Setup has not completed.");
 
     /// <summary>Releases the context owned by this benchmark instance.</summary>
     public void Dispose()

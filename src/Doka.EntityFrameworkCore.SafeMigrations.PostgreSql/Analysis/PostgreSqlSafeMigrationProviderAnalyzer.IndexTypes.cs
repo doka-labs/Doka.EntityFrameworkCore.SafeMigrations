@@ -437,19 +437,17 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     /// <summary>Keys a native schema-relation-name absence proof inside the existing input protocol.</summary>
     private IndexInputRequest GeneratedIndexAbsenceIdentity(
         ExpectedIndexDefinition definition
-    )
-        => IndexInputIdentity(0, definition, null, null) with
-        {
-            OwnerSchema = PostgreSqlSafeMigrationSchemaIdentity.Normalize(definition.Schema, _currentSchema),
-            AbsentRelationName = definition.Name,
-        };
+    ) => IndexInputIdentity(0, definition, null, null) with
+    {
+        OwnerSchema = PostgreSqlSafeMigrationSchemaIdentity.Normalize(definition.Schema, _currentSchema),
+        AbsentRelationName = definition.Name,
+    };
 
     /// <summary>Rejects another table's syntactic qualifier without inferring a same-named local member.</summary>
     private static bool IndexMemberTableMatches(
         ExpectedIndexDefinition definition,
         PostgreSqlIndexPhysicalMember member
-    )
-        => member.PartCount == 1 || (member.PartCount is 2 or 3 && member.Table == definition.Table);
+    ) => member.PartCount == 1 || (member.PartCount is 2 or 3 && member.Table == definition.Table);
 
     /// <summary>
     /// Preserves independent Matching and stronger blockers while retaining accepted ordered replacements.
@@ -457,12 +455,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     private bool NeedsIndexInputCapture(
         SafeMigrationProviderAnalysis result,
         int ordinal
-    )
-        => result.ObservedState is SafeMigrationObservedState.Missing
-                or SafeMigrationObservedState.PrerequisiteMissing
-                or SafeMigrationObservedState.Different
-            || result.Code == "index_input_operator_class"
-            || _indexInputOrderedReplacementOrdinals?.Contains(ordinal) == true;
+    ) => result.ObservedState is SafeMigrationObservedState.Missing
+            or SafeMigrationObservedState.PrerequisiteMissing
+            or SafeMigrationObservedState.Different
+        || result.Code == "index_input_operator_class"
+        || _indexInputOrderedReplacementOrdinals?.Contains(ordinal) == true;
 
     /// <summary>Captures Matching inputs only after an earlier relevant typed drop.</summary>
     private void SelectOrderedIndexInputRequests(
@@ -683,16 +680,15 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     /// <summary>Distinguishes a disproved native input from incomplete binding evidence.</summary>
     private static SafeMigrationProviderAnalysis IndexInputRejected(
         bool unsupported
-    )
-        => new(
-            unsupported
-                ? SafeMigrationObservedState.Unsupported
-                : SafeMigrationObservedState.PrerequisiteMissing,
-            SafeMigrationRepairCapability.None,
-            false,
-            unsupported
-                ? "index_input_operator_class"
-                : "index_input_binding_unproven");
+    ) => new(
+        unsupported
+            ? SafeMigrationObservedState.Unsupported
+            : SafeMigrationObservedState.PrerequisiteMissing,
+        SafeMigrationRepairCapability.None,
+        false,
+        unsupported
+            ? "index_input_operator_class"
+            : "index_input_binding_unproven");
 
     /// <summary>An earlier typed declaration, never permission to apply or infer a physical column.</summary>
     private readonly record struct ProviderIndexColumnProposal(

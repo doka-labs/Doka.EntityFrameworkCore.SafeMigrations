@@ -205,16 +205,14 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
     /// <returns>The original fragment with a statement-local acquisition assignment.</returns>
     internal static string BuildAcquiredNativeSqlModeSnapshot(
         string snapshot
-    ) =>
-        BindCertifiedNativeSqlModeStatement(snapshot, NativeSqlModeSnapshot, AcquiredNativeSqlModeSnapshot);
+    ) => BindCertifiedNativeSqlModeStatement(snapshot, NativeSqlModeSnapshot, AcquiredNativeSqlModeSnapshot);
 
     /// <summary>Leaves current mode unchanged when rejection or interruption prevented native acquisition.</summary>
     /// <param name="restore">The previously certified native restoration fragment.</param>
     /// <returns>The conditional restoration with its original executable-comment and transport boundaries.</returns>
     internal static string BuildConditionalNativeSqlModeRestore(
         string restore
-    ) =>
-        BindCertifiedNativeSqlModeStatement(restore, NativeSqlModeRestore, ConditionalNativeSqlModeRestore);
+    ) => BindCertifiedNativeSqlModeStatement(restore, NativeSqlModeRestore, ConditionalNativeSqlModeRestore);
 
     /// <summary>Binds one exact certified statement without rewriting arbitrary provider SQL.</summary>
     /// <param name="source">The original transport fragment, including surrounding whitespace.</param>

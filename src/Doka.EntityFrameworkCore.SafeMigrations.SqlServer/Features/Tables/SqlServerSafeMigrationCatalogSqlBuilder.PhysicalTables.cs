@@ -15,11 +15,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     internal string BuildPhysicalTableSupportExpression(
         string table,
         string? schema
-    )
-        => Bit(
-            "NOT EXISTS (SELECT 1 FROM sys.tables physical "
-            + $"WHERE physical.object_id = {TableId(table, schema)} "
-            + $"AND ({UnsupportedPhysicalTablePredicate}))");
+    ) => Bit(
+        "NOT EXISTS (SELECT 1 FROM sys.tables physical "
+        + $"WHERE physical.object_id = {TableId(table, schema)} "
+        + $"AND ({UnsupportedPhysicalTablePredicate}))");
 
     private string? BuildPhysicalTableSupportExpression(
         SafeMigrationIntent intent

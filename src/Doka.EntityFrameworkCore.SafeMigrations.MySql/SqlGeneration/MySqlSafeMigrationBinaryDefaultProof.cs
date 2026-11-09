@@ -19,8 +19,7 @@ internal sealed record MySqlSafeMigrationBinaryDefaultProof(
     /// <returns>A provider-owned variable that never includes an authored identifier.</returns>
     internal static string Variable(
         int ordinal
-    ) =>
-        "@doka_sm_binary_default_" + ordinal.ToString(CultureInfo.InvariantCulture);
+    ) => "@doka_sm_binary_default_" + ordinal.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>Builds one guarded prepared SELECT for all native literal defaults of an operation.</summary>
     /// <param name="proofs">The operation's exact immutable default queries.</param>

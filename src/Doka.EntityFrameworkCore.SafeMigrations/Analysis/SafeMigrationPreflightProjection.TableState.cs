@@ -6,8 +6,8 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         private readonly List<string> _columnOrder;
         private readonly string? _comment;
-        private readonly IReadOnlyList<SafeMigrationProviderAnnotation> _providerAnnotations;
         private readonly ISafeMigrationProviderObjectIdentityNormalizer? _objectIdentityNormalizer;
+        private readonly IReadOnlyList<SafeMigrationProviderAnnotation> _providerAnnotations;
 
         public ProjectedTable(
             ExpectedTableDefinition definition,
@@ -60,19 +60,18 @@ internal sealed partial class SafeMigrationPreflightProjection
             DataMutationVersion = dataMutationVersion;
         }
 
-        public ExpectedTableDefinition Definition =>
-            new(
-                Table,
-                _columnOrder.Select(name => Columns[name]),
-                Schema,
-                _comment,
-                PrimaryKey,
-                UniqueConstraints.Values,
-                CheckConstraints.Values,
-                ForeignKeys.Values)
-            {
-                ProviderAnnotations = _providerAnnotations,
-            };
+        public ExpectedTableDefinition Definition => new(
+            Table,
+            _columnOrder.Select(name => Columns[name]),
+            Schema,
+            _comment,
+            PrimaryKey,
+            UniqueConstraints.Values,
+            CheckConstraints.Values,
+            ForeignKeys.Values)
+        {
+            ProviderAnnotations = _providerAnnotations,
+        };
 
         public Dictionary<string, ExpectedColumnDefinition> Columns { get; }
 
@@ -99,8 +98,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         IEnumerable<ExpectedColumnDefinition> ISafeMigrationProjectedAlterTable.Columns => Columns.Values;
 
-        IEnumerable<ExpectedUniqueConstraintDefinition> ISafeMigrationProjectedAlterTable.UniqueConstraints =>
-            UniqueConstraints.Values;
+        IEnumerable<ExpectedUniqueConstraintDefinition> ISafeMigrationProjectedAlterTable.UniqueConstraints
+            => UniqueConstraints.Values;
 
         IEnumerable<ExpectedIndexDefinition> ISafeMigrationProjectedAlterTable.Indexes => Indexes.Values;
 

@@ -195,6 +195,6 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
     /// <summary>Rejects destination protocol faults without exposing identifiers or data.</summary>
     /// <returns>The low-cardinality ownership error.</returns>
-    private static InvalidOperationException InvalidRenameTargetResult() =>
-        new("The PostgreSQL rename destination query returned malformed or incomplete evidence.");
+    private static InvalidOperationException InvalidRenameTargetResult()
+        => new("The PostgreSQL rename destination query returned malformed or incomplete evidence.");
 }

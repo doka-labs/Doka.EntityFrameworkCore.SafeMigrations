@@ -260,8 +260,7 @@ internal static class CancellationTokenContract
     /// <summary>Excludes compiler callback/base-call adapters, but not owned local functions.</summary>
     private static bool IsCompilerAdapter(
         MethodInfo method
-    ) =>
-        (method.Name.Contains(">b__", StringComparison.Ordinal)
+    ) => (method.Name.Contains(">b__", StringComparison.Ordinal)
             || method.Name.StartsWith("<>n__", StringComparison.Ordinal))
         && (method.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false)
             || method.DeclaringType!.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false));
@@ -320,8 +319,7 @@ internal static class CancellationTokenContract
     /// <summary>Retains the CLR delegate infrastructure while checking the authored Invoke contract.</summary>
     private static bool IsDelegateAdapter(
         MethodInfo method
-    ) =>
-        typeof(Delegate).IsAssignableFrom(method.DeclaringType)
+    ) => typeof(Delegate).IsAssignableFrom(method.DeclaringType)
         && method.Name is "BeginInvoke" or "EndInvoke"
         && (method.GetMethodImplementationFlags() & MethodImplAttributes.CodeTypeMask) == MethodImplAttributes.Runtime;
 

@@ -18,7 +18,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             return null;
         }
 
-        if (!newlyCreated && liveAnalysis.ObservedState == SafeMigrationObservedState.Matching)
+        if (!newlyCreated
+            && liveAnalysis.ObservedState == SafeMigrationObservedState.Matching)
         {
             // WHY: A complete fresh Matching probe already checked this exact
             // live engine; subsequent safe member changes do not change it.

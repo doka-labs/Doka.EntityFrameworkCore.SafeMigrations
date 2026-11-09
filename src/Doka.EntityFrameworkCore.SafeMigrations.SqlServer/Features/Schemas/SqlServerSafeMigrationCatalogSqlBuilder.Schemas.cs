@@ -35,13 +35,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
     private string SchemaExists(
         string schema
-    )
-        => $"EXISTS (SELECT 1 FROM sys.schemas s WHERE s.name = {Literal(schema)})";
+    ) => $"EXISTS (SELECT 1 FROM sys.schemas s WHERE s.name = {Literal(schema)})";
 
     private static bool IsReservedSchema(
         string schema
-    )
-        => schema
-            .TrimEnd(' ')
-            .ToUpperInvariant() is "DBO" or "GUEST" or "SYS" or "INFORMATION_SCHEMA";
+    ) => schema
+        .TrimEnd(' ')
+        .ToUpperInvariant() is "DBO" or "GUEST" or "SYS" or "INFORMATION_SCHEMA";
 }

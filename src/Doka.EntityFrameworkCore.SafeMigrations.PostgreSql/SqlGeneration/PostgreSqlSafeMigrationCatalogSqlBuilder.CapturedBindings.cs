@@ -465,32 +465,31 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <summary>Maps builtin identities; custom/domain mappings cannot borrow a canonical alias proof.</summary>
     private string? CapturedBuiltinTypeName(
         string type
-    )
-        => _typeMappingSource.FindMapping(type)
-                ?.StoreTypeNameBase switch
-            {
-                "boolean" or "bool" => "bool",
-                "smallint" or "int2" => "int2",
-                "integer" or "int" or "int4" => "int4",
-                "bigint" or "int8" => "int8",
-                "numeric" or "decimal" => "numeric",
-                "real" or "float4" => "float4",
-                "double precision" or "float8" => "float8",
-                "text" => "text",
-                "character varying" or "varchar" => "varchar",
-                "character" or "char" or "bpchar" => "bpchar",
-                "uuid" => "uuid",
-                "bytea" => "bytea",
-                "date" => "date",
-                "timestamp without time zone" or "timestamp" => "timestamp",
-                "timestamp with time zone" or "timestamptz" => "timestamptz",
-                "time without time zone" or "time" => "time",
-                "time with time zone" or "timetz" => "timetz",
-                "interval" => "interval",
-                "json" => "json",
-                "jsonb" => "jsonb",
-                _ => null,
-            };
+    ) => _typeMappingSource.FindMapping(type)
+            ?.StoreTypeNameBase switch
+        {
+            "boolean" or "bool" => "bool",
+            "smallint" or "int2" => "int2",
+            "integer" or "int" or "int4" => "int4",
+            "bigint" or "int8" => "int8",
+            "numeric" or "decimal" => "numeric",
+            "real" or "float4" => "float4",
+            "double precision" or "float8" => "float8",
+            "text" => "text",
+            "character varying" or "varchar" => "varchar",
+            "character" or "char" or "bpchar" => "bpchar",
+            "uuid" => "uuid",
+            "bytea" => "bytea",
+            "date" => "date",
+            "timestamp without time zone" or "timestamp" => "timestamp",
+            "timestamp with time zone" or "timestamptz" => "timestamptz",
+            "time without time zone" or "time" => "time",
+            "time with time zone" or "timetz" => "timetz",
+            "interval" => "interval",
+            "json" => "json",
+            "jsonb" => "jsonb",
+            _ => null,
+        };
 
     /// <summary>Resolves the bare original type without executing user typmod parsers through TO_REGTYPE.</summary>
     private string CapturedCastBinding(

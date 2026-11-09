@@ -441,8 +441,7 @@ public sealed class SqlServerForeignKeyWidthSqlTests
 
     private static SqlServerSafeMigrationCatalogSqlBuilder CreateCatalog(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private static string[] Names(
         int count

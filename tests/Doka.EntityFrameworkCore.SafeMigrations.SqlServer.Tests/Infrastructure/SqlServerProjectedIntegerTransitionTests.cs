@@ -446,54 +446,56 @@ public sealed class SqlServerProjectedIntegerTransitionTests
 
     private static SqlServerSafeMigrationProviderAnalyzer Analyzer(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private static SafeMigrationOperation Widening(
         bool tightens = false,
         string table = "items"
-    )
-        => new(
-            new AlterColumnIntent(
-                table,
-                new ExpectedColumnDefinition("Value", typeof(long), false, "bigint"),
-                new ExpectedColumnDefinition("Value", typeof(int), tightens, "int")),
-            SafeMigrationPolicy.RepairIfSafe);
+    ) => new(
+        new AlterColumnIntent(
+            table,
+            new ExpectedColumnDefinition("Value", typeof(long), false, "bigint"),
+            new ExpectedColumnDefinition("Value", typeof(int), tightens, "int")),
+        SafeMigrationPolicy.RepairIfSafe);
 
     private static SafeMigrationOperation Drop(
         string kind,
         string name
-    )
-        => new(
-            kind switch
-            {
-                "index" => new DropIndexIntent(name, "items"),
-                "primary" => new DropPrimaryKeyIntent(name, "items"),
-                "unique" => new DropUniqueConstraintIntent(name, "items"),
-                "check" => new DropCheckConstraintIntent(name, "items"),
-                "foreign" => new DropForeignKeyIntent(name, "items"),
-                _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-            },
-            SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(
+        kind switch
+        {
+            "index" => new DropIndexIntent(name, "items"),
+            "primary" => new DropPrimaryKeyIntent(name, "items"),
+            "unique" => new DropUniqueConstraintIntent(name, "items"),
+            "check" => new DropCheckConstraintIntent(name, "items"),
+            "foreign" => new DropForeignKeyIntent(name, "items"),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        },
+        SafeMigrationPolicy.ThrowIfDifferent);
 
-    private static SafeMigrationProviderAnalysis SafeSource()
-        => new(SafeMigrationObservedState.Different, SafeMigrationRepairCapability.Safe, false, "candidate_safe");
+    private static SafeMigrationProviderAnalysis SafeSource() => new(SafeMigrationObservedState.Different,
+        SafeMigrationRepairCapability.Safe,
+        false,
+        "candidate_safe");
 
-    private static SafeMigrationProviderAnalysis Different()
-        => new(SafeMigrationObservedState.Different, SafeMigrationRepairCapability.None, false, "classified_different");
+    private static SafeMigrationProviderAnalysis Different() => new(SafeMigrationObservedState.Different,
+        SafeMigrationRepairCapability.None,
+        false,
+        "classified_different");
 
-    private static SafeMigrationProviderAnalysis Matching()
-        => new(SafeMigrationObservedState.Matching, SafeMigrationRepairCapability.None, true, "classified_matching");
+    private static SafeMigrationProviderAnalysis Matching() => new(SafeMigrationObservedState.Matching,
+        SafeMigrationRepairCapability.None,
+        true,
+        "classified_matching");
 
     private static SafeMigrationDecision Decision(
         SafeMigrationOperation operation,
         SafeMigrationProviderAnalysis analysis
-    )
-        => SafeMigrationDecisionPlanner.Plan(
-            operation.Intent.Kind,
-            analysis.ObservedState,
-            operation.Policy,
-            analysis.RepairCapability);
+    ) => SafeMigrationDecisionPlanner.Plan(
+        operation.Intent.Kind,
+        analysis.ObservedState,
+        operation.Policy,
+        analysis.RepairCapability);
 
     private sealed class EmptyColumns : ISafeMigrationProjectedColumnSource
     {

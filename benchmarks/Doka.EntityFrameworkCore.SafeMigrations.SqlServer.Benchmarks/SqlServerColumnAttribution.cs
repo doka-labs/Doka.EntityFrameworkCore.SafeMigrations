@@ -48,11 +48,11 @@ public partial class SqlServerColumnAttribution : IDisposable
 
     private AttributionContext Context => _context ?? throw new InvalidOperationException("Setup has not completed.");
 
-    private IMigrationsSqlGenerator Generator =>
-        _generator ?? throw new InvalidOperationException("Setup has not completed.");
+    private IMigrationsSqlGenerator Generator
+        => _generator ?? throw new InvalidOperationException("Setup has not completed.");
 
-    private ISafeMigrationProviderAnalyzer Analyzer =>
-        _analyzer ?? throw new InvalidOperationException("Setup has not completed.");
+    private ISafeMigrationProviderAnalyzer Analyzer
+        => _analyzer ?? throw new InvalidOperationException("Setup has not completed.");
 
     private Scenario ScenarioDefinition => _scenario ?? throw new InvalidOperationException("Setup has not completed.");
 

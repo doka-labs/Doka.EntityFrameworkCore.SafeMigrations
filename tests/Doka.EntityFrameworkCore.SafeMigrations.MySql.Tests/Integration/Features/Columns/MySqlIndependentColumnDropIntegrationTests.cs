@@ -749,13 +749,12 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
     /// <summary>Builds neutral populated rows valid under the original two-member primary key.</summary>
     private static string ExistingKeyFixture(
         string rows
-    )
-        => "CREATE TABLE `replacement_items` (`event_id` int NOT NULL, `legacy_value` varchar(20) NOT NULL, "
-            + "`tag_id` int NULL, PRIMARY KEY (`event_id`, `legacy_value`)) ENGINE=InnoDB "
-            + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `replacement_items` (`event_id`, `legacy_value`, `tag_id`) VALUES "
-            + rows
-            + ";";
+    ) => "CREATE TABLE `replacement_items` (`event_id` int NOT NULL, `legacy_value` varchar(20) NOT NULL, "
+        + "`tag_id` int NULL, PRIMARY KEY (`event_id`, `legacy_value`)) ENGINE=InnoDB "
+        + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
+        + "INSERT INTO `replacement_items` (`event_id`, `legacy_value`, `tag_id`) VALUES "
+        + rows
+        + ";";
 
     /// <summary>Declares the exact removal, surviving-column or generated-value transition, and new key.</summary>
     private List<MigrationOperation> ReplacementOperations(

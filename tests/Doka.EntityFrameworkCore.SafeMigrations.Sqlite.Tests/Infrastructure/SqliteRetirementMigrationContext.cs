@@ -51,44 +51,80 @@ internal sealed class SqliteRetirementMigrationContext : DbContext
         bool includeRetiring
     )
     {
-        modelBuilder.Entity("RetainedHost", entity =>
-        {
-            entity.ToTable("retained_host");
-            entity.Property<int>("id").HasColumnType("INTEGER").ValueGeneratedNever();
-            entity.Property<string>("marker").HasColumnType("TEXT").IsRequired();
-            entity.HasKey("id").HasName("pk_retained_host");
-            entity.HasIndex("marker").HasDatabaseName("ix_retained_host_marker");
-        });
+        modelBuilder.Entity("RetainedHost",
+            entity =>
+            {
+                entity.ToTable("retained_host");
+                entity
+                    .Property<int>("id")
+                    .HasColumnType("INTEGER")
+                    .ValueGeneratedNever();
+
+                entity
+                    .Property<string>("marker")
+                    .HasColumnType("TEXT")
+                    .IsRequired();
+
+                entity
+                    .HasKey("id")
+                    .HasName("pk_retained_host");
+
+                entity
+                    .HasIndex("marker")
+                    .HasDatabaseName("ix_retained_host_marker");
+            });
 
         if (!includeRetiring)
         {
             return;
         }
 
-        modelBuilder.Entity("RetiringParent", entity =>
-        {
-            entity.ToTable("retiring_parent");
-            entity.Property<int>("id").HasColumnType("INTEGER").ValueGeneratedNever();
-            entity.Property<int?>("child_id").HasColumnType("INTEGER");
-            entity.HasKey("id").HasName("pk_retiring_parent");
-        });
+        modelBuilder.Entity("RetiringParent",
+            entity =>
+            {
+                entity.ToTable("retiring_parent");
+                entity
+                    .Property<int>("id")
+                    .HasColumnType("INTEGER")
+                    .ValueGeneratedNever();
 
-        modelBuilder.Entity("RetiringChild", entity =>
-        {
-            entity.ToTable("retiring_child");
-            entity.Property<int>("id").HasColumnType("INTEGER").ValueGeneratedNever();
-            entity.Property<int?>("parent_id").HasColumnType("INTEGER");
-            entity.HasKey("id").HasName("pk_retiring_child");
-        });
+                entity
+                    .Property<int?>("child_id")
+                    .HasColumnType("INTEGER");
 
-        modelBuilder.Entity("RetiringParent")
+                entity
+                    .HasKey("id")
+                    .HasName("pk_retiring_parent");
+            });
+
+        modelBuilder.Entity("RetiringChild",
+            entity =>
+            {
+                entity.ToTable("retiring_child");
+                entity
+                    .Property<int>("id")
+                    .HasColumnType("INTEGER")
+                    .ValueGeneratedNever();
+
+                entity
+                    .Property<int?>("parent_id")
+                    .HasColumnType("INTEGER");
+
+                entity
+                    .HasKey("id")
+                    .HasName("pk_retiring_child");
+            });
+
+        modelBuilder
+            .Entity("RetiringParent")
             .HasOne("RetiringChild", null)
             .WithMany()
             .HasForeignKey("child_id")
             .HasConstraintName("fk_retiring_parent_child")
             .OnDelete(DeleteBehavior.NoAction);
 
-        modelBuilder.Entity("RetiringChild")
+        modelBuilder
+            .Entity("RetiringChild")
             .HasOne("RetiringParent", null)
             .WithMany()
             .HasForeignKey("parent_id")
@@ -110,11 +146,13 @@ public sealed class SqliteRetirementBaselineMigration : Migration
         MigrationBuilder migrationBuilder
     )
     {
-        migrationBuilder.CreateTableIfNotExists("retained_host", table => new
-        {
-            id = table.Column<int>(type: "INTEGER", nullable: false),
-            marker = table.Column<string>(type: "TEXT", nullable: false),
-        }, constraints: table => table.PrimaryKey("pk_retained_host", value => value.id));
+        migrationBuilder.CreateTableIfNotExists("retained_host",
+            table => new
+            {
+                id = table.Column<int>(type: "INTEGER", nullable: false),
+                marker = table.Column<string>(type: "TEXT", nullable: false),
+            },
+            constraints: table => table.PrimaryKey("pk_retained_host", value => value.id));
 
         migrationBuilder.CreateIndexIfNotExists("ix_retained_host_marker", "retained_host", ["marker"]);
     }
@@ -143,23 +181,33 @@ public sealed class SqliteRetirementCycleMigration : Migration
         MigrationBuilder migrationBuilder
     )
     {
-        migrationBuilder.CreateTableIfNotExists("retiring_parent", table => new
-        {
-            id = table.Column<int>(type: "INTEGER", nullable: false),
-            child_id = table.Column<int>(type: "INTEGER", nullable: true),
-        }, constraints: table => table.PrimaryKey("pk_retiring_parent", value => value.id));
+        migrationBuilder.CreateTableIfNotExists("retiring_parent",
+            table => new
+            {
+                id = table.Column<int>(type: "INTEGER", nullable: false),
+                child_id = table.Column<int>(type: "INTEGER", nullable: true),
+            },
+            constraints: table => table.PrimaryKey("pk_retiring_parent", value => value.id));
 
-        migrationBuilder.CreateTableIfNotExists("retiring_child", table => new
-        {
-            id = table.Column<int>(type: "INTEGER", nullable: false),
-            parent_id = table.Column<int>(type: "INTEGER", nullable: true),
-        }, constraints: table => table.PrimaryKey("pk_retiring_child", value => value.id));
+        migrationBuilder.CreateTableIfNotExists("retiring_child",
+            table => new
+            {
+                id = table.Column<int>(type: "INTEGER", nullable: false),
+                parent_id = table.Column<int>(type: "INTEGER", nullable: true),
+            },
+            constraints: table => table.PrimaryKey("pk_retiring_child", value => value.id));
 
-        migrationBuilder.AddForeignKeyIfNotExists("fk_retiring_parent_child", "retiring_parent", ["child_id"],
-            "retiring_child", ["id"]);
+        migrationBuilder.AddForeignKeyIfNotExists("fk_retiring_parent_child",
+            "retiring_parent",
+            ["child_id"],
+            "retiring_child",
+            ["id"]);
 
-        migrationBuilder.AddForeignKeyIfNotExists("fk_retiring_child_parent", "retiring_child", ["parent_id"],
-            "retiring_parent", ["id"]);
+        migrationBuilder.AddForeignKeyIfNotExists("fk_retiring_child_parent",
+            "retiring_child",
+            ["parent_id"],
+            "retiring_parent",
+            ["id"]);
     }
 
     /// <inheritdoc />

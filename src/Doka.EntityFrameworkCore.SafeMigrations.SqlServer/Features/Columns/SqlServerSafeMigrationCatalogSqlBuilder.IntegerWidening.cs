@@ -148,14 +148,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     internal SqlServerSafeMigrationRuntimePlan BuildIntegerWideningCapturePlan(
         AlterColumnIntent intent,
         int reservedBytes
-    )
-        => QualifyExpressionDependencyRead(
-            BuildIntegerWidening(intent, orderedCapture: true, reservedBytes) with
-            {
-                PhysicalTableSupportExpression = BuildPhysicalTableSupportExpression(intent),
-                DefaultValueSupportExpression = BuildDefaultValueSupportExpression(intent),
-                PrerequisiteExpression = BuildPrerequisiteExpression(intent),
-            });
+    ) => QualifyExpressionDependencyRead(
+        BuildIntegerWidening(intent, orderedCapture: true, reservedBytes) with
+        {
+            PhysicalTableSupportExpression = BuildPhysicalTableSupportExpression(intent),
+            DefaultValueSupportExpression = BuildDefaultValueSupportExpression(intent),
+            PrerequisiteExpression = BuildPrerequisiteExpression(intent),
+        });
 
     /// <summary>Gets the fixed scalar growth of an already eligible widening.</summary>
     internal int IntegerWideningGrowth(

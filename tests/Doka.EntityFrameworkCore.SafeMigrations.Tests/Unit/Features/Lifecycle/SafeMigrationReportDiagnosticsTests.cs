@@ -630,9 +630,8 @@ public sealed class SafeMigrationReportDiagnosticsTests
     private static IEnumerable<string?> ReadColumns(
         JsonElement assessment,
         string propertyName
-    ) =>
-        assessment
-            .GetProperty(propertyName)
-            .EnumerateArray()
-            .Select(static column => column.GetString());
+    ) => assessment
+        .GetProperty(propertyName)
+        .EnumerateArray()
+        .Select(static column => column.GetString());
 }

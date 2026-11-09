@@ -326,7 +326,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     )
     {
         /// <summary>Gets the smaller physical row identity used after full transition eligibility is proven.</summary>
-        public PostgreSqlDataProbeRowIdentity RowIdentity =>
-            new(Identity.Schema, Identity.Table, Identity.Column, Identity.TargetLength);
+        public PostgreSqlDataProbeRowIdentity RowIdentity
+            => new(Identity.Schema, Identity.Table, Identity.Column, Identity.TargetLength);
     }
 }

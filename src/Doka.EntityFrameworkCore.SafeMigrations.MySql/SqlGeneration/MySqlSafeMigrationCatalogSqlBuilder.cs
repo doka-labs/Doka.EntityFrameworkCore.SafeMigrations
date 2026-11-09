@@ -309,31 +309,29 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private static string? GetUnsupportedCapturedExpressionFeature(
         SafeMigrationIntent intent,
         bool isMariaDb
-    ) =>
-        intent switch
-        {
-            EnsureColumnIntent value => CapturedColumnFeature(value.Definition, isMariaDb),
-            AlterColumnIntent value => CapturedColumnFeature(value.Definition, isMariaDb)
-                ?? (value.OldDefinition is null
-                    ? null
-                    : CapturedColumnFeature(value.OldDefinition, isMariaDb)),
-            EnsureCheckConstraintIntent value => MySqlCapturedExpressionContract.GetUnsupportedFeature(
-                value.Definition.CapturedSql,
-                value.Definition.Expression,
-                isMariaDb),
-            EnsureTableIntent value => CapturedTableFeature(value.Definition, isMariaDb),
-            _ => null,
-        };
+    ) => intent switch
+    {
+        EnsureColumnIntent value => CapturedColumnFeature(value.Definition, isMariaDb),
+        AlterColumnIntent value => CapturedColumnFeature(value.Definition, isMariaDb)
+            ?? (value.OldDefinition is null
+                ? null
+                : CapturedColumnFeature(value.OldDefinition, isMariaDb)),
+        EnsureCheckConstraintIntent value => MySqlCapturedExpressionContract.GetUnsupportedFeature(
+            value.Definition.CapturedSql,
+            value.Definition.Expression,
+            isMariaDb),
+        EnsureTableIntent value => CapturedTableFeature(value.Definition, isMariaDb),
+        _ => null,
+    };
 
     /// <summary>Retains a no-allocation fast path for ordinary noncaptured column definitions.</summary>
     private static string? CapturedColumnFeature(
         ExpectedColumnDefinition definition,
         bool isMariaDb
-    ) =>
-        MySqlCapturedExpressionContract.GetUnsupportedFeature(
-            definition.CapturedComputedSql,
-            definition.ComputedExpression,
-            isMariaDb);
+    ) => MySqlCapturedExpressionContract.GetUnsupportedFeature(
+        definition.CapturedComputedSql,
+        definition.ComputedExpression,
+        isMariaDb);
 
     /// <summary>Validates complete contracts directly rather than materializing single-item traversal arrays.</summary>
     private static string? CapturedTableFeature(

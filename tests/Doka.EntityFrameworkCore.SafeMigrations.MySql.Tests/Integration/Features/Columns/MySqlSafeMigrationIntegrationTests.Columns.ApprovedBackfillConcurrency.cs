@@ -463,15 +463,14 @@ public sealed class MySqlColumnsApprovedBackfillConcurrencyIntegrationTests : My
     private static string ApprovedBackfillValueSql(
         string storageContract,
         bool declared
-    )
-        => storageContract == "integer"
-            ? declared
-                ? "7"
-                : "11"
-            : AtomicRequiredAddLiteral(
-                declared
-                    ? ApprovedBackfillDeclaredValue(storageContract)
-                    : ApprovedBackfillPreservedValue(storageContract));
+    ) => storageContract == "integer"
+        ? declared
+            ? "7"
+            : "11"
+        : AtomicRequiredAddLiteral(
+            declared
+                ? ApprovedBackfillDeclaredValue(storageContract)
+                : ApprovedBackfillPreservedValue(storageContract));
 
     /// <summary>Gets the exact declared replacement for portable scalar comparison.</summary>
     /// <param name="storageContract">The finite test-owned storage contract.</param>
@@ -506,12 +505,11 @@ public sealed class MySqlColumnsApprovedBackfillConcurrencyIntegrationTests : My
     private static Task<int> ApprovedBackfillNullableCountAsync(
         string connectionString,
         CancellationToken cancellationToken
-    )
-        => ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'approved_backfill_items' AND COLUMN_NAME = 'required_value' AND IS_NULLABLE = 'YES';",
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connectionString,
+        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+        + "AND TABLE_NAME = 'approved_backfill_items' AND COLUMN_NAME = 'required_value' AND IS_NULLABLE = 'YES';",
+        cancellationToken: cancellationToken);
 
     /// <summary>Reads current character width so failed widening cannot masquerade as completed DDL.</summary>
     /// <param name="connectionString">The isolated test database.</param>
@@ -520,13 +518,12 @@ public sealed class MySqlColumnsApprovedBackfillConcurrencyIntegrationTests : My
     private static Task<int> ApprovedBackfillCharacterWidthAsync(
         string connectionString,
         CancellationToken cancellationToken
-    )
-        => ScalarIntAsync(
-            connectionString,
-            "SELECT COALESCE(CHARACTER_MAXIMUM_LENGTH, 0) FROM INFORMATION_SCHEMA.COLUMNS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'approved_backfill_items' "
-            + "AND COLUMN_NAME = 'required_value';",
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connectionString,
+        "SELECT COALESCE(CHARACTER_MAXIMUM_LENGTH, 0) FROM INFORMATION_SCHEMA.COLUMNS "
+        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'approved_backfill_items' "
+        + "AND COLUMN_NAME = 'required_value';",
+        cancellationToken: cancellationToken);
 
     /// <summary>Waits for a committed marker after the real UPDATE and before the real ALTER.</summary>
     /// <param name="writer">The independent writer session.</param>

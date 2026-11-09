@@ -117,8 +117,7 @@ public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMig
     /// <returns>The same migration-lock connection options with pooling explicitly disabled.</returns>
     internal static string CreateOwnedFileConnectionString(
         string databasePath
-    ) =>
-        $"Data Source={databasePath};Mode=ReadWriteCreate;Cache=Private;"
+    ) => $"Data Source={databasePath};Mode=ReadWriteCreate;Cache=Private;"
         + "Default Timeout=10;Foreign Keys=True;Pooling=False";
 
     private static async Task<ConcurrentExecutionResult> ExecuteConcurrentMigrationAsync(

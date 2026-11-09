@@ -164,18 +164,19 @@ public sealed class SafeMigrationPostflightPrimaryKeyIdentityTests
     /// <summary>Creates one safe writer with a strict conflict policy.</summary>
     private static SafeMigrationOperation Operation(
         SafeMigrationIntent intent
-    ) =>
-        new(intent, SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(intent, SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Creates final evidence, including diagnostic names that are not identity certificates.</summary>
     private static SafeMigrationProviderAnalysis Analysis(
         SafeMigrationObservedState state,
         string? physicalName = null
-    ) =>
-        new(state, SafeMigrationRepairCapability.None, state == SafeMigrationObservedState.Matching, "test_final_state")
-        {
-            MatchedObjectName = physicalName,
-        };
+    ) => new(state,
+        SafeMigrationRepairCapability.None,
+        state == SafeMigrationObservedState.Matching,
+        "test_final_state")
+    {
+        MatchedObjectName = physicalName,
+    };
 
     /// <summary>Certifies only name-independent PK identity without adding shape or data proof.</summary>
     private sealed class SingletonPrimaryKeyAnalyzer : ISafeMigrationProjectedKeyAnalyzer

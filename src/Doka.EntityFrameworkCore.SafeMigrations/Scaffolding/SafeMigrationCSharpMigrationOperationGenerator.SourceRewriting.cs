@@ -44,7 +44,8 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
         var closeParenthesis = FindMatchingParenthesis(source, openParenthesis);
         var argumentIndent = FindArgumentIndent(source, openParenthesis, closeParenthesis);
         var newline = SafeMigrationGeneratedSource.GetConsistentNewLine(source);
-        var policy = GetLegacyConvergencePolicy().ToString();
+        var policy = GetLegacyConvergencePolicy()
+            .ToString();
 
         // Freeze the policy into generated source. Runtime option changes must
         // never reinterpret a migration that was already reviewed.

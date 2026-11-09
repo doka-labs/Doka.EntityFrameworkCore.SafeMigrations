@@ -364,16 +364,15 @@ public sealed class MySqlColumnDependencyTransportTests
     private static MySqlColumnDependencyRequest[] Requests(
         int count,
         string table = "items"
-    ) =>
-        Enumerable
-            .Range(0, count)
-            .Select(index => new MySqlColumnDependencyRequest(
-                Operation(table, "column_" + index.ToString(CultureInfo.InvariantCulture), index % 2 == 1),
-                table,
-                "column_" + index.ToString(CultureInfo.InvariantCulture),
-                index % 2 == 1,
-                index))
-            .ToArray();
+    ) => Enumerable
+        .Range(0, count)
+        .Select(index => new MySqlColumnDependencyRequest(
+            Operation(table, "column_" + index.ToString(CultureInfo.InvariantCulture), index % 2 == 1),
+            table,
+            "column_" + index.ToString(CultureInfo.InvariantCulture),
+            index % 2 == 1,
+            index))
+        .ToArray();
 
     /// <summary>Creates a reference-distinct repair envelope for a physical target.</summary>
     /// <param name="table">The untouched authored owner.</param>

@@ -13,12 +13,11 @@ internal static class SqlServerSafeMigrationIdentityInsertScope
     internal static string BuildBootstrapSql(
         string token,
         string? scopeInUseMessage = null
-    )
-        => $"IF SESSION_CONTEXT(N'{ContextKey}') IS NOT NULL "
-            + "THROW 51007, "
-            + ScopeInUseLiteral(scopeInUseMessage)
-            + ", 1; "
-            + $"EXEC sys.sp_set_session_context @key = N'{ContextKey}', @value = 0x00{token};";
+    ) => $"IF SESSION_CONTEXT(N'{ContextKey}') IS NOT NULL "
+        + "THROW 51007, "
+        + ScopeInUseLiteral(scopeInUseMessage)
+        + ", 1; "
+        + $"EXEC sys.sp_set_session_context @key = N'{ContextKey}', @value = 0x00{token};";
 
     /// <summary>
     /// Recovers only the exact invocation, without requiring fresh metadata or ALTER on rejection.
@@ -123,9 +122,8 @@ internal static class SqlServerSafeMigrationIdentityInsertScope
     /// <summary>Explains unknown session ownership without exposing its caller-supplied marker value.</summary>
     private static string ScopeInUseLiteral(
         string? message
-    )
-        => SqlServerSafeMigrationRuntimeDiagnostic.FormatLiteral(
-            message
-            ?? "doka_sm_identity_scope_in_use: SafeMigrations cannot acquire caller-owned session state; "
-            + "next=Use a clean context and connection without a preexisting identity marker.");
+    ) => SqlServerSafeMigrationRuntimeDiagnostic.FormatLiteral(
+        message
+        ?? "doka_sm_identity_scope_in_use: SafeMigrations cannot acquire caller-owned session state; "
+        + "next=Use a clean context and connection without a preexisting identity marker.");
 }

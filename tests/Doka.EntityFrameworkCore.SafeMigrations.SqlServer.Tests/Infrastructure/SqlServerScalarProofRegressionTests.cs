@@ -711,10 +711,9 @@ public sealed class SqlServerScalarProofRegressionTests
     private static int Occurrences(
         string text,
         string token
-    )
-        => text.Split(token)
-                .Length
-            - 1;
+    ) => text.Split(token)
+            .Length
+        - 1;
 
     /// <summary>Carries raw engine evidence independently of provider result projection.</summary>
     /// <param name="Ordinal">The original classifier ordinal.</param>

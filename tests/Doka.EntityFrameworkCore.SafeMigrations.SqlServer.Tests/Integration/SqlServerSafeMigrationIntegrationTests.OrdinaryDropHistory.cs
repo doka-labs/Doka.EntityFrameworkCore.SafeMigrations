@@ -185,37 +185,33 @@ public sealed class SqlServerSafeMigrationOrdinaryDropHistoryIntegrationTests : 
         string connectionString,
         bool check,
         CancellationToken cancellationToken
-    )
-        => ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM dbo.__EFMigrationsHistory WHERE MigrationId=N'"
-            + (check
-                ? SqlServerOrdinaryDropCheckBlockedMigration.Identifier
-                : SqlServerOrdinaryDropBlockedMigration.MigrationIdentifier)
-            + "';",
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connectionString,
+        "SELECT COUNT(*) FROM dbo.__EFMigrationsHistory WHERE MigrationId=N'"
+        + (check
+            ? SqlServerOrdinaryDropCheckBlockedMigration.Identifier
+            : SqlServerOrdinaryDropBlockedMigration.MigrationIdentifier)
+        + "';",
+        cancellationToken: cancellationToken);
 
     private static string InitialIdentifier(
         bool check
-    )
-        => check
-            ? SqlServerOrdinaryDropCheckInitialMigration.Identifier
-            : SqlServerOrdinaryDropInitialMigration.MigrationIdentifier;
+    ) => check
+        ? SqlServerOrdinaryDropCheckInitialMigration.Identifier
+        : SqlServerOrdinaryDropInitialMigration.MigrationIdentifier;
 
     private static DbContext HistoryContext(
         string connectionString,
         bool check
-    )
-        => check
-            ? new SqlServerOrdinaryDropCheckHistoryContext(connectionString)
-            : new SqlServerOrdinaryDropHistoryContext(connectionString);
+    ) => check
+        ? new SqlServerOrdinaryDropCheckHistoryContext(connectionString)
+        : new SqlServerOrdinaryDropHistoryContext(connectionString);
 
     private static string CorrectPrerequisiteSql(
         bool check
-    )
-        => check
-            ? "ALTER TABLE dbo.ordinary_drop_history DROP CONSTRAINT CK_ordinary_drop_history_L;"
-            : "DROP INDEX IX_ordinary_drop_history_L ON dbo.ordinary_drop_history;";
+    ) => check
+        ? "ALTER TABLE dbo.ordinary_drop_history DROP CONSTRAINT CK_ordinary_drop_history_L;"
+        : "DROP INDEX IX_ordinary_drop_history_L ON dbo.ordinary_drop_history;";
 
     private static async Task ExecuteScriptAsync(
         string connectionString,

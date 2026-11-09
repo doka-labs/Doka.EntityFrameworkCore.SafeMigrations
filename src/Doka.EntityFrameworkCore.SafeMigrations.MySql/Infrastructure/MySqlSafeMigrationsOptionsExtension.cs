@@ -57,8 +57,8 @@ internal sealed class MySqlSafeMigrationsOptionsExtension : IDbContextOptionsExt
 
         public override string LogFragment => "doka-mysql-safe-migrations ";
 
-        private new MySqlSafeMigrationsOptionsExtension Extension =>
-            (MySqlSafeMigrationsOptionsExtension)base.Extension;
+        private new MySqlSafeMigrationsOptionsExtension Extension
+            => (MySqlSafeMigrationsOptionsExtension)base.Extension;
 
         // WHY: The ownership option changes runtime pending-model detection.
         // It must participate in EF's service-provider identity so a context

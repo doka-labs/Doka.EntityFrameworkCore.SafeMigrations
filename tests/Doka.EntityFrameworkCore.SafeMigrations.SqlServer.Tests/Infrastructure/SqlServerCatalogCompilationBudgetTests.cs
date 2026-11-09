@@ -587,32 +587,29 @@ public sealed class SqlServerCatalogCompilationBudgetTests
     private static SqlServerSafeMigrationRuntimePlan Plan(
         int ordinal,
         bool delayed
-    )
-        => new("N'missing'", "0", SafeMigrationRepairCapability.None, "0")
-        {
-            RequiresDelayedBinding = delayed,
-            DifferentDifference = new SafeMigrationFacetDifference(
-                "probe",
-                "expected",
-                ordinal.ToString(
-                    CultureInfo.InvariantCulture)),
-        };
+    ) => new("N'missing'", "0", SafeMigrationRepairCapability.None, "0")
+    {
+        RequiresDelayedBinding = delayed,
+        DifferentDifference = new SafeMigrationFacetDifference(
+            "probe",
+            "expected",
+            ordinal.ToString(
+                CultureInfo.InvariantCulture)),
+    };
 
     /// <summary>Counts only direct UNION branches, never nested SELECT clauses.</summary>
     private static int StatementWidth(
         string statement
-    )
-        => statement.Split(SafeMigrationCatalogQueryLimits.Separator)
-            .Length;
+    ) => statement.Split(SafeMigrationCatalogQueryLimits.Separator)
+        .Length;
 
     /// <summary>Mirrors the transport fixture's ordinal-dependent synthetic observation.</summary>
     private static SafeMigrationObservedState State(
         int ordinal
-    )
-        => (ordinal % 3) switch
-        {
-            0 => SafeMigrationObservedState.Missing,
-            1 => SafeMigrationObservedState.Matching,
-            _ => SafeMigrationObservedState.Different,
-        };
+    ) => (ordinal % 3) switch
+    {
+        0 => SafeMigrationObservedState.Missing,
+        1 => SafeMigrationObservedState.Matching,
+        _ => SafeMigrationObservedState.Different,
+    };
 }

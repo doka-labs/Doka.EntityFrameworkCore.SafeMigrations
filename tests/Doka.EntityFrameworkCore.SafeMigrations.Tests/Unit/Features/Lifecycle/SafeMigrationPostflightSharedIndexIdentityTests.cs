@@ -174,18 +174,16 @@ public sealed class SafeMigrationPostflightSharedIndexIdentityTests
     /// <summary>Creates a strict named safe operation without adding provider-specific annotations.</summary>
     private static SafeMigrationOperation Operation(
         SafeMigrationIntent intent
-    ) =>
-        new(intent, SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(intent, SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Creates exact final-catalog evidence without inventing a historical physical binding.</summary>
     private static SafeMigrationProviderAnalysis Analysis(
         SafeMigrationObservedState state,
         string? physicalName = null
-    ) =>
-        new(state, SafeMigrationRepairCapability.None, state == SafeMigrationObservedState.Matching, "test_final")
-        {
-            MatchedObjectName = physicalName,
-        };
+    ) => new(state, SafeMigrationRepairCapability.None, state == SafeMigrationObservedState.Matching, "test_final")
+    {
+        MatchedObjectName = physicalName,
+    };
 
     /// <summary>Certifies only native namespace/member identity, never key shape or row safety.</summary>
     private sealed class SharedIndexIdentityContract(
@@ -226,10 +224,9 @@ public sealed class SafeMigrationPostflightSharedIndexIdentityTests
         public StringComparer IdentifierComparer => StringComparer.Ordinal;
 
         /// <inheritdoc />
-        public StringComparer IndexIdentifierComparer =>
-            insensitive
-                ? StringComparer.OrdinalIgnoreCase
-                : StringComparer.Ordinal;
+        public StringComparer IndexIdentifierComparer => insensitive
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
 
         /// <inheritdoc />
         public string NormalizeIdentifier(

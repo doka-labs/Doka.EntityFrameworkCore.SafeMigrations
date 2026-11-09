@@ -470,19 +470,17 @@ public sealed class SqlServerAbsentTableCaptureTests
     private static SafeMigrationOperation Table(
         string name,
         string? schema = null
-    )
-        => new(
-            new EnsureTableIntent(
-                new ExpectedTableDefinition(
-                    name,
-                    [new ExpectedColumnDefinition("Id", typeof(int), false, "int")],
-                    schema: schema),
-                SafeMigrationTableMode.StrictDefinition),
-            SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(
+        new EnsureTableIntent(
+            new ExpectedTableDefinition(
+                name,
+                [new ExpectedColumnDefinition("Id", typeof(int), false, "int")],
+                schema: schema),
+            SafeMigrationTableMode.StrictDefinition),
+        SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Creates an unrelated column operation that must not participate in the occupancy prepass.</summary>
-    private static SafeMigrationOperation Column()
-        => new(
-            new EnsureColumnIntent("columns", new ExpectedColumnDefinition("Id", typeof(int), false, "int")),
-            SafeMigrationPolicy.ThrowIfDifferent);
+    private static SafeMigrationOperation Column() => new(
+        new EnsureColumnIntent("columns", new ExpectedColumnDefinition("Id", typeof(int), false, "int")),
+        SafeMigrationPolicy.ThrowIfDifferent);
 }

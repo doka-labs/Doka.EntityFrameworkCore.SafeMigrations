@@ -365,22 +365,21 @@ internal static partial class SqlServerLocalCatalogDiagnostics
     }
 
     /// <summary>Creates the same three populated tables used by the mixed stress contract.</summary>
-    private static string BuildFixtureSql()
-        => "CREATE TABLE dbo.sqlserver_stress_target(id int NOT NULL);"
-            + "INSERT dbo.sqlserver_stress_target VALUES(1);"
-            + "CREATE TABLE dbo.sqlserver_stress_alter(caption varchar(10) NOT NULL);"
-            + "INSERT dbo.sqlserver_stress_alter VALUES('short');"
-            + "CREATE TABLE dbo.sqlserver_stress_managed(id int NOT NULL PRIMARY KEY, managed_value nvarchar(32) NOT NULL);"
-            + string.Join(
-                "",
-                LargeMigrationStressContract
-                    .ModelManagedUpdateOrdinals(LargeMigrationStressDialect.SqlServer)
-                    .TakeWhile(ordinal => ordinal < SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture)
-                    .Select(ordinal => "INSERT dbo.sqlserver_stress_managed VALUES("
-                        + LargeMigrationStressContract
-                            .ModelManagedUpdateKey(ordinal)
-                            .ToString(CultureInfo.InvariantCulture)
-                        + ",N'source');"));
+    private static string BuildFixtureSql() => "CREATE TABLE dbo.sqlserver_stress_target(id int NOT NULL);"
+        + "INSERT dbo.sqlserver_stress_target VALUES(1);"
+        + "CREATE TABLE dbo.sqlserver_stress_alter(caption varchar(10) NOT NULL);"
+        + "INSERT dbo.sqlserver_stress_alter VALUES('short');"
+        + "CREATE TABLE dbo.sqlserver_stress_managed(id int NOT NULL PRIMARY KEY, managed_value nvarchar(32) NOT NULL);"
+        + string.Join(
+            "",
+            LargeMigrationStressContract
+                .ModelManagedUpdateOrdinals(LargeMigrationStressDialect.SqlServer)
+                .TakeWhile(ordinal => ordinal < SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture)
+                .Select(ordinal => "INSERT dbo.sqlserver_stress_managed VALUES("
+                    + LargeMigrationStressContract
+                        .ModelManagedUpdateKey(ordinal)
+                        .ToString(CultureInfo.InvariantCulture)
+                    + ",N'source');"));
 
     /// <summary>Creates a fresh synthetic database and retains its exact name for recoverable cleanup.</summary>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
@@ -407,11 +406,10 @@ internal static partial class SqlServerLocalCatalogDiagnostics
     private static Task DropDatabaseAsync(
         SqlConnection root,
         string database
-    )
-        => ExecuteAsync(
-            root,
-            $"ALTER DATABASE [{database}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{database}];",
-            cancellationToken: CancellationToken.None);
+    ) => ExecuteAsync(
+        root,
+        $"ALTER DATABASE [{database}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{database}];",
+        cancellationToken: CancellationToken.None);
 
     /// <summary>Executes fixture-only SQL without logging connection strings or source values.</summary>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>

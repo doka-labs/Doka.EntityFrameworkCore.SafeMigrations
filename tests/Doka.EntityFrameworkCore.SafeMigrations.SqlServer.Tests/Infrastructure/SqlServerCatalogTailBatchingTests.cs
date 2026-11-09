@@ -500,8 +500,7 @@ public sealed class SqlServerCatalogTailBatchingTests
 
     private static SqlServerSafeMigrationProviderAnalyzer Analyzer(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private static IDictionary Snapshot(
         SqlServerSafeMigrationProviderAnalyzer analyzer,

@@ -232,35 +232,34 @@ public sealed class SqlServerSafeMigrationDmlStructuralDeferralIntegrationTests 
     /// <summary>Supplies explicit store types so typed EF writes need no unrelated model entity.</summary>
     private static MigrationOperation TypedDml(
         string writeKind
-    )
-        => writeKind switch
+    ) => writeKind switch
+    {
+        "insert" => new InsertDataOperation
         {
-            "insert" => new InsertDataOperation
-            {
-                Table = "dml_source",
-                Columns = ["Id"],
-                ColumnTypes = ["int"],
-                Values = new object?[,] { { 1 } },
-            },
-            "update" => new UpdateDataOperation
-            {
-                Table = "dml_source",
-                KeyColumns = ["Id"],
-                KeyColumnTypes = ["int"],
-                KeyValues = new object?[,] { { 1 } },
-                Columns = ["Id"],
-                ColumnTypes = ["int"],
-                Values = new object?[,] { { 2 } },
-            },
-            "delete" => new DeleteDataOperation
-            {
-                Table = "dml_source",
-                KeyColumns = ["Id"],
-                KeyColumnTypes = ["int"],
-                KeyValues = new object?[,] { { 1 } },
-            },
-            _ => throw new ArgumentOutOfRangeException(nameof(writeKind)),
-        };
+            Table = "dml_source",
+            Columns = ["Id"],
+            ColumnTypes = ["int"],
+            Values = new object?[,] { { 1 } },
+        },
+        "update" => new UpdateDataOperation
+        {
+            Table = "dml_source",
+            KeyColumns = ["Id"],
+            KeyColumnTypes = ["int"],
+            KeyValues = new object?[,] { { 1 } },
+            Columns = ["Id"],
+            ColumnTypes = ["int"],
+            Values = new object?[,] { { 2 } },
+        },
+        "delete" => new DeleteDataOperation
+        {
+            Table = "dml_source",
+            KeyColumns = ["Id"],
+            KeyColumnTypes = ["int"],
+            KeyValues = new object?[,] { { 1 } },
+        },
+        _ => throw new ArgumentOutOfRangeException(nameof(writeKind)),
+    };
 
     /// <summary>Typed ALTER's EF-generated UPDATE can invoke a DML trigger before the structural DDL.</summary>
     /// <param name="disabled">Whether the trigger is disabled and the baseline only changes its authored column.</param>

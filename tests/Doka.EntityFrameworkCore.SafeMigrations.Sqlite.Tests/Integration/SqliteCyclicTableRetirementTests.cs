@@ -38,7 +38,9 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         };
 
         // Act
-        var owner = context.GetService<IDbContextOptions>().FindExtension<CoreOptionsExtension>()
+        var owner = context
+            .GetService<IDbContextOptions>()
+            .FindExtension<CoreOptionsExtension>()
             ?.InternalServiceProvider;
 
         // Assert
@@ -61,11 +63,14 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         // Arrange
         await using var database = await RetirementDatabase.OpenAsync(fileBacked, CancellationToken.None);
         await using var context = new SqliteRetirementMigrationContext(
-            database.Connection, safeFirst, _internalServices);
+            database.Connection,
+            safeFirst,
+            _internalServices);
 
         var migrator = context.GetService<IMigrator>();
         await migrator.MigrateAsync(SqliteRetirementBaselineMigration.MigrationIdentifier, CancellationToken.None);
-        await ExecuteSqlAsync(database.Connection, "INSERT INTO retained_host VALUES (42, 'retained');",
+        await ExecuteSqlAsync(database.Connection,
+            "INSERT INTO retained_host VALUES (42, 'retained');",
             CancellationToken.None);
 
         // Act
@@ -85,7 +90,8 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         await migrator.MigrateAsync(SqliteRetirementCycleMigration.MigrationIdentifier, CancellationToken.None);
         var replayHistory = (await context.Database.GetAppliedMigrationsAsync(CancellationToken.None)).ToArray();
         var host = await ScalarIntAsync(database.Connection,
-            "SELECT COUNT(*) FROM retained_host WHERE id = 42 AND marker = 'retained';", CancellationToken.None);
+            "SELECT COUNT(*) FROM retained_host WHERE id = 42 AND marker = 'retained';",
+            CancellationToken.None);
 
         var hostIndex = await ScalarIntAsync(database.Connection,
             "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'index' AND name = 'ix_retained_host_marker';",
@@ -96,8 +102,11 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         // Assert
         Assert.Equal([SqliteRetirementBaselineMigration.MigrationIdentifier], reverseHistory);
         Assert.Equal(0, removedOwners);
-        Assert.Equal([SqliteRetirementBaselineMigration.MigrationIdentifier,
-            SqliteRetirementCycleMigration.MigrationIdentifier], replayHistory);
+        Assert.Equal([
+                SqliteRetirementBaselineMigration.MigrationIdentifier,
+                SqliteRetirementCycleMigration.MigrationIdentifier,
+            ],
+            replayHistory);
 
         Assert.Equal(1, host);
         Assert.Equal(1, hostIndex);
@@ -129,11 +138,13 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         var operations = RetirementOperations();
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            operations,
-            new SafeMigrationRunOptions("sqlite-cycle-retirement"),
-            CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                new SafeMigrationRunOptions("sqlite-cycle-retirement"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
             context,
@@ -163,7 +174,10 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         Assert.Null(replayException);
         Assert.Equal(0, retired);
         Assert.Equal(1, host);
-        Assert.Equal(foreignKeysEnabled ? 1 : 0, foreignKeys);
+        Assert.Equal(foreignKeysEnabled
+                ? 1
+                : 0,
+            foreignKeys);
     }
 
     /// <summary>Retirement retains live artifact checks and preserves the native schema on rejection.</summary>
@@ -201,11 +215,13 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         var before = await ReadSchemaAsync(database.Connection, CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            operations,
-            new SafeMigrationRunOptions("sqlite-unsupported-retirement-artifact"),
-            CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                new SafeMigrationRunOptions("sqlite-unsupported-retirement-artifact"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
             context,
@@ -213,13 +229,16 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
             CancellationToken.None));
 
         var after = await ReadSchemaAsync(database.Connection, CancellationToken.None);
-        var rows = await ScalarIntAsync(database.Connection, "SELECT COUNT(*) FROM retiring_parent;",
+        var rows = await ScalarIntAsync(database.Connection,
+            "SELECT COUNT(*) FROM retiring_parent;",
             CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(expectedCode, report.Assessments[0].AnalysisCode);
-        Assert.Contains(expectedCode, Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains(expectedCode,
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
 
         Assert.Equal(before, after);
@@ -260,11 +279,13 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         var before = await ReadSchemaAsync(database.Connection, CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            operations,
-            new SafeMigrationRunOptions("sqlite-retirement-surviving-reference"),
-            CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                new SafeMigrationRunOptions("sqlite-retirement-surviving-reference"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
             context,
@@ -273,7 +294,8 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
 
         var after = await ReadSchemaAsync(database.Connection, CancellationToken.None);
         var retained = await ScalarIntAsync(database.Connection,
-            "SELECT COUNT(*) FROM surviving_child WHERE id = 7 AND parent_id = 1;", CancellationToken.None);
+            "SELECT COUNT(*) FROM surviving_child WHERE id = 7 AND parent_id = 1;",
+            CancellationToken.None);
 
         var mode = await ScalarIntAsync(database.Connection, "PRAGMA foreign_keys;", CancellationToken.None);
 
@@ -283,7 +305,10 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         Assert.IsType<InvalidOperationException>(exception);
         Assert.Equal(before, after);
         Assert.Equal(1, retained);
-        Assert.Equal(foreignKeysEnabled ? 1 : 0, mode);
+        Assert.Equal(foreignKeysEnabled
+                ? 1
+                : 0,
+            mode);
     }
 
     /// <summary>A later DDL failure rolls back the subsumed FK removal and every preceding table drop.</summary>
@@ -306,12 +331,15 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
 
         var after = await ReadSchemaAsync(database.Connection, CancellationToken.None);
         var parent = await ScalarIntAsync(database.Connection,
-            "SELECT COUNT(*) FROM retiring_parent WHERE id = 1 AND child_id = 2;", CancellationToken.None);
+            "SELECT COUNT(*) FROM retiring_parent WHERE id = 1 AND child_id = 2;",
+            CancellationToken.None);
 
         var mode = await ScalarIntAsync(database.Connection, "PRAGMA foreign_keys;", CancellationToken.None);
 
         // Assert
-        Assert.Contains("missing_failure_owner", Assert.IsType<SqliteException>(exception).Message,
+        Assert.Contains("missing_failure_owner",
+            Assert.IsType<SqliteException>(exception)
+                .Message,
             StringComparison.Ordinal);
 
         Assert.Equal(before, after);
@@ -339,7 +367,8 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
             cancellation.Token));
 
         var after = await ReadSchemaAsync(database.Connection, CancellationToken.None);
-        var rows = await ScalarIntAsync(database.Connection, "SELECT COUNT(*) FROM retiring_parent;",
+        var rows = await ScalarIntAsync(database.Connection,
+            "SELECT COUNT(*) FROM retiring_parent;",
             CancellationToken.None);
 
         var mode = await ScalarIntAsync(database.Connection, "PRAGMA foreign_keys;", CancellationToken.None);
@@ -377,11 +406,13 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         var before = await ReadSchemaAsync(database.Connection, CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            operations,
-            new SafeMigrationRunOptions("sqlite-missing-window-retirement"),
-            CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                new SafeMigrationRunOptions("sqlite-missing-window-retirement"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
             context,
@@ -393,7 +424,9 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal("table_rebuild_model_missing", report.Assessments[0].AnalysisCode);
-        Assert.Contains("table_rebuild_model_missing", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains("table_rebuild_model_missing",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
 
         Assert.Equal(before, after);
@@ -449,7 +482,9 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         var after = await ReadSchemaAsync(database.Connection, CancellationToken.None);
 
         // Assert
-        Assert.Contains("table_rebuild_model_missing", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains("table_rebuild_model_missing",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
 
         Assert.Equal(before, after);
@@ -471,11 +506,13 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         var before = await ReadSchemaAsync(database.Connection, CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            operations,
-            new SafeMigrationRunOptions("sqlite-retirement-wrong-fk"),
-            CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                new SafeMigrationRunOptions("sqlite-retirement-wrong-fk"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
             context,
@@ -504,20 +541,30 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         await using var database = await RetirementDatabase.OpenAsync(false, CancellationToken.None);
         await using var context = new RetirementTargetContext(database.Connection, _internalServices);
         var native = new CreateTableOperation { Name = "foreign_engine" };
-        native.Columns.Add(new AddColumnOperation { Name = "id", Table = native.Name, ClrType = typeof(int) });
+        native.Columns.Add(new AddColumnOperation
+        {
+            Name = "id",
+            Table = native.Name,
+            ClrType = typeof(int),
+        });
+
         native.AddAnnotation("Doka:MySql:StorageEngine", "InnoDB");
         var definition = SafeMigrationExpectedDefinitionFactory.From(native);
         var operations = new MigrationBuilder("Microsoft.EntityFrameworkCore.Sqlite");
         operations.EnsureTable(definition,
-            convergence ? SafeMigrationTableMode.ConvergenceContainer : SafeMigrationTableMode.StrictDefinition,
+            convergence
+                ? SafeMigrationTableMode.ConvergenceContainer
+                : SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ExistenceOnly);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            operations.Operations,
-            new SafeMigrationRunOptions("sqlite-foreign-table-metadata"),
-            CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                operations.Operations,
+                new SafeMigrationRunOptions("sqlite-foreign-table-metadata"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
             context,
@@ -525,13 +572,16 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
             CancellationToken.None));
 
         var owners = await ScalarIntAsync(database.Connection,
-            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'foreign_engine';", CancellationToken.None);
+            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'foreign_engine';",
+            CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal("table_annotation", assessment.AnalysisCode);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
-        Assert.Contains("table_annotation", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains("table_annotation",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
 
         Assert.Equal(0, owners);
@@ -556,24 +606,40 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         await CreateCycleAsync(database.Connection, "child-" + artifact, CancellationToken.None);
         var operations = RetirementOperations();
         operations.RemoveAt(1);
-        operations.Insert(1, new RenameTableOperation { Name = "retiring_child", NewName = "renamed_child" });
+        operations.Insert(1,
+            new RenameTableOperation
+            {
+                Name = "retiring_child",
+                NewName = "renamed_child",
+            });
+
         if (renameCount == 2)
         {
-            operations.Insert(2, new RenameTableOperation { Name = "renamed_child", NewName = "final_child" });
+            operations.Insert(2,
+                new RenameTableOperation
+                {
+                    Name = "renamed_child",
+                    NewName = "final_child",
+                });
         }
 
-        operations.Insert(1 + renameCount, new SafeMigrationOperation(
-            new DropTableIntent(renameCount == 2 ? "final_child" : "renamed_child"),
-            SafeMigrationPolicy.ThrowIfDifferent));
+        operations.Insert(1 + renameCount,
+            new SafeMigrationOperation(
+                new DropTableIntent(renameCount == 2
+                    ? "final_child"
+                    : "renamed_child"),
+                SafeMigrationPolicy.ThrowIfDifferent));
 
         var before = await ReadSchemaAsync(database.Connection, CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            operations,
-            new SafeMigrationRunOptions("sqlite-retirement-neighbor-lifetime"),
-            CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                new SafeMigrationRunOptions("sqlite-retirement-neighbor-lifetime"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
             context,
@@ -584,7 +650,9 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
 
         // Assert
         Assert.Equal("table_retirement_owner_lifetime", report.Assessments[0].AnalysisCode);
-        Assert.Contains("table_retirement_owner_lifetime", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains("table_retirement_owner_lifetime",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
 
         Assert.Equal(before, after);
@@ -618,11 +686,13 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         builder.DropTableIfExists("retiring_parent");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlite-retained-principal-rename"),
-            CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-retained-principal-rename"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
             context,
@@ -631,12 +701,14 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
 
         var host = exception is null
             ? await ScalarIntAsync(database.Connection,
-                "SELECT COUNT(*) FROM renamed_host WHERE id = 42 AND marker = 'retained';", CancellationToken.None)
+                "SELECT COUNT(*) FROM renamed_host WHERE id = 42 AND marker = 'retained';",
+                CancellationToken.None)
             : -1;
 
         var view = exception is null
             ? await ScalarIntAsync(database.Connection,
-                "SELECT COUNT(*) FROM retained_view WHERE marker = 'retained';", CancellationToken.None)
+                "SELECT COUNT(*) FROM retained_view WHERE marker = 'retained';",
+                CancellationToken.None)
             : -1;
 
         // Assert
@@ -685,21 +757,30 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         var before = await ReadSchemaAsync(database.Connection, CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-renamed-retirement-blocker"),
-            CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-renamed-retirement-blocker"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
-            context, builder.Operations, CancellationToken.None));
+            context,
+            builder.Operations,
+            CancellationToken.None));
 
         var after = await ReadSchemaAsync(database.Connection, CancellationToken.None);
         var rows = await ScalarIntAsync(database.Connection,
-            "SELECT COUNT(*) FROM surviving_child WHERE id = 7 AND parent_id = 1;", CancellationToken.None);
+            "SELECT COUNT(*) FROM surviving_child WHERE id = 7 AND parent_id = 1;",
+            CancellationToken.None);
 
         // Assert
         Assert.Equal("table_drop_foreign_key_dependency", report.Assessments[^1].AnalysisCode);
         Assert.Contains("table_drop_foreign_key_dependency",
-            Assert.IsType<InvalidOperationException>(exception).Message, StringComparison.Ordinal);
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
+            StringComparison.Ordinal);
 
         Assert.Equal(before, after);
         Assert.Equal(1, rows);
@@ -726,8 +807,10 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         var original = analyzer.IsSequenceAwareAnalysis(operation, captured);
         var copiedOperation = analyzer.IsSequenceAwareAnalysis(copy, captured);
         var copiedAnalysis = analyzer.IsSequenceAwareAnalysis(operation,
-            new SafeMigrationProviderAnalysis(captured.ObservedState, captured.RepairCapability,
-                captured.PostconditionSatisfied, captured.Code));
+            new SafeMigrationProviderAnalysis(captured.ObservedState,
+                captured.RepairCapability,
+                captured.PostconditionSatisfied,
+                captured.Code));
 
         analyzer.ResetDropOnlyProjection(SqliteSafeMigrationCatalog.Read(database.Connection, null));
         var reset = analyzer.IsSequenceAwareAnalysis(operation, captured);
@@ -768,7 +851,8 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         CREATE TABLE retiring_parent (id INTEGER NOT NULL PRIMARY KEY, host_id INTEGER NOT NULL,
             CONSTRAINT fk_retiring_parent_host FOREIGN KEY (host_id) REFERENCES retained_host(id));
         INSERT INTO retiring_parent VALUES (1, 42);
-        """, cancellationToken);
+        """,
+        cancellationToken);
 
     /// <summary>Creates the native fixture with one independently selected unsupported table shape.</summary>
     private static async Task CreateCycleAsync(
@@ -778,7 +862,10 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
     )
     {
         var childArtifact = artifact.StartsWith("child-", StringComparison.Ordinal);
-        var shape = childArtifact ? artifact[6..] : artifact;
+        var shape = childArtifact
+            ? artifact[6..]
+            : artifact;
+
         var tableOptions = shape switch
         {
             "strict" => " STRICT",
@@ -790,38 +877,65 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
             ? "derived INTEGER GENERATED ALWAYS AS (id + 1) VIRTUAL,"
             : string.Empty;
 
-        var foreignKeyOptions = shape == "provider-option" ? " DEFERRABLE INITIALLY DEFERRED" : string.Empty;
-        var parentOptions = childArtifact ? string.Empty : tableOptions;
-        var childOptions = childArtifact ? tableOptions : string.Empty;
-        var parentGenerated = childArtifact ? string.Empty : generated;
-        var childGenerated = childArtifact ? generated : string.Empty;
-        var parentForeignKeyOptions = childArtifact ? string.Empty : foreignKeyOptions;
-        var childForeignKeyOptions = childArtifact ? foreignKeyOptions : string.Empty;
+        var foreignKeyOptions = shape == "provider-option"
+            ? " DEFERRABLE INITIALLY DEFERRED"
+            : string.Empty;
+
+        var parentOptions = childArtifact
+            ? string.Empty
+            : tableOptions;
+
+        var childOptions = childArtifact
+            ? tableOptions
+            : string.Empty;
+
+        var parentGenerated = childArtifact
+            ? string.Empty
+            : generated;
+
+        var childGenerated = childArtifact
+            ? generated
+            : string.Empty;
+
+        var parentForeignKeyOptions = childArtifact
+            ? string.Empty
+            : foreignKeyOptions;
+
+        var childForeignKeyOptions = childArtifact
+            ? foreignKeyOptions
+            : string.Empty;
 
         await ExecuteSqlAsync(connection,
-        $$"""
-        CREATE TABLE retained_host (id INTEGER NOT NULL PRIMARY KEY, marker TEXT NOT NULL);
-        CREATE INDEX ix_retained_host_marker ON retained_host(marker);
-        INSERT INTO retained_host VALUES (42, 'retained');
-        CREATE TABLE retiring_parent (
-            id INTEGER NOT NULL PRIMARY KEY,
-            child_id INTEGER NULL,
-            {{parentGenerated}}
-            CONSTRAINT fk_retiring_parent_child FOREIGN KEY (child_id)
-                REFERENCES retiring_child(id){{parentForeignKeyOptions}}){{parentOptions}};
-        CREATE TABLE retiring_child (
-            id INTEGER NOT NULL PRIMARY KEY,
-            parent_id INTEGER NULL,
-            {{childGenerated}}
-            CONSTRAINT fk_retiring_child_parent FOREIGN KEY (parent_id)
-                REFERENCES retiring_parent(id){{childForeignKeyOptions}}){{childOptions}};
-        INSERT INTO retiring_parent (id, child_id) VALUES (1, NULL);
-        INSERT INTO retiring_child (id, parent_id) VALUES (2, 1);
-        UPDATE retiring_parent SET child_id = 2 WHERE id = 1;
-        """, cancellationToken);
+            $$"""
+            CREATE TABLE retained_host (id INTEGER NOT NULL PRIMARY KEY, marker TEXT NOT NULL);
+            CREATE INDEX ix_retained_host_marker ON retained_host(marker);
+            INSERT INTO retained_host VALUES (42, 'retained');
+            CREATE TABLE retiring_parent (
+                id INTEGER NOT NULL PRIMARY KEY,
+                child_id INTEGER NULL,
+                {{parentGenerated}}
+                CONSTRAINT fk_retiring_parent_child FOREIGN KEY (child_id)
+                    REFERENCES retiring_child(id){{parentForeignKeyOptions}}){{parentOptions}};
+            CREATE TABLE retiring_child (
+                id INTEGER NOT NULL PRIMARY KEY,
+                parent_id INTEGER NULL,
+                {{childGenerated}}
+                CONSTRAINT fk_retiring_child_parent FOREIGN KEY (parent_id)
+                    REFERENCES retiring_parent(id){{childForeignKeyOptions}}){{childOptions}};
+            INSERT INTO retiring_parent (id, child_id) VALUES (1, NULL);
+            INSERT INTO retiring_child (id, parent_id) VALUES (2, 1);
+            UPDATE retiring_parent SET child_id = 2 WHERE id = 1;
+            """,
+            cancellationToken);
 
-        var artifactOwner = childArtifact ? "retiring_child" : "retiring_parent";
-        var artifactColumn = childArtifact ? "parent_id" : "child_id";
+        var artifactOwner = childArtifact
+            ? "retiring_child"
+            : "retiring_parent";
+
+        var artifactColumn = childArtifact
+            ? "parent_id"
+            : "child_id";
+
         var artifactSql = shape switch
         {
             "trigger" => $"CREATE TRIGGER retirement_trigger BEFORE UPDATE ON {artifactOwner} BEGIN SELECT 1; END;",
@@ -871,21 +985,32 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
 
         protected override void OnConfiguring(
             DbContextOptionsBuilder optionsBuilder
-        ) => optionsBuilder.UseSqlite(_connection).UseSqliteSafeMigrations()
+        ) => optionsBuilder
+            .UseSqlite(_connection)
+            .UseSqliteSafeMigrations()
             .UseInternalServiceProvider(_internalServices);
 
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
         )
         {
-            modelBuilder.Entity("RetainedHost", entity =>
-            {
-                entity.ToTable("retained_host");
-                entity.Property<int>("id").ValueGeneratedNever();
-                entity.Property<string>("marker").IsRequired();
-                entity.HasKey("id");
-                entity.HasIndex("marker").HasDatabaseName("ix_retained_host_marker");
-            });
+            modelBuilder.Entity("RetainedHost",
+                entity =>
+                {
+                    entity.ToTable("retained_host");
+                    entity
+                        .Property<int>("id")
+                        .ValueGeneratedNever();
+
+                    entity
+                        .Property<string>("marker")
+                        .IsRequired();
+
+                    entity.HasKey("id");
+                    entity
+                        .HasIndex("marker")
+                        .HasDatabaseName("ix_retained_host_marker");
+                });
         }
     }
 
@@ -906,20 +1031,29 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
 
         protected override void OnConfiguring(
             DbContextOptionsBuilder optionsBuilder
-        ) => optionsBuilder.UseSqlite(_connection).UseSqliteSafeMigrations()
+        ) => optionsBuilder
+            .UseSqlite(_connection)
+            .UseSqliteSafeMigrations()
             .UseInternalServiceProvider(_internalServices);
 
         protected override void OnModelCreating(
             ModelBuilder modelBuilder
         )
         {
-            modelBuilder.Entity("RetainedHost", entity =>
-            {
-                entity.ToTable("renamed_host");
-                entity.Property<int>("id").ValueGeneratedNever();
-                entity.Property<string>("marker").IsRequired();
-                entity.HasKey("id");
-            });
+            modelBuilder.Entity("RetainedHost",
+                entity =>
+                {
+                    entity.ToTable("renamed_host");
+                    entity
+                        .Property<int>("id")
+                        .ValueGeneratedNever();
+
+                    entity
+                        .Property<string>("marker")
+                        .IsRequired();
+
+                    entity.HasKey("id");
+                });
         }
     }
 
@@ -938,6 +1072,15 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         }
 
         public SqliteConnection Connection { get; }
+
+        public async ValueTask DisposeAsync()
+        {
+            await Connection.DisposeAsync();
+            if (_path is not null)
+            {
+                File.Delete(_path);
+            }
+        }
 
         public static async Task<RetirementDatabase> OpenAsync(
             bool fileBacked,
@@ -967,15 +1110,6 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
                 await database.DisposeAsync();
 
                 throw;
-            }
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            await Connection.DisposeAsync();
-            if (_path is not null)
-            {
-                File.Delete(_path);
             }
         }
     }

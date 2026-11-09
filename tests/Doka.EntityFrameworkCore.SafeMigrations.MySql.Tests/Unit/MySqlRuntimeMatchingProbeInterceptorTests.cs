@@ -150,8 +150,7 @@ public sealed class MySqlRuntimeMatchingProbeInterceptorTests
     /// <returns>The complete guarded assignment and contiguous prepared-control group.</returns>
     private static string RuntimeMatchingPreparedProof(
         string statement
-    ) =>
-        "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x"
+    ) => "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x"
         + Convert.ToHexString(Encoding.UTF8.GetBytes(statement))
         + " USING utf8mb4) ELSE 'DO 0' END;PREPARE doka_sm_statement FROM @doka_sm_sql;"
         + "EXECUTE doka_sm_statement;DEALLOCATE PREPARE doka_sm_statement;";

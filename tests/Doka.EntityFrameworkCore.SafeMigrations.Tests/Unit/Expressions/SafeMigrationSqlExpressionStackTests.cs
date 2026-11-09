@@ -209,9 +209,9 @@ public sealed class SafeMigrationSqlExpressionStackTests(ITestOutputHelper outpu
                 "in_operand" => SafeMigrationSql.In(expression, [scalar]),
                 "in_value" => SafeMigrationSql.In(scalar, [expression]),
                 "function" => SafeMigrationSql.Function("probe", expression),
-                "case_condition" => SafeMigrationSql.Case([new(expression, scalar)]),
-                "case_result" => SafeMigrationSql.Case([new(scalar, expression)]),
-                "case_else" => SafeMigrationSql.Case([new(scalar, scalar)], expression),
+                "case_condition" => SafeMigrationSql.Case([new SafeMigrationSqlCaseWhenClause(expression, scalar)]),
+                "case_result" => SafeMigrationSql.Case([new SafeMigrationSqlCaseWhenClause(scalar, expression)]),
+                "case_else" => SafeMigrationSql.Case([new SafeMigrationSqlCaseWhenClause(scalar, scalar)], expression),
                 "cast" => SafeMigrationSql.Cast(expression, "integer"),
                 "collate" => SafeMigrationSql.Collate(expression, "C", "pg_catalog"),
                 _ => throw new ArgumentException("Unknown test shape.", nameof(shape)),
@@ -245,8 +245,12 @@ public sealed class SafeMigrationSqlExpressionStackTests(ITestOutputHelper outpu
             SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Timestamp, 6),
             SafeMigrationSql.ProviderFragment("provider", "CURRENT_USER"),
             new SafeMigrationSqlOpaqueExpression("value + 1", followsIdentifierRename: true),
-            SafeMigrationSql.Case([new(one, SafeMigrationSql.Literal(null)), new(identifier, one)]),
-            SafeMigrationSql.Case([new(one, one)], SafeMigrationSql.Literal("fallback")));
+            SafeMigrationSql.Case([
+                new SafeMigrationSqlCaseWhenClause(one, SafeMigrationSql.Literal(null)),
+                new SafeMigrationSqlCaseWhenClause(identifier, one),
+            ]),
+            SafeMigrationSql.Case([new SafeMigrationSqlCaseWhenClause(one, one)],
+                SafeMigrationSql.Literal("fallback")));
     }
 
     /// <summary>Hashes the exact canonical bytes written by the production contract.</summary>

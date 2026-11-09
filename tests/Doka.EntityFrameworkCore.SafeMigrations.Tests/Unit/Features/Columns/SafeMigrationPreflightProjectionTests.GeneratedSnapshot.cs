@@ -449,21 +449,19 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             SafeMigrationOperation operation,
             SafeMigrationProviderAnalysis liveAnalysis,
             ISafeMigrationProjectedColumnSource columns
-        )
-            => SawAcceptedRemoval && operation.Intent is DropColumnIntent
-                ? new SafeMigrationProviderAnalysis(
-                    SafeMigrationObservedState.Unsupported,
-                    SafeMigrationRepairCapability.None,
-                    false,
-                    "ddl_trigger_unproven")
-                : null;
+        ) => SawAcceptedRemoval && operation.Intent is DropColumnIntent
+            ? new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.Unsupported,
+                SafeMigrationRepairCapability.None,
+                false,
+                "ddl_trigger_unproven")
+            : null;
 
         public SafeMigrationProviderAnalysis ValidateProjectedOperation(
             SafeMigrationOperation operation,
             SafeMigrationProviderAnalysis projectedAnalysis,
             ISafeMigrationProjectedColumnSource columns
-        )
-            => projectedAnalysis;
+        ) => projectedAnalysis;
 
         public void ObserveAcceptedOperation(
             SafeMigrationOperation operation,

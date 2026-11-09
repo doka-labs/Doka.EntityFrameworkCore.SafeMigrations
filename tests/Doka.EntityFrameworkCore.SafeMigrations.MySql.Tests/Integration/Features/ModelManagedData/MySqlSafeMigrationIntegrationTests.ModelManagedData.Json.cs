@@ -420,15 +420,15 @@ public sealed class MySqlModelManagedDataJsonIntegrationTests : MySqlSafeMigrati
     ) => ExecuteSqlAsync(
         connectionString,
         $$"""
-          UPDATE `json_model_rows`
-          SET `json_text` = '{ "verified": true, "source": "HasData" }',
-              `json_element` = '{ "value": 1, "kind": "element" }',
-              `json_document` = '{ "value": 1, "kind": "document" }',
-              `json_node` = '{ "value": 1, "kind": "node" }',
-              `json_object` = '{ "value": 1, "kind": "object" }',
-              `json_array` = '[ "array", 5, true ]'
-          WHERE `id` = {{GuidLiteral(guidFormat, identifier.ToString())}};
-          """,
+        UPDATE `json_model_rows`
+        SET `json_text` = '{ "verified": true, "source": "HasData" }',
+            `json_element` = '{ "value": 1, "kind": "element" }',
+            `json_document` = '{ "value": 1, "kind": "document" }',
+            `json_node` = '{ "value": 1, "kind": "node" }',
+            `json_object` = '{ "value": 1, "kind": "object" }',
+            `json_array` = '[ "array", 5, true ]'
+        WHERE `id` = {{GuidLiteral(guidFormat, identifier.ToString())}};
+        """,
         cancellationToken: cancellationToken);
 
     /// <summary>Applies the equivalent updated JSON representation with explicit cancellation.</summary>
@@ -444,14 +444,14 @@ public sealed class MySqlModelManagedDataJsonIntegrationTests : MySqlSafeMigrati
     ) => ExecuteSqlAsync(
         connectionString,
         $$"""
-          UPDATE `json_model_rows`
-          SET `json_text` = '{ "verified": false, "source": "HasData" }',
-              `json_element` = '{ "value": 2, "kind": "element" }',
-              `json_document` = '{ "value": 2, "kind": "document" }',
-              `json_node` = '{ "value": 2, "kind": "node" }',
-              `json_object` = '{ "value": 2, "kind": "object" }',
-              `json_array` = '[ "array", 6, false ]'
-          WHERE `id` = {{GuidLiteral(guidFormat, identifier.ToString())}};
-          """,
+        UPDATE `json_model_rows`
+        SET `json_text` = '{ "verified": false, "source": "HasData" }',
+            `json_element` = '{ "value": 2, "kind": "element" }',
+            `json_document` = '{ "value": 2, "kind": "document" }',
+            `json_node` = '{ "value": 2, "kind": "node" }',
+            `json_object` = '{ "value": 2, "kind": "object" }',
+            `json_array` = '[ "array", 6, false ]'
+        WHERE `id` = {{GuidLiteral(guidFormat, identifier.ToString())}};
+        """,
         cancellationToken: cancellationToken);
 }
