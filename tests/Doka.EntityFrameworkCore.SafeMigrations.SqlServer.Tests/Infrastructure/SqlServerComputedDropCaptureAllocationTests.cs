@@ -411,24 +411,20 @@ public sealed class SqlServerComputedDropCaptureAllocationTests(ITestOutputHelpe
 
     private static SafeMigrationOperation DropIndex(
         string name
-    )
-        => new(new DropIndexIntent(name, "nodes"), SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(new DropIndexIntent(name, "nodes"), SafeMigrationPolicy.ThrowIfDifferent);
 
     private static SafeMigrationOperation DropColumn(
         string name
-    )
-        => new(new DropColumnIntent(name, "nodes"), SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(new DropColumnIntent(name, "nodes"), SafeMigrationPolicy.ThrowIfDifferent);
 
-    private static SafeMigrationDbContext Context()
-        => new(
-            "Server=127.0.0.1,1433;Database=offline_computed_drop;User ID=sa;"
-            + "Password=unused;TrustServerCertificate=True");
+    private static SafeMigrationDbContext Context() => new(
+        "Server=127.0.0.1,1433;Database=offline_computed_drop;User ID=sa;"
+        + "Password=unused;TrustServerCertificate=True");
 
     private static void Prepare(
         SqlServerSafeMigrationProviderAnalyzer analyzer,
         IReadOnlyList<SafeMigrationOperation> operations
-    )
-        => Preparation(analyzer)(operations);
+    ) => Preparation(analyzer)(operations);
 
     private static Action<IReadOnlyList<SafeMigrationOperation>> Preparation(
         SqlServerSafeMigrationProviderAnalyzer analyzer

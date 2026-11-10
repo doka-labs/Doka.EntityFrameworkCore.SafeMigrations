@@ -22,9 +22,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 return false;
             }
 
-            var bytes = type.Length is { } length
-                ? length
-                : type.Name switch
+            var bytes = type.Length
+                ?? type.Name switch
                 {
                     "bigint" or "datetime" or "datetime2" or "float" or "money" or "timestamp" => 8,
                     "datetimeoffset" => 10,
@@ -178,17 +177,15 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string table,
         string? schema,
         string name
-    )
-        => "EXISTS (SELECT 1 FROM sys.key_constraints kc JOIN sys.foreign_keys fk "
-            + "ON fk.referenced_object_id = kc.parent_object_id AND fk.key_index_id = kc.unique_index_id "
-            + $"WHERE kc.parent_object_id = {TableId(table, schema)} AND kc.name = {Literal(name)})";
+    ) => "EXISTS (SELECT 1 FROM sys.key_constraints kc JOIN sys.foreign_keys fk "
+        + "ON fk.referenced_object_id = kc.parent_object_id AND fk.key_index_id = kc.unique_index_id "
+        + $"WHERE kc.parent_object_id = {TableId(table, schema)} AND kc.name = {Literal(name)})";
 
     private string KeyExists(
         string table,
         string? schema,
         string name,
         string kind
-    )
-        => $"EXISTS (SELECT 1 FROM sys.key_constraints kc WHERE kc.parent_object_id = {TableId(table, schema)} "
-            + $"AND kc.name = {Literal(name)} AND kc.type = {Literal(kind)})";
+    ) => $"EXISTS (SELECT 1 FROM sys.key_constraints kc WHERE kc.parent_object_id = {TableId(table, schema)} "
+        + $"AND kc.name = {Literal(name)} AND kc.type = {Literal(kind)})";
 }

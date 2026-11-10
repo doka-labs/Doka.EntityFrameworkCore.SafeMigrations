@@ -857,9 +857,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             : mapping.GenerateSqlLiteral(literal);
     }
 
-    private static string ActualDefaultKindExpression() =>
-        "CASE WHEN a.attidentity <> '' THEN 'identity' WHEN a.attgenerated <> '' THEN 'generated' "
-        + "WHEN d.oid IS NOT NULL THEN 'present' ELSE 'none' END";
+    private static string ActualDefaultKindExpression()
+        => "CASE WHEN a.attidentity <> '' THEN 'identity' WHEN a.attgenerated <> '' THEN 'generated' "
+            + "WHEN d.oid IS NOT NULL THEN 'present' ELSE 'none' END";
 
     private static string ValueGenerationKind(
         ExpectedColumnDefinition definition

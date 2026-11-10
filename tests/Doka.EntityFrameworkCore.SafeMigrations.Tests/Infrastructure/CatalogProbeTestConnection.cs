@@ -84,8 +84,7 @@ internal sealed class CatalogProbeTestConnection : DbConnection
     /// <inheritdoc />
     protected override DbTransaction BeginDbTransaction(
         IsolationLevel isolationLevel
-    )
-        => new ProbeTransaction(this, isolationLevel);
+    ) => new ProbeTransaction(this, isolationLevel);
 
     /// <inheritdoc />
     protected override DbCommand CreateDbCommand() => new ProbeCommand(this);
@@ -250,8 +249,7 @@ internal sealed class CatalogProbeTestConnection : DbConnection
         /// <inheritdoc />
         protected override DbDataReader ExecuteDbDataReader(
             CommandBehavior behavior
-        )
-            => Read(CancellationToken.None);
+        ) => Read(CancellationToken.None);
 
         /// <inheritdoc />
         protected override Task<DbDataReader> ExecuteDbDataReaderAsync(
@@ -314,8 +312,7 @@ internal sealed class CatalogProbeTestConnection : DbConnection
         /// <inheritdoc />
         public override Task PrepareAsync(
             CancellationToken cancellationToken = default
-        )
-            => throw new NotSupportedException();
+        ) => throw new NotSupportedException();
 
         /// <inheritdoc />
         public override int ExecuteNonQuery() => throw new NotSupportedException();
@@ -323,8 +320,7 @@ internal sealed class CatalogProbeTestConnection : DbConnection
         /// <inheritdoc />
         public override Task<int> ExecuteNonQueryAsync(
             CancellationToken cancellationToken = default
-        )
-            => throw new NotSupportedException();
+        ) => throw new NotSupportedException();
 
         /// <inheritdoc />
         public override object? ExecuteScalar() => throw new NotSupportedException();
@@ -332,14 +328,12 @@ internal sealed class CatalogProbeTestConnection : DbConnection
         /// <inheritdoc />
         public override Task<object?> ExecuteScalarAsync(
             CancellationToken cancellationToken = default
-        )
-            => throw new NotSupportedException();
+        ) => throw new NotSupportedException();
 
         /// <inheritdoc />
         protected override DbDataReader ExecuteDbDataReader(
             CommandBehavior behavior
-        )
-            => Read(CancellationToken.None);
+        ) => Read(CancellationToken.None);
 
         /// <inheritdoc />
         protected override Task<DbDataReader> ExecuteDbDataReaderAsync(
@@ -374,7 +368,6 @@ internal sealed class CatalogProbeTestConnection : DbConnection
             }
 
             base.Dispose();
-            GC.SuppressFinalize(this);
         }
     }
 
@@ -427,8 +420,7 @@ internal sealed class CatalogProbeTestConnection : DbConnection
             byte[]? buffer,
             int bufferOffset,
             int length
-        )
-            => inner.GetBytes(ordinal, dataOffset, buffer, bufferOffset, length);
+        ) => inner.GetBytes(ordinal, dataOffset, buffer, bufferOffset, length);
 
         /// <inheritdoc />
         public override char GetChar(
@@ -442,8 +434,7 @@ internal sealed class CatalogProbeTestConnection : DbConnection
             char[]? buffer,
             int bufferOffset,
             int length
-        )
-            => inner.GetChars(ordinal, dataOffset, buffer, bufferOffset, length);
+        ) => inner.GetChars(ordinal, dataOffset, buffer, bufferOffset, length);
 
         /// <inheritdoc />
         public override string GetDataTypeName(
@@ -623,8 +614,7 @@ internal sealed class CatalogProbeTestConnection : DbConnection
         public override void CopyTo(
             DbBatchCommand[] array,
             int arrayIndex
-        )
-            => _items.CopyTo(array, arrayIndex);
+        ) => _items.CopyTo(array, arrayIndex);
 
         /// <inheritdoc />
         public override IEnumerator<DbBatchCommand> GetEnumerator() => _items.GetEnumerator();
@@ -659,8 +649,7 @@ internal sealed class CatalogProbeTestConnection : DbConnection
         protected override void SetBatchCommand(
             int index,
             DbBatchCommand batchCommand
-        )
-            => _items[index] = batchCommand;
+        ) => _items[index] = batchCommand;
     }
 
     private sealed class ProbeParameters : DbParameterCollection
@@ -711,8 +700,7 @@ internal sealed class CatalogProbeTestConnection : DbConnection
         public override void CopyTo(
             Array array,
             int index
-        )
-            => ((ICollection)_items).CopyTo(array, index);
+        ) => ((ICollection)_items).CopyTo(array, index);
 
         /// <inheritdoc />
         public override IEnumerator GetEnumerator() => _items.GetEnumerator();
@@ -751,14 +739,12 @@ internal sealed class CatalogProbeTestConnection : DbConnection
         /// <inheritdoc />
         protected override DbParameter GetParameter(
             int index
-        )
-            => (DbParameter)_items[index];
+        ) => (DbParameter)_items[index];
 
         /// <inheritdoc />
         protected override DbParameter GetParameter(
             string parameterName
-        )
-            => throw new NotSupportedException();
+        ) => throw new NotSupportedException();
 
         /// <inheritdoc />
         protected override void SetParameter(
@@ -770,7 +756,6 @@ internal sealed class CatalogProbeTestConnection : DbConnection
         protected override void SetParameter(
             string parameterName,
             DbParameter value
-        )
-            => throw new NotSupportedException();
+        ) => throw new NotSupportedException();
     }
 }

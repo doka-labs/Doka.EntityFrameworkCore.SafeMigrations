@@ -81,7 +81,10 @@ internal static class SafeMigrationCapturedExpressionNormalization
                 definition.PrimaryKey,
                 definition.UniqueConstraints,
                 checks ?? definition.CheckConstraints,
-                definition.ForeignKeys);
+                definition.ForeignKeys)
+            {
+                ProviderAnnotations = definition.ProviderAnnotations,
+            };
     }
 
     private static EnsureColumnIntent Normalize(

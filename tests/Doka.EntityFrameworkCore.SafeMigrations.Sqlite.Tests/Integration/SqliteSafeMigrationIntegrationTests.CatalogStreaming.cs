@@ -183,8 +183,8 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             column => Assert.Equal("B", column),
             column => Assert.Equal("A", column));
 
-        Assert.Contains(snapshot.OtherObjects, value => value.Type == "view" && value.Name == "v quoted");
-        Assert.Contains(snapshot.OtherObjects, value => value.Type == "trigger" && value.Name == "tr quoted");
+        Assert.Contains(snapshot.OtherObjects, value => value is { Type: "view", Name: "v quoted" });
+        Assert.Contains(snapshot.OtherObjects, value => value is { Type: "trigger", Name: "tr quoted" });
     }
 
     /// <summary>Virtual-table hidden columns remain in the snapshot rather than being dropped by table_info.</summary>

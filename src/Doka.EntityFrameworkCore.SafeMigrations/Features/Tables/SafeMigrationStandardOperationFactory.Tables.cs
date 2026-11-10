@@ -16,6 +16,8 @@ internal static partial class SafeMigrationStandardOperationFactory
             Comment = definition.Comment,
         };
 
+        ApplyProviderAnnotations(operation, definition.ProviderAnnotations);
+
         foreach (var column in definition.Columns)
         {
             operation.Columns.Add(

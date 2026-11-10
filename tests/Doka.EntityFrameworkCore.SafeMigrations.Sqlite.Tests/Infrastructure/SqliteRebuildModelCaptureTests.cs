@@ -387,6 +387,7 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
     }
 
     /// <summary>Observes the catalog boundary on this connection without changing production instrumentation.</summary>
+    /// <param name="connection">The caller-owned open connection on which sqlite_version calls are counted.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task<Func<int>> ObserveCatalogCapturesAsync(
         SqliteConnection connection,
@@ -450,50 +451,48 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
     /// <summary>Retains the distinct row-evidence boundaries without requiring extra database fixtures.</summary>
     private static MigrationOperation CreateBoundary(
         string boundary
-    )
-        => boundary switch
+    ) => boundary switch
+    {
+        "opaque" => new SqlOperation { Sql = "SELECT 1;" },
+        "insert" => new InsertDataOperation
         {
-            "opaque" => new SqlOperation { Sql = "SELECT 1;" },
-            "insert" => new InsertDataOperation
-            {
-                Table = "nodes",
-                Columns = ["id"],
-                Values = new object[,] { { 1 } },
-            },
-            "update" => new UpdateDataOperation
-            {
-                Table = "nodes",
-                KeyColumns = ["id"],
-                KeyValues = new object[,] { { 1 } },
-                Columns = ["value"],
-                Values = new object[,] { { 2 } },
-            },
-            "delete" => new DeleteDataOperation
-            {
-                Table = "nodes",
-                KeyColumns = ["id"],
-                KeyValues = new object[,] { { 1 } },
-            },
-            _ => throw new ArgumentOutOfRangeException(nameof(boundary)),
-        };
+            Table = "nodes",
+            Columns = ["id"],
+            Values = new object[,] { { 1 } },
+        },
+        "update" => new UpdateDataOperation
+        {
+            Table = "nodes",
+            KeyColumns = ["id"],
+            KeyValues = new object[,] { { 1 } },
+            Columns = ["value"],
+            Values = new object[,] { { 2 } },
+        },
+        "delete" => new DeleteDataOperation
+        {
+            Table = "nodes",
+            KeyColumns = ["id"],
+            KeyValues = new object[,] { { 1 } },
+        },
+        _ => throw new ArgumentOutOfRangeException(nameof(boundary)),
+    };
 
     /// <summary>Creates the active provider analyzer without registering a test-only execution hook.</summary>
     private static SqliteSafeMigrationProviderAnalyzer CreateAnalyzer(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     /// <summary>Creates one small table whose legacy column is deliberately absent from the target model.</summary>
+    /// <param name="connection">The caller-owned connection receiving the physical window-entity table.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static Task CreateWindowTableAsync(
         SqliteConnection connection,
         CancellationToken cancellationToken
-    )
-        => ExecuteSqlAsync(
-            connection,
-            "CREATE TABLE window_entities (Id INTEGER NOT NULL, Legacy TEXT NULL, "
-            + "CONSTRAINT pk_window_entities PRIMARY KEY (Id));",
-            cancellationToken: cancellationToken);
+    ) => ExecuteSqlAsync(
+        connection,
+        "CREATE TABLE window_entities (Id INTEGER NOT NULL, Legacy TEXT NULL, "
+        + "CONSTRAINT pk_window_entities PRIMARY KEY (Id));",
+        cancellationToken: cancellationToken);
 
     /// <summary>Owns a distinct immutable EF model identity without changing physical test setup.</summary>
     /// <typeparam name="TModel">The marker selecting a distinct target-model identity.</typeparam>
@@ -503,8 +502,7 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         /// <inheritdoc />
         protected override void OnConfiguring(
             DbContextOptionsBuilder optionsBuilder
-        )
-            => optionsBuilder.UseSqlite(connection);
+        ) => optionsBuilder.UseSqlite(connection);
 
         /// <inheritdoc />
         protected override void OnModelCreating(

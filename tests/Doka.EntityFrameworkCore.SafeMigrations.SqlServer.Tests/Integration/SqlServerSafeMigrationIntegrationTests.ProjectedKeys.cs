@@ -99,17 +99,15 @@ public sealed class SqlServerSafeMigrationProjectedKeysIntegrationTests : SqlSer
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AlterColumnIfDifferentFromModel(
-            operation => operation.AlterColumn<string>(
-                "Code",
-                "projected_width",
-                type: $"nvarchar({length})",
-                maxLength: length,
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "nvarchar(10)",
-                oldMaxLength: 10),
-            SafeMigrationPolicy.RepairIfSafe);
+        builder.AlterColumnIfDifferentFromModel(operation => operation.AlterColumn<string>(
+            "Code",
+            "projected_width",
+            type: $"nvarchar({length})",
+            maxLength: length,
+            nullable: false,
+            oldClrType: typeof(string),
+            oldType: "nvarchar(10)",
+            oldMaxLength: 10));
 
         builder.CreateIndexIfNotExists("IX_projected_width_Code", "projected_width", ["Code"]);
 

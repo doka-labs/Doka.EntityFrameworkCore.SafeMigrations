@@ -124,8 +124,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 requested.Add(table.Value, columns);
             }
 
-            if (operation.Intent is EnsurePrimaryKeyIntent or EnsureUniqueConstraintIntent
-                || operation.Intent is EnsureIndexIntent { Definition.Unique: true })
+            if (operation.Intent is EnsurePrimaryKeyIntent
+                or EnsureUniqueConstraintIntent
+                or EnsureIndexIntent { Definition.Unique: true })
             {
                 rowsRequired.Add(table.Value);
             }

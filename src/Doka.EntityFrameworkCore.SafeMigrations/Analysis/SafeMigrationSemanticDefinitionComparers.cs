@@ -37,23 +37,21 @@ internal static class SafeMigrationSemanticDefinitionComparers
     /// <param name="columns">The separately certified column comparer.</param>
     public static IEqualityComparer<ExpectedIndexDefinition> IndexForColumns(
         StringComparer columns
-    ) =>
-        ReferenceEquals(columns, StringComparer.Ordinal)
-            ? Index
-            : ReferenceEquals(columns, StringComparer.OrdinalIgnoreCase)
-                ? s_caseInsensitiveColumnIndex
-                : new ColumnAwareIndexComparer(columns);
+    ) => ReferenceEquals(columns, StringComparer.Ordinal)
+        ? Index
+        : ReferenceEquals(columns, StringComparer.OrdinalIgnoreCase)
+            ? s_caseInsensitiveColumnIndex
+            : new ColumnAwareIndexComparer(columns);
 
     /// <summary>Gets equality and hashing with one certified typed candidate-key column identity contract.</summary>
     /// <param name="columns">The separately certified column comparer.</param>
     public static IEqualityComparer<ExpectedUniqueConstraintDefinition> UniqueForColumns(
         StringComparer columns
-    ) =>
-        ReferenceEquals(columns, StringComparer.Ordinal)
-            ? UniqueConstraint
-            : ReferenceEquals(columns, StringComparer.OrdinalIgnoreCase)
-                ? s_caseInsensitiveColumnUnique
-                : new ColumnAwareUniqueComparer(columns);
+    ) => ReferenceEquals(columns, StringComparer.Ordinal)
+        ? UniqueConstraint
+        : ReferenceEquals(columns, StringComparer.OrdinalIgnoreCase)
+            ? s_caseInsensitiveColumnUnique
+            : new ColumnAwareUniqueComparer(columns);
 
     private static int CheckConstraintHash(
         ExpectedCheckConstraintDefinition definition
@@ -306,8 +304,7 @@ internal static class SafeMigrationSemanticDefinitionComparers
         public bool Equals(
             ExpectedIndexDefinition? left,
             ExpectedIndexDefinition? right
-        ) =>
-            ReferenceEquals(left, right)
+        ) => ReferenceEquals(left, right)
             || (left is not null
                 && right is not null
                 && SafeMigrationDefinitionEquivalence.IndexSemantics(left, right, columns));
@@ -326,8 +323,7 @@ internal static class SafeMigrationSemanticDefinitionComparers
         public bool Equals(
             ExpectedUniqueConstraintDefinition? left,
             ExpectedUniqueConstraintDefinition? right
-        ) =>
-            ReferenceEquals(left, right)
+        ) => ReferenceEquals(left, right)
             || (left is not null
                 && right is not null
                 && SafeMigrationDefinitionEquivalence.UniqueConstraintSemantics(left, right, columns));

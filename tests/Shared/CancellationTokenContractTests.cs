@@ -260,8 +260,7 @@ internal static class CancellationTokenContract
     /// <summary>Excludes compiler callback/base-call adapters, but not owned local functions.</summary>
     private static bool IsCompilerAdapter(
         MethodInfo method
-    ) =>
-        (method.Name.Contains(">b__", StringComparison.Ordinal)
+    ) => (method.Name.Contains(">b__", StringComparison.Ordinal)
             || method.Name.StartsWith("<>n__", StringComparison.Ordinal))
         && (method.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false)
             || method.DeclaringType!.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false));
@@ -320,8 +319,7 @@ internal static class CancellationTokenContract
     /// <summary>Retains the CLR delegate infrastructure while checking the authored Invoke contract.</summary>
     private static bool IsDelegateAdapter(
         MethodInfo method
-    ) =>
-        typeof(Delegate).IsAssignableFrom(method.DeclaringType)
+    ) => typeof(Delegate).IsAssignableFrom(method.DeclaringType)
         && method.Name is "BeginInvoke" or "EndInvoke"
         && (method.GetMethodImplementationFlags() & MethodImplAttributes.CodeTypeMask) == MethodImplAttributes.Runtime;
 
@@ -350,6 +348,10 @@ internal static class CancellationTokenContract
         // are not exceptions; each owner/signature must be reviewed as a resource-recovery boundary.
         return (identity, method.Name, parameters) switch
         {
+            ("Doka.EntityFrameworkCore.SafeMigrations.Testing.OwnedTestOperationCleanup",
+                "CompleteAsync", "System.Exception,System.Threading.Tasks.Task,"
+                + "System.Func`1[System.Threading.Tasks.Task],System.Threading.CancellationTokenSource,"
+                + "System.Func`1[System.Threading.Tasks.Task]") => true,
             ("Doka.EntityFrameworkCore.SafeMigrations.MySql.MySqlCatalogSnapshot",
                 "DisposeAfterFailureAsync", "System.Exception") => true,
             ("Doka.EntityFrameworkCore.SafeMigrations.MySql.MySqlCatalogSnapshot",
@@ -378,7 +380,8 @@ internal static class CancellationTokenContract
             ("Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.MySqlGeneratedCaseIntegrationTests",
                 "ReleaseSparseDropGateAsync", "MySqlConnector.MySqlConnection,System.String") => true,
             ("Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.MySqlSafeMigrationIntegrationTests",
-                "FinishAtomicAddConcurrentAttemptAsync", "System.Threading.Tasks.Task`1[System.Exception],"
+                "FinishAtomicAddConcurrentAttemptAsync",
+                "System.Exception,System.Threading.Tasks.Task,"
                 + "System.Threading.CancellationTokenSource,MySqlConnector.MySqlTransaction,"
                 + "System.Boolean") => true,
             ("Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.PostgreSqlContainerFixture",

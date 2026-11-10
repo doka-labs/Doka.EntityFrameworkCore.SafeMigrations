@@ -230,8 +230,7 @@ internal sealed class MySqlSafeMigrationRuntimeDiagnostic
         MySqlException failure,
         out string guardCode,
         out int reasonSlot
-    )
-        => TryReadFailure(failure.Number, failure.SqlState, failure.Message, out guardCode, out reasonSlot);
+    ) => TryReadFailure(failure.Number, failure.SqlState, failure.Message, out guardCode, out reasonSlot);
 
     /// <summary>Parses the closed native transport independently of exception construction.</summary>
     /// <param name="number">The original server error number.</param>

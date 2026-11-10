@@ -2,7 +2,6 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
 /// <summary>Exercises projected foreign key new owner with independently owned SQLite state.</summary>
 public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegrationTests
-    : SqliteSafeMigrationCatalogIntegrationTests
 {
     /// <summary>Allowed later PK shapes cannot lend their native identity to an incompatible original PK.</summary>
     /// <param name="nativeKeyColumn">The physically installed initial or allowed terminal key member.</param>
@@ -51,10 +50,12 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
             bindsInitial,
             results[0]
                 .TableConstraintIdentities
-                ?.Any(binding =>
-                    binding.Kind == SafeMigrationDatabaseObjectKind.PrimaryKey
-                    && binding.AuthoredName == "logical_initial_pk"
-                    && binding.PhysicalName == "physical_current_pk")
+                ?.Any(binding => binding is
+                {
+                    Kind: SafeMigrationDatabaseObjectKind.PrimaryKey,
+                    AuthoredName: "logical_initial_pk",
+                    PhysicalName: "physical_current_pk",
+                })
             ?? false);
     }
 

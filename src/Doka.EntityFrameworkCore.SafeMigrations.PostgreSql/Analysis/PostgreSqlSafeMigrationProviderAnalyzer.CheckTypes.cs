@@ -14,7 +14,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         if (analysis.ObservedState != SafeMigrationObservedState.Missing
             || operation.Intent is not EnsureCheckConstraintIntent check
             || _sparseCheckTypeFacts?.Checks.Contains(check.Definition) != true
-            || check.Definition.Expression is not { } expression)
+            || check.Definition.Expression is null)
         {
             return null;
         }
@@ -39,7 +39,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             return null;
         }
 
-        expression = SafeMigrationCapturedExpressionNormalization.NormalizeCheck(check.Definition, true)
+        var expression = SafeMigrationCapturedExpressionNormalization.NormalizeCheck(check.Definition, true)
             .Expression!;
 
         var resolved = ResolveCheckExpression(expression, check.Definition, columns);
@@ -122,7 +122,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             cancellationToken.ThrowIfCancellationRequested();
             if (results[ordinal].ObservedState != SafeMigrationObservedState.PrerequisiteMissing
                 || operations[ordinal].Intent is not EnsureCheckConstraintIntent check
-                || check.Definition.Expression is not { } expression
+                || check.Definition.Expression is null
                 || !NativePrerequisiteColumns(check)
                     .Any(column => members.Contains(
                         LiveColumnKey(check.Definition.Table, check.Definition.Schema, column))))
@@ -131,7 +131,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             }
 
             checks.Add(check.Definition);
-            expression = SafeMigrationCapturedExpressionNormalization.NormalizeCheck(
+            var expression = SafeMigrationCapturedExpressionNormalization.NormalizeCheck(
                     check.Definition,
                     true)
                 .Expression!;
@@ -140,8 +140,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             {
                 var identity = node switch
                 {
-                    SafeMigrationSqlBinaryExpression binary when binary.Operator
-                            is not (SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or)
+                    SafeMigrationSqlBinaryExpression
+                        {
+                            Operator: not (SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or),
+                        } binary
                         => new CheckCallableIdentity(CheckOperator(binary.Operator), 2, Function: false),
                     SafeMigrationSqlUnaryExpression { Operator: SafeMigrationSqlUnaryOperator.Negate }
                         => new CheckCallableIdentity("-", 1, Function: false),
@@ -864,17 +866,16 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     private CheckExpressionType ResolveCheckFunction(
         SafeMigrationSqlFunctionExpression function,
         CheckExpressionType[] arguments
-    )
-        => function.Name.Equals("NULLIF", StringComparison.OrdinalIgnoreCase)
-            ? ResolveCheckNullIf(arguments)
-            : IsCommonTypeFunction(function.Name)
-                ? ResolveCommonCheckType(arguments)
-                : ResolveCheckCallable(
-                    new CheckCallableIdentity(
-                        function.Name.ToLowerInvariant(),
-                        arguments.Length,
-                        Function: true),
-                    arguments);
+    ) => function.Name.Equals("NULLIF", StringComparison.OrdinalIgnoreCase)
+        ? ResolveCheckNullIf(arguments)
+        : IsCommonTypeFunction(function.Name)
+            ? ResolveCommonCheckType(arguments)
+            : ResolveCheckCallable(
+                new CheckCallableIdentity(
+                    function.Name.ToLowerInvariant(),
+                    arguments.Length,
+                    Function: true),
+                arguments);
 
     /// <summary>Uses exact overloads first and only native expression-implicit casts for nonexact operands.</summary>
     private CheckExpressionType ResolveCheckCallable(
@@ -1125,12 +1126,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     /// </summary>
     private CheckCallableIdentity CheckCollationIdentity(
         SafeMigrationSqlCollateExpression expression
-    )
-        => new(
-            _sqlGenerationHelper.DelimitIdentifier(expression.Name, expression.Schema),
-            0,
-            Function: false,
-            Collation: true);
+    ) => new(
+        _sqlGenerationHelper.DelimitIdentifier(expression.Name, expression.Schema),
+        0,
+        Function: false,
+        Collation: true);
 
     /// <summary>Recognizes logical operands separately from overloaded comparison operators.</summary>
     private CheckExpressionType BooleanOperands(
@@ -1152,20 +1152,18 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     /// <summary>A NULL test's result is Boolean regardless of its valid operand's type.</summary>
     private static CheckExpressionType BooleanResult(
         CheckExpressionType operand
-    )
-        => operand.Incompatible
-            ? new CheckExpressionType(null, Incompatible: true)
-            : operand.TypeOid is null
-                ? default
-                : new CheckExpressionType(16);
+    ) => operand.Incompatible
+        ? new CheckExpressionType(null, Incompatible: true)
+        : operand.TypeOid is null
+            ? default
+            : new CheckExpressionType(16);
 
     /// <summary>Uses only captured native implicit-cast edges, never assignment-only or explicit coercions.</summary>
     private bool CanImplicitlyCast(
         long source,
         long target
-    )
-        => source == target
-            || _sparseCheckTypeFacts?.ImplicitCasts.Contains(new CheckImplicitCast(source, target)) == true;
+    ) => source == target
+        || _sparseCheckTypeFacts?.ImplicitCasts.Contains(new CheckImplicitCast(source, target)) == true;
 
     /// <summary>
     /// Retains unknown literal value provenance rather than treating every string as a valid native input.
@@ -1241,32 +1239,30 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     /// <summary>Limits negative binding proofs to builtin scalars without domain or polymorphic inference.</summary>
     private static bool IsBuiltinCheckScalar(
         long type
-    )
-        => type is 16
-            or 20
-            or 21
-            or 23
-            or 25
-            or 700
-            or 701
-            or 1042
-            or 1043
-            or 1082
-            or 1083
-            or 1114
-            or 1184
-            or 1266
-            or 1700
-            or 2950;
+    ) => type is 16
+        or 20
+        or 21
+        or 23
+        or 25
+        or 700
+        or 701
+        or 1042
+        or 1043
+        or 1082
+        or 1083
+        or 1114
+        or 1184
+        or 1266
+        or 1700
+        or 2950;
 
     /// <summary>Looks up a literal, CAST target or current value's independently resolved native OID.</summary>
     private CheckExpressionType CheckExpressionNativeType(
         SafeMigrationSqlExpression expression
-    )
-        => CheckExpressionTypeIdentity(expression) is { } identity
-            && _livePrerequisiteTypes?.TryGetValue(identity, out var storage) == true
-                ? new CheckExpressionType(storage.TypeOid)
-                : default;
+    ) => CheckExpressionTypeIdentity(expression) is { } identity
+        && _livePrerequisiteTypes?.TryGetValue(identity, out var storage) == true
+            ? new CheckExpressionType(storage.TypeOid)
+            : default;
 
     /// <summary>Captures only referenced type identities; native values and user functions are not evaluated.</summary>
     private IEnumerable<LiveColumnTypeIdentity> CheckExpressionTypeIdentities(
@@ -1292,22 +1288,28 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             SafeMigrationSqlUnaryExpression
                 {
                     Operator: SafeMigrationSqlUnaryOperator.Negate,
-                    Operand: SafeMigrationSqlLiteralExpression { Value: long value } literal,
+                    Operand: SafeMigrationSqlLiteralExpression
+                    {
+                        Value: long value, NumericSourceToken.IsEmpty: false,
+                    },
                 }
-                when !literal.NumericSourceToken.IsEmpty && value == 2147483648L => "integer",
+                when value == 2147483648L => "integer",
             SafeMigrationSqlUnaryExpression
                 {
                     Operator: SafeMigrationSqlUnaryOperator.Negate,
-                    Operand: SafeMigrationSqlLiteralExpression { Value: ulong value } literal,
+                    Operand: SafeMigrationSqlLiteralExpression
+                    {
+                        Value: ulong value, NumericSourceToken.IsEmpty: false,
+                    },
                 }
-                when !literal.NumericSourceToken.IsEmpty && value == 9223372036854775808UL => "bigint",
+                when value == 9223372036854775808UL => "bigint",
             SafeMigrationSqlCastExpression cast => _typeMappingSource.FindMapping(cast.StoreType)
                 ?.StoreTypeNameBase,
             SafeMigrationSqlLiteralExpression { StoreType: { } storeType }
                 => _typeMappingSource.FindMapping(storeType)
                     ?.StoreTypeNameBase,
-            SafeMigrationSqlLiteralExpression literal when !literal.NumericSourceToken.IsEmpty
-                && literal.NumericSourceToken.Span.ContainsAny('.', 'e', 'E') => "numeric",
+            SafeMigrationSqlLiteralExpression { NumericSourceToken.IsEmpty: false } literal
+                when literal.NumericSourceToken.Span.ContainsAny('.', 'e', 'E') => "numeric",
             SafeMigrationSqlLiteralExpression { Value: bool } => "boolean",
             SafeMigrationSqlLiteralExpression { Value: byte or sbyte or short or ushort or int } => "integer",
             SafeMigrationSqlLiteralExpression { Value: long value }
@@ -1405,10 +1407,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     /// <summary>Recognizes native SQL common-type special forms rather than callable catalog entries.</summary>
     private static bool IsCommonTypeFunction(
         string name
-    )
-        => name.Equals("COALESCE", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("GREATEST", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("LEAST", StringComparison.OrdinalIgnoreCase);
+    ) => name.Equals("COALESCE", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("GREATEST", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("LEAST", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Validates the scalar native OID list before exposing signature facts.</summary>
     private static long[] CheckOidList(

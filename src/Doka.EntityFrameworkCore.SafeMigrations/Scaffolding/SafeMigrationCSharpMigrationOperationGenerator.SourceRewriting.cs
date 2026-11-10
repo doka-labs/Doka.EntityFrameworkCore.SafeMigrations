@@ -33,7 +33,9 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
 
         var methodIndex = source.IndexOf(method, StringComparison.Ordinal);
         if (methodIndex < 0
-            || source.IndexOf(method, methodIndex + method.Length, StringComparison.Ordinal) >= 0)
+            || source
+                .AsSpan(0, methodIndex)
+                .ContainsAnyExcept(' ', '\t'))
         {
             throw new InvalidOperationException(
                 "The EF Core C# operation generator emitted an unexpected CreateTable shape. "
@@ -42,16 +44,18 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
 
         var openParenthesis = methodIndex + method.Length - 1;
         var closeParenthesis = FindMatchingParenthesis(source, openParenthesis);
+        if (!source
+            .AsSpan(closeParenthesis + 1)
+            .Trim()
+            .IsEmpty)
+        {
+            throw new InvalidOperationException("The EF Core C# generator emitted an unexpected CreateTable suffix.");
+        }
+
         var argumentIndent = FindArgumentIndent(source, openParenthesis, closeParenthesis);
         var newline = SafeMigrationGeneratedSource.GetConsistentNewLine(source);
-        var policy = _configuration.LegacyConvergencePolicy switch
-        {
-            SafeMigrationPolicy.ThrowIfDifferent => nameof(SafeMigrationPolicy.ThrowIfDifferent),
-            SafeMigrationPolicy.RepairIfSafe => nameof(SafeMigrationPolicy.RepairIfSafe),
-            _ => throw new InvalidOperationException(
-                "The legacy-convergence policy is invalid. Select ThrowIfDifferent or RepairIfSafe "
-                + "through UseLegacyConvergencePolicy before generating migrations."),
-        };
+        var policy = GetLegacyConvergencePolicy()
+            .ToString();
 
         // Freeze the policy into generated source. Runtime option changes must
         // never reinterpret a migration that was already reviewed.
@@ -64,6 +68,16 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
                 "policy: global::Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationPolicy.",
                 policy));
     }
+
+    /// <summary>Validates the convergence policy before freezing it into the existing typed table source.</summary>
+    private SafeMigrationPolicy GetLegacyConvergencePolicy() => _configuration.LegacyConvergencePolicy switch
+    {
+        SafeMigrationPolicy.ThrowIfDifferent => SafeMigrationPolicy.ThrowIfDifferent,
+        SafeMigrationPolicy.RepairIfSafe => SafeMigrationPolicy.RepairIfSafe,
+        _ => throw new InvalidOperationException(
+            "The legacy-convergence policy is invalid. Select ThrowIfDifferent or RepairIfSafe "
+            + "through UseLegacyConvergencePolicy before generating migrations."),
+    };
 
     private static int FindMatchingParenthesis(
         string source,
@@ -292,12 +306,27 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
         if (methodIndex < 0
             || baseline
                 .AsSpan(0, methodIndex)
-                .ContainsAnyExcept(' ', '\t')
-            || baseline.IndexOf(expected, methodIndex + expected.Length, StringComparison.Ordinal) >= 0)
+                .ContainsAnyExcept(' ', '\t'))
         {
             throw new InvalidOperationException(
                 $"The EF Core C# operation generator emitted an unexpected '{expected}' shape. "
                 + "SafeMigrations stopped instead of generating ambiguous migration code.");
+        }
+
+        // WHY: Native literals can contain method-looking text. For tables,
+        // validate the actual outer call and its empty suffix instead of
+        // mistaking quoted user data for a second generated invocation.
+        var unexpectedSuffix = expected == ".CreateTable("
+            ? !baseline
+                .AsSpan(FindMatchingParenthesis(baseline, methodIndex + expected.Length - 1) + 1)
+                .Trim()
+                .IsEmpty
+            : baseline.IndexOf(expected, methodIndex + expected.Length, StringComparison.Ordinal) >= 0;
+
+        if (unexpectedSuffix)
+        {
+            throw new InvalidOperationException(
+                $"The EF Core C# operation generator emitted an unexpected '{expected}' suffix.");
         }
 
         builder
@@ -365,6 +394,10 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
 
     private static IndentedStringBuilder CreateScratchBuilder(
         IndentedStringBuilder source
+    ) => CreateScratchBuilder(source.IndentCount);
+
+    private static IndentedStringBuilder CreateScratchBuilder(
+        int indentCount
     )
     {
         var scratch = new IndentedStringBuilder();
@@ -372,7 +405,7 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
         // WHY: Reproduce the exact indentation depth without allocating an enumerable of levels.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
-        for (var index = 0; index < source.IndentCount; index++)
+        for (var index = 0; index < indentCount; index++)
         {
             scratch.IncrementIndent();
         }

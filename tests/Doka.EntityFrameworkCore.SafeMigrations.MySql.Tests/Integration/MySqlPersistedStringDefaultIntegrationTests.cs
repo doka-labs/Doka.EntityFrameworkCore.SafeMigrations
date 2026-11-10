@@ -1335,8 +1335,7 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
     /// <returns>A native MySQL identifier with embedded backticks escaped.</returns>
     private static string QuoteIdentifier(
         string identifier
-    ) =>
-        "`" + identifier.Replace("`", "``", StringComparison.Ordinal) + "`";
+    ) => "`" + identifier.Replace("`", "``", StringComparison.Ordinal) + "`";
 
     /// <summary>Sets an explicit mode instead of relying on a container or connection-pool default.</summary>
     /// <param name="connection">The already-open native connection.</param>

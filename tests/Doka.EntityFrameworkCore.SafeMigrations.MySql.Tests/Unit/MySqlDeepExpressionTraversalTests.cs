@@ -167,7 +167,7 @@ public sealed class MySqlDeepExpressionTraversalTests
     {
         // Arrange
         using var context = CreateContext();
-        var expression = (SafeMigrationSqlExpression)SafeMigrationSql.Identifier("source");
+        var expression = SafeMigrationSql.Identifier("source");
         for (var index = 0; index < Depth; index++)
         {
             expression = SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Not, expression);
@@ -202,17 +202,19 @@ public sealed class MySqlDeepExpressionTraversalTests
         // Arrange
         using var context = CreateContext();
         var expression = Build(shape, SafeMigrationSql.Literal(1));
-        var prefix = shape == "case"
-            ? "case when 1 then "
-            : shape == "right"
-                ? "1 + "
-                : "";
+        var prefix = shape switch
+        {
+            "case" => "case when 1 then ",
+            "right" => "1 + ",
+            _ => "",
+        };
 
-        var suffix = shape == "case"
-            ? " else 1 end"
-            : shape == "left"
-                ? " + 1"
-                : "";
+        var suffix = shape switch
+        {
+            "case" => " else 1 end",
+            "left" => " + 1",
+            _ => "",
+        };
 
         var grouping = !isMariaDb || shape == "right";
         var expected = new StringBuilder();
@@ -357,7 +359,7 @@ public sealed class MySqlDeepExpressionTraversalTests
     )
     {
         // Arrange
-        var expression = (SafeMigrationSqlExpression)SafeMigrationSql.Literal(1);
+        var expression = SafeMigrationSql.Literal(1);
         for (var index = 0; index < depth; index++)
         {
             expression = SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Negate, expression);
@@ -467,7 +469,7 @@ public sealed class MySqlDeepExpressionTraversalTests
     {
         // Arrange
         using var context = CreateContext();
-        var expression = (SafeMigrationSqlExpression)SafeMigrationSql.Binary(
+        var expression = SafeMigrationSql.Binary(
             SafeMigrationSql.Binary(
                 SafeMigrationSql.Identifier("a"),
                 SafeMigrationSqlBinaryOperator.Equal,

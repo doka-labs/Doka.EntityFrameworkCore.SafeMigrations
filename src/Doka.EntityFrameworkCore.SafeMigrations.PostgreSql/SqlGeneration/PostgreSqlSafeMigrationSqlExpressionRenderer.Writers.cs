@@ -455,8 +455,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             if (!NativeLiteralForms
                 || _relationOid is null
                 || !function.Name.Equals("LOWER", StringComparison.OrdinalIgnoreCase)
-                || function.Arguments.Count != 1
-                || function.Arguments[0] is not SafeMigrationSqlIdentifierExpression column)
+                || function.Arguments is not [SafeMigrationSqlIdentifierExpression column])
             {
                 return false;
             }

@@ -347,7 +347,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
             return [Command("DO 0;", transactionSuppressed: true)];
         }
 
-        if (operation.Intent is ModelManagedDataIntent modelManagedData)
+        if (operation.Intent is ModelManagedDataIntent)
         {
             return
             [

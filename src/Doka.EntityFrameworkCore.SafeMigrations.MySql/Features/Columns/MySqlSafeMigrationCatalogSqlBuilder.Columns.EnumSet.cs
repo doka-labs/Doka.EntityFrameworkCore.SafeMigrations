@@ -55,8 +55,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <returns>Whether native literal decoding changes the member domain.</returns>
     private static bool HasModeSensitiveEnumSetMembers(
         ExpectedColumnDefinition definition
-    ) =>
-        definition.StoreType is { } storeType
+    ) => definition.StoreType is { } storeType
         && !StringComparer.Ordinal.Equals(
             BuildEnumSetCatalogDisplay(storeType, backslashEscapes: true, out _),
             BuildEnumSetCatalogDisplay(storeType, backslashEscapes: false, out _));
@@ -94,8 +93,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         string QualifyState(
             string expression
-        ) =>
-            $"CASE WHEN NOT ({prerequisite}) THEN 'prerequisite_missing' "
+        ) => $"CASE WHEN NOT ({prerequisite}) THEN 'prerequisite_missing' "
             + $"WHEN ({matching}) THEN 'matching' WHEN NOT ({mode}) THEN 'unsupported' ELSE ({expression}) END";
 
         // WHY: Native comment setup enables NO_BACKSLASH_ESCAPES. A different

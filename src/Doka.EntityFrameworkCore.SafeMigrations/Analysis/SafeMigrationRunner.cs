@@ -401,10 +401,7 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
                 cancellationToken.ThrowIfCancellationRequested();
 
                 var operation = operations[ordinal];
-                if (preflightProjection is not null)
-                {
-                    preflightProjection.CurrentOperationOrdinal = ordinal;
-                }
+                preflightProjection?.CurrentOperationOrdinal = ordinal;
 
                 var managedDataVersion = preflightProjection?.ModelManagedDataChangeVersion;
                 var globalDataVersion = preflightProjection?.DataMutationVersion;
@@ -479,9 +476,12 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
                         ? rawSqlOrigin
                         : null;
 
-                if (analysis.IsModelManagedProjectionUnknown
-                    && !analysis.HasStaleGlobalModelManagedData
-                    && analysis.ModelManagedLocalOriginOrdinal is { } localOriginOrdinal)
+                if (analysis is
+                    {
+                        IsModelManagedProjectionUnknown: true,
+                        HasStaleGlobalModelManagedData: false,
+                        ModelManagedLocalOriginOrdinal: { } localOriginOrdinal,
+                    })
                 {
                     var originOperation = operations[localOriginOrdinal];
 

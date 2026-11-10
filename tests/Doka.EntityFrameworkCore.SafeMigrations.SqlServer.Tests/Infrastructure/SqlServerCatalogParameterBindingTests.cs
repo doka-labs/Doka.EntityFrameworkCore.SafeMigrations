@@ -90,7 +90,7 @@ public sealed class SqlServerCatalogParameterBindingTests
         // Assert
         Assert.False(original.IsStaticallyUnsupported);
         Assert.False(parameterized.IsStaticallyUnsupported);
-        Assert.Contains(bindings.Values, parameter => Equals(parameter.Value, value));
+        Assert.Contains(bindings.Values, binding => Equals(binding.Value, value));
         Assert.DoesNotContain("@doka_source", parameterized.StateExpression, StringComparison.Ordinal);
         Assert.Contains("@doka_value", parameterized.StateExpression, StringComparison.Ordinal);
         if (value is sbyte or ushort or uint or ulong or BindingValue)

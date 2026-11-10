@@ -555,8 +555,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
 
     private static SafeMigrationOperation Safe(
         SafeMigrationIntent intent
-    ) =>
-        new(intent, SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(intent, SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Verifies the ordered postflight contract through the production dispatch loop.</summary>
     /// <param name="operations">The ordered operations whose final contracts are verified.</param>
@@ -726,8 +725,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         public bool IsPostflightIdentityProven(
             SafeMigrationIntent intent,
             int ordinal
-        ) =>
-            HistoricalIdentityProven && (FirstUnprovenOrdinal is null || ordinal < FirstUnprovenOrdinal);
+        ) => HistoricalIdentityProven && (FirstUnprovenOrdinal is null || ordinal < FirstUnprovenOrdinal);
 
         public ISafeMigrationProviderObjectIdentityNormalizer GetPostflightIdentityNormalizer(
             IReadOnlyList<MigrationOperation> operations
@@ -780,7 +778,6 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         public bool IsPostflightIdentityProven(
             SafeMigrationIntent intent,
             int ordinal
-        ) =>
-            historicalProven && (firstUnproven is null || ordinal < firstUnproven);
+        ) => historicalProven && (firstUnproven is null || ordinal < firstUnproven);
     }
 }

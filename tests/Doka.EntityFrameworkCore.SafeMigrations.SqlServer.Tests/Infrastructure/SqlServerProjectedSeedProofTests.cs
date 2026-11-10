@@ -305,30 +305,27 @@ public sealed class SqlServerProjectedSeedProofTests
 
     private static ExpectedTableDefinition Table(
         int length = 20
-    )
-        => new(
-            "seeds",
-            [
-                new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
-                new ExpectedColumnDefinition("Code", typeof(string), true, $"nvarchar({length})", maxLength: length),
-            ]);
+    ) => new(
+        "seeds",
+        [
+            new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
+            new ExpectedColumnDefinition("Code", typeof(string), true, $"nvarchar({length})", maxLength: length),
+        ]);
 
-    private static EnsureModelManagedDataIntent Seed()
-        => new(
-            "seeds",
-            ["Id"],
-            ["int"],
-            ["Id", "Code"],
-            ["int", "nvarchar(20)"],
-            new object?[,] { { 1, "one" } },
-            schema: null,
-            uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Code"])]);
+    private static EnsureModelManagedDataIntent Seed() => new(
+        "seeds",
+        ["Id"],
+        ["int"],
+        ["Id", "Code"],
+        ["int", "nvarchar(20)"],
+        new object?[,] { { 1, "one" } },
+        schema: null,
+        uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Code"])]);
 
     private static SafeMigrationProviderAnalysis Analysis(
         SafeMigrationObservedState state,
         string code
-    )
-        => new(state, SafeMigrationRepairCapability.None, false, code);
+    ) => new(state, SafeMigrationRepairCapability.None, false, code);
 
     private sealed class Source(
         ExpectedTableDefinition table,

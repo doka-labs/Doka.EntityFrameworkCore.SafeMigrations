@@ -513,7 +513,7 @@ public sealed class MySqlColumnsRequiredDefaultsIntegrationTests : MySqlSafeMigr
         await using var observer = new RequiredAddCatalogTransportObserver(connectionString);
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>()
             .UseMySql(observer, Fixture.ServerVersion)
-            .UseMySqlSafeMigrations<SafeMigrationDbContext>()
+            .UseMySqlSafeMigrations()
             .Options;
 
         await using var context = new SafeMigrationDbContext(options);
@@ -700,8 +700,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         /// <inheritdoc />
         protected override DbTransaction BeginDbTransaction(
             IsolationLevel isolationLevel
-        )
-            => _inner.BeginTransaction(isolationLevel);
+        ) => _inner.BeginTransaction(isolationLevel);
 
         /// <inheritdoc />
         protected override DbCommand CreateDbCommand() => new RequiredAddObservedCommand(this, _inner.CreateCommand());
@@ -828,8 +827,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             /// <inheritdoc />
             public override Task PrepareAsync(
                 CancellationToken cancellationToken = default
-            )
-                => _inner.PrepareAsync(cancellationToken);
+            ) => _inner.PrepareAsync(cancellationToken);
 
             /// <inheritdoc />
             protected override DbParameter CreateDbParameter() => _inner.CreateParameter();
@@ -967,8 +965,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             /// <inheritdoc />
             public override Task PrepareAsync(
                 CancellationToken cancellationToken = default
-            )
-                => _inner.PrepareAsync(cancellationToken);
+            ) => _inner.PrepareAsync(cancellationToken);
 
             /// <inheritdoc />
             public override int ExecuteNonQuery()
@@ -1032,7 +1029,6 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             {
                 _inner.Dispose();
                 base.Dispose();
-                GC.SuppressFinalize(this);
             }
 
             /// <inheritdoc />
@@ -1040,7 +1036,6 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             {
                 await _inner.DisposeAsync();
                 await base.DisposeAsync();
-                GC.SuppressFinalize(this);
             }
 
             /// <summary>Counts each submitted native statement without retaining its SQL or parameter values.</summary>

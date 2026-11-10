@@ -51,8 +51,8 @@ public class SqlServerGuardGenerationBenchmarks
     /// <summary>Renders one guard using the same preconstructed immutable control inputs.</summary>
     /// <returns>The complete guarded SQL text.</returns>
     [Benchmark]
-    public string Generate()
-        => _lastSql = SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(Control.Operation, Control.Plan, [], []);
+    public string Generate() => _lastSql =
+        SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(Control.Operation, Control.Plan, [], []);
 
     /// <summary>Checks each iteration's generated SQL without including validation in the timing.</summary>
     [IterationCleanup]
@@ -66,8 +66,7 @@ public class SqlServerGuardGenerationBenchmarks
 
     /// <summary>Requires the final generated SQL to match the setup oracle.</summary>
     [GlobalCleanup]
-    public void Cleanup()
-        => VerifyDeterministicSql();
+    public void Cleanup() => VerifyDeterministicSql();
 
     /// <summary>Creates quoted direct and delayed inputs using only the baseline runtime-plan surface.</summary>
     private static IEnumerable<GuardGenerationControl> CreateGuardGenerationControls()

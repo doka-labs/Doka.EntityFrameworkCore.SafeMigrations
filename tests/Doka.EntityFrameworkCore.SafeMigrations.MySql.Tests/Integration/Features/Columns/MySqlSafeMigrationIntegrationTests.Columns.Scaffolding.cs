@@ -750,10 +750,10 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
             _ => throw new ArgumentOutOfRangeException(nameof(testCase), testCase, "Unsupported test case."),
         };
 
-        var storeType = testCase == UnsupportedGuidAnnotationCase.BinaryWithCharStoreType
-            || testCase == UnsupportedGuidAnnotationCase.NonGuidClrType
-                ? "char(36)"
-                : "binary(16)";
+        var storeType = testCase is UnsupportedGuidAnnotationCase.BinaryWithCharStoreType
+            or UnsupportedGuidAnnotationCase.NonGuidClrType
+            ? "char(36)"
+            : "binary(16)";
 
         _ = builder.CreateTableIfNotExists(
             name: "invalid_guid_format",

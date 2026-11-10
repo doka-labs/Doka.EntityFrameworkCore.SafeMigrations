@@ -599,17 +599,16 @@ public sealed partial class SqlServerComputedDropProjectionTests
 
     private static SafeMigrationOperation ConstraintDrop(
         int kind
-    )
-        => new(
-            kind switch
-            {
-                0 => new DropCheckConstraintIntent("CK_L", "nodes"),
-                1 => new DropPrimaryKeyIntent("PK_L", "nodes"),
-                2 => new DropUniqueConstraintIntent("UQ_L", "nodes"),
-                3 => new DropForeignKeyIntent("FK_L", "nodes"),
-                _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-            },
-            SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(
+        kind switch
+        {
+            0 => new DropCheckConstraintIntent("CK_L", "nodes"),
+            1 => new DropPrimaryKeyIntent("PK_L", "nodes"),
+            2 => new DropUniqueConstraintIntent("UQ_L", "nodes"),
+            3 => new DropForeignKeyIntent("FK_L", "nodes"),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        },
+        SafeMigrationPolicy.ThrowIfDifferent);
 
     private static void PrepareOrdinary(
         SqlServerSafeMigrationProviderAnalyzer analyzer,

@@ -447,6 +447,7 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
     [InlineData("login")]
     [InlineData("collation")]
     [InlineData("unproven")]
+    [InlineData("unproven-principal")]
     [InlineData("dml_triggers")]
     public async Task FreshEnvironment_GatesActualIdentifierProbeReuse(
         string change
@@ -481,6 +482,9 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
                 break;
             case "unproven":
                 connection.LoginSid = null;
+                break;
+            case "unproven-principal":
+                connection.PrincipalId = null;
                 break;
             case "dml_triggers":
                 connection.HasEnabledDmlTriggers = true;
@@ -597,7 +601,7 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await using var connection = new PreambleConnection();
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>()
             .UseSqlServer(connection)
-            .UseSqlServerSafeMigrations<SafeMigrationDbContext>()
+            .UseSqlServerSafeMigrations()
             .Options;
 
         var context = new SafeMigrationDbContext(options);
@@ -631,14 +635,12 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
 
     private static SafeMigrationDbContext Context(
         PreambleConnection connection
-    )
-        => new(new DbContextOptionsBuilder<SafeMigrationDbContext>().UseSqlServer(connection)
-            .Options);
+    ) => new(new DbContextOptionsBuilder<SafeMigrationDbContext>().UseSqlServer(connection)
+        .Options);
 
     private static SqlServerSafeMigrationProviderAnalyzer Analyzer(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private static SafeMigrationOperation[] AnalysisOperations()
     {
@@ -702,8 +704,7 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
 
         protected override DbTransaction BeginDbTransaction(
             IsolationLevel isolationLevel
-        )
-            => new PreambleTransaction(this);
+        ) => new PreambleTransaction(this);
 
         protected override DbCommand CreateDbCommand() => new PreambleCommand(this);
 
@@ -807,12 +808,8 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
                     connection.DefaultSchema == "dbo"
                         ? 1
                         : 0,
-                    connection.PrincipalId is { } principal
-                        ? principal
-                        : DBNull.Value,
-                    connection.LoginSid is { } sid
-                        ? sid
-                        : DBNull.Value,
+                    (object?)connection.PrincipalId ?? DBNull.Value,
+                    (object?)connection.LoginSid ?? DBNull.Value,
                     0,
                     1,
                     connection.HasEnabledDmlTriggers

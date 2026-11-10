@@ -16,11 +16,11 @@ internal static class SafeMigrationColumnRepairHelper
         // Unknown and non-null SQL defaults retain their native provider contract.
         return expected.IsNullable
             || (expected.DefaultValue.Kind != SafeMigrationDefaultValueKind.None
-                && !(expected.DefaultValue is
+                && expected.DefaultValue is not
                 {
                     Kind: SafeMigrationDefaultValueKind.Sql,
                     StructuredExpression: SafeMigrationSqlLiteralExpression { Value: null },
-                }))
+                })
             || expected.ComputedColumnSql is not null
             || expected.ComputedExpression is not null;
     }

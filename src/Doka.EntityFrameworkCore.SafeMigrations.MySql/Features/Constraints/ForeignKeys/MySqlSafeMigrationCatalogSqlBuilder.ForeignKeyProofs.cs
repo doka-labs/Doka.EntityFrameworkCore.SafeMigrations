@@ -65,15 +65,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <returns>The current catalog nullability predicate, or TRUE for another action.</returns>
     private string ForeignKeySetNullIsRepresentable(
         ExpectedForeignKeyDefinition definition
-    )
-        => definition.OnDelete != ReferentialAction.SetNull && definition.OnUpdate != ReferentialAction.SetNull
-            ? "TRUE"
-            : "(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS null_column "
-            + "WHERE null_column.TABLE_SCHEMA = DATABASE() "
-            + $"AND null_column.TABLE_NAME = {Literal(definition.Table)} "
-            + $"AND null_column.COLUMN_NAME IN ({string.Join(", ", definition.Columns.Select(Literal))}) "
-            + "AND null_column.IS_NULLABLE = 'YES') "
-            + $"= {definition.Columns.Count.ToString(CultureInfo.InvariantCulture)}";
+    ) => definition.OnDelete != ReferentialAction.SetNull && definition.OnUpdate != ReferentialAction.SetNull
+        ? "TRUE"
+        : "(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS null_column "
+        + "WHERE null_column.TABLE_SCHEMA = DATABASE() "
+        + $"AND null_column.TABLE_NAME = {Literal(definition.Table)} "
+        + $"AND null_column.COLUMN_NAME IN ({string.Join(", ", definition.Columns.Select(Literal))}) "
+        + "AND null_column.IS_NULLABLE = 'YES') "
+        + $"= {definition.Columns.Count.ToString(CultureInfo.InvariantCulture)}";
 
     /// <summary>Captures bounded catalog facts for an ordered, source-bound FK replacement.</summary>
     /// <param name="definition">The immutable replacement endpoints.</param>
@@ -82,16 +81,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     internal string BuildForeignKeyReplacementProof(
         ExpectedForeignKeyDefinition definition,
         bool sourceExists = true
-    )
-        => BuildForeignKeyReplacementProbe(definition, includeRows: false, sourceExists);
+    ) => BuildForeignKeyReplacementProbe(definition, includeRows: false, sourceExists);
 
     /// <summary>Reads rows only after both physical endpoint inventories have qualified.</summary>
     /// <param name="definition">The catalog-qualified replacement endpoints.</param>
     /// <returns>The exact target's orphan-safety predicate.</returns>
     internal string BuildForeignKeyReplacementRowProof(
         ExpectedForeignKeyDefinition definition
-    )
-        => BuildForeignKeyReplacementProbe(definition, includeRows: true, sourceExists: true);
+    ) => BuildForeignKeyReplacementProbe(definition, includeRows: true, sourceExists: true);
 
     /// <summary>Builds a bounded probe inside an isolated escaped-literal generation scope.</summary>
     /// <param name="definition">The requested immutable foreign key.</param>

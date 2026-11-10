@@ -43,13 +43,12 @@ internal sealed partial class SafeMigrationPreflightProjection
         public bool HasAcceptedDefinitions => _physicalDefinitions.Count > 0 || _unboundDefinitions?.Count > 0;
 
         /// <summary>Enumerates physical and unbound semantic prerequisites without cloning either set.</summary>
-        public IEnumerable<T> Definitions =>
-            _unboundDefinitions is null
-                ? _physicalDefinitions.Values.Select(static value => value.Definition)
-                : _physicalDefinitions
-                    .Values
-                    .Select(static value => value.Definition)
-                    .Concat(_unboundDefinitions);
+        public IEnumerable<T> Definitions => _unboundDefinitions is null
+            ? _physicalDefinitions.Values.Select(static value => value.Definition)
+            : _physicalDefinitions
+                .Values
+                .Select(static value => value.Definition)
+                .Concat(_unboundDefinitions);
 
         /// <summary>Tests accepted prerequisite shapes without materializing a second collection.</summary>
         public bool Any(

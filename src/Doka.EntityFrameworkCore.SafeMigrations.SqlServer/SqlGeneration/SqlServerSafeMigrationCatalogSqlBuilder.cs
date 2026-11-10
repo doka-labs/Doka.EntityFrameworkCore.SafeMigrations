@@ -16,19 +16,16 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
 
     private readonly IRelationalTypeMappingSource _typeMappingSource;
-    private readonly Func<object?, string, string> _valueLiteral;
 
     /// <summary>Initializes the catalog builder with the active provider services.</summary>
     /// <param name="typeMappingSource">The provider's canonical store-type and literal mappings.</param>
     /// <param name="sqlGenerationHelper">The provider's identifier delimiter.</param>
     /// <param name="literal">An optional string-literal renderer for contract probes.</param>
-    /// <param name="valueLiteral">An optional typed-literal renderer for contract probes.</param>
     /// <param name="sourceParameter">An analysis-only lossless scalar binding, before target conversion.</param>
     public SqlServerSafeMigrationCatalogSqlBuilder(
         IRelationalTypeMappingSource typeMappingSource,
         ISqlGenerationHelper sqlGenerationHelper,
         Func<string, string>? literal = null,
-        Func<object?, string, string>? valueLiteral = null,
         Func<object, bool, string>? sourceParameter = null
     )
     {
@@ -39,7 +36,6 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         _sqlGenerationHelper = sqlGenerationHelper;
         _expressionRenderer = new SqlServerSafeMigrationSqlExpressionRenderer(typeMappingSource, sqlGenerationHelper);
         _literal = literal ?? RenderStringLiteral;
-        _valueLiteral = valueLiteral ?? RenderValueLiteral;
         _sourceParameter = sourceParameter;
     }
 
@@ -217,8 +213,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <returns>The SQL Server expression text.</returns>
     public string RenderExpression(
         SafeMigrationSqlExpression expression
-    )
-        => _expressionRenderer.Render(expression);
+    ) => _expressionRenderer.Render(expression);
 
     private string? GetUnsupportedFeature(
         SafeMigrationOperation operation
@@ -239,6 +234,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         if (operation.Intent is EnsureTableIntent table)
         {
+            // WHY: A foreign provider's table facets have no SQL Server proof,
+            // even when all ordinary column and constraint facets are supported.
+            if (table.Definition.ProviderAnnotations.Count > 0)
+            {
+                return "table_annotation";
+            }
+
             if (table.Definition.Columns.Count > 1024)
             {
                 return "table_column_limit";
@@ -328,8 +330,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return GetUnsupportedColumnFeature(columnIntent.Definition);
         }
 
-        if (operation.Intent is EnsureForeignKeyIntent foreignKeyIntent
-            && foreignKeyIntent.Definition.Columns.Count > 32)
+        if (operation.Intent is EnsureForeignKeyIntent { Definition.Columns.Count: > 32 })
         {
             return "foreign_key_unproven_width";
         }
@@ -375,8 +376,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return checkSourceFeature;
         }
 
-        if (operation.Intent is EnsureCheckConstraintIntent checkIntent
-            && checkIntent.Definition.Expression is { } checkExpression
+        if (operation.Intent is EnsureCheckConstraintIntent { Definition.Expression: { } checkExpression }
             && _expressionRenderer.GetUnsupportedFeature(checkExpression) is not null)
         {
             return "check_expression_unproven";
@@ -601,7 +601,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 return false;
             }
 
-            if (arguments.SequenceEqual("max"))
+            if (arguments is "max")
             {
                 if (name is not ("varchar" or "nvarchar" or "varbinary"))
                 {
@@ -623,13 +623,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     ? parsed * 2
                     : parsed;
 
-                if (bytes > short.MaxValue)
-                {
-                    type = default;
-
-                    return false;
-                }
-
+                // WHY: The native finite length bounds cap both branches at 8000 bytes.
                 length = (short)bytes;
             }
             else
@@ -755,44 +749,38 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private string TableExists(
         string table,
         string? schema
-    )
-        => $"EXISTS (SELECT 1 FROM sys.tables t WHERE t.object_id = {TableId(table, schema)})";
+    ) => $"EXISTS (SELECT 1 FROM sys.tables t WHERE t.object_id = {TableId(table, schema)})";
 
     private string ObjectExists(
         string table,
         string? schema
-    )
-        => $"EXISTS (SELECT 1 FROM sys.objects o WHERE o.schema_id = SCHEMA_ID({Literal(EffectiveSchema(schema))}) "
-            + $"AND o.name = {Literal(table)})";
+    ) => $"EXISTS (SELECT 1 FROM sys.objects o WHERE o.schema_id = SCHEMA_ID({Literal(EffectiveSchema(schema))}) "
+        + $"AND o.name = {Literal(table)})";
 
     private string ColumnExists(
         string table,
         string? schema,
         string column
-    )
-        => $"EXISTS (SELECT 1 FROM sys.columns c WHERE c.object_id = {TableId(table, schema)} "
-            + $"AND c.name = {Literal(column)})";
+    ) => $"EXISTS (SELECT 1 FROM sys.columns c WHERE c.object_id = {TableId(table, schema)} "
+        + $"AND c.name = {Literal(column)})";
 
     private string ConstraintNameExists(
         string table,
         string? schema,
         string name
-    )
-        => $"EXISTS (SELECT 1 FROM sys.objects o WHERE o.parent_object_id = {TableId(table, schema)} "
-            + $"AND o.name = {Literal(name)} AND o.type IN ('PK', 'UQ', 'C', 'F'))";
+    ) => $"EXISTS (SELECT 1 FROM sys.objects o WHERE o.parent_object_id = {TableId(table, schema)} "
+        + $"AND o.name = {Literal(name)} AND o.type IN ('PK', 'UQ', 'C', 'F'))";
 
     private string ConstraintNameOccupiedInSchema(
         string? schema,
         string name
-    )
-        => $"EXISTS (SELECT 1 FROM sys.objects o WHERE o.schema_id = SCHEMA_ID({Literal(EffectiveSchema(schema))}) "
-            + $"AND o.name = {Literal(name)})";
+    ) => $"EXISTS (SELECT 1 FROM sys.objects o WHERE o.schema_id = SCHEMA_ID({Literal(EffectiveSchema(schema))}) "
+        + $"AND o.name = {Literal(name)})";
 
     private string TableId(
         string table,
         string? schema
-    )
-        => $"OBJECT_ID({Literal(_sqlGenerationHelper.DelimitIdentifier(table, EffectiveSchema(schema)))}, 'U')";
+    ) => $"OBJECT_ID({Literal(_sqlGenerationHelper.DelimitIdentifier(table, EffectiveSchema(schema)))}, 'U')";
 
     private static string EffectiveSchema(
         string? schema
@@ -804,8 +792,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
     private string RenderStringLiteral(
         string value
-    )
-        => SqlServerSqlStringLiteral.Render(value);
+    ) => SqlServerSqlStringLiteral.Render(value);
 
     private string RenderValueLiteral(
         object? value,
@@ -830,16 +817,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string postcondition,
         SafeMigrationRepairCapability repair = SafeMigrationRepairCapability.None,
         string repairPrecondition = "0"
-    )
-        => new(stateExpression, postcondition, repair, repairPrecondition);
+    ) => new(stateExpression, postcondition, repair, repairPrecondition);
 
     private static SqlServerSafeMigrationRuntimePlan Unsupported(
         string code
-    )
-        => new("N'unsupported'", "0", SafeMigrationRepairCapability.None, "0", code)
-        {
-            IsStaticallyUnsupported = true,
-        };
+    ) => new("N'unsupported'", "0", SafeMigrationRepairCapability.None, "0", code)
+    {
+        IsStaticallyUnsupported = true,
+    };
 
     private readonly record struct SqlServerColumnType(
         string Name,

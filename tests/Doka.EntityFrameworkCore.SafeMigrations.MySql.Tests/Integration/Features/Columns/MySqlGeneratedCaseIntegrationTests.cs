@@ -487,9 +487,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Contains(
             report.Assessments,
-            static assessment =>
-                assessment.ObservedState == SafeMigrationObservedState.Unsupported
-                && assessment.Code == "opaque_sql_expression");
+            static assessment => assessment is
+            {
+                ObservedState: SafeMigrationObservedState.Unsupported, Code: "opaque_sql_expression",
+            });
     }
 
     /// <summary>Builds the immutable physical contract independently of EF model conventions.</summary>
@@ -511,31 +512,31 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         int offset = 1,
         string storeType = "tinyint(1)",
         string leftColumn = "left_bound"
-    ) =>
-        new(
-            "has_descendants",
-            typeof(bool),
-            false,
-            storeType,
-            computedExpression: SqlBinary(
-                SqlColumn("right_bound"),
-                SafeMigrationSqlBinaryOperator.GreaterThan,
-                SafeMigrationSql.Case(
-                    [
-                        new SafeMigrationSqlCaseWhenClause(
-                            SqlBinary(
-                                SqlColumn(leftColumn),
-                                SafeMigrationSqlBinaryOperator.Equal,
-                                SafeMigrationSql.Literal(long.MaxValue)),
-                            SqlColumn(leftColumn)),
-                    ],
-                    SqlBinary(
-                        SqlColumn(leftColumn),
-                        SafeMigrationSqlBinaryOperator.Add,
-                        SafeMigrationSql.Literal(offset)))),
-            isStored: stored);
+    ) => new(
+        "has_descendants",
+        typeof(bool),
+        false,
+        storeType,
+        computedExpression: SqlBinary(
+            SqlColumn("right_bound"),
+            SafeMigrationSqlBinaryOperator.GreaterThan,
+            SafeMigrationSql.Case(
+                [
+                    new SafeMigrationSqlCaseWhenClause(
+                        SqlBinary(
+                            SqlColumn(leftColumn),
+                            SafeMigrationSqlBinaryOperator.Equal,
+                            SafeMigrationSql.Literal(long.MaxValue)),
+                        SqlColumn(leftColumn)),
+                ],
+                SqlBinary(
+                    SqlColumn(leftColumn),
+                    SafeMigrationSqlBinaryOperator.Add,
+                    SafeMigrationSql.Literal(offset)))),
+        isStored: stored);
 
     /// <summary>Includes both signed extrema and ordinary true/false generated outcomes.</summary>
+    /// <param name="connectionString">The test database containing the case table to populate.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static Task SeedCaseRowsAsync(
         string connectionString,
@@ -549,6 +550,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         cancellationToken: cancellationToken);
 
     /// <summary>Checks generated outputs while also retaining every original key and bound.</summary>
+    /// <param name="connectionString">The test database whose case rows and generated results are checked.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static Task<int> CountExpectedCaseRowsAsync(
         string connectionString,
@@ -578,16 +580,17 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
                     $"{difference.Facet}={difference.Expected}/{difference.Actual}"))));
 
     /// <summary>Captures only deterministic test-fixture metadata when an expression postcondition fails.</summary>
+    /// <param name="connectionString">The test database whose generated-column catalog entry is read.</param>
+    /// <param name="column">The fixture column whose type, nullability, default and expression are displayed.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static Task<string> GeneratedNativeDisplayAsync(
         string connectionString,
         string column,
         CancellationToken cancellationToken
-    ) =>
-        ScalarStringAsync(
-            connectionString,
-            "SELECT CONCAT(COLUMN_TYPE, '|', IS_NULLABLE, '|', "
-            + "COALESCE(COLUMN_DEFAULT, '<null>'), '|', GENERATION_EXPRESSION) FROM INFORMATION_SCHEMA.COLUMNS "
-            + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND COLUMN_NAME = '{column}';",
-            cancellationToken: cancellationToken);
+    ) => ScalarStringAsync(
+        connectionString,
+        "SELECT CONCAT(COLUMN_TYPE, '|', IS_NULLABLE, '|', "
+        + "COALESCE(COLUMN_DEFAULT, '<null>'), '|', GENERATION_EXPRESSION) FROM INFORMATION_SCHEMA.COLUMNS "
+        + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND COLUMN_NAME = '{column}';",
+        cancellationToken: cancellationToken);
 }

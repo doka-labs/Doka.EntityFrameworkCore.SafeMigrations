@@ -240,17 +240,6 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + $"({exact}) OR (NOT ({exists}) AND ({alias})), FALSE))";
     }
 
-    private string ForeignKeySatisfied(
-        ExpectedForeignKeyDefinition definition
-    )
-    {
-        var exists = ConstraintExists(definition.Table, definition.Schema, definition.Name, 'f');
-        var exact = ForeignKeyMatches(definition, requireExpectedName: true);
-        var semanticAlias = ForeignKeyMatches(definition, requireExpectedName: false);
-
-        return $"({exact}) OR (NOT ({exists}) AND ({semanticAlias}))";
-    }
-
     private static string ReferentialCode(
         ReferentialAction action
     ) => action switch

@@ -53,9 +53,11 @@ internal static class LargeMigrationStressContract
     )
     {
         var scenarios = CreateScenarios(dialect);
-        var scenarioIndex = scenarios.FindIndex(static scenario =>
-            scenario.OperationKind == SafeMigrationOperationKind.UpdateModelManagedData
-            && scenario.ObservedState == SafeMigrationObservedState.TransitionReady);
+        var scenarioIndex = scenarios.FindIndex(static scenario => scenario is
+        {
+            OperationKind: SafeMigrationOperationKind.UpdateModelManagedData,
+            ObservedState: SafeMigrationObservedState.TransitionReady,
+        });
 
         if (scenarioIndex < 0)
         {

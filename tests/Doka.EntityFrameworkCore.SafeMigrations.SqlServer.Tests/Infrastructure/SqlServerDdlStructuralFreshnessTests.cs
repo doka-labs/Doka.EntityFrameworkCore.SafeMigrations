@@ -256,18 +256,16 @@ public sealed class SqlServerDdlStructuralFreshnessTests
     /// <summary>Creates an analyzer from the provider's registered mapping and identifier services.</summary>
     private static SqlServerSafeMigrationProviderAnalyzer Analyzer(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     /// <summary>Creates immutable matching, missing, or different live observations.</summary>
     private static SafeMigrationProviderAnalysis Analysis(
         SafeMigrationObservedState state
-    )
-        => new(
-            state,
-            SafeMigrationRepairCapability.None,
-            state == SafeMigrationObservedState.Matching,
-            "classified_state");
+    ) => new(
+        state,
+        SafeMigrationRepairCapability.None,
+        state == SafeMigrationObservedState.Matching,
+        "classified_state");
 
     private sealed class EmptyColumns : ISafeMigrationProjectedColumnSource
     {

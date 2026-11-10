@@ -819,20 +819,18 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     /// <returns>The stable owned CHECK name.</returns>
     protected static string AtomicRequiredAddGuardName(
         SafeMigrationOperation operation
-    )
-        => MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(
-            Assert.IsType<EnsureColumnIntent>(operation.Intent));
+    ) => MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(
+        Assert.IsType<EnsureColumnIntent>(operation.Intent));
 
     /// <summary>Creates an empty InnoDB owner without any required target or fabricated row values.</summary>
     /// <param name="table">The anonymous owner name, including quoted-identifier controls.</param>
     /// <returns>The original fixture DDL.</returns>
     protected static string AtomicRequiredAddOriginalTableSql(
         string table = "atomic_required_items"
-    )
-        => "CREATE TABLE "
-            + AtomicRequiredAddDelimited(table)
-            + " (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB "
-            + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
+    ) => "CREATE TABLE "
+        + AtomicRequiredAddDelimited(table)
+        + " (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB "
+        + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
 
     /// <summary>Creates a deliberately controlled durable intermediate state for ownership probes.</summary>
     /// <param name="operation">The pending target whose physical owner is reused.</param>
@@ -949,16 +947,14 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     /// <returns>The exact backtick-delimited identifier.</returns>
     protected static string AtomicRequiredAddDelimited(
         string identifier
-    )
-        => "`" + identifier.Replace("`", "``", StringComparison.Ordinal) + "`";
+    ) => "`" + identifier.Replace("`", "``", StringComparison.Ordinal) + "`";
 
     /// <summary>Uses UTF-8 hex literals so catalog probes do not assume backslash escape semantics.</summary>
     /// <param name="value">The anonymous identifier used as a catalog value.</param>
     /// <returns>The SQL-mode-independent literal expression.</returns>
     protected static string AtomicRequiredAddLiteral(
         string value
-    )
-        => "CONVERT(0x" + Convert.ToHexString(Encoding.UTF8.GetBytes(value)) + " USING utf8mb4)";
+    ) => "CONVERT(0x" + Convert.ToHexString(Encoding.UTF8.GetBytes(value)) + " USING utf8mb4)";
 
     /// <summary>Decodes anonymous guarded DDL payloads without changing production rendering or planning.</summary>
     /// <param name="sql">The actual body SQL dispatched by the real provider pipeline.</param>

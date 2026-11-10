@@ -27,27 +27,26 @@ public sealed class SqliteRebuildArtifactContractTests
         Assert.Equal(expectedCode, code);
     }
 
-    public static TheoryData<string, string> RebuildArtifactDriftCases()
-        => new()
-        {
-            { "unmanaged_index", "table_rebuild_unmanaged_index" },
-            { "missing_column", "table_rebuild_unmodeled_target_column" },
-            { "missing_index", "table_rebuild_unmodeled_target_index" },
-            { "different_primary_key", "table_rebuild_unmanaged_primary_key" },
-            { "different_primary_key_name", "table_rebuild_primary_key_drift" },
-            { "different_primary_key_collation", "table_rebuild_primary_key_drift" },
-            { "unmanaged_unique", "table_rebuild_unmanaged_unique_constraint" },
-            { "different_unique_name", "table_rebuild_unique_constraint_drift" },
-            { "different_unique_collation", "table_rebuild_unique_constraint_drift" },
-            { "unmanaged_check", "table_rebuild_unmanaged_check_constraint" },
-            { "different_check_name", "table_rebuild_check_constraint_drift" },
-            { "different_foreign_key_name", "table_rebuild_foreign_key_drift" },
-            { "provider_constraint_option", "table_rebuild_provider_constraint_option" },
-            { "missing_primary_key", "table_rebuild_unmodeled_target_primary_key" },
-            { "missing_unique", "table_rebuild_unmodeled_target_unique_constraint" },
-            { "missing_foreign_key", "table_rebuild_unmodeled_target_foreign_key" },
-            { "missing_check", "table_rebuild_unmodeled_target_check_constraint" },
-        };
+    public static TheoryData<string, string> RebuildArtifactDriftCases() => new()
+    {
+        { "unmanaged_index", "table_rebuild_unmanaged_index" },
+        { "missing_column", "table_rebuild_unmodeled_target_column" },
+        { "missing_index", "table_rebuild_unmodeled_target_index" },
+        { "different_primary_key", "table_rebuild_unmanaged_primary_key" },
+        { "different_primary_key_name", "table_rebuild_primary_key_drift" },
+        { "different_primary_key_collation", "table_rebuild_primary_key_drift" },
+        { "unmanaged_unique", "table_rebuild_unmanaged_unique_constraint" },
+        { "different_unique_name", "table_rebuild_unique_constraint_drift" },
+        { "different_unique_collation", "table_rebuild_unique_constraint_drift" },
+        { "unmanaged_check", "table_rebuild_unmanaged_check_constraint" },
+        { "different_check_name", "table_rebuild_check_constraint_drift" },
+        { "different_foreign_key_name", "table_rebuild_foreign_key_drift" },
+        { "provider_constraint_option", "table_rebuild_provider_constraint_option" },
+        { "missing_primary_key", "table_rebuild_unmodeled_target_primary_key" },
+        { "missing_unique", "table_rebuild_unmodeled_target_unique_constraint" },
+        { "missing_foreign_key", "table_rebuild_unmodeled_target_foreign_key" },
+        { "missing_check", "table_rebuild_unmodeled_target_check_constraint" },
+    };
 
     [Fact]
     public void AddedIndexNameCannotAuthorizeMissingColumnWithSameName()
@@ -192,7 +191,7 @@ public sealed class SqliteRebuildArtifactContractTests
     ) => new(
         ordinal,
         name,
-        name == "Id" || name == "ParentId"
+        name is "Id" or "ParentId"
             ? "INTEGER"
             : "TEXT",
         isNullable,

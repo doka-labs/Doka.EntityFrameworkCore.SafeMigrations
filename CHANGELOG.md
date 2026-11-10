@@ -6,6 +6,60 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [10.7.1] - 2026-11-09
+
+Version 10.7.1 preserves explicit InnoDB contracts and corrects atomic SQLite
+table retirement and rebuild order. All five packages retain .NET/EF Core 10.
+The fixes use existing public APIs; public signatures, cancellation requirements,
+report schemas and fingerprint formats remain unchanged from 10.7.0. The
+MySQL/MariaDB adapter requires Doka 10.6.5.
+Review the [upgrade notes](docs/support-and-qualification.md#upgrade-to-1071)
+before deploying existing or newly scaffolded migrations. Updating the packages
+alone does not require an additional database migration or rewrite history.
+
+### Changed
+
+- Raise the MySQL/MariaDB provider's Doka dependency to `[10.6.5,10.7.0)`
+  and restore the published maintenance package. Retain the public migration
+  SPI, transport minimums, provider isolation, GUID storage and migration history.
+- Update SHA-pinned setup-dotnet to 6.1.0 and CodeQL SARIF upload to 4.39.3.
+  Refresh the rebuilt MySQL and PostgreSQL image digests while preserving
+  server patch versions, supported engine lines and required qualification gates.
+  Keep serviced dependency floors, provider isolation and SDK selection unchanged.
+- Align Rider formatting and simplify verified C# patterns, conditionals,
+  reference qualification and redundant initialization across Core, providers,
+  tests and benchmarks. Complete XML documentation and preserve linked-source
+  compilation, exact numeric/nullable semantics and cleanup ownership. This
+  cleanup claims no measured performance improvement or migration-policy change.
+
+### Fixed
+
+- Complete owned concurrent test operations before releasing their contexts,
+  transactions, cancellation sources and fixtures, including observer, rollback,
+  cancellation-callback and post-drain cleanup failures. Retain original failures
+  and additional cleanup causes. Replace load-sensitive admission/coordination
+  cutoffs with actual producer and barrier-state evidence. Correct the existing
+  internal SQL Server dependency-interface dispatch; public APIs remain unchanged.
+- Remove verified private dead state and redundant test declarations while
+  retaining runtime input guards, reflection-based consumers, enum values,
+  exact provider overload selection and native type-size boundaries.
+- Preserve explicitly configured InnoDB table metadata through safe scaffolding,
+  immutable capture, native DDL and catalog verification. Strict and legacy
+  convergence retain the authored engine requirement through the existing typed
+  table callbacks, without adding public factory overloads. Failed callbacks,
+  invalid operation counts and rejected snapshots remove their owned appended
+  operations without discarding an earlier migration prefix. Unrelated provider
+  metadata and unsupported engines remain rejected without automatic conversion.
+  Normalize only certified historical table/key metadata on identity-only
+  DROP/RENAME operations so generated Down and replay remain usable.
+- Support removal of foreign keys on SQLite tables that are proved to retire
+  in the same atomic structural batch, including populated private FK cycles
+  absent from the final target model. Retain policy, surviving-reference,
+  artifact-ownership, rollback and FK-mode restoration checks; unrelated
+  missing-model rebuilds remain unsupported. Safe rebuilds preserve retained
+  native column order unless explicitly overridden by model `ColumnOrder`;
+  fresh/recreated and ordinary EF lifetimes keep native provider semantics.
+
 ## [10.7.0] - 2026-11-06
 
 Version 10.7.0 requires explicit cancellation tokens on owned asynchronous

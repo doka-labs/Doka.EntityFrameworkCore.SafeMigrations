@@ -1131,11 +1131,12 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             columnAliases
                 ? "VALUE"
                 : "value",
-            boundary == "row"
-                ? 8000
-                : boundary == "key"
-                    ? 900
-                    : 200);
+            boundary switch
+            {
+                "row" => 8000,
+                "key" => 900,
+                _ => 200,
+            });
 
         var table = new TableView(
             source,
@@ -1207,22 +1208,21 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         string type,
         long? length = null,
         int characterBytes = 4
-    ) =>
-        MySqlProjectedAlterPhysicalSnapshot.CreateCatalogColumn(
-            type,
-            false,
-            length,
-            length * characterBytes,
-            null,
-            null,
-            null,
-            characterBytes,
-            characterBytes == 1
-                ? "latin1_bin"
-                : "utf8mb4_bin",
-            characterBytes == 1
-                ? "latin1"
-                : "utf8mb4");
+    ) => MySqlProjectedAlterPhysicalSnapshot.CreateCatalogColumn(
+        type,
+        false,
+        length,
+        length * characterBytes,
+        null,
+        null,
+        null,
+        characterBytes,
+        characterBytes == 1
+            ? "latin1_bin"
+            : "utf8mb4_bin",
+        characterBytes == 1
+            ? "latin1"
+            : "utf8mb4");
 
     private static ExpectedColumnDefinition Character(
         string name,

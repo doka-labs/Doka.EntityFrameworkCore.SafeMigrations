@@ -560,12 +560,12 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     ) => new(
         new DbContextOptionsBuilder<SafeMigrationDbContext>()
             .UseMySql(connectionString, Fixture.ServerVersion)
-            .UseMySqlSafeMigrations<SafeMigrationDbContext>()
+            .UseMySqlSafeMigrations()
             .AddInterceptors(observer)
             .Options);
 }
 
-public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlRuntimeMatchingIntegrationTests
 {
     /// <summary>Creates a full required scalar contract without an analysis preflight.</summary>
     private static SafeMigrationOperation RuntimeMatchingOperation(
@@ -594,6 +594,7 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Reads only bounded counters that cleanup intentionally does not own.</summary>
+    /// <param name="context">The caller-owned context retaining the instrumented session's matching counters.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     protected static async Task<RuntimeMatchingVisits> ReadRuntimeMatchingVisitsAsync(
         DbContext context,
@@ -625,7 +626,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             cancellationToken: cancellationToken));
 }
 
-public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlRuntimeMatchingIntegrationTests
 {
     /// <summary>Rejects vacuous zero counts when a changed SQL shape prevents instrumentation.</summary>
     private static void AssertRuntimeMatchingInstrumentation(

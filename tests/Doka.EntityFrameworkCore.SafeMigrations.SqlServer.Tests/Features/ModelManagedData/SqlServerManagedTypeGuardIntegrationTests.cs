@@ -48,11 +48,13 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
                     cancellationToken: CancellationToken.None);
             }
 
-            var setup = actualType == "alias"
-                ? "CREATE TABLE dbo.managed_types (Id int NOT NULL PRIMARY KEY, Value dbo.guard_alias NULL);"
-                : actualType == "missing_column"
-                    ? "CREATE TABLE dbo.managed_types (Id int NOT NULL PRIMARY KEY, OtherValue int NULL);"
-                    : "CREATE TABLE dbo.managed_types (Id int NOT NULL PRIMARY KEY, Value " + actualType + " NULL);";
+            var setup = actualType switch
+            {
+                "alias" => "CREATE TABLE dbo.managed_types (Id int NOT NULL PRIMARY KEY, Value dbo.guard_alias NULL);",
+                "missing_column"
+                    => "CREATE TABLE dbo.managed_types (Id int NOT NULL PRIMARY KEY, OtherValue int NULL);",
+                _ => "CREATE TABLE dbo.managed_types (Id int NOT NULL PRIMARY KEY, Value " + actualType + " NULL);",
+            };
 
             await ExecuteSqlAsync(connectionString, setup, cancellationToken: CancellationToken.None);
         }
@@ -113,11 +115,12 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
 
         if (mode != "missing_table")
         {
-            var definition = mode == "missing_column"
-                ? "OtherId int"
-                : mode == "wrong_type"
-                    ? "ReferenceId bigint"
-                    : "ReferenceId int";
+            var definition = mode switch
+            {
+                "missing_column" => "OtherId int",
+                "wrong_type" => "ReferenceId bigint",
+                _ => "ReferenceId int",
+            };
 
             await ExecuteSqlAsync(
                 connectionString,
@@ -249,47 +252,45 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
     /// <summary>Uses the runtime provider services for type parsing and identifier rendering.</summary>
     private static SqlServerSafeMigrationCatalogSqlBuilder CreateCatalog(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     /// <summary>
     /// Captures an identity column without varying the physical type contract between operation kinds.
     /// </summary>
     private static ModelManagedDataIntent CreateIdentityIntent(
         string kind
-    )
-        => kind switch
-        {
-            "ensure" => new EnsureModelManagedDataIntent(
-                "identity_types",
-                ["Id"],
-                ["int"],
-                ["Id"],
-                ["int"],
-                new object?[,] { { 1 } },
-                null,
-                null),
-            "update" => new UpdateModelManagedDataIntent(
-                "identity_types",
-                ["Id"],
-                ["int"],
-                new object?[,] { { 1 } },
-                ["Id"],
-                ["int"],
-                new object?[,] { { 1 } },
-                new object?[,] { { 1 } },
-                null,
-                null),
-            "delete" => new DeleteModelManagedDataIntent(
-                "identity_types",
-                ["Id"],
-                ["int"],
-                new object?[,] { { 1 } },
-                ["Id"],
-                ["int"],
-                new object?[,] { { 1 } },
-                null,
-                []),
-            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-        };
+    ) => kind switch
+    {
+        "ensure" => new EnsureModelManagedDataIntent(
+            "identity_types",
+            ["Id"],
+            ["int"],
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            null,
+            null),
+        "update" => new UpdateModelManagedDataIntent(
+            "identity_types",
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            new object?[,] { { 1 } },
+            null,
+            null),
+        "delete" => new DeleteModelManagedDataIntent(
+            "identity_types",
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            null,
+            []),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
 }

@@ -288,32 +288,28 @@ public sealed class MySqlGeneratedInitialMigrationFixtureCancellationTests
         /// <returns>The actual SQL helper task.</returns>
         internal static Task ExecuteStatement(
             CancellationToken cancellationToken
-        ) =>
-            ExecuteSqlAsync("not a connection string", "SELECT 1;", cancellationToken);
+        ) => ExecuteSqlAsync("not a connection string", "SELECT 1;", cancellationToken);
 
         /// <summary>Executes script validation against intentionally malformed connection settings.</summary>
         /// <param name="cancellationToken">The caller cancellation forwarded to the script helper.</param>
         /// <returns>The actual migration script helper task.</returns>
         internal static Task ExecuteScript(
             CancellationToken cancellationToken
-        ) =>
-            ExecuteMigrationScriptAsync("not a connection string", "SELECT 1;", cancellationToken);
+        ) => ExecuteMigrationScriptAsync("not a connection string", "SELECT 1;", cancellationToken);
 
         /// <summary>Reads integer validation against intentionally malformed connection settings.</summary>
         /// <param name="cancellationToken">The caller cancellation forwarded to the scalar helper.</param>
         /// <returns>The actual integer observation task.</returns>
         internal static Task<int> ReadInteger(
             CancellationToken cancellationToken
-        ) =>
-            ScalarIntAsync("not a connection string", "SELECT 1;", cancellationToken);
+        ) => ScalarIntAsync("not a connection string", "SELECT 1;", cancellationToken);
 
         /// <summary>Reads string validation against intentionally malformed connection settings.</summary>
         /// <param name="cancellationToken">The caller cancellation forwarded to the scalar helper.</param>
         /// <returns>The actual string observation task.</returns>
         internal static Task<string> ReadString(
             CancellationToken cancellationToken
-        ) =>
-            ScalarStringAsync("not a connection string", "SELECT 1;", cancellationToken);
+        ) => ScalarStringAsync("not a connection string", "SELECT 1;", cancellationToken);
 
         /// <summary>Reads context scalar validation without a configured relational provider.</summary>
         /// <param name="context">The intentionally unconfigured context.</param>
@@ -322,8 +318,7 @@ public sealed class MySqlGeneratedInitialMigrationFixtureCancellationTests
         internal static Task<int> ReadContext(
             DbContext context,
             CancellationToken cancellationToken
-        ) =>
-            ContextScalarIntAsync(context, "SELECT 1;", cancellationToken);
+        ) => ContextScalarIntAsync(context, "SELECT 1;", cancellationToken);
 
         /// <summary>Invokes the production test assertion with a token-aware action.</summary>
         /// <param name="action">The action receiving the exact caller token.</param>

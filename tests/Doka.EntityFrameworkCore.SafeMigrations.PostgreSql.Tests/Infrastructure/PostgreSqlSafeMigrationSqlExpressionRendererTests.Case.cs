@@ -2,6 +2,69 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
 public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
 {
+    /// <summary>Only untyped boxed Int64 values outside Int32 become native BIGINT constants.</summary>
+    /// <param name="value">The exact signed 64-bit literal value.</param>
+    /// <param name="expected">The independently authored catalog-candidate SQL.</param>
+    [Theory]
+    [InlineData(long.MinValue, "'''-9223372036854775808''::bigint'")]
+    [InlineData(-2147483649L, "'''-2147483649''::bigint'")]
+    [InlineData(-2147483648L, "'-2147483648'")]
+    [InlineData(-2147483647L, "'-2147483647'")]
+    [InlineData(2147483646L, "'2147483646'")]
+    [InlineData(2147483647L, "'2147483647'")]
+    [InlineData(2147483648L, "'''2147483648''::bigint'")]
+    [InlineData(long.MaxValue, "'''9223372036854775807''::bigint'")]
+    public void CapturedNativeInt64LiteralsPreserveInt32Boundaries(
+        long value,
+        string expected
+    )
+    {
+        // Arrange
+        using var context = CreateContext();
+        var renderer = CreateRenderer(context);
+        var expression = SafeMigrationSql.Literal(value);
+
+        // Act
+        var candidate = renderer.RenderCatalogCapturedNativeDeparsedCandidateSql(expression, Literal);
+
+        // Assert
+        Assert.Equal(expected, candidate);
+    }
+
+    /// <summary>Other boxed numeric kinds retain their provider mapping instead of Int64-specific folding.</summary>
+    /// <param name="value">The boxed literal whose exact CLR numeric type must remain significant.</param>
+    [Theory]
+    [InlineData((byte)42)]
+    [InlineData((short)42)]
+    [InlineData(42)]
+    [InlineData(2147483648U)]
+    [InlineData(2147483648F)]
+    [InlineData(2147483648D)]
+    [InlineData(-2147483649D)]
+    public void CapturedNativeOtherNumericKindsRetainProviderLiteralMapping(
+        object value
+    )
+    {
+        // Arrange
+        using var context = CreateContext();
+        var renderer = CreateRenderer(context);
+        var expression = SafeMigrationSql.Literal(value);
+        var mapping = Assert.IsType<RelationalTypeMapping>(
+            context
+                .GetService<IRelationalTypeMappingSource>()
+                .FindMapping(value.GetType()),
+            exactMatch: false);
+
+        var expected = Literal(mapping.GenerateSqlLiteral(value));
+
+        // Act
+        var candidate = renderer.RenderCatalogCapturedNativeDeparsedCandidateSql(expression, Literal);
+
+        // Assert
+        Assert.Equal(expected, candidate);
+        Assert.DoesNotContain("::bigint", candidate, StringComparison.Ordinal);
+    }
+
     /// <summary>Metadata function qualification reuses the bounded native type proof from catalog rendering.</summary>
     /// <param name="sql">The captured argument expression.</param>
     /// <param name="expectedOid">The exact builtin type OID, or null for an unproven result.</param>

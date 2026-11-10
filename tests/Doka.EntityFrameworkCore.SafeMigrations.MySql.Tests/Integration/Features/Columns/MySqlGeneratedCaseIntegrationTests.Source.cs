@@ -202,14 +202,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     private static ExpectedCheckConstraintDefinition StringCaseCheck(
         string result,
         string source
-    ) =>
-        ExpectedCheckConstraintDefinition.FromExpression(
-            "ck_case_literal",
-            Table,
-            SqlBinary(
-                SafeMigrationSql.Collate(StringCaseColumn(result, source)
-                        .ComputedExpression!,
-                    "utf8mb4_bin"),
-                SafeMigrationSqlBinaryOperator.Equal,
-                SafeMigrationSql.Literal("Alpha")));
+    ) => ExpectedCheckConstraintDefinition.FromExpression(
+        "ck_case_literal",
+        Table,
+        SqlBinary(
+            SafeMigrationSql.Collate(StringCaseColumn(result, source)
+                    .ComputedExpression!,
+                "utf8mb4_bin"),
+            SafeMigrationSqlBinaryOperator.Equal,
+            SafeMigrationSql.Literal("Alpha")));
 }

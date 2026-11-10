@@ -32,8 +32,8 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
     }
 
     /// <inheritdoc />
-    public override string CommandText =>
-        $"-- SQLite SafeMigrations: {_operation.Intent.Kind} {_operation.Intent.ObjectName}";
+    public override string CommandText
+        => $"-- SQLite SafeMigrations: {_operation.Intent.Kind} {_operation.Intent.ObjectName}";
 
     /// <inheritdoc />
     public override int ExecuteNonQuery(

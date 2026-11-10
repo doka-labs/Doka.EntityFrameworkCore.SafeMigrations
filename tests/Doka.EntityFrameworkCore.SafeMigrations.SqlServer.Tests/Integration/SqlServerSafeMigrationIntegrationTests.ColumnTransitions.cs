@@ -35,18 +35,16 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AlterColumnIfDifferentFromModel(
-            operation => operation.AlterColumn<string>(
-                "Caption",
-                "fitting_text",
-                type: "nvarchar(20)",
-                maxLength: 20,
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "nvarchar(80)",
-                oldMaxLength: 80,
-                oldNullable: true),
-            SafeMigrationPolicy.RepairIfSafe);
+        builder.AlterColumnIfDifferentFromModel(operation => operation.AlterColumn<string>(
+            "Caption",
+            "fitting_text",
+            type: "nvarchar(20)",
+            maxLength: 20,
+            nullable: false,
+            oldClrType: typeof(string),
+            oldType: "nvarchar(80)",
+            oldMaxLength: 80,
+            oldNullable: true));
 
         // Act
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
@@ -86,17 +84,15 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AlterColumnIfDifferentFromModel(
-            operation => operation.AlterColumn<string>(
-                "Caption",
-                "expand_text",
-                type: "varchar(200)",
-                maxLength: 200,
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "varchar(10)",
-                oldMaxLength: 10),
-            SafeMigrationPolicy.RepairIfSafe);
+        builder.AlterColumnIfDifferentFromModel(operation => operation.AlterColumn<string>(
+            "Caption",
+            "expand_text",
+            type: "varchar(200)",
+            maxLength: 200,
+            nullable: false,
+            oldClrType: typeof(string),
+            oldType: "varchar(10)",
+            oldMaxLength: 10));
 
         // Act
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
@@ -135,18 +131,16 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AlterColumnIfDifferentFromModel(
-            operation => operation.AlterColumn<string>(
-                "Caption",
-                "null_text",
-                type: "nvarchar(80)",
-                maxLength: 80,
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "nvarchar(80)",
-                oldMaxLength: 80,
-                oldNullable: true),
-            SafeMigrationPolicy.RepairIfSafe);
+        builder.AlterColumnIfDifferentFromModel(operation => operation.AlterColumn<string>(
+            "Caption",
+            "null_text",
+            type: "nvarchar(80)",
+            maxLength: 80,
+            nullable: false,
+            oldClrType: typeof(string),
+            oldType: "nvarchar(80)",
+            oldMaxLength: 80,
+            oldNullable: true));
 
         // Act
         var report = await context
@@ -188,18 +182,16 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AlterColumnIfDifferentFromModel(
-            operation => operation.AlterColumn<string>(
-                "Caption",
-                "statistics_text",
-                type: "nvarchar(20)",
-                maxLength: 20,
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "nvarchar(80)",
-                oldMaxLength: 80,
-                oldNullable: true),
-            SafeMigrationPolicy.RepairIfSafe);
+        builder.AlterColumnIfDifferentFromModel(operation => operation.AlterColumn<string>(
+            "Caption",
+            "statistics_text",
+            type: "nvarchar(20)",
+            maxLength: 20,
+            nullable: false,
+            oldClrType: typeof(string),
+            oldType: "nvarchar(80)",
+            oldMaxLength: 80,
+            oldNullable: true));
 
         // Act
         var analyses = await context
@@ -264,18 +256,16 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AlterColumnIfDifferentFromModel(
-            operation => operation.AlterColumn<string>(
-                "Caption",
-                "oversized_text",
-                type: "nvarchar(20)",
-                maxLength: 20,
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "nvarchar(80)",
-                oldMaxLength: 80,
-                oldNullable: true),
-            SafeMigrationPolicy.RepairIfSafe);
+        builder.AlterColumnIfDifferentFromModel(operation => operation.AlterColumn<string>(
+            "Caption",
+            "oversized_text",
+            type: "nvarchar(20)",
+            maxLength: 20,
+            nullable: false,
+            oldClrType: typeof(string),
+            oldType: "nvarchar(80)",
+            oldMaxLength: 80,
+            oldNullable: true));
 
         // Act
         var analyses = await context

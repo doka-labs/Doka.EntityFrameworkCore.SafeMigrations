@@ -77,7 +77,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var visitor = new DatabaseQualifierTargetVisitor(currentDatabase);
         VisitDatabaseQualifiers(intent, ref visitor);
 
-        return visitor.TargetsDatabase;
+        return visitor.AllQualifiersMatch;
     }
 
     private static void VisitDatabaseQualifiers<TVisitor>(
@@ -262,7 +262,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string? currentDatabase
     ) : IDatabaseQualifierVisitor
     {
-        public bool TargetsDatabase { get; private set; } = true;
+        public bool AllQualifiersMatch { get; private set; } = true;
 
         public void Visit(
             string? qualifier
@@ -272,7 +272,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 && (currentDatabase is null
                     || !StringComparer.Ordinal.Equals(qualifier, currentDatabase)))
             {
-                TargetsDatabase = false;
+                AllQualifiersMatch = false;
             }
         }
     }

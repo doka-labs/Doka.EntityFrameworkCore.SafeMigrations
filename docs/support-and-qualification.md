@@ -2,12 +2,15 @@
 
 ## Support contract
 
-Version 10.7.0 requires explicit cancellation tokens on owned asynchronous
-APIs and uses BenchmarkDotNet for engineering measurements. It retains
-.NET/EF Core 10, migration policies, SQL, report/fingerprint formats and
-historical migrations. This source/API contract change is intentionally
-released within 10.x; it is not strictly SemVer-compatible. No additional
-database schema migration is required solely for this upgrade.
+Version 10.7.1 corrects explicit InnoDB contracts and atomic SQLite
+retirement/rebuild behavior through the existing public APIs. It retains
+.NET/EF Core 10, public signatures, report schemas and fingerprint formats.
+Review the [10.7.1 upgrade](#upgrade-to-1071) for the provider boundaries.
+
+Version 10.7.0 introduced required cancellation tokens on owned asynchronous
+APIs and BenchmarkDotNet for engineering measurements. Removing public optional-
+token defaults was an intentional source-breaking exception within 10.x, not a
+strictly SemVer-compatible change. Version 10.7.1 retains those requirements.
 
 Version 10.6.0 introduced public CASE expressions, certified generated-column
 and CHECK support, lossless signed-integer upgrades, ordered projection/DROP
@@ -23,6 +26,51 @@ MySQL/MariaDB callers must account for the owned-guard outer exception type;
 see [diagnostic compatibility](diagnostics.md#runtime-provider-differences).
 Native qualification still requires the complete blocking matrix; ARM SQL Server
 skips and offline SQL-shape tests are not substitutes for its x64 cells.
+
+## Upgrade to 10.7.1
+
+Keep every installed SafeMigrations package on version 10.7.1 and install only
+the adapters needed by the application. The MySQL/MariaDB adapter requires
+Doka `[10.6.5,10.7.0)` and retains MySqlConnector minimum 2.6.2. EF Core,
+dependency-injection and SQL Server transport floors are unchanged from 10.7.0;
+provider dependencies remain isolated.
+
+Public APIs and their shipped baselines remain unchanged from 10.7.0. The
+internal scaffolder places certified table annotations inside the existing
+typed `constraints` callback before immutable capture. The existing
+`CreateTableIfNotExists<TColumns>` and `ConvergeTableFromModel<TColumns>` methods
+retain their signatures and policy defaults. No new callback, factory overload,
+configuration option or application wrapper is required.
+
+MySQL/MariaDB now preserves an explicitly authored InnoDB requirement through
+safe scaffolding, capture, DDL, projection and catalog checks. Unrelated provider
+metadata and unsupported storage engines remain rejected; no existing table is
+automatically converted. Review newly scaffolded annotation placement and its
+captured contract rather than rewriting deployed migration history. An explicitly
+captured engine participates in the authored contract fingerprint; an unchanged
+fingerprint format is not permission to reuse an approval for a changed contract.
+See [explicit InnoDB contracts](mysql-mariadb-ddl-behavior.md#explicit-innodb-table-contracts).
+
+SQLite can remove an explicitly dropped FK on an owner certified to retire
+within the same atomic structural window, including private populated cycles
+absent from the final model. Surviving references, unsupported artifacts and
+unmodeled retained owners still block. Safe rebuilds preserve native retained
+column order unless explicitly overridden by model `ColumnOrder`; fresh owners
+and ordinary EF lifetimes keep their provider semantics. See
+[retiring-table foreign keys](sqlite-behavior.md#foreign-keys-on-retiring-tables).
+
+PostgreSQL and SQL Server migration contracts are unchanged by these fixes.
+Report schemas, diagnostic transport and fingerprint formats remain unchanged;
+newly authored metadata is still part of its captured contract. Updating packages
+alone requires no additional database migration or approval bypass. Runtime
+guards, recovery, history, native qualification and coverage remain mandatory.
+Action/image updates retain the existing engine lines and required checks;
+C# cleanup claims no measured performance improvement.
+
+Applications upgrading from before 10.7.0 must also apply its
+[required-token source changes](#upgrade-to-1070), including the documented
+SemVer exception. Earlier [10.6.0 approval boundaries](#upgrade-to-1060) still
+apply; never reuse an obsolete approval or rewrite historical evidence.
 
 ## Upgrade to 10.7.0
 
@@ -92,7 +140,7 @@ gates remain mandatory; see the [publication runbook](operations/release-publica
 ## Upgrade to 10.6.0
 
 The 10.6.0 minor release introduced the following boundaries. They also apply
-when upgrading an older application directly to 10.7.0. Keep all installed
+when upgrading an older application directly to 10.7.1. Keep all installed
 SafeMigrations packages on the selected shared version and review newly
 scaffolded implicit index-length changes without rewriting historical migrations.
 
@@ -147,7 +195,7 @@ with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 | Package | Runtime dependency contract |
 | --- | --- |
 | Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.14,10.1.0)` |
-| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.6.4,10.7.0)`; `MySqlConnector` minimum `2.6.2` |
+| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.6.5,10.7.0)`; `MySqlConnector` minimum `2.6.2` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
 | SQLite | EF Core SQLite Core `[10.0.14,10.1.0)`; application-owned native bundle |
 | SQL Server (available since 10.4.6) | `Microsoft.EntityFrameworkCore.SqlServer` `[10.0.14,10.1.0)`; `Microsoft.Data.SqlClient` minimum `6.1.8`; `System.Security.Cryptography.Pkcs` minimum `9.0.22` |
@@ -178,13 +226,13 @@ The minimum is not an exact version lock or a claim that every higher major
 version is patched. Consumers selecting PKCS 10.x must use 10.0.13 or later
 for these advisories; NuGet audit remains enabled for the actual resolved graph.
 
-The current MySQL/MariaDB package requires Doka 10.6.4 or a compatible later 10.6 patch
+The current MySQL/MariaDB package requires Doka 10.6.5 or a compatible later 10.6 patch
 release and rejects the next minor line. This boundary avoids an exact
 transitive pin without claiming compatibility across an unqualified behavioral
 SPI revision. CI does not build Doka and never uses a cross-repository
 ProjectReference. The MySQL/MariaDB package lockfile resolves the public
-Doka 10.6.4 package. Its NuGet repository metadata identifies source commit
-`581047a524d25163818fd144146440ea4440a838`. The complete package, engine,
+Doka 10.6.5 package. Its NuGet repository metadata identifies source commit
+`10a1f19c63633881f99b8a81b12a5a82fc5fb7f7`. The complete package, engine,
 tooling, coverage, and performance matrix remains the SafeMigrations release
 gate; a local Doka ProjectReference or locally packed candidate is not release
 evidence.
@@ -254,12 +302,14 @@ The SQL Server project supplies the fifth lockfile. Releases 10.4.2 through
 10.4.5 contain four package artifacts; their inventory remains unchanged.
 
 The five-package set began with stable 10.4.6, including the optional SQL Server
-provider. Version 10.7.0 retains that inventory and the SQL Server-only PKCS
+provider. Version 10.7.1 retains that inventory and the SQL Server-only PKCS
 minimum of 9.0.22. The Core API baseline includes the additive
 CASE surface introduced in 10.6.0; the diagnostic surface began in 10.5.0.
 Version 10.7.0 replaces ten optional-token declarations with required-token
 declarations in the shipped baseline; it does not add an overload or restore
-the removed defaults. The current Doka
+the removed defaults. Version 10.7.1 retains that shipped baseline exactly;
+its table metadata correction adds no public declaration.
+The current Doka
 dependency contract is the 10.6 line above. Qualification requires the blocking
 workflow, including all three native x86-64 SQL Server cells. The
 [publication runbook](operations/release-publication.md) owns the five-package
@@ -318,17 +368,17 @@ images:
 
 | Engine | Image |
 | --- | --- |
-| MySQL 8.4 | `mysql:8.4.13@sha256:a0225d1ea6631c8bc2385dc4c2faba17bbf1834ecf369e1659a9a382bd8d5dd7` |
-| MySQL 9.7 | `mysql:9.7.4@sha256:86b390ef642f89a0157d6215dee33ddc928b8b0ecab173117f56f6c40cb24eab` |
+| MySQL 8.4 | `mysql:8.4.13@sha256:a81d043930e51745522bd5c430961cf8286f0a23f0a9a2a6e0108f7ea71b0902` |
+| MySQL 9.7 | `mysql:9.7.4@sha256:df90258da46f6e7ff8574ff84f17618aba0765cac749928299c69fd4e7cb8ad8` |
 | MariaDB 10.11 | `mariadb:10.11.19@sha256:d769e37960821dfdcf096954f6e7ac89f747e116c1bba98e48edd265dfc7deae` |
 | MariaDB 11.4 | `mariadb:11.4.13@sha256:d1891ede5a559f1086f55053bb8cc1569b0298338c4d72d71725a7f74f6ba620` |
 | MariaDB 11.8 | `mariadb:11.8.9@sha256:c4124d1afa875e47f2892edf26b482fa54f796e2f342d3717a04ca091a22a9bd` |
 | MariaDB 12.3 | `mariadb:12.3.3@sha256:d46e102fa8b9b72bfcdeb56f9dd538742092119dc8b11f31fe662605cd234cd9` |
-| PostgreSQL 14 | `postgres:14.24@sha256:0472f5295d05c211cc42b3daa5e84a128e390c5267b60ced9fe044bcf4edfdb8` |
-| PostgreSQL 15 | `postgres:15.19@sha256:64b99032e218b66b1d1a6334995056e1aa57f50a0c522cc856e72dff0e4b0d63` |
-| PostgreSQL 16 | `postgres:16.15@sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c` |
-| PostgreSQL 17 | `postgres:17.11@sha256:31ba9c94a03ada9988f2bb493a22a75eef3a185884533e5cdbcd498ea835b08f` |
-| PostgreSQL 18 | `postgres:18.6@sha256:979bccfde35445db618c65107d27d08c6c21339d8dc3ad4c830c6633947be0e4` |
+| PostgreSQL 14 | `postgres:14.24@sha256:834a046089d76edd1d2e81c4741f3ad5d1853646ededc86c2708936aad31c1ed` |
+| PostgreSQL 15 | `postgres:15.19@sha256:1aac5b49cefd627f02816141ca4ad012d6cc19460dfe02a9b5168a105be3fc53` |
+| PostgreSQL 16 | `postgres:16.15@sha256:f9a7b9ebf6f56201f949db745e47bc423c0f0f8294bafe991cc10bf74b029657` |
+| PostgreSQL 17 | `postgres:17.11@sha256:ff87138949ad9a46f32ff23bd6852b52ce024a13dffe9b4087be98292cdd3b4f` |
+| PostgreSQL 18 | `postgres:18.6@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42` |
 | SQLite | 3.46.1 or later; application-owned native bundle |
 | SQL Server 2019 | `mcr.microsoft.com/mssql/server:2019-latest@sha256:07d7dedecdbfcf6776035dc5eefb5bfd9aa1804b2f6b99f7dedb397d8a599069` |
 | SQL Server 2022 | `mcr.microsoft.com/mssql/server:2022-latest@sha256:cf8f0ab2ebe61feec2eed2629061a07d247f791c2a8ddda74a4ac9f06a291718` |
@@ -339,18 +389,20 @@ The image patches and manifest digests above were refreshed against the official
 [MariaDB](https://hub.docker.com/_/mariadb),
 [PostgreSQL](https://hub.docker.com/_/postgres) and
 [Microsoft Container Registry](https://mcr.microsoft.com/v2/mssql/server/tags/list)
-registries on 2026-10-29. MySQL/MariaDB and PostgreSQL keep the same server patch
-versions with rebuilt image manifests; SQL Server's digests remain current.
+registries on 2026-11-09. MySQL and PostgreSQL retain their server patch
+versions with rebuilt image manifests; MariaDB and SQL Server pins remain current.
 These declarations identify the configured matrix, not
 completed qualification of every image; the required hosted matrix must pass.
 
-A primary-source inventory on that date verified every current direct NuGet
-dependency, SDK/tool and Action against its official stable releases. The .NET
-10 SDK advances to 10.0.403, EF Core/DI/dotnet-ef to 10.0.14 and PKCS to 9.0.22
-on its existing 9.x line. The remaining direct packages, all ten Action pins,
-SBOM Tool 4.1.5 and Ryuk 0.14.0 are current and remain unchanged. This refresh
-does not activate .NET 11, change engine series or impose unrelated transitive
-major upgrades on consumers.
+A primary-source inventory on that date verified the latest applicable stable
+versions in the existing package and tooling lines. The .NET 10 SDK remains
+10.0.403, EF Core/DI/dotnet-ef 10.0.14 and PKCS 9.0.22 on its existing 9.x
+line. The SqlClient minimum remains 6.1.8; raising it to 7.x requires
+a separate [authentication migration](https://learn.microsoft.com/en-us/sql/connect/ado-net/microsoft-data-sqlclient-release-notes).
+The Action refresh selects setup-dotnet 6.1.0 and CodeQL 4.39.3; the other eight
+Action pins, remaining direct packages, SBOM Tool 4.1.5 and Ryuk 0.14.0 remain
+current. This refresh does not activate .NET 11, change engine series or impose
+unrelated transitive major upgrades on consumers.
 
 Local MySQL/MariaDB integration tests, design-time fallback contexts and the
 shared CI coverage/tooling defaults use MariaDB 12.3.3. Explicit engine,
@@ -1007,6 +1059,9 @@ and release-asset verification.
 - [Doka 10.6.4 package metadata](https://api.nuget.org/v3-flatcontainer/doka.entityframeworkcore.mysql/10.6.4/doka.entityframeworkcore.mysql.nuspec),
   retrieved 2026-11-05. The bug-fix release retains the same EF Core,
   MySqlConnector and System.IO.Hashing dependency ranges.
+- [Doka 10.6.5 package metadata](https://api.nuget.org/v3-flatcontainer/doka.entityframeworkcore.mysql/10.6.5/doka.entityframeworkcore.mysql.nuspec),
+  retrieved 2026-11-09. The maintenance release retains those dependency ranges,
+  the public migration SPI and the existing storage defaults.
 - [MySQL 8.4 InnoDB limits](https://dev.mysql.com/doc/refman/8.4/en/innodb-limits.html),
   [MySQL 8.4 CREATE INDEX](https://dev.mysql.com/doc/refman/8.4/en/create-index.html),
   [MySQL 8.4 invisible indexes](https://dev.mysql.com/doc/refman/8.4/en/invisible-indexes.html),

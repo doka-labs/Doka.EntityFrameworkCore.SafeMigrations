@@ -119,16 +119,17 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             new DropPrimaryKeyIntent("pk_items", "items"),
             SafeMigrationObservedState.Matching);
 
-        var target = targetProof is "nullable" or "nullable_with_empty_peer"
-            ? NullableColumn("replacement_id")
-            : targetProof == "defaulted"
-                ? new ExpectedColumnDefinition(
-                    "replacement_id",
-                    typeof(int),
-                    isNullable: false,
-                    storeType: "int",
-                    defaultValue: SafeMigrationDefaultValue.Literal(0))
-                : Column("replacement_id");
+        var target = targetProof switch
+        {
+            "nullable" or "nullable_with_empty_peer" => NullableColumn("replacement_id"),
+            "defaulted" => new ExpectedColumnDefinition(
+                "replacement_id",
+                typeof(int),
+                isNullable: false,
+                storeType: "int",
+                defaultValue: SafeMigrationDefaultValue.Literal(0)),
+            _ => Column("replacement_id"),
+        };
 
         if (targetProof == "nullable_with_empty_peer")
         {
@@ -280,7 +281,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             foreignKeys:
             [
                 ForeignKey()
-                    .Definition
+                    .Definition,
             ]);
 
         Apply(projection, new EnsureTableIntent(parent, SafeMigrationTableMode.StrictDefinition));
@@ -873,18 +874,19 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     SafeMigrationTableMode.StrictDefinition));
         }
 
-        var target = mutation == "action"
-            ? new EnsureForeignKeyIntent(
+        var target = mutation switch
+        {
+            "action" => new EnsureForeignKeyIntent(
                 new ExpectedForeignKeyDefinition(
                     "fk_children_parents",
                     "children",
                     ["parent_id"],
                     "parents",
                     ["id"],
-                    onDelete: ReferentialAction.Cascade))
-            : mutation == "mapping"
-                ? ForeignKey(columns: ["alternate_id"])
-                : ForeignKey();
+                    onDelete: ReferentialAction.Cascade)),
+            "mapping" => ForeignKey(columns: ["alternate_id"]),
+            _ => ForeignKey(),
+        };
 
         var operation = new SafeMigrationOperation(target, SafeMigrationPolicy.ThrowIfDifferent);
 
@@ -2146,7 +2148,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             foreignKeys:
             [
                 ForeignKey()
-                    .Definition
+                    .Definition,
             ]);
 
         Apply(projection, new EnsureTableIntent(parent, SafeMigrationTableMode.StrictDefinition));

@@ -363,50 +363,50 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     private static string BuildUnexpectedTableSql(
         string schemaScope
     ) => $"""
-          SELECT 'table', n.nspname, c.relname, c.relname, current_schema()
-          FROM pg_catalog.pg_class c
-          JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-          WHERE {schemaScope} AND c.relkind IN ('r', 'p')
-          ORDER BY 1, 2, 3, 4;
-          """;
+        SELECT 'table', n.nspname, c.relname, c.relname, current_schema()
+        FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE {schemaScope} AND c.relkind IN ('r', 'p')
+        ORDER BY 1, 2, 3, 4;
+        """;
 
     /// <summary>Reads column, constraint and independent-index identities for bounded expected owners.</summary>
     private static string BuildUnexpectedChildObjectSql(
         string childScope,
         string indexScope
     ) => $"""
-          SELECT 'column', n.nspname, c.relname, a.attname, current_schema()
-          FROM pg_catalog.pg_attribute a
-          JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
-          JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-          WHERE {childScope} AND c.relkind IN ('r', 'p')
-            AND a.attnum > 0 AND NOT a.attisdropped
-          UNION ALL
-          SELECT CASE co.contype
-              WHEN 'p' THEN 'primary_key'
-              WHEN 'u' THEN 'unique_constraint'
-              WHEN 'c' THEN 'check_constraint'
-              WHEN 'f' THEN 'foreign_key'
-              END,
-              n.nspname,
-              c.relname,
-              co.conname,
-              current_schema()
-          FROM pg_catalog.pg_constraint co
-          JOIN pg_catalog.pg_class c ON c.oid = co.conrelid
-          JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-          WHERE {childScope} AND co.contype IN ('p', 'u', 'c', 'f')
-          UNION ALL
-          SELECT 'index', n.nspname, tbl.relname, idx.relname, current_schema()
-          FROM pg_catalog.pg_index i
-          JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid
-          JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid
-          JOIN pg_catalog.pg_namespace n ON n.oid = tbl.relnamespace
-          WHERE {indexScope}
-            AND NOT EXISTS (
-                SELECT 1 FROM pg_catalog.pg_constraint co WHERE co.conindid = idx.oid)
-          ORDER BY 1, 2, 3, 4;
-          """;
+        SELECT 'column', n.nspname, c.relname, a.attname, current_schema()
+        FROM pg_catalog.pg_attribute a
+        JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE {childScope} AND c.relkind IN ('r', 'p')
+          AND a.attnum > 0 AND NOT a.attisdropped
+        UNION ALL
+        SELECT CASE co.contype
+            WHEN 'p' THEN 'primary_key'
+            WHEN 'u' THEN 'unique_constraint'
+            WHEN 'c' THEN 'check_constraint'
+            WHEN 'f' THEN 'foreign_key'
+            END,
+            n.nspname,
+            c.relname,
+            co.conname,
+            current_schema()
+        FROM pg_catalog.pg_constraint co
+        JOIN pg_catalog.pg_class c ON c.oid = co.conrelid
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE {childScope} AND co.contype IN ('p', 'u', 'c', 'f')
+        UNION ALL
+        SELECT 'index', n.nspname, tbl.relname, idx.relname, current_schema()
+        FROM pg_catalog.pg_index i
+        JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid
+        JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid
+        JOIN pg_catalog.pg_namespace n ON n.oid = tbl.relnamespace
+        WHERE {indexScope}
+          AND NOT EXISTS (
+              SELECT 1 FROM pg_catalog.pg_constraint co WHERE co.conindid = idx.oid)
+        ORDER BY 1, 2, 3, 4;
+        """;
 
     /// <summary>Keeps explicit schemas distinct from an invocation's effective provider-default schema.</summary>
     private sealed class ExpectedTableLookup

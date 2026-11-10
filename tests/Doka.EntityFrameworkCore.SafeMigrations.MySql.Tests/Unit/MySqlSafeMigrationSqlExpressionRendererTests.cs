@@ -717,7 +717,7 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
         var renderer = CreateRenderer(context);
         const string sql = "COALESCE('N\\n', _utf8mb4 X'0A')";
         var expression = providerFragment
-            ? (SafeMigrationSqlExpression)SafeMigrationSql.ProviderFragment("doka_mysql", sql)
+            ? SafeMigrationSql.ProviderFragment("doka_mysql", sql)
             : SafeMigrationSql.Opaque(sql);
 
         var result = renderer.RenderDefault(expression);

@@ -1639,17 +1639,16 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
     /// <returns>The isolated initial schema and deterministic sentinel values.</returns>
     private static string ForeignKeyAlternateColumnFixture(
         bool orphan
-    )
-        => ForeignKeyNullabilityFixture(alreadyNullable: true)
-            + " ALTER TABLE `proof_child` ADD `alternate_owner_id` char(36) NULL; "
+    ) => ForeignKeyNullabilityFixture(alreadyNullable: true)
+        + " ALTER TABLE `proof_child` ADD `alternate_owner_id` char(36) NULL; "
 
-            // WHY: These tests isolate orphan-row authorization, not the
-            // retained symbol's incompatible automatic-index namespace.
-            + "CREATE INDEX `ix_alternate_owner` ON `proof_child` (`alternate_owner_id`); "
-            + "UPDATE `proof_child` SET `alternate_owner_id` = "
-            + (orphan
-                ? "'00000000-0000-0000-0000-000000000999';"
-                : "'00000000-0000-0000-0000-000000000001';");
+        // WHY: These tests isolate orphan-row authorization, not the
+        // retained symbol's incompatible automatic-index namespace.
+        + "CREATE INDEX `ix_alternate_owner` ON `proof_child` (`alternate_owner_id`); "
+        + "UPDATE `proof_child` SET `alternate_owner_id` = "
+        + (orphan
+            ? "'00000000-0000-0000-0000-000000000999';"
+            : "'00000000-0000-0000-0000-000000000001';");
 
     /// <summary>Declares an exact physical removal followed by a distinct requested column mapping.</summary>
     /// <param name="context">The active provider context used to identify the migration dialect.</param>
@@ -1712,14 +1711,13 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
     /// <returns>The populated schema with all original FK checks enforced.</returns>
     private static string ForeignKeySemanticAliasFixture(
         bool includeSecondAlias
-    )
-        => ForeignKeyNullabilityFixture(alreadyNullable: true)
-            + " ALTER TABLE `proof_child` ADD CONSTRAINT `fk_semantic_proof_1` FOREIGN KEY (`owner_id`) "
+    ) => ForeignKeyNullabilityFixture(alreadyNullable: true)
+        + " ALTER TABLE `proof_child` ADD CONSTRAINT `fk_semantic_proof_1` FOREIGN KEY (`owner_id`) "
+        + "REFERENCES `proof_parent` (`id`) ON DELETE SET NULL;"
+        + (includeSecondAlias
+            ? " ALTER TABLE `proof_child` ADD CONSTRAINT `fk_semantic_proof_2` FOREIGN KEY (`owner_id`) "
             + "REFERENCES `proof_parent` (`id`) ON DELETE SET NULL;"
-            + (includeSecondAlias
-                ? " ALTER TABLE `proof_child` ADD CONSTRAINT `fk_semantic_proof_2` FOREIGN KEY (`owner_id`) "
-                + "REFERENCES `proof_parent` (`id`) ON DELETE SET NULL;"
-                : string.Empty);
+            : string.Empty);
 
     /// <summary>
     /// Removes the exact source and each requested physical alias before recreating the owned target.
@@ -1842,11 +1840,10 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
     private static Task<int> ReplacementForeignKeyCountAsync(
         string connectionString,
         CancellationToken cancellationToken
-    )
-        => ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child' "
-            + "AND CONSTRAINT_NAME = 'fk_proof_child_parent';",
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connectionString,
+        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
+        + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child' "
+        + "AND CONSTRAINT_NAME = 'fk_proof_child_parent';",
+        cancellationToken: cancellationToken);
 }

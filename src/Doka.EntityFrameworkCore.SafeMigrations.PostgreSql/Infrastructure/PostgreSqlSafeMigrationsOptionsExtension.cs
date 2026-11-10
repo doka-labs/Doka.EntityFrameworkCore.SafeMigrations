@@ -65,8 +65,8 @@ internal sealed class PostgreSqlSafeMigrationsOptionsExtension
 
         public override string LogFragment => "doka-postgresql-safe-migrations ";
 
-        private new PostgreSqlSafeMigrationsOptionsExtension Extension =>
-            (PostgreSqlSafeMigrationsOptionsExtension)base.Extension;
+        private new PostgreSqlSafeMigrationsOptionsExtension Extension
+            => (PostgreSqlSafeMigrationsOptionsExtension)base.Extension;
 
         // WHY: The ownership option changes runtime pending-model detection.
         // It must participate in EF's service-provider identity so a context

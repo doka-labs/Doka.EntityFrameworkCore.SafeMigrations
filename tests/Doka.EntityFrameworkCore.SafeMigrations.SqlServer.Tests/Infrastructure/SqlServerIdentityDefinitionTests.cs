@@ -468,8 +468,10 @@ public sealed class SqlServerIdentityDefinitionTests
         DbContext context
     ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
-    private static SafeMigrationProviderAnalysis MissingIdentityAnalysis()
-        => new(SafeMigrationObservedState.Missing, SafeMigrationRepairCapability.None, false, "test_missing");
+    private static SafeMigrationProviderAnalysis MissingIdentityAnalysis() => new(SafeMigrationObservedState.Missing,
+        SafeMigrationRepairCapability.None,
+        false,
+        "test_missing");
 
     private static void AcceptIdentityOperation(
         SqlServerSafeMigrationProviderAnalyzer analyzer,

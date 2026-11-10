@@ -159,11 +159,11 @@ internal static class SafeMigrationOperationCompatibility
                 Create(
                     new EnsureIndexIntent(SafeMigrationExpectedDefinitionFactory.From(value)),
                     SafeMigrationPolicy.ThrowIfDifferent),
-            DropIndexOperation value when value.Table is not null && HasNoAnnotations(value) =>
+            DropIndexOperation { Table: not null } value when HasNoAnnotations(value) =>
                 Create(
                     new DropIndexIntent(value.Name, value.Table, value.Schema),
                     SafeMigrationPolicy.ThrowIfDifferent),
-            RenameIndexOperation value when value.Table is not null && HasNoAnnotations(value) =>
+            RenameIndexOperation { Table: not null } value when HasNoAnnotations(value) =>
                 Create(
                     new RenameIndexIntent(value.Name, value.Table, value.NewName, value.Schema),
                     SafeMigrationPolicy.ThrowIfDifferent),

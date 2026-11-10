@@ -39,6 +39,23 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
         Assert.Equal(MySqlProjectedIndexPhysicalShapeResult.PrefixExceedsTargetColumn, result);
     }
 
+    /// <summary>A TEXT prefix can prove physical width without a declared character ceiling.</summary>
+    [Fact]
+    public void TextPrefixDoesNotRequireDeclaredCharacterLength()
+    {
+        // Arrange
+        var columns = ProjectedColumns.Create(
+            new ExpectedColumnDefinition("property", typeof(string), isNullable: false, storeType: "text"));
+
+        var index = Index(new ExpectedIndexKeyDefinition(column: "property", prefixLength: 768));
+
+        // Act
+        var result = Validate(index, columns, maximumKeyBytes: 3072);
+
+        // Assert
+        Assert.Equal(MySqlProjectedIndexPhysicalShapeResult.Feasible, result);
+    }
+
     [Fact]
     public void OverlongUnprefixedProjectedColumnRequiresAnExplicitPrefix()
     {
@@ -339,6 +356,37 @@ public sealed class MySqlProjectedIndexPhysicalShapeTests : IDisposable
         Assert.False(shape.SupportsPrefix);
         Assert.Null(shape.MaximumPrefixUnits);
         Assert.Equal(0L, shape.BytesPerPrefixUnit);
+    }
+
+    /// <summary>BIT widths retain nullable catalog precision and round up partial bytes.</summary>
+    /// <param name="precision">The available native bit precision, or null when unreported.</param>
+    /// <param name="expectedWidth">The fixed key width, or null when it cannot be proved.</param>
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData(1, 1L)]
+    [InlineData(8, 1L)]
+    [InlineData(9, 2L)]
+    [InlineData(64, 8L)]
+    public void BitCatalogPrecisionPreservesNullableRoundedWidth(
+        int? precision,
+        long? expectedWidth
+    )
+    {
+        // Arrange
+        const string dataType = "bit";
+
+        // Act
+        var shape = MySqlProjectedIndexPhysicalShape.CreateCatalogColumnShape(
+            dataType,
+            null,
+            null,
+            precision,
+            null,
+            null);
+
+        // Assert
+        Assert.Equal(expectedWidth, shape.FullWidthBytes);
+        Assert.False(shape.SupportsPrefix);
     }
 
     [Fact]

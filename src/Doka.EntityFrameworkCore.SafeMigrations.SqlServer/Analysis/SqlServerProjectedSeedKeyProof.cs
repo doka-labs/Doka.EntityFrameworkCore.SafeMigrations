@@ -201,9 +201,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 && lineage.Seeds.Count != 0)
             {
                 var columns = UniqueKeyColumns(operation.Intent);
-                var capturedMetadataMatches = lineage.Seeds.All(seed =>
-                    seed.KeyColumns.SequenceEqual(columns, StringComparer.Ordinal)
-                    || seed.UniqueKeys.Any(key => key.Columns.SequenceEqual(columns, StringComparer.Ordinal)));
+                var capturedMetadataMatches = lineage.Seeds.All(capturedSeed =>
+                    capturedSeed.KeyColumns.SequenceEqual(columns, StringComparer.Ordinal)
+                    || capturedSeed.UniqueKeys.Any(key => key.Columns.SequenceEqual(columns, StringComparer.Ordinal)));
 
                 var filter = operation.Intent is EnsureIndexIntent index
                     ? SqlServerSafeMigrationCatalogSqlBuilder.GetStructuredIndexFilter(index.Definition)
@@ -363,12 +363,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         };
     }
 
-    private static SafeMigrationProviderAnalysis UnprovenProjectedSeed()
-        => new(
-            SafeMigrationObservedState.PrerequisiteMissing,
-            SafeMigrationRepairCapability.None,
-            false,
-            "projected_seed_row_data_unproven");
+    private static SafeMigrationProviderAnalysis UnprovenProjectedSeed() => new(
+        SafeMigrationObservedState.PrerequisiteMissing,
+        SafeMigrationRepairCapability.None,
+        false,
+        "projected_seed_row_data_unproven");
 
     private static void AddProof<TIntent>(
         Dictionary<TIntent, List<SqlServerProjectedSeedKeyProof>> target,
@@ -534,29 +533,27 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
     private static (string Schema, string Table)? UniqueKeyIdentity(
         SafeMigrationIntent intent
-    )
-        => intent switch
-        {
-            EnsurePrimaryKeyIntent key => (key.Definition.Schema ?? "dbo", key.Definition.Table),
-            EnsureUniqueConstraintIntent key => (key.Definition.Schema ?? "dbo", key.Definition.Table),
-            EnsureIndexIntent { Definition.Unique: true } key
-                when key.Definition.Keys.All(static column => column.Column is not null)
-                => (key.Definition.Schema ?? "dbo", key.Definition.Table),
-            _ => null,
-        };
+    ) => intent switch
+    {
+        EnsurePrimaryKeyIntent key => (key.Definition.Schema ?? "dbo", key.Definition.Table),
+        EnsureUniqueConstraintIntent key => (key.Definition.Schema ?? "dbo", key.Definition.Table),
+        EnsureIndexIntent { Definition.Unique: true } key
+            when key.Definition.Keys.All(static column => column.Column is not null)
+            => (key.Definition.Schema ?? "dbo", key.Definition.Table),
+        _ => null,
+    };
 
     private static IReadOnlyList<string> UniqueKeyColumns(
         SafeMigrationIntent intent
-    )
-        => intent switch
-        {
-            EnsurePrimaryKeyIntent key => key.Definition.Columns,
-            EnsureUniqueConstraintIntent key => key.Definition.Columns,
-            EnsureIndexIntent key => key
-                .Definition
-                .Keys
-                .Select(static column => column.Column!)
-                .ToArray(),
-            _ => throw new UnreachableException(),
-        };
+    ) => intent switch
+    {
+        EnsurePrimaryKeyIntent key => key.Definition.Columns,
+        EnsureUniqueConstraintIntent key => key.Definition.Columns,
+        EnsureIndexIntent key => key
+            .Definition
+            .Keys
+            .Select(static column => column.Column!)
+            .ToArray(),
+        _ => throw new UnreachableException(),
+    };
 }

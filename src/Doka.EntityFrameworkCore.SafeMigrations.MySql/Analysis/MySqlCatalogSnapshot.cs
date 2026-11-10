@@ -157,8 +157,7 @@ internal sealed class MySqlCatalogSnapshot : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(connection);
 
         var settings = new MySqlConnectionStringBuilder(connection.ConnectionString);
-        if (settings.Pooling
-            && !settings.ConnectionReset)
+        if (settings is { Pooling: true, ConnectionReset: false })
         {
             // WHY: A failed DROP must not leak copies into a reused pooled session. ConnectionReset
             // clears temporary objects before reuse, including MySqlDataSource pools and wrappers;

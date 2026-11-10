@@ -134,11 +134,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // avoids copying it into an intermediate CASE fragment for every
         // operation, while all catalog and data decisions remain unchanged.
         var state = $"""
-                     CASE WHEN NOT {table} THEN N'prerequisite_missing'
-                     {identityGate}WHEN NOT {exists} AND {unsafeAdd} THEN N'data_blocked'
-                     WHEN NOT {exists} THEN N'missing'
-                     WHEN {matching} THEN N'matching' ELSE N'different' END
-                     """;
+            CASE WHEN NOT {table} THEN N'prerequisite_missing'
+            {identityGate}WHEN NOT {exists} AND {unsafeAdd} THEN N'data_blocked'
+            WHEN NOT {exists} THEN N'missing'
+            WHEN {matching} THEN N'matching' ELSE N'different' END
+            """;
 
         return Plan(state, matchingProof) with
         {
@@ -462,16 +462,16 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             : "c.is_computed = 0";
 
         return $"""
-                EXISTS (SELECT 1 FROM sys.columns c JOIN sys.types ty ON ty.user_type_id = c.user_type_id
-                WHERE c.object_id = {TableId(table, schema)} AND c.name = {Literal(definition.Name)}
-                AND ty.name = {Literal(type.Name)} AND ty.is_user_defined = 0 AND ty.is_assembly_type = 0
-                AND c.is_nullable = {nullability} AND c.is_identity = {(isIdentity ? "1" : "0")}
-                AND {computedClause} AND c.is_sparse = 0 AND c.is_column_set = 0 AND c.is_rowguidcol = 0
-                AND c.is_filestream = 0 AND c.is_hidden = 0 AND c.generated_always_type = 0
-                AND c.rule_object_id = 0 AND c.encryption_type IS NULL
-                AND {DefaultMatches(table, schema, definition)}{identityClause}
-                {lengthClause}{precisionClause}{scaleClause}{collationClause})
-                """;
+            EXISTS (SELECT 1 FROM sys.columns c JOIN sys.types ty ON ty.user_type_id = c.user_type_id
+            WHERE c.object_id = {TableId(table, schema)} AND c.name = {Literal(definition.Name)}
+            AND ty.name = {Literal(type.Name)} AND ty.is_user_defined = 0 AND ty.is_assembly_type = 0
+            AND c.is_nullable = {nullability} AND c.is_identity = {(isIdentity ? "1" : "0")}
+            AND {computedClause} AND c.is_sparse = 0 AND c.is_column_set = 0 AND c.is_rowguidcol = 0
+            AND c.is_filestream = 0 AND c.is_hidden = 0 AND c.generated_always_type = 0
+            AND c.rule_object_id = 0 AND c.encryption_type IS NULL
+            AND {DefaultMatches(table, schema, definition)}{identityClause}
+            {lengthClause}{precisionClause}{scaleClause}{collationClause})
+            """;
     }
 
     /// <summary>Reads only the supported immutable EF identity annotations.</summary>
@@ -686,21 +686,20 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
     private string DefaultExpression(
         ExpectedColumnDefinition definition
-    )
-        => definition.DefaultValue.Kind switch
-        {
-            SafeMigrationDefaultValueKind.Literal => RenderValueLiteral(
-                definition.DefaultValue.LiteralValue,
-                definition.StoreType
-                ?? FindColumnTypeMapping(definition)
-                    ?.StoreType
-                ?? throw new NotSupportedException("SQL Server has no default-value type mapping.")),
-            SafeMigrationDefaultValueKind.Sql when definition.DefaultValue.StructuredExpression is { } expression
-                => _expressionRenderer.Render(expression),
-            SafeMigrationDefaultValueKind.Sql => definition.DefaultValue.SqlExpression
-                ?? throw new InvalidOperationException("A SQL default has no expression."),
-            _ => throw new InvalidOperationException("No default expression exists."),
-        };
+    ) => definition.DefaultValue.Kind switch
+    {
+        SafeMigrationDefaultValueKind.Literal => RenderValueLiteral(
+            definition.DefaultValue.LiteralValue,
+            definition.StoreType
+            ?? FindColumnTypeMapping(definition)
+                ?.StoreType
+            ?? throw new NotSupportedException("SQL Server has no default-value type mapping.")),
+        SafeMigrationDefaultValueKind.Sql when definition.DefaultValue.StructuredExpression is { } expression
+            => _expressionRenderer.Render(expression),
+        SafeMigrationDefaultValueKind.Sql => definition.DefaultValue.SqlExpression
+            ?? throw new InvalidOperationException("A SQL default has no expression."),
+        _ => throw new InvalidOperationException("No default expression exists."),
+    };
 
     /// <summary>
     /// Names exact native constraint kinds and owners without treating authored removals as accepted.

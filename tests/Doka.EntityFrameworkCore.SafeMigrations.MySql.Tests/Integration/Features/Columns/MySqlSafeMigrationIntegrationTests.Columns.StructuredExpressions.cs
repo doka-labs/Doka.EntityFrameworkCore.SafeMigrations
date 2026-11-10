@@ -68,8 +68,10 @@ public sealed class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSaf
         Assert.Equal(SafeMigrationReportStatus.Blocked, driftReport.Status);
         Assert.Contains(
             driftReport.Assessments,
-            assessment => assessment.ObjectName == "doubled_id"
-                && assessment.ObservedState == SafeMigrationObservedState.Different);
+            assessment => assessment is
+            {
+                ObjectName: "doubled_id", ObservedState: SafeMigrationObservedState.Different,
+            });
     }
 
     [Fact]
@@ -109,8 +111,10 @@ public sealed class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSaf
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Contains(
             report.Assessments,
-            static assessment => assessment.ObservedState == SafeMigrationObservedState.Unsupported
-                && assessment.Code == "structured_cast_type");
+            static assessment => assessment is
+            {
+                ObservedState: SafeMigrationObservedState.Unsupported, Code: "structured_cast_type",
+            });
 
         Assert.Equal(
             0,

@@ -141,8 +141,8 @@ public sealed class PostgreSqlDataProbeConstructionTests
     }
 
     /// <summary>Constructs only provider services, never a server connection.</summary>
-    private static SafeMigrationDbContext OfflineContext() =>
-        new("Host=127.0.0.1;Database=unused;Username=unused", registerSafeMigrations: false);
+    private static SafeMigrationDbContext OfflineContext() => new("Host=127.0.0.1;Database=unused;Username=unused",
+        registerSafeMigrations: false);
 
     /// <summary>Optionally observes existing literal calls without replacing native mapping semantics.</summary>
     private static PostgreSqlSafeMigrationCatalogSqlBuilder Builder(
@@ -340,14 +340,13 @@ public sealed class PostgreSqlDataProbeConstructionTests
         bool nullable = true,
         string? comment = null,
         SafeMigrationDefaultValue? defaultValue = null
-    ) =>
-        new(
-            "value",
-            typeof(string),
-            nullable,
-            $"character varying({length})",
-            comment: comment,
-            defaultValue: defaultValue);
+    ) => new(
+        "value",
+        typeof(string),
+        nullable,
+        $"character varying({length})",
+        comment: comment,
+        defaultValue: defaultValue);
 
     /// <summary>Uses the real immutable annotation capture rather than synthesizing provider metadata.</summary>
     private static ExpectedColumnDefinition AnnotatedDefinition(
@@ -369,14 +368,13 @@ public sealed class PostgreSqlDataProbeConstructionTests
     private static ExpectedColumnDefinition GeneratedDefinition(
         SafeMigrationSqlExpression expression,
         int length = 40
-    ) =>
-        new(
-            "value",
-            typeof(string),
-            true,
-            $"character varying({length})",
-            isStored: true,
-            computedExpression: expression);
+    ) => new(
+        "value",
+        typeof(string),
+        true,
+        $"character varying({length})",
+        isStored: true,
+        computedExpression: expression);
 
     /// <summary>Captures the native source together with its finite parsed role tree.</summary>
     private static ExpectedColumnDefinition CapturedDefinition(

@@ -154,7 +154,7 @@ public sealed class MySqlSharedEngineIsolationTests : MySqlIntegrationTestBase
             CancellationToken cancellationToken
         )
         {
-            var connectionString = string.Empty;
+            string connectionString;
 
             try
             {

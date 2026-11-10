@@ -46,8 +46,7 @@ internal static class SqlServerSqlStringLiteral
     /// <returns>Whether the string requires an expression rather than one native quoted literal.</returns>
     internal static bool RequiresExpression(
         ReadOnlySpan<char> value
-    )
-        => value.IndexOf("\\\n") >= 0 || value.IndexOf("\\\r") >= 0;
+    ) => value.IndexOf("\\\n") >= 0 || value.IndexOf("\\\r") >= 0;
 
     /// <summary>Binds a statement expression when sp_executesql cannot receive a quoted literal.</summary>
     /// <param name="sql">The exact dynamic statement text.</param>
@@ -58,8 +57,7 @@ internal static class SqlServerSqlStringLiteral
         string sql,
         string variable,
         out string declaration
-    )
-        => ProcedureArgument(sql, Render(sql), variable, out declaration);
+    ) => ProcedureArgument(sql, Render(sql), variable, out declaration);
 
     /// <summary>Binds an already rendered input argument without discarding analysis parameter capture.</summary>
     /// <param name="original">The original Unicode data used to identify native continuation hazards.</param>

@@ -31,26 +31,20 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("source", "generated_drop");
-        using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(2));
-        var committed = false;
+        using var cancellation = new CancellationTokenSource();
 
         // Act
-        var pending = Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations, deadline.Token));
-        Exception? failure;
-        try
-        {
-            await WaitForDropOwnerLockAsync(connectionString, dropPid, pending, deadline.Token);
-            await transaction.CommitAsync(deadline.Token);
-            committed = true;
-            failure = await pending.WaitAsync(deadline.Token);
-        }
-        finally
-        {
-            if (!committed)
-            {
-                await transaction.RollbackAsync(CancellationToken.None);
-            }
-        }
+        var failure = await PostgreSqlOwnedConcurrentAttempt.RunAsync(
+            cancellationToken => ExecuteOperationsAsync(context, builder.Operations, cancellationToken),
+            (pending, cancellationToken) => WaitForDropOwnerLockAsync(
+                connectionString,
+                dropPid,
+                pending,
+                cancellationToken),
+            cancellationToken => transaction.CommitAsync(cancellationToken),
+            () => transaction.RollbackAsync(CancellationToken.None),
+            cancellation,
+            cancellation.Token);
 
         // Assert
         Assert.Equal("P1001",
@@ -62,7 +56,7 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             await ScalarStringAsync(
                 connectionString,
                 "SELECT source::text || ':' || unrelated::text || ':' || derived::text FROM generated_drop;",
-                cancellationToken: deadline.Token));
+                cancellationToken: cancellation.Token));
     }
 
     /// <summary>Coordinates on native lock state instead of a CPU-dependent delay or runtime threshold.</summary>

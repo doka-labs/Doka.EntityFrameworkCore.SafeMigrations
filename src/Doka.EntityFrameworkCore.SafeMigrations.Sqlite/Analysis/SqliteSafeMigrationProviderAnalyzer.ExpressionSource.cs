@@ -5,8 +5,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
     /// <summary>Accepts only captured syntax whose identifier delimiters have native SQLite meaning.</summary>
     private static bool CapturedSourceDialectCompatible(
         string? source
-    )
-        => source is null || SafeMigrationSqlExpressionParser.IsCapturedSourceDialectCompatible(source, "\"`[");
+    ) => source is null || SafeMigrationSqlExpressionParser.IsCapturedSourceDialectCompatible(source, "\"`[");
 
     /// <summary>Proves identifier roles against the complete declared table, not native DQS fallback.</summary>
     private static bool HasMissingDeclaredExpressionColumns(

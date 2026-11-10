@@ -749,8 +749,7 @@ public sealed class SqlServerIdentityInsertCommandTests
 
     private static SqlServerSafeMigrationProviderAnalyzer CreateAnalyzer(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private sealed class FailingCommand : MigrationCommand
     {
@@ -986,8 +985,7 @@ public sealed class SqlServerIdentityInsertCommandTests
 
         protected override DbTransaction BeginDbTransaction(
             IsolationLevel isolationLevel
-        )
-            => new RecoveryTransaction(this, isolationLevel);
+        ) => new RecoveryTransaction(this, isolationLevel);
 
         protected override DbCommand CreateDbCommand()
         {
@@ -1075,8 +1073,7 @@ public sealed class SqlServerIdentityInsertCommandTests
 
         protected override DbTransaction? DbTransaction { get; set; }
 
-        protected override DbParameterCollection DbParameterCollection
-            => throw new NotSupportedException();
+        protected override DbParameterCollection DbParameterCollection => throw new NotSupportedException();
 
         public override void Cancel() { }
 
@@ -1084,8 +1081,7 @@ public sealed class SqlServerIdentityInsertCommandTests
 
         public override Task<int> ExecuteNonQueryAsync(
             CancellationToken cancellationToken
-        )
-            => Task.FromResult(ExecuteCleanup(cancellationToken));
+        ) => Task.FromResult(ExecuteCleanup(cancellationToken));
 
         public override object? ExecuteScalar() => throw new NotSupportedException();
 
@@ -1095,8 +1091,7 @@ public sealed class SqlServerIdentityInsertCommandTests
 
         protected override DbDataReader ExecuteDbDataReader(
             CommandBehavior behavior
-        )
-            => throw new NotSupportedException();
+        ) => throw new NotSupportedException();
 
         private int ExecuteCleanup(
             CancellationToken cancellationToken
@@ -1141,8 +1136,7 @@ public sealed class SqlServerIdentityInsertCommandTests
                 throw new InvalidOperationException("identity acquisition is unproven");
             }
 
-            if (_connection.FailCleanup
-                && _connection.IdentityPhase == 2)
+            if (_connection is { FailCleanup: true, IdentityPhase: 2 })
             {
                 throw new InvalidOperationException("cleanup cannot recover this session");
             }

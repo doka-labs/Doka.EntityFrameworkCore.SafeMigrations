@@ -12,11 +12,13 @@ internal interface ISqliteSafeMigrationsBaselineGenerator
     /// ordinary fresh creators even when adjacent safe operations require complete generated-column facets.
     /// Explicit consumer generators remain delegated unchanged and must satisfy the runtime postconditions.
     /// </param>
+    /// <param name="snapshot">The native catalog captured inside the owned transaction, when available.</param>
     /// <returns>The executable native migration commands.</returns>
     IReadOnlyList<MigrationCommand> Generate(
         IReadOnlyList<MigrationOperation> operations,
         IModel? model = null,
         MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default,
-        IReadOnlyList<MigrationOperation>? guardedOperations = null
+        IReadOnlyList<MigrationOperation>? guardedOperations = null,
+        SqliteCatalogSnapshot? snapshot = null
     );
 }

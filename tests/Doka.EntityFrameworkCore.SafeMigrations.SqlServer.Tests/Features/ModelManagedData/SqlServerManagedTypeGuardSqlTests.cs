@@ -257,54 +257,51 @@ public sealed class SqlServerManagedTypeGuardSqlTests
     /// <summary>Creates a catalog builder using the same provider mappings as runtime plans.</summary>
     private static SqlServerSafeMigrationCatalogSqlBuilder CreateCatalog(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     /// <summary>Captures the same identity target for each supported managed-data operation.</summary>
     private static ModelManagedDataIntent CreateIdentityIntent(
         string kind
-    )
-        => kind switch
-        {
-            "ensure" => new EnsureModelManagedDataIntent(
-                "items",
-                ["Id"],
-                ["int"],
-                ["Id"],
-                ["int"],
-                new object?[,] { { 1 } },
-                null,
-                null),
-            "update" => new UpdateModelManagedDataIntent(
-                "items",
-                ["Id"],
-                ["int"],
-                new object?[,] { { 1 } },
-                ["Id"],
-                ["int"],
-                new object?[,] { { 1 } },
-                new object?[,] { { 1 } },
-                null,
-                null),
-            "delete" => new DeleteModelManagedDataIntent(
-                "items",
-                ["Id"],
-                ["int"],
-                new object?[,] { { 1 } },
-                ["Id"],
-                ["int"],
-                new object?[,] { { 1 } },
-                null,
-                []),
-            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-        };
+    ) => kind switch
+    {
+        "ensure" => new EnsureModelManagedDataIntent(
+            "items",
+            ["Id"],
+            ["int"],
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            null,
+            null),
+        "update" => new UpdateModelManagedDataIntent(
+            "items",
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            new object?[,] { { 1 } },
+            null,
+            null),
+        "delete" => new DeleteModelManagedDataIntent(
+            "items",
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            null,
+            []),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
 
     /// <summary>Counts complete SQL tokens rather than unrelated identifier fragments.</summary>
     private static int Occurrences(
         string sql,
         string value
-    )
-        => sql.Split(value)
-                .Length
-            - 1;
+    ) => sql.Split(value)
+            .Length
+        - 1;
 }

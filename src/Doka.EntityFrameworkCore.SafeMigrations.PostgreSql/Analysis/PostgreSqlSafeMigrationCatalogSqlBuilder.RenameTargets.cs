@@ -23,6 +23,5 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <returns>Whether the existing source is the independently owned index this operation can rename.</returns>
     internal string BuildIndexRenameSourceSupportedExpression(
         RenameIndexIntent intent
-    ) =>
-        IndependentIndexExists(intent.Name, intent.Schema, intent.Table);
+    ) => IndependentIndexExists(intent.Name, intent.Schema, intent.Table);
 }

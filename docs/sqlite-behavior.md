@@ -1,9 +1,10 @@
 # SQLite behavior
 
-Version 10.7.0 retains the generated-column creation/rebuild facets and
+Version 10.7.1 corrects atomic retiring-table FK removal and safe rebuild column
+order while retaining the generated-column creation/rebuild facets and
 independent DROP/identifier proofs introduced in 10.6.0. Review the
-[current upgrade notes](support-and-qualification.md#upgrade-to-1070) for required
-cancellation arguments and dependency floors, and the earlier
+[current upgrade notes](support-and-qualification.md#upgrade-to-1071) for retirement,
+rebuild order, required cancellation arguments and dependency floors, and the earlier
 [10.6.0 contract changes](support-and-qualification.md#upgrade-to-1060) for
 conditional computed/CHECK fingerprint approvals and conservative boundaries.
 
@@ -144,6 +145,45 @@ Actual or unknown row effects require origin-bearing runtime revalidation,
 and a new owner cannot inherit the removed owner's row evidence. Explicit FK
 retirement is evaluated separately. Mandatory execution still verifies foreign
 keys before committing the owned rebuild transaction.
+
+### Foreign keys on retiring tables
+
+A complete structural batch can remove a populated private FK cycle even when
+its retiring tables are intentionally absent from the final target model.
+The adapter certifies the exact FK-drop operation only when that same owner is
+explicitly dropped later in the same atomic structural window. The FK is still
+classified under its normal policy. Execution omits only the redundant physical
+FK removal, then performs the explicit table drops in the existing owned batch.
+Fresh postflight verifies the absent owners; there is no fabricated rebuild
+model or row copy for discarded tables.
+
+A future DROP beyond SQL/data boundaries, another migration, a renamed or
+recreated owner, or a merely copied operation does not supply that certificate.
+Unmodeled surviving owners still require the complete rebuild model. Surviving
+incoming references and unsupported triggers, views, generated shapes,
+strict/without-rowid shapes or provider options retain their proof requirements.
+They are not silently removed to make retirement possible.
+
+The connected retiring component is checked on both sides of its native FK
+edges, including tables that need no separate FK-drop operation. A renamed
+retiring neighbor cannot hide an old artifact behind its new name. A rename
+of a retained, independently supported principal is not a retirement certificate
+and does not by itself invalidate the other table's retirement.
+
+Rebuilding a retained host through safe operations preserves its native column
+order unless the destination model specifies an explicit `ColumnOrder`.
+The existing native EF rewrite identifies the private reconstructed creator;
+only its column declarations are reordered. Named row-copy projections and
+column facets remain EF-owned. Renamed columns retain their ordinal, newly
+added or dropped-and-readded columns append, and fresh/recreated or ordinary
+EF-owned lifetimes retain their authored provider behavior. This applies to
+safe upgrade and downgrade rebuilds, not just retirement.
+
+The existing transaction, rollback, original-error priority and restoration of
+the original FK-enforcement mode remain authoritative. EF migration-history
+writes still follow the batch separately. Runtime migration and bundles can
+use this contract; safe-operation scripts remain explicitly unsupported.
+See [the retirement decision](decisions/D-020-atomic-retiring-table-foreign-keys.md).
 
 A strictly matching existing table reuses its captured snapshot to certify
 actual named PK/UNIQUE/CHECK/FK members separately from their authored semantic

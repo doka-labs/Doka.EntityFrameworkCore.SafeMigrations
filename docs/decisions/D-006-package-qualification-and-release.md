@@ -351,6 +351,17 @@ owns independent consumer readback.
   Local ARM preparation is permitted while native x64 SQL Server and complete
   merged coverage remain explicitly pending and blocking. This is not a
   release waiver, extra-line activation or .NET 11 adoption.
+- 2026-11-09: Set the shared five-package stable identity to 10.7.1. Keep
+  public declarations and shipped API baselines identical to 10.7.0. Correct
+  table annotation capture through existing typed callbacks rather than
+  publishing the unreleased operation-factory overloads. Retain 10.7.0's
+  explicit-token requirements and documented SemVer exception.
+  Include explicit InnoDB metadata and atomic SQLite retirement/rebuild-order
+  fixes, the verified C# cleanup, Doka 10.6.5 and current Action/image pins.
+  Product documentation describes the stable contract without publication-status
+  wording. Record actual qualification/publication only in the runbook and
+  exact release evidence; preserve native, coverage, SBOM and protected-release
+  gates. No .NET 11 or additional release line is activated.
 
 ### Implementation References
 

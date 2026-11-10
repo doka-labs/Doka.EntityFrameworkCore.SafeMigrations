@@ -230,30 +230,27 @@ public sealed class SqlServerProjectedSeedProofCacheTests
                 StringComparison.Ordinal));
     }
 
-    private static ExpectedTableDefinition Table()
-        => new(
-            "seeds",
-            [
-                new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
-                new ExpectedColumnDefinition("Code", typeof(string), true, "nvarchar(20)"),
-            ],
-            primaryKey: new ExpectedPrimaryKeyDefinition("PK_seeds", "seeds", ["Id"]));
+    private static ExpectedTableDefinition Table() => new(
+        "seeds",
+        [
+            new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
+            new ExpectedColumnDefinition("Code", typeof(string), true, "nvarchar(20)"),
+        ],
+        primaryKey: new ExpectedPrimaryKeyDefinition("PK_seeds", "seeds", ["Id"]));
 
     private static EnsureModelManagedDataIntent Seed(
         int id
-    )
-        => new(
-            "seeds",
-            ["Id"],
-            ["int"],
-            ["Id", "Code"],
-            ["int", "nvarchar(20)"],
-            new object?[,] { { id, "code_" + id } },
-            null,
-            uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Code"])]);
+    ) => new(
+        "seeds",
+        ["Id"],
+        ["int"],
+        ["Id", "Code"],
+        ["int", "nvarchar(20)"],
+        new object?[,] { { id, "code_" + id } },
+        null,
+        uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Code"])]);
 
     private static SqlServerSafeMigrationCatalogSqlBuilder Catalog(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 }

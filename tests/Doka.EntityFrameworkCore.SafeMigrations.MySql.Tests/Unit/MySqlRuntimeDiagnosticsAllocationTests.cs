@@ -253,17 +253,15 @@ public sealed class MySqlRuntimeDiagnosticsAllocationTests
     private static int ScratchCount(
         MySqlSafeMigrationCatalogSqlBuilder catalog,
         string name
-    ) =>
-        Assert.IsAssignableFrom<ICollection>(Field(catalog, name))
-            .Count;
+    ) => Assert.IsAssignableFrom<ICollection>(Field(catalog, name))
+        .Count;
 
     /// <summary>Requires the exact field to exist so an absent scratch probe cannot pass vacuously.</summary>
     private static object? Field(
         MySqlSafeMigrationCatalogSqlBuilder catalog,
         string name
-    ) =>
-        (typeof(MySqlSafeMigrationCatalogSqlBuilder).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("The scratch field is unavailable.")).GetValue(catalog);
+    ) => (typeof(MySqlSafeMigrationCatalogSqlBuilder).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new InvalidOperationException("The scratch field is unavailable.")).GetValue(catalog);
 
     /// <summary>Renders a captured parameter snapshot using real provider type mappings.</summary>
     private static string Render(
@@ -304,8 +302,7 @@ public sealed class MySqlRuntimeDiagnosticsAllocationTests
     private static MySqlSafeMigrationCatalogSqlBuilder Catalog(
         IRelationalTypeMappingSource mappings,
         DbContext context
-    ) =>
-        new(mappings, context.GetService<ISqlGenerationHelper>());
+    ) => new(mappings, context.GetService<ISqlGenerationHelper>());
 
     /// <summary>Uses the pinned provider's internal context constructor, like existing SPI contract fixtures.</summary>
     private static MySqlMigrationOperationContext NativeContext(

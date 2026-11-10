@@ -489,13 +489,16 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
         var seed = CreateSeedCommand(context);
         var connection = context.GetService<IRelationalConnection>();
         using var cancellation = new CancellationTokenSource();
-        using var readinessDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
         // Act
         var execution = seed.ExecuteNonQueryAsync(connection, cancellationToken: cancellation.Token);
-        await pause.WaitUntilReadyAsync(observer, execution, readinessDeadline.Token);
-        await cancellation.CancelAsync();
-        var attention = await Record.ExceptionAsync(() => execution.WaitAsync(TimeSpan.FromSeconds(45)));
+        var observation = await SqlServerAttentionTestOperation.ObserveAsync(
+            execution,
+            cancellationToken => pause.WaitUntilReadyAsync(observer, execution, cancellationToken),
+            cancellation,
+            CancellationToken.None);
+
+        var attention = observation.ExecutionFailure;
         var quarantine = Record.Exception(() =>
             context
                 .GetService<IMigrationsSqlGenerator>()
@@ -504,11 +507,13 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
         await using var newLease = new SqlConnection(connectionString);
         await newLease.OpenAsync();
 
-        // WHY: The readiness deadline belongs to the earlier admission phase and may expire during attention.
-        // Recovery observation must remain independent of both that deadline and the canceled execution token.
+        // WHY: Recovery observes completed attention independently of the canceled
+        // execution token; no owner can be disposed while a cancellation request runs.
         var newLeaseMarkerIsNull = await ReadMarkerIsNullAsync(newLease, cancellationToken: CancellationToken.None);
 
         // Assert
+        Assert.Null(observation.ReadinessFailure);
+        Assert.Null(observation.CancellationFailure);
         Assert.NotNull(attention);
         Assert.True(attention is OperationCanceledException or SqlException);
         Assert.Equal(
@@ -526,11 +531,10 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
     /// </summary>
     private static DbContext CreateRetainedContext(
         SqlConnection session
-    )
-        => new(new DbContextOptionsBuilder()
-            .UseSqlServer(session)
-            .UseSqlServerSafeMigrations()
-            .Options);
+    ) => new(new DbContextOptionsBuilder()
+        .UseSqlServer(session)
+        .UseSqlServerSafeMigrations()
+        .Options);
 
     /// <summary>Generates the actual managed seed wrapper, not the raw SQL-only execution path.</summary>
     private static SqlServerSafeMigrationIdentityInsertCommand CreateSeedCommand(
@@ -584,6 +588,8 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
     }
 
     /// <summary>Executes a caller-state probe directly so provider recovery cannot hide the assertion.</summary>
+    /// <param name="session">The caller-owned open session whose state is probed without provider interception.</param>
+    /// <param name="sql">The trusted fixture statement used to establish or inspect caller session state.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task RunSessionSqlAsync(
         SqlConnection session,
@@ -600,6 +606,7 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
     }
 
     /// <summary>Reads only the ownership marker, without modifying it or testing unrelated session settings.</summary>
+    /// <param name="session">The caller-owned open session whose identity-insert ownership marker is inspected.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task<bool> ReadMarkerIsNullAsync(
         SqlConnection session,

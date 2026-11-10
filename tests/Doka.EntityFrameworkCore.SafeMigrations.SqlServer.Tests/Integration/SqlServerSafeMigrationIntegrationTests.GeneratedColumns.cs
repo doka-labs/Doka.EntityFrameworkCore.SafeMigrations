@@ -737,39 +737,60 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         command.CommandText = blocked;
         command.CommandTimeout = SafeMigrationDbContext.CommandTimeoutSeconds;
         using var cancellation = new CancellationTokenSource();
-        using var readiness = new CancellationTokenSource(TimeSpan.FromSeconds(60));
         Exception? failure;
+        Exception? primaryFailure = null;
+        Exception? handledNativeFailure = null;
         bool retained;
         int repeated;
         Task<int>? execution = null;
+        Task? cancellationRequest = null;
 
         // Act
         try
         {
             execution = command.ExecuteNonQueryAsync(cancellation.Token);
-            await marker.WaitUntilReadyAsync(observer, execution, readiness.Token);
-            await cancellation.CancelAsync();
+            await marker.WaitUntilReadyAsync(observer, execution, CancellationToken.None);
+            cancellationRequest = cancellation.CancelAsync();
+            await cancellationRequest;
             failure = await Record.ExceptionAsync(async () => { await execution; });
+            handledNativeFailure = failure;
 
-            // WHY: Readiness has already completed; its old deadline may expire while attention drains.
-            // Observe recovery independently rather than rejecting a healthy session with an earlier phase's token.
+            // WHY: The actual command and cancellation request have both ended.
+            // Recovery uses its own uncanceled boundary, not a scheduling deadline.
             retained = await CompilerScopeExistsAsync(connection, original, cancellationToken: CancellationToken.None);
             repeated = await ReadCompilerProofAsync(connection, original, cancellationToken: CancellationToken.None);
         }
+        catch (Exception exception)
+        {
+            primaryFailure = exception;
+
+            throw;
+        }
         finally
         {
-            if (execution is { IsCompleted: false })
+            Task? pendingWork = execution;
+            if (cancellationRequest is not null)
             {
-                await cancellation.CancelAsync();
-                _ = await Record.ExceptionAsync(async () => { await execution; });
+                pendingWork = execution is null
+                    ? cancellationRequest
+                    : Task.WhenAll(execution, cancellationRequest);
             }
 
-            // WHY: The readiness lock is a test-owned session signal, not product
-            // state. Release it explicitly before returning a pooled connection.
-            await using var release = connection.CreateCommand();
-            release.CommandText = "EXEC sys.sp_releaseapplock @Resource=@resource,@LockOwner=N'Session';";
-            release.Parameters.Add(new SqlParameter("@resource", SqlDbType.NVarChar, 255) { Value = resource });
-            await release.ExecuteNonQueryAsync();
+            // WHY: Preserve an observed attention fault without treating its raw
+            // task as new cleanup failure. A callback failure must not bypass
+            // drain, and this same-session lock release must run only afterward.
+            await OwnedTestOperationCleanup.CompleteAsync(
+                primaryFailure ?? handledNativeFailure,
+                pendingWork,
+                null,
+                cancellation,
+                afterDrain: async () =>
+                {
+                    await using var release = connection.CreateCommand();
+                    release.CommandText = "EXEC sys.sp_releaseapplock @Resource=@resource,@LockOwner=N'Session';";
+                    release.Parameters.Add(new SqlParameter("@resource", SqlDbType.NVarChar, 255) { Value = resource });
+                    await release.ExecuteNonQueryAsync(CancellationToken.None);
+                });
         }
 
         // Assert
@@ -1529,7 +1550,7 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         var columns = sensitive
             ? new ExpectedColumnDefinition[]
             {
-                new("L", typeof(int), false, "int"), new("l", typeof(int), false, "int")
+                new("L", typeof(int), false, "int"), new("l", typeof(int), false, "int"),
             }
             :
             [
@@ -2061,9 +2082,8 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
     private static string CompilerScopeName(
         string sql
-    )
-        => Regex.Match(sql, "#doka_sm_computed_[A-F0-9]{24}")
-            .Value;
+    ) => Regex.Match(sql, "#doka_sm_computed_[A-F0-9]{24}")
+        .Value;
 
     private static async Task<bool> CompilerScopeExistsAsync(
         SqlConnection connection,

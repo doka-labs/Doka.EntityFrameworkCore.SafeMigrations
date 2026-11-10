@@ -308,6 +308,8 @@ public sealed class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrationInteg
     }
 
     /// <summary>Reads the complete server-side DDL for the independently created column fixture.</summary>
+    /// <param name="connectionString">The test database from which a short-lived catalog connection is opened.</param>
+    /// <param name="table">The table identifier to quote and inspect with SHOW CREATE TABLE.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<string> ReadStrictColumnTableDefinitionAsync(
         string connectionString,

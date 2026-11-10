@@ -144,6 +144,13 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator : C
         base.Generate(operation, baseline);
 
         var source = ReplaceCompositePrincipalColumnArrays(operation, baseline.ToString());
+        if (operation
+            .GetAnnotations()
+            .Any())
+        {
+            source = MoveTableAnnotationsIntoConstraints(operation, source, builder.IndentCount);
+        }
+
         if (_configuration.Mode == SafeMigrationScaffoldingMode.LegacyConvergence)
         {
             source = AppendLegacyConvergencePolicy(source);
@@ -275,11 +282,16 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator : C
             return;
         }
 
-        ValidateSafeCompatibility(operation);
-        GenerateWithReplacement(operation, builder, ".DropTable(", ".DropTableIfExists(");
+        var normalized = ValidateSafeCompatibility(operation);
+
+        // WHY: Provider-certified historical removal facets have already been
+        // consumed by the identity adapter. Render its complete identity, not
+        // a late Annotation chain on the guarded operation wrapper.
+        var identity = (DropTableOperation)SafeMigrationStandardOperationFactory.Create(normalized.Intent);
+        GenerateWithReplacement(identity, builder, ".DropTable(", ".DropTableIfExists(");
     }
 
-    private void ValidateSafeCompatibility(
+    private SafeMigrationOperation ValidateSafeCompatibility(
         MigrationOperation operation
     )
     {
@@ -288,6 +300,8 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator : C
         {
             throw SafeMigrationOperationCompatibility.Unsupported(operation);
         }
+
+        return (SafeMigrationOperation)compatibility.Operation;
     }
 
     private void GenerateUnsupported(

@@ -297,7 +297,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     }
 }
 
-public sealed partial class MySqlColumnsNullProofEligibilityIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlColumnsNullProofEligibilityIntegrationTests
 {
     /// <summary>Creates a generic required varchar(800) or datetime(6) contract.</summary>
     private static SafeMigrationOperation BuildMySqlNullEligibilityOperation(
@@ -321,6 +321,8 @@ public sealed partial class MySqlColumnsNullProofEligibilityIntegrationTests : M
         SafeMigrationPolicy.RepairIfSafe);
 
     /// <summary>Uses a cardinality-error sentinel to prove the CASE branch is not evaluated.</summary>
+    /// <param name="context">The caller-owned context supplying the probe connection and type mappings.</param>
+    /// <param name="plan">The runtime plan whose nullability proof is replaced with the sentinel expression.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<string> ExecuteMySqlInlineNullEligibilitySentinelAsync(
         DbContext context,

@@ -185,21 +185,20 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     internal static string ComputedIndexColumnEligibility(
         string alias,
         bool included = false
-    )
-        => $"({alias}.is_computed=0 OR (COLUMNPROPERTY({alias}.object_id,{alias}.name,N'IsDeterministic')=1 "
+    ) => $"({alias}.is_computed=0 OR (COLUMNPROPERTY({alias}.object_id,{alias}.name,N'IsDeterministic')=1 "
 
-            // WHY: Deterministic imprecise values may be included without
-            // persistence. Keys additionally need native indexability and a
-            // precise expression or the engine's persisted-value contract.
-            + (included
-                ? string.Empty
-                : $"AND COLUMNPROPERTY({alias}.object_id,{alias}.name,N'IsIndexable')=1 "
-                + $"AND (COLUMNPROPERTY({alias}.object_id,{alias}.name,N'IsPrecise')=1 "
-                + $"OR EXISTS(SELECT 1 FROM sys.computed_columns cc WHERE cc.object_id={alias}.object_id "
-                + $"AND cc.column_id={alias}.column_id AND cc.is_persisted=1)) ")
-            + "AND ("
-            + ComputedIndexSessionPredicate
-            + ")))";
+        // WHY: Deterministic imprecise values may be included without
+        // persistence. Keys additionally need native indexability and a
+        // precise expression or the engine's persisted-value contract.
+        + (included
+            ? string.Empty
+            : $"AND COLUMNPROPERTY({alias}.object_id,{alias}.name,N'IsIndexable')=1 "
+            + $"AND (COLUMNPROPERTY({alias}.object_id,{alias}.name,N'IsPrecise')=1 "
+            + $"OR EXISTS(SELECT 1 FROM sys.computed_columns cc WHERE cc.object_id={alias}.object_id "
+            + $"AND cc.column_id={alias}.column_id AND cc.is_persisted=1)) ")
+        + "AND ("
+        + ComputedIndexSessionPredicate
+        + ")))";
 
     private string IncludedIndexColumnsAreEligible(
         ExpectedIndexDefinition definition
@@ -256,26 +255,23 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
     private static bool HasIndexFilter(
         ExpectedIndexDefinition definition
-    )
-        => definition.Filter is not null || definition.StructuredFilter is not null;
+    ) => definition.Filter is not null || definition.StructuredFilter is not null;
 
     private string? GetIndexFilter(
         ExpectedIndexDefinition definition
-    )
-        => definition.Filter
-            ?? (definition.StructuredFilter is null
-                ? null
-                : _expressionRenderer.Render(definition.StructuredFilter));
+    ) => definition.Filter
+        ?? (definition.StructuredFilter is null
+            ? null
+            : _expressionRenderer.Render(definition.StructuredFilter));
 
     private string IndexFilterFingerprint(
         ExpectedIndexDefinition definition
-    )
-        => ContractFingerprint(
-            "filtered_index",
-            definition.Schema,
-            definition.Table,
-            definition.Name,
-            GetIndexFilter(definition)!);
+    ) => ContractFingerprint(
+        "filtered_index",
+        definition.Schema,
+        definition.Table,
+        definition.Name,
+        GetIndexFilter(definition)!);
 
     private string BuildIndexStampSql(
         ExpectedIndexDefinition definition
@@ -337,24 +333,21 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string name,
         string table,
         string? schema
-    )
-        => $"EXISTS (SELECT 1 FROM sys.indexes i WHERE i.object_id = {TableId(table, schema)} "
-            + $"AND i.name = {Literal(name)})";
+    ) => $"EXISTS (SELECT 1 FROM sys.indexes i WHERE i.object_id = {TableId(table, schema)} "
+        + $"AND i.name = {Literal(name)})";
 
     private string IndependentIndexExists(
         string name,
         string table,
         string? schema
-    )
-        => $"EXISTS (SELECT 1 FROM sys.indexes i WHERE i.object_id = {TableId(table, schema)} "
-            + $"AND i.name = {Literal(name)} AND i.is_primary_key = 0 AND i.is_unique_constraint = 0)";
+    ) => $"EXISTS (SELECT 1 FROM sys.indexes i WHERE i.object_id = {TableId(table, schema)} "
+        + $"AND i.name = {Literal(name)} AND i.is_primary_key = 0 AND i.is_unique_constraint = 0)";
 
     private string IndexIsReferenced(
         string name,
         string table,
         string? schema
-    )
-        => "EXISTS (SELECT 1 FROM sys.indexes i JOIN sys.foreign_keys fk "
-            + "ON fk.referenced_object_id = i.object_id AND fk.key_index_id = i.index_id "
-            + $"WHERE i.object_id = {TableId(table, schema)} AND i.name = {Literal(name)})";
+    ) => "EXISTS (SELECT 1 FROM sys.indexes i JOIN sys.foreign_keys fk "
+        + "ON fk.referenced_object_id = i.object_id AND fk.key_index_id = i.index_id "
+        + $"WHERE i.object_id = {TableId(table, schema)} AND i.name = {Literal(name)})";
 }

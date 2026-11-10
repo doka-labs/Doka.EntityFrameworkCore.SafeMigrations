@@ -26,6 +26,24 @@ internal sealed class MySqlSafeMigrationProviderOperationAdapter : ISafeMigratio
 
         safeOperation = operation switch
         {
+            CreateTableOperation table when MySqlSafeMigrationTableMetadata.CanNormalize(table) =>
+                new SafeMigrationOperation(
+                    new EnsureTableIntent(SafeMigrationExpectedDefinitionFactory.From(table),
+                        SafeMigrationTableMode.StrictDefinition),
+                    SafeMigrationPolicy.ThrowIfDifferent),
+            DropTableOperation table when MySqlSafeMigrationTableMetadata.CanNormalizeIdentity(table) =>
+                new SafeMigrationOperation(new DropTableIntent(table.Name, table.Schema),
+                    SafeMigrationPolicy.ThrowIfDifferent),
+            RenameTableOperation table when MySqlSafeMigrationTableMetadata.CanNormalizeIdentity(table) =>
+                new SafeMigrationOperation(
+                    new RenameTableIntent(table.Name, table.NewName, table.Schema, table.NewSchema),
+                    SafeMigrationPolicy.ThrowIfDifferent),
+            DropPrimaryKeyOperation key when MySqlSafeMigrationTableMetadata.CanNormalizeIdentity(key) =>
+                new SafeMigrationOperation(new DropPrimaryKeyIntent(key.Name, key.Table, key.Schema),
+                    SafeMigrationPolicy.ThrowIfDifferent),
+            DropUniqueConstraintOperation key when MySqlSafeMigrationTableMetadata.CanNormalizeIdentity(key) =>
+                new SafeMigrationOperation(new DropUniqueConstraintIntent(key.Name, key.Table, key.Schema),
+                    SafeMigrationPolicy.ThrowIfDifferent),
             CreateIndexOperation index => NormalizeIndex(index),
             DropColumnOperation column when HasOnlyRecognizedColumnIdentityAnnotations(column) =>
                 new SafeMigrationOperation(

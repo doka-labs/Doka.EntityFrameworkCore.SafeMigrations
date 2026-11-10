@@ -250,11 +250,12 @@ public sealed class MySqlForeignKeyDropColumnProofTests
         var target = MarkedGuidColumn(
             nullable: false,
             includeMarker: mutation != "removed",
-            marker: mutation == "text-marker"
-                ? "true"
-                : mutation == "null-marker"
-                    ? null
-                    : mutation is not "added-false" and not "changed-false",
+            marker: mutation switch
+            {
+                "text-marker" => "true",
+                "null-marker" => null,
+                _ => mutation is not "added-false" and not "changed-false",
+            },
             extraUnknown: mutation == "unknown",
             guidFormat: mutation == "guid-format"
                 ? DokaMySqlGuidFormat.Binary16

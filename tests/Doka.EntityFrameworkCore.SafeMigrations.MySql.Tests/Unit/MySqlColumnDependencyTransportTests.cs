@@ -6,6 +6,174 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 /// <summary>Verifies bounded complete dependency transport without application-row probes.</summary>
 public sealed class MySqlColumnDependencyTransportTests
 {
+    /// <summary>All supported boxed native types preserve exact zero/one boolean evidence.</summary>
+    /// <param name="caseId">The stable identifier of the exact provider-returned metadata type and value.</param>
+    /// <param name="expected">The corresponding boolean fact.</param>
+    [Theory]
+    [InlineData("bool-false", false)]
+    [InlineData("bool-true", true)]
+    [InlineData("sbyte-zero", false)]
+    [InlineData("sbyte-one", true)]
+    [InlineData("byte-zero", false)]
+    [InlineData("byte-one", true)]
+    [InlineData("short-zero", false)]
+    [InlineData("short-one", true)]
+    [InlineData("ushort-zero", false)]
+    [InlineData("ushort-one", true)]
+    [InlineData("int-zero", false)]
+    [InlineData("int-one", true)]
+    [InlineData("uint-zero", false)]
+    [InlineData("uint-one", true)]
+    [InlineData("long-zero", false)]
+    [InlineData("long-one", true)]
+    [InlineData("ulong-zero", false)]
+    [InlineData("ulong-one", true)]
+    public async Task NativeBooleanMetadataPreservesPrimaryFact(
+        string caseId,
+        bool expected
+    )
+    {
+        // Arrange
+        var value = BooleanMetadataValue(caseId);
+        var requests = Requests(2);
+        await using var connection = new CatalogStatementTestConnection(
+            true,
+            (sql, _) =>
+            {
+                var rows = Results(sql, requests);
+                rows
+                    .Rows[4][3] = value;
+
+                return rows;
+            });
+
+        bool? captured = null;
+
+        // Act
+        await MySqlSafeMigrationProviderAnalyzer.ReadColumnDependenciesAsync(
+            connection,
+            requests,
+            4 * 1024 * 1024,
+            71,
+            (ordinal, primary, _) =>
+            {
+                if (ordinal == 1)
+                {
+                    captured = primary;
+                }
+            },
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(expected, captured);
+        Assert.Equal(1, connection.ReadersDisposed);
+        Assert.Equal(1, connection.BatchesDisposed);
+    }
+
+    /// <summary>Nonboolean numeric values and unsupported types reject the complete statement.</summary>
+    /// <param name="caseId">The stable identifier of the malformed metadata type and value.</param>
+    [Theory]
+    [InlineData("sbyte-negative-one")]
+    [InlineData("sbyte-two")]
+    [InlineData("byte-two")]
+    [InlineData("short-negative-one")]
+    [InlineData("short-two")]
+    [InlineData("ushort-two")]
+    [InlineData("int-negative-one")]
+    [InlineData("int-two")]
+    [InlineData("uint-two")]
+    [InlineData("long-negative-one")]
+    [InlineData("long-two")]
+    [InlineData("ulong-two")]
+    [InlineData("single-one")]
+    [InlineData("double-one")]
+    [InlineData("decimal-one")]
+    [InlineData("char-one")]
+    [InlineData("string-one")]
+    [InlineData("dbnull")]
+    public async Task InvalidBooleanMetadataPublishesNoFacts(
+        string caseId
+    )
+    {
+        // Arrange
+        var value = BooleanMetadataValue(caseId);
+        var requests = Requests(2);
+        await using var connection = new CatalogStatementTestConnection(
+            true,
+            (sql, _) =>
+            {
+                var rows = Results(sql, requests);
+                rows
+                    .Rows[4][3] = value;
+
+                return rows;
+            });
+
+        var observed = 0;
+
+        // Act
+        var exception = await Record.ExceptionAsync(() =>
+            MySqlSafeMigrationProviderAnalyzer.ReadColumnDependenciesAsync(
+                connection,
+                requests,
+                4 * 1024 * 1024,
+                71,
+                (_, _, _) => observed++,
+                CancellationToken.None));
+
+        // Assert
+        Assert.IsType<InvalidOperationException>(exception);
+        Assert.Equal(0, observed);
+        Assert.Equal(1, connection.ReadersDisposed);
+        Assert.Equal(1, connection.BatchesDisposed);
+    }
+
+    /// <summary>Creates an exact boxed metadata value without making it a serialized theory argument.</summary>
+    /// <param name="caseId">The stable case identifier declared by the metadata theories.</param>
+    /// <returns>The exact primitive box, string, or database-null sentinel for the requested case.</returns>
+    private static object BooleanMetadataValue(
+        string caseId
+    ) => caseId switch
+    {
+        "bool-false" => false,
+        "bool-true" => true,
+        "sbyte-zero" => (sbyte)0,
+        "sbyte-one" => (sbyte)1,
+        "byte-zero" => (byte)0,
+        "byte-one" => (byte)1,
+        "short-zero" => (short)0,
+        "short-one" => (short)1,
+        "ushort-zero" => (ushort)0,
+        "ushort-one" => (ushort)1,
+        "int-zero" => 0,
+        "int-one" => 1,
+        "uint-zero" => 0U,
+        "uint-one" => 1U,
+        "long-zero" => 0L,
+        "long-one" => 1L,
+        "ulong-zero" => 0UL,
+        "ulong-one" => 1UL,
+        "sbyte-negative-one" => (sbyte)-1,
+        "sbyte-two" => (sbyte)2,
+        "byte-two" => (byte)2,
+        "short-negative-one" => (short)-1,
+        "short-two" => (short)2,
+        "ushort-two" => (ushort)2,
+        "int-negative-one" => -1,
+        "int-two" => 2,
+        "uint-two" => 2U,
+        "long-negative-one" => -1L,
+        "long-two" => 2L,
+        "ulong-two" => 2UL,
+        "single-one" => 1F,
+        "double-one" => 1D,
+        "decimal-one" => 1M,
+        "char-one" => '1',
+        "string-one" => "1",
+        "dbnull" => DBNull.Value,
+        _ => throw new ArgumentOutOfRangeException(nameof(caseId), caseId, "Unknown metadata case."),
+    };
+
     /// <summary>Four mixed repairs share one statement and preserve complete dependency facts.</summary>
     /// <param name="native">Whether native batching or sequential fallback carries the statement.</param>
     [Theory]
@@ -364,16 +532,15 @@ public sealed class MySqlColumnDependencyTransportTests
     private static MySqlColumnDependencyRequest[] Requests(
         int count,
         string table = "items"
-    ) =>
-        Enumerable
-            .Range(0, count)
-            .Select(index => new MySqlColumnDependencyRequest(
-                Operation(table, "column_" + index.ToString(CultureInfo.InvariantCulture), index % 2 == 1),
-                table,
-                "column_" + index.ToString(CultureInfo.InvariantCulture),
-                index % 2 == 1,
-                index))
-            .ToArray();
+    ) => Enumerable
+        .Range(0, count)
+        .Select(index => new MySqlColumnDependencyRequest(
+            Operation(table, "column_" + index.ToString(CultureInfo.InvariantCulture), index % 2 == 1),
+            table,
+            "column_" + index.ToString(CultureInfo.InvariantCulture),
+            index % 2 == 1,
+            index))
+        .ToArray();
 
     /// <summary>Creates a reference-distinct repair envelope for a physical target.</summary>
     /// <param name="table">The untouched authored owner.</param>

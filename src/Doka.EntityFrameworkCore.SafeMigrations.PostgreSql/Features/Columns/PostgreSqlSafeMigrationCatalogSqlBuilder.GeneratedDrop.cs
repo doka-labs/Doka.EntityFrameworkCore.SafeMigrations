@@ -26,8 +26,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <summary>Checks explicit native LOCK rights without assuming ownership grants revoked DML privileges.</summary>
     private string GeneratedDropLockPrivilege(
         DropColumnIntent intent
-    )
-        => ExplicitExclusiveLockPrivilege(intent.Table, intent.Schema);
+    ) => ExplicitExclusiveLockPrivilege(intent.Table, intent.Schema);
 
     /// <summary>Checks explicit owner-fence authority without implicitly granting table privileges.</summary>
     private string ExplicitExclusiveLockPrivilege(
@@ -84,11 +83,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <summary>Proves the complete native generated set remaining after this exact member disappears.</summary>
     private string NoSurvivingGeneratedDropMembers(
         DropColumnIntent intent
-    )
-        => "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_attribute gen WHERE gen.attrelid OPERATOR(pg_catalog.=) "
-            + QualifiedRegclass(intent.Table, intent.Schema)
-            + " AND gen.attnum OPERATOR(pg_catalog.>) 0 AND NOT gen.attisdropped "
-            + "AND gen.attname OPERATOR(pg_catalog.<>) "
-            + Literal(intent.Name)
-            + " AND gen.attgenerated OPERATOR(pg_catalog.<>) '')";
+    ) => "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_attribute gen WHERE gen.attrelid OPERATOR(pg_catalog.=) "
+        + QualifiedRegclass(intent.Table, intent.Schema)
+        + " AND gen.attnum OPERATOR(pg_catalog.>) 0 AND NOT gen.attisdropped "
+        + "AND gen.attname OPERATOR(pg_catalog.<>) "
+        + Literal(intent.Name)
+        + " AND gen.attgenerated OPERATOR(pg_catalog.<>) '')";
 }

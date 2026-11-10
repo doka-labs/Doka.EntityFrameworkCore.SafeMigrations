@@ -1,7 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>
-/// Captures one provider-owned column annotation as an immutable value and a
+/// Captures one provider-owned migration annotation as an immutable value and a
 /// deterministic fingerprint.
 /// </summary>
 /// <remarks>

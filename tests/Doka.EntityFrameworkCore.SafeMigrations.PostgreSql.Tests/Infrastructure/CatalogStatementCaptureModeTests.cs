@@ -123,7 +123,7 @@ public sealed class CatalogStatementCaptureModeTests
         object? result;
 
         // Act
-        using (var transaction = connection.BeginTransaction())
+        using (connection.BeginTransaction())
         using (var command = connection.CreateCommand())
         {
             command.CommandText = "SELECT 1;";

@@ -1269,7 +1269,10 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     /// <summary>
     /// Creates an independently retained incoming relationship with either valid or orphaned native rows.
     /// </summary>
+    /// <param name="connection">The caller-owned connection receiving the native owner and referencing child.</param>
+    /// <param name="orphan">Whether the child references a missing owner instead of the seeded owner row.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
+    /// <param name="sourceExists">Whether the physical owner already contains the source column and its values.</param>
     private static async Task CreateForeignKeyOwnerAsync(
         SqliteConnection connection,
         bool orphan,
@@ -1308,6 +1311,8 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         context.GetService<MigrationsSqlGeneratorDependencies>());
 
     /// <summary>Uses real migration-command execution within the wrapper's owned transaction.</summary>
+    /// <param name="context">The caller-owned context supplying the wrapper's relational connection.</param>
+    /// <param name="commands">The ordered provider commands to execute through their real async entry points.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task ExecuteCommandsAsync(
         DbContext context,
@@ -1396,6 +1401,8 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     };
 
     /// <summary>Creates native artifacts independently of the target model used by EF rebuild generation.</summary>
+    /// <param name="connection">The caller-owned connection receiving the native rebuild owner and seed rows.</param>
+    /// <param name="artifact">Selects the retained column, check, foreign key, trigger, index or no artifact.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static Task CreateNativeOwnerAsync(
         SqliteConnection connection,
@@ -1432,6 +1439,7 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     }
 
     /// <summary>Reads the exact native owner SQL to detect lost constraints or unexpected rebuilds.</summary>
+    /// <param name="connection">The caller-owned connection whose rebuild_nodes table definition is read.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task<string> ReadSchemaAsync(
         SqliteConnection connection,
@@ -1447,25 +1455,26 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     }
 
     /// <summary>Counts actual retained artifacts rather than inferring preservation from an exception.</summary>
+    /// <param name="connection">The caller-owned connection whose retained native artifacts are inspected.</param>
+    /// <param name="artifact">Selects the trigger, index, check, foreign key or retained-column catalog probe.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static Task<int> CountArtifactsAsync(
         SqliteConnection connection,
         string artifact,
         CancellationToken cancellationToken
-    ) =>
-        ScalarIntAsync(
-            connection,
-            artifact switch
-            {
-                "trigger" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'trigger' "
-                    + "AND name = 'retained_trigger';",
-                "index" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'index' AND name = 'retained_index';",
-                "check" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'table' AND name = 'rebuild_nodes' "
-                    + "AND instr(sql, 'retained_check') > 0;",
-                "foreign_key" => "SELECT COUNT(*) FROM pragma_foreign_key_list('rebuild_nodes');",
-                _ => "SELECT COUNT(*) FROM pragma_table_xinfo('rebuild_nodes') WHERE name = 'retained_payload';",
-            },
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connection,
+        artifact switch
+        {
+            "trigger" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'trigger' "
+                + "AND name = 'retained_trigger';",
+            "index" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'index' AND name = 'retained_index';",
+            "check" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'table' AND name = 'rebuild_nodes' "
+                + "AND instr(sql, 'retained_check') > 0;",
+            "foreign_key" => "SELECT COUNT(*) FROM pragma_foreign_key_list('rebuild_nodes');",
+            _ => "SELECT COUNT(*) FROM pragma_table_xinfo('rebuild_nodes') WHERE name = 'retained_payload';",
+        },
+        cancellationToken: cancellationToken);
 
     /// <summary>Names the exact independent rebuild guard expected for each native artifact.</summary>
     private static string ArtifactCode(
@@ -1545,7 +1554,7 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
                 if (IncludeSource)
                 {
                     var source = entity
-                        .Property(value => value.Source)
+                        .Property(row => row.Source)
                         .HasColumnName("source");
 
                     if (SourceDefault is { } value)
@@ -1674,10 +1683,11 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             IReadOnlyList<MigrationOperation> operations,
             IModel? model = null,
             MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default,
-            IReadOnlyList<MigrationOperation>? guardedOperations = null
+            IReadOnlyList<MigrationOperation>? guardedOperations = null,
+            SqliteCatalogSnapshot? snapshot = null
         )
         {
-            var commands = inner.Generate(operations, model, options, guardedOperations);
+            var commands = inner.Generate(operations, model, options, guardedOperations, snapshot);
             var mutation = inner.Generate([new SqlOperation { Sql = sql }], model, options);
             MutationGenerated = true;
 
@@ -1702,9 +1712,10 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             IReadOnlyList<MigrationOperation> operations,
             IModel? model = null,
             MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default,
-            IReadOnlyList<MigrationOperation>? guardedOperations = null
+            IReadOnlyList<MigrationOperation>? guardedOperations = null,
+            SqliteCatalogSnapshot? snapshot = null
         ) => inner
-            .Generate(operations, model, options, guardedOperations)
+            .Generate(operations, model, options, guardedOperations, snapshot)
             .Select(command => new ZeroAffectedCommand(command, context, this))
             .ToArray();
 

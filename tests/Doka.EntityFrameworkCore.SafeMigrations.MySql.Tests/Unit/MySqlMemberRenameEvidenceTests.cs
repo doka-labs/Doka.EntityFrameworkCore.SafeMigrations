@@ -372,8 +372,7 @@ public sealed class MySqlMemberRenameEvidenceTests
 
     private static SafeMigrationProviderAnalysis Live(
         SafeMigrationObservedState state
-    ) =>
-        new(state, SafeMigrationRepairCapability.None, false, "test");
+    ) => new(state, SafeMigrationRepairCapability.None, false, "test");
 
     private static DataTable Results(
         string sql

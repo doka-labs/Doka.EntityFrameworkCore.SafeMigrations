@@ -13,8 +13,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     /// <inheritdoc />
     public void SetCurrentOperationOrdinal(
         int operationOrdinal
-    )
-        => _currentProjectedOperationOrdinal = operationOrdinal;
+    ) => _currentProjectedOperationOrdinal = operationOrdinal;
 
     /// <inheritdoc />
     public SafeMigrationProviderAnalysis? ValidateCapturedProjection(

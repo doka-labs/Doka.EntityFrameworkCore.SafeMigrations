@@ -393,7 +393,6 @@ internal sealed class CatalogStatementTestConnection : DbConnection
             }
 
             base.Dispose();
-            GC.SuppressFinalize(this);
         }
     }
 
@@ -635,14 +634,12 @@ internal sealed class CatalogStatementTestConnection : DbConnection
         /// <inheritdoc />
         public override object this[
             int ordinal
-        ] =>
-            inner[ordinal];
+        ] => inner[ordinal];
 
         /// <inheritdoc />
         public override object this[
             string name
-        ] =>
-            inner[name];
+        ] => inner[name];
 
         /// <inheritdoc />
         public override int Depth => inner.Depth;

@@ -148,8 +148,7 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
 
     private static bool IsNarrowingDataStatement(
         string commandText
-    ) =>
-        commandText.Contains("char_length(", StringComparison.OrdinalIgnoreCase)
+    ) => commandText.Contains("char_length(", StringComparison.OrdinalIgnoreCase)
         && (commandText.StartsWith("SELECT EXISTS(SELECT 1 FROM ", StringComparison.Ordinal)
             || commandText.StartsWith("SELECT COALESCE(", StringComparison.Ordinal));
 
@@ -566,8 +565,7 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
         /// <inheritdoc />
         public override Task PrepareAsync(
             CancellationToken cancellationToken = default
-        )
-            => _innerBatch.PrepareAsync(cancellationToken);
+        ) => _innerBatch.PrepareAsync(cancellationToken);
 
         /// <inheritdoc />
         public override int ExecuteNonQuery() => _innerBatch.ExecuteNonQuery();
@@ -575,8 +573,7 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
         /// <inheritdoc />
         public override Task<int> ExecuteNonQueryAsync(
             CancellationToken cancellationToken = default
-        )
-            => _innerBatch.ExecuteNonQueryAsync(cancellationToken);
+        ) => _innerBatch.ExecuteNonQueryAsync(cancellationToken);
 
         /// <inheritdoc />
         public override object? ExecuteScalar() => _innerBatch.ExecuteScalar();
@@ -584,8 +581,7 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
         /// <inheritdoc />
         public override Task<object?> ExecuteScalarAsync(
             CancellationToken cancellationToken = default
-        )
-            => _innerBatch.ExecuteScalarAsync(cancellationToken);
+        ) => _innerBatch.ExecuteScalarAsync(cancellationToken);
 
         /// <inheritdoc />
         protected override DbDataReader ExecuteDbDataReader(
@@ -643,7 +639,6 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
             }
 
             base.Dispose();
-            GC.SuppressFinalize(this);
         }
 
         /// <inheritdoc />
@@ -662,7 +657,6 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
             finally
             {
                 await base.DisposeAsync();
-                GC.SuppressFinalize(this);
             }
         }
     }

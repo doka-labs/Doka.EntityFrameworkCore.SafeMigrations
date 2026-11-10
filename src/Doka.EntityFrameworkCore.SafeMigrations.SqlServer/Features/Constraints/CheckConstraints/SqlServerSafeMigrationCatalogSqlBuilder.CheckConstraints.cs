@@ -120,12 +120,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <returns>A guarded row proof requiring an accepted local drop before reuse.</returns>
     internal SqlServerSafeMigrationRuntimePlan BuildCheckPredicateCapturePlan(
         EnsureCheckConstraintIntent intent
-    )
-        => BuildEnsureCheck(intent, orderedCapture: true) with
-        {
-            PhysicalTableSupportExpression = BuildPhysicalTableSupportExpression(intent),
-            DefaultValueSupportExpression = BuildDefaultValueSupportExpression(intent),
-        };
+    ) => BuildEnsureCheck(intent, orderedCapture: true) with
+    {
+        PhysicalTableSupportExpression = BuildPhysicalTableSupportExpression(intent),
+        DefaultValueSupportExpression = BuildDefaultValueSupportExpression(intent),
+    };
 
     private SqlServerSafeMigrationRuntimePlan BuildDropCheck(
         DropCheckConstraintIntent intent
@@ -226,19 +225,17 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
     private string CheckExpression(
         ExpectedCheckConstraintDefinition definition
-    )
-        => definition.CapturedSql
-            ?? definition.Sql
-            ?? (definition.Expression is { } expression
-                ? _expressionRenderer.Render(expression)
-                : null)
-            ?? throw new InvalidOperationException("A check constraint has no expression.");
+    ) => definition.CapturedSql
+        ?? definition.Sql
+        ?? (definition.Expression is { } expression
+            ? _expressionRenderer.Render(expression)
+            : null)
+        ?? throw new InvalidOperationException("A check constraint has no expression.");
 
     private string CheckExists(
         string table,
         string? schema,
         string name
-    )
-        => $"EXISTS (SELECT 1 FROM sys.check_constraints cc WHERE cc.parent_object_id = {TableId(table, schema)} "
-            + $"AND cc.name = {Literal(name)})";
+    ) => $"EXISTS (SELECT 1 FROM sys.check_constraints cc WHERE cc.parent_object_id = {TableId(table, schema)} "
+        + $"AND cc.name = {Literal(name)})";
 }

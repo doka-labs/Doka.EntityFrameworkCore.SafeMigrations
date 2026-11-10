@@ -145,8 +145,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     internal string BuildInlineForeignKeyPrerequisite(
         ExpectedTableDefinition table,
         ExpectedForeignKeyDefinition foreignKey
-    )
-        => BuildInlineForeignKeyPrerequisite(table, foreignKey, requireCandidateKey: true);
+    ) => BuildInlineForeignKeyPrerequisite(table, foreignKey, requireCandidateKey: true);
 
     /// <summary>Shares physical operands with independently captured composite candidate keys.</summary>
     private string BuildInlineForeignKeyPrerequisite(
@@ -305,8 +304,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     internal string BuildSparseForeignKeyPrerequisite(
         ExpectedTableDefinition table,
         ExpectedForeignKeyDefinition foreignKey
-    )
-        => BuildSparseForeignKeyPrerequisite(table, foreignKey, operandOrdinal: null);
+    ) => BuildSparseForeignKeyPrerequisite(table, foreignKey, operandOrdinal: null);
 
     /// <summary>Captures one independent operand without combining alternative authored FK shapes.</summary>
     /// <param name="table">The single authored dependent operand, or null for an untouched live operand.</param>
@@ -317,8 +315,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         ExpectedTableDefinition? table,
         ExpectedForeignKeyDefinition foreignKey,
         int operandOrdinal
-    )
-        => BuildSparseForeignKeyPrerequisite(table, foreignKey, (int?)operandOrdinal);
+    ) => BuildSparseForeignKeyPrerequisite(table, foreignKey, (int?)operandOrdinal);
 
     /// <summary>Shares complete owner/key-width checks with full or independent sparse storage qualification.</summary>
     private string BuildSparseForeignKeyPrerequisite(
@@ -414,11 +411,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     internal bool ColumnStorageEquals(
         ExpectedColumnDefinition left,
         ExpectedColumnDefinition right
-    )
-        => TryGetColumnType(left, out var leftType)
-            && TryGetColumnType(right, out var rightType)
-            && leftType == rightType
-            && Equals(left.Collation, right.Collation);
+    ) => TryGetColumnType(left, out var leftType)
+        && TryGetColumnType(right, out var rightType)
+        && leftType == rightType
+        && Equals(left.Collation, right.Collation);
 
     private SqlServerSafeMigrationRuntimePlan BuildDropForeignKey(
         DropForeignKeyIntent intent
@@ -477,7 +473,6 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string table,
         string? schema,
         string name
-    )
-        => $"EXISTS (SELECT 1 FROM sys.foreign_keys fk WHERE fk.parent_object_id = {TableId(table, schema)} "
-            + $"AND fk.name = {Literal(name)})";
+    ) => $"EXISTS (SELECT 1 FROM sys.foreign_keys fk WHERE fk.parent_object_id = {TableId(table, schema)} "
+        + $"AND fk.name = {Literal(name)})";
 }

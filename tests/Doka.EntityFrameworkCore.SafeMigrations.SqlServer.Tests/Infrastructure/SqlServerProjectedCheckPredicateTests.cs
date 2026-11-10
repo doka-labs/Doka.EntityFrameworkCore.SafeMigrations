@@ -76,19 +76,20 @@ public sealed class SqlServerProjectedCheckPredicateTests
                     ? SafeMigrationPolicy.ThrowIfDifferent
                     : SafeMigrationPolicy.RepairIfSafe);
 
-            var observed = mutation == "widening"
-                ? new SafeMigrationProviderAnalysis(
+            var observed = mutation switch
+            {
+                "widening" => new SafeMigrationProviderAnalysis(
                     SafeMigrationObservedState.Different,
                     SafeMigrationRepairCapability.Safe,
                     false,
-                    "classified_different")
-                : mutation == "unrelated-managed-dml"
-                    ? missing
-                    : new SafeMigrationProviderAnalysis(
-                        SafeMigrationObservedState.Matching,
-                        SafeMigrationRepairCapability.None,
-                        true,
-                        "classified_matching");
+                    "classified_different"),
+                "unrelated-managed-dml" => missing,
+                _ => new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.Matching,
+                    SafeMigrationRepairCapability.None,
+                    true,
+                    "classified_matching"),
+            };
 
             var decision = SafeMigrationDecisionPlanner.Plan(
                 operation.Intent.Kind,

@@ -47,8 +47,7 @@ public sealed class SqlServerTransitionDependencyAllocationTests
     /// <summary>Creates an analyzer using the registered SQL Server mapping and identifier services.</summary>
     private static SqlServerSafeMigrationProviderAnalyzer Analyzer(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     /// <summary>Counts only synchronous certificate capture after preparation and dictionary growth.</summary>
     private static long Measure(

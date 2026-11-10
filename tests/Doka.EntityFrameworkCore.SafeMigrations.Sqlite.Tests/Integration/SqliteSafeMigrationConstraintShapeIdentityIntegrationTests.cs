@@ -598,28 +598,26 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
     private static IEnumerable<string?> ConstraintShapeNames(
         SqliteTableSnapshot table,
         SafeMigrationOperationKind kind
-    ) =>
-        kind switch
-        {
-            SafeMigrationOperationKind.EnsureUniqueConstraint => table.UniqueConstraints.Select(value => value.Name),
-            SafeMigrationOperationKind.EnsureCheckConstraint => table.Checks.Select(value => value.Name),
-            SafeMigrationOperationKind.EnsureForeignKey => table.ForeignKeys.Select(value => value.Name),
-            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-        };
+    ) => kind switch
+    {
+        SafeMigrationOperationKind.EnsureUniqueConstraint => table.UniqueConstraints.Select(value => value.Name),
+        SafeMigrationOperationKind.EnsureCheckConstraint => table.Checks.Select(value => value.Name),
+        SafeMigrationOperationKind.EnsureForeignKey => table.ForeignKeys.Select(value => value.Name),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
 
     /// <summary>Maps an ensure family to its native catalog identity kind.</summary>
     /// <param name="kind">The ensure operation family.</param>
     /// <returns>The corresponding native object family.</returns>
     private static SafeMigrationDatabaseObjectKind ConstraintShapeObjectKind(
         SafeMigrationOperationKind kind
-    ) =>
-        kind switch
-        {
-            SafeMigrationOperationKind.EnsureUniqueConstraint => SafeMigrationDatabaseObjectKind.UniqueConstraint,
-            SafeMigrationOperationKind.EnsureCheckConstraint => SafeMigrationDatabaseObjectKind.CheckConstraint,
-            SafeMigrationOperationKind.EnsureForeignKey => SafeMigrationDatabaseObjectKind.ForeignKey,
-            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-        };
+    ) => kind switch
+    {
+        SafeMigrationOperationKind.EnsureUniqueConstraint => SafeMigrationDatabaseObjectKind.UniqueConstraint,
+        SafeMigrationOperationKind.EnsureCheckConstraint => SafeMigrationDatabaseObjectKind.CheckConstraint,
+        SafeMigrationOperationKind.EnsureForeignKey => SafeMigrationDatabaseObjectKind.ForeignKey,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
 
     /// <summary>
     /// Selects fixed model types so EF's model cache cannot reuse a different family's constraint contract.
@@ -630,17 +628,16 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
     private SqliteConstraintShapeContext CreateConstraintShapeContext(
         DbConnection connection,
         SafeMigrationOperationKind kind
-    ) =>
-        kind switch
-        {
-            SafeMigrationOperationKind.EnsureUniqueConstraint =>
-                new SqliteUniqueConstraintShapeContext(connection, _constraintShapeServices.Provider),
-            SafeMigrationOperationKind.EnsureCheckConstraint =>
-                new SqliteCheckConstraintShapeContext(connection, _constraintShapeServices.Provider),
-            SafeMigrationOperationKind.EnsureForeignKey =>
-                new SqliteForeignKeyConstraintShapeContext(connection, _constraintShapeServices.Provider),
-            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-        };
+    ) => kind switch
+    {
+        SafeMigrationOperationKind.EnsureUniqueConstraint =>
+            new SqliteUniqueConstraintShapeContext(connection, _constraintShapeServices.Provider),
+        SafeMigrationOperationKind.EnsureCheckConstraint =>
+            new SqliteCheckConstraintShapeContext(connection, _constraintShapeServices.Provider),
+        SafeMigrationOperationKind.EnsureForeignKey =>
+            new SqliteForeignKeyConstraintShapeContext(connection, _constraintShapeServices.Provider),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
 }
 
 /// <summary>Owns one provider for independently cached constraint identity and projected-FK CLR models.</summary>

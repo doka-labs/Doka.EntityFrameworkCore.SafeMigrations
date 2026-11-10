@@ -306,44 +306,42 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
     private static int FilterTypePrecedence(
         string storeType
-    )
-        => storeType.ToLowerInvariant() switch
-        {
-            "datetimeoffset" => 27,
-            "datetime2" => 26,
-            "datetime" => 25,
-            "smalldatetime" => 24,
-            "date" => 23,
-            "time" => 22,
-            "float" => 21,
-            "real" => 20,
-            "decimal" or "numeric" => 19,
-            "money" => 18,
-            "smallmoney" => 17,
-            "bigint" => 16,
-            "int" => 15,
-            "smallint" => 14,
-            "tinyint" => 13,
-            "bit" => 12,
-            "uniqueidentifier" => 7,
-            "nvarchar" => 6,
-            "nchar" => 5,
-            "varchar" => 4,
-            "char" => 3,
-            "varbinary" => 2,
-            "binary" => 1,
-            _ => 0,
-        };
+    ) => storeType.ToLowerInvariant() switch
+    {
+        "datetimeoffset" => 27,
+        "datetime2" => 26,
+        "datetime" => 25,
+        "smalldatetime" => 24,
+        "date" => 23,
+        "time" => 22,
+        "float" => 21,
+        "real" => 20,
+        "decimal" or "numeric" => 19,
+        "money" => 18,
+        "smallmoney" => 17,
+        "bigint" => 16,
+        "int" => 15,
+        "smallint" => 14,
+        "tinyint" => 13,
+        "bit" => 12,
+        "uniqueidentifier" => 7,
+        "nvarchar" => 6,
+        "nchar" => 5,
+        "varchar" => 4,
+        "char" => 3,
+        "varbinary" => 2,
+        "binary" => 1,
+        _ => 0,
+    };
 
     /// <summary>Gets a stable structured predicate identity for invocation-local proof memoization.</summary>
     /// <param name="filter">The immutable structured filter.</param>
     /// <returns>The canonical rendered predicate, or null when it is not supported.</returns>
     internal string? ProjectedSeedFilterIdentity(
         SafeMigrationSqlExpression filter
-    )
-        => IsSupportedIndexFilter(filter) && _expressionRenderer.GetUnsupportedFeature(filter) is null
-            ? _expressionRenderer.Render(filter)
-            : null;
+    ) => IsSupportedIndexFilter(filter) && _expressionRenderer.GetUnsupportedFeature(filter) is null
+        ? _expressionRenderer.Render(filter)
+        : null;
 
     /// <summary>
     /// Validates SQL Server's filtered-index predicate grammar, independently of general SQL expressions.
@@ -379,12 +377,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                         {
                             Left: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 },
                             Right: SafeMigrationSqlLiteralExpression { Value: not null } literal,
-                        } comparison when comparison.Operator is SafeMigrationSqlBinaryOperator.Equal
+                            Operator: SafeMigrationSqlBinaryOperator.Equal
                             or SafeMigrationSqlBinaryOperator.NotEqual
                             or SafeMigrationSqlBinaryOperator.LessThan
                             or SafeMigrationSqlBinaryOperator.LessThanOrEqual
                             or SafeMigrationSqlBinaryOperator.GreaterThan
-                            or SafeMigrationSqlBinaryOperator.GreaterThanOrEqual
+                            or SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+                        }
                         => literal.StoreType is null || IsManagedValueRepresentable(literal.Value, literal.StoreType),
                     SafeMigrationSqlInExpression
                     {
@@ -420,8 +419,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         SafeMigrationSqlExpression expression,
         Dictionary<string, ExpectedColumnDefinition> columns,
         Dictionary<string, string> aliases
-    )
-        => RewriteFilter(expression, new SeedFilterRewriter(columns, aliases));
+    ) => RewriteFilter(expression, new SeedFilterRewriter(columns, aliases));
 
     /// <summary>Rebuilds a supported filter in source order without allocating a closure per ancestor.</summary>
     private static SafeMigrationSqlExpression? RewriteFilter<TRewriter>(
@@ -577,9 +575,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         /// <inheritdoc />
         public bool SupportsBinary(
             SafeMigrationSqlBinaryOperator operation
-        )
-            => operation is SafeMigrationSqlBinaryOperator.And
-                or >= SafeMigrationSqlBinaryOperator.Equal and <= SafeMigrationSqlBinaryOperator.GreaterThanOrEqual;
+        ) => operation is SafeMigrationSqlBinaryOperator.And
+            or >= SafeMigrationSqlBinaryOperator.Equal and <= SafeMigrationSqlBinaryOperator.GreaterThanOrEqual;
 
         /// <inheritdoc />
         public SafeMigrationSqlExpression? RewriteLeaf(
@@ -632,10 +629,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         /// <inheritdoc />
         public SafeMigrationSqlExpression RewriteLeaf(
             SafeMigrationSqlExpression expression
-        )
-            => expression is SafeMigrationSqlLiteralExpression { Value: string } literal
-                ? new SafeMigrationSqlLiteralExpression(literal.Value, _strings.Dequeue())
-                : expression;
+        ) => expression is SafeMigrationSqlLiteralExpression { Value: string } literal
+            ? new SafeMigrationSqlLiteralExpression(literal.Value, _strings.Dequeue())
+            : expression;
     }
 
     /// <summary>Retains reconstructed siblings until their immutable parent can be rebuilt.</summary>

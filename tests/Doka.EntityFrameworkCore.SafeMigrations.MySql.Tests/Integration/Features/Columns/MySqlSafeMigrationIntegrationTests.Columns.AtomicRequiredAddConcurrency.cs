@@ -1,6 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-/// <summary>Exercises the ColumnsAtomicRequiredAddConcurrency migration contracts in an independent class collection.</summary>
+/// <summary>Exercises atomic required-column additions in an independent class collection.</summary>
 public sealed partial class
     MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
@@ -33,38 +33,53 @@ public sealed partial class
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await using var writer = new MySqlConnection(connectionString);
         await writer.OpenAsync(CancellationToken.None);
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
-        await using var gate = await AcquireAtomicAddWriterGateAsync(writer, deadline.Token);
+
+        // WHY: The observed native checkpoint, not host speed, selects the interleaving.
+        var cancellationToken = CancellationToken.None;
+        using var executionCancellation = new CancellationTokenSource();
+        await using var gate = await AcquireAtomicAddWriterGateAsync(writer, cancellationToken);
         var gateReleased = false;
 
         // Act
-        var execution = Record.ExceptionAsync(() =>
-            ExecuteOperationsAsync(context, [operation], executionCancellation.Token));
+        // WHY: Cleanup needs the raw task so a later native fault cannot be
+        // hidden inside a successfully completed exception-observation wrapper.
+        var execution = ExecuteOperationsAsync(context, [operation], executionCancellation.Token);
 
-        Exception? failure;
+        Exception? failure = null;
+        Exception? coordinationFailure = null;
         try
         {
-            await WaitForAtomicAddCheckpointAsync(writer, gate, checkpoint, deadline.Token);
+            await WaitForAtomicAddCheckpointAsync(writer, gate, checkpoint, execution, cancellationToken);
             await ExecuteAtomicAddWriterSqlAsync(
                 writer,
                 gate,
                 "INSERT INTO `atomic_required_items` (`key`) VALUES (1);",
-                deadline.Token);
+                cancellationToken);
 
-            await gate.CommitAsync(deadline.Token);
+            await gate.CommitAsync(cancellationToken);
             gateReleased = true;
-            failure = await execution.WaitAsync(deadline.Token);
+            failure = await Record.ExceptionAsync(() => execution);
+        }
+        catch (Exception exception)
+        {
+            coordinationFailure = exception;
+
+            throw;
         }
         finally
         {
-            await FinishAtomicAddConcurrentAttemptAsync(execution, executionCancellation, gate, gateReleased);
+            await FinishAtomicAddConcurrentAttemptAsync(
+                coordinationFailure ?? failure,
+                execution,
+                executionCancellation,
+                gate,
+                gateReleased);
         }
 
         var interrupted = await ReadAtomicRequiredAddStateAsync(
             connectionString,
             operation,
-            cancellationToken: deadline.Token);
+            cancellationToken: cancellationToken);
 
         var retry = await context
             .GetService<ISafeMigrationRunner>()
@@ -72,10 +87,10 @@ public sealed partial class
                 context,
                 [operation],
                 new SafeMigrationRunOptions("atomic-add-raced-existing-row"),
-                deadline.Token);
+                cancellationToken);
 
         var retryFailure = await Record.ExceptionAsync(() =>
-            ExecuteOperationsAsync(context, [operation], deadline.Token));
+            ExecuteOperationsAsync(context, [operation], cancellationToken));
 
         // Assert
         Assert.True(checkpoint.CheckpointWasReached);
@@ -122,25 +137,27 @@ public sealed partial class
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await using var writer = new MySqlConnection(connectionString);
         await writer.OpenAsync(CancellationToken.None);
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
-        await using var gate = await AcquireAtomicAddWriterGateAsync(writer, deadline.Token);
+
+        // WHY: The observed native checkpoint, not host speed, selects the interleaving.
+        var cancellationToken = CancellationToken.None;
+        using var executionCancellation = new CancellationTokenSource();
+        await using var gate = await AcquireAtomicAddWriterGateAsync(writer, cancellationToken);
         var gateReleased = false;
 
         // Act
-        var execution = Record.ExceptionAsync(() =>
-            ExecuteOperationsAsync(context, [operation], executionCancellation.Token));
+        var execution = ExecuteOperationsAsync(context, [operation], executionCancellation.Token);
 
         Exception? omissionFailure;
-        Exception? migrationFailure;
+        Exception? migrationFailure = null;
+        Exception? coordinationFailure = null;
         try
         {
-            await WaitForAtomicAddCheckpointAsync(writer, gate, checkpoint, deadline.Token);
+            await WaitForAtomicAddCheckpointAsync(writer, gate, checkpoint, execution, cancellationToken);
             omissionFailure = await Record.ExceptionAsync(() => ExecuteAtomicAddWriterSqlAsync(
                 writer,
                 gate,
                 "INSERT INTO `atomic_required_items` (`key`) VALUES (1);",
-                deadline.Token));
+                cancellationToken));
 
             await ExecuteAtomicAddWriterSqlAsync(
                 writer,
@@ -149,28 +166,39 @@ public sealed partial class
                 + (useGuidStorage
                     ? $"'{AtomicAddExplicitGuid}');"
                     : "17);"),
-                deadline.Token);
+                cancellationToken);
 
-            await gate.CommitAsync(deadline.Token);
+            await gate.CommitAsync(cancellationToken);
             gateReleased = true;
-            migrationFailure = await execution.WaitAsync(deadline.Token);
+            migrationFailure = await Record.ExceptionAsync(() => execution);
+        }
+        catch (Exception exception)
+        {
+            coordinationFailure = exception;
+
+            throw;
         }
         finally
         {
-            await FinishAtomicAddConcurrentAttemptAsync(execution, executionCancellation, gate, gateReleased);
+            await FinishAtomicAddConcurrentAttemptAsync(
+                coordinationFailure ?? migrationFailure,
+                execution,
+                executionCancellation,
+                gate,
+                gateReleased);
         }
 
         var final = await ReadAtomicRequiredAddStateAsync(
             connectionString,
             operation,
-            cancellationToken: deadline.Token);
+            cancellationToken: cancellationToken);
 
         var suppliedValue = await ScalarStringAsync(
             connectionString,
             "SELECT `required_value` FROM `atomic_required_items` WHERE `key` = 2;",
-            cancellationToken: deadline.Token);
+            cancellationToken: cancellationToken);
 
-        await ExecuteOperationsAsync(context, [operation], deadline.Token);
+        await ExecuteOperationsAsync(context, [operation], cancellationToken);
 
         // Assert
         Assert.True(checkpoint.CheckpointWasReached);
@@ -196,7 +224,7 @@ public sealed partial class
 }
 
 public sealed partial class
-    MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
+    MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests
 {
     /// <summary>A writer-only MariaDB check bypass cannot make final strict DDL invent a value.</summary>
     [AtomicAddMariaDbFact]
@@ -217,19 +245,21 @@ public sealed partial class
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await using var writer = new MySqlConnection(connectionString);
         await writer.OpenAsync(CancellationToken.None);
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
-        await using var gate = await AcquireAtomicAddWriterGateAsync(writer, deadline.Token);
+
+        // WHY: The observed native checkpoint, not host speed, selects the interleaving.
+        var cancellationToken = CancellationToken.None;
+        using var executionCancellation = new CancellationTokenSource();
+        await using var gate = await AcquireAtomicAddWriterGateAsync(writer, cancellationToken);
         var gateReleased = false;
 
         // Act
-        var execution = Record.ExceptionAsync(() =>
-            ExecuteOperationsAsync(context, [operation], executionCancellation.Token));
+        var execution = ExecuteOperationsAsync(context, [operation], executionCancellation.Token);
 
-        Exception? failure;
+        Exception? failure = null;
+        Exception? coordinationFailure = null;
         try
         {
-            await WaitForAtomicAddCheckpointAsync(writer, gate, checkpoint, deadline.Token);
+            await WaitForAtomicAddCheckpointAsync(writer, gate, checkpoint, execution, cancellationToken);
 
             // WHY: Only this hostile writer changes its own session. The
             // migration session must remain strict and keep CHECK enforcement.
@@ -239,43 +269,54 @@ public sealed partial class
                 "SET SESSION check_constraint_checks = OFF; "
                 + "INSERT INTO `atomic_required_items` (`key`, `required_value`) VALUES (1, NULL); "
                 + "SET SESSION check_constraint_checks = ON;",
-                deadline.Token);
+                cancellationToken);
 
-            await gate.CommitAsync(deadline.Token);
+            await gate.CommitAsync(cancellationToken);
             gateReleased = true;
-            failure = await execution.WaitAsync(deadline.Token);
+            failure = await Record.ExceptionAsync(() => execution);
+        }
+        catch (Exception exception)
+        {
+            coordinationFailure = exception;
+
+            throw;
         }
         finally
         {
-            await FinishAtomicAddConcurrentAttemptAsync(execution, executionCancellation, gate, gateReleased);
+            await FinishAtomicAddConcurrentAttemptAsync(
+                coordinationFailure ?? failure,
+                execution,
+                executionCancellation,
+                gate,
+                gateReleased);
         }
 
         var interrupted = await ReadAtomicRequiredAddStateAsync(
             connectionString,
             operation,
-            cancellationToken: deadline.Token);
+            cancellationToken: cancellationToken);
 
         var nullRowsBeforeRetry = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM `atomic_required_items` WHERE `key` = 1 AND `required_value` IS NULL;",
-            cancellationToken: deadline.Token);
+            cancellationToken: cancellationToken);
 
         await ExecuteAtomicAddWriterSqlAsync(
             writer,
             transaction: null,
             "UPDATE `atomic_required_items` SET `required_value` = '" + AtomicAddExplicitGuid + "' WHERE `key` = 1;",
-            deadline.Token);
+            cancellationToken);
 
-        await ExecuteOperationsAsync(context, [operation], deadline.Token);
+        await ExecuteOperationsAsync(context, [operation], cancellationToken);
         var recovered = await ReadAtomicRequiredAddStateAsync(
             connectionString,
             operation,
-            cancellationToken: deadline.Token);
+            cancellationToken: cancellationToken);
 
         var preserved = await ScalarStringAsync(
             connectionString,
             "SELECT `required_value` FROM `atomic_required_items` WHERE `key` = 1;",
-            cancellationToken: deadline.Token);
+            cancellationToken: cancellationToken);
 
         // Assert
         Assert.True(checkpoint.CheckpointWasReached);
@@ -293,7 +334,7 @@ public sealed partial class
 }
 
 public sealed partial class
-    MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
+    MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests
 {
     // WHY: The marker and the gate are separate tables. The migration commits
     // its reached marker before waiting on the writer's independent row lock.
@@ -326,41 +367,54 @@ public sealed partial class
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await using var writer = new MySqlConnection(connectionString);
         await writer.OpenAsync(CancellationToken.None);
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
-        await using var gate = await AcquireAtomicAddWriterGateAsync(writer, deadline.Token);
+
+        // WHY: The observed native checkpoint, not host speed, selects the interleaving.
+        var cancellationToken = CancellationToken.None;
+        using var executionCancellation = new CancellationTokenSource();
+        await using var gate = await AcquireAtomicAddWriterGateAsync(writer, cancellationToken);
         var gateReleased = false;
         var sessionBefore = await ContextScalarIntAsync(
             context,
             "SELECT CONNECTION_ID();",
-            cancellationToken: deadline.Token);
+            cancellationToken: cancellationToken);
 
         // Act
-        var execution = Record.ExceptionAsync(() =>
-            ExecuteOperationsAsync(context, [operation], executionCancellation.Token));
+        var execution = ExecuteOperationsAsync(context, [operation], executionCancellation.Token);
 
-        Exception? failure;
+        Exception? failure = null;
+        Exception? coordinationFailure = null;
         try
         {
-            await WaitForAtomicAddCheckpointAsync(writer, gate, checkpoint, deadline.Token);
+            await WaitForAtomicAddCheckpointAsync(writer, gate, checkpoint, execution, cancellationToken);
             await ExecuteAtomicAddWriterSqlAsync(
                 writer,
                 gate,
                 "INSERT INTO `atomic_required_items` (`key`, `required_value`) VALUES (1, '"
                 + AtomicAddExplicitGuid
                 + "');",
-                deadline.Token);
+                cancellationToken);
 
             // WHY: Keep the gate locked until cancellation is observed. A
             // commit-before-cancel would race successful finalization instead.
             await executionCancellation.CancelAsync();
-            failure = await execution.WaitAsync(deadline.Token);
-            await gate.CommitAsync(deadline.Token);
+            failure = await Record.ExceptionAsync(() => execution);
+            await gate.CommitAsync(cancellationToken);
             gateReleased = true;
+        }
+        catch (Exception exception)
+        {
+            coordinationFailure = exception;
+
+            throw;
         }
         finally
         {
-            await FinishAtomicAddConcurrentAttemptAsync(execution, executionCancellation, gate, gateReleased);
+            await FinishAtomicAddConcurrentAttemptAsync(
+                coordinationFailure ?? failure,
+                execution,
+                executionCancellation,
+                gate,
+                gateReleased);
         }
 
         var interrupted = await ReadAtomicRequiredAddStateAsync(
@@ -409,7 +463,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Acquires a real writer-owned row lock before dispatching the migration.</summary>
     /// <param name="writer">The independently opened writer session.</param>
-    /// <param name="cancellationToken">The bounded test deadline.</param>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     /// <returns>The transaction retaining the gate until the test deliberately releases it.</returns>
     protected static async Task<MySqlTransaction> AcquireAtomicAddWriterGateAsync(
         MySqlConnection writer,
@@ -445,17 +499,19 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 }
 
 public sealed partial class
-    MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
+    MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests
 {
     /// <summary>Waits for the database-visible checkpoint rather than estimating stage timing.</summary>
     /// <param name="writer">The independent writer session.</param>
     /// <param name="transaction">The transaction retaining the test gate.</param>
     /// <param name="checkpoint">The observer whose non-vacuity flag is set only after an actual marker read.</param>
-    /// <param name="cancellationToken">The bounded test deadline.</param>
+    /// <param name="execution">The owned migration whose completion also ends an unsuccessful observation.</param>
+    /// <param name="cancellationToken">The caller's coordination cancellation.</param>
     private static async Task WaitForAtomicAddCheckpointAsync(
         MySqlConnection writer,
         MySqlTransaction transaction,
         AtomicAddCheckpointInterceptor checkpoint,
+        Task execution,
         CancellationToken cancellationToken
     )
     {
@@ -475,6 +531,15 @@ public sealed partial class
                 return;
             }
 
+            if (execution.IsCompleted)
+            {
+                // WHY: A stopped producer cannot commit a later checkpoint. Do not
+                // replace this observable terminal state with a host-speed deadline.
+                await execution;
+
+                throw new InvalidOperationException("The atomic-add operation completed before its checkpoint.");
+            }
+
             // WHY: This is only polling backoff. A committed marker, never an
             // elapsed delay, authorizes the writer's deterministic interleaving.
             await Task.Delay(TimeSpan.FromMilliseconds(10), cancellationToken);
@@ -488,7 +553,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     /// <param name="writer">The writer connection that never uses the migration's advisory lock.</param>
     /// <param name="transaction">The writer-owned gate transaction, or null after its commit.</param>
     /// <param name="sql">The bounded anonymous fixture statement.</param>
-    /// <param name="cancellationToken">The operation's test deadline.</param>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     protected static async Task ExecuteAtomicAddWriterSqlAsync(
         MySqlConnection writer,
         MySqlTransaction? transaction,
@@ -503,28 +568,25 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     }
 
     /// <summary>Releases a test gate on failure and observes any outstanding migration before disposal.</summary>
-    /// <param name="execution">The captured migration completion, including its first exception.</param>
+    /// <param name="primaryFailure">The original coordination error or handled native failure, or null.</param>
+    /// <param name="execution">The raw migration task, never a wrapper that converts faults into result values.</param>
     /// <param name="executionCancellation">The test-owned migration cancellation source.</param>
     /// <param name="gate">The writer transaction retaining the independent row lock.</param>
     /// <param name="gateReleased">Whether the test successfully committed that transaction.</param>
-    protected static async Task FinishAtomicAddConcurrentAttemptAsync(
-        Task<Exception?> execution,
+    /// <returns>Completion after release, cancellation and observation of the actual migration task.</returns>
+    protected static Task FinishAtomicAddConcurrentAttemptAsync(
+        Exception? primaryFailure,
+        Task execution,
         CancellationTokenSource executionCancellation,
         MySqlTransaction gate,
         bool gateReleased
-    )
-    {
-        if (!gateReleased)
-        {
-            await gate.RollbackAsync(CancellationToken.None);
-        }
-
-        if (!execution.IsCompleted)
-        {
-            await executionCancellation.CancelAsync();
-            _ = await execution.WaitAsync(TimeSpan.FromSeconds(10));
-        }
-    }
+    ) => OwnedTestOperationCleanup.CompleteAsync(
+        primaryFailure,
+        execution,
+        gateReleased
+            ? null
+            : () => gate.RollbackAsync(CancellationToken.None),
+        executionCancellation);
 
     /// <summary>Injects one test-owned gate into the real two-stage body, never into setup or product code.</summary>
     protected sealed class AtomicAddCheckpointInterceptor : DbCommandInterceptor

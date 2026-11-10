@@ -28,11 +28,12 @@ public sealed class SqlServerTableAdmissionTests
             ? type
             : type + "(" + length.ToString(CultureInfo.InvariantCulture) + ")";
 
-        var clr = type == "int"
-            ? typeof(int)
-            : type == "bit"
-                ? typeof(bool)
-                : typeof(string);
+        var clr = type switch
+        {
+            "int" => typeof(int),
+            "bit" => typeof(bool),
+            _ => typeof(string),
+        };
 
         var columns = Enumerable
             .Range(0, count)

@@ -290,21 +290,21 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
     }
 
     /// <summary>Creates the original small dependency fixture independently for each rejection contract.</summary>
+    /// <param name="connection">The caller-owned connection receiving roles, assignments and their dependency.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static Task CreateManagedRoleDependencyFixtureAsync(
         SqliteConnection connection,
         CancellationToken cancellationToken
-    )
-        => ExecuteSqlAsync(
-            connection,
-            "CREATE TABLE managed_roles ("
-            + "Id INTEGER NOT NULL PRIMARY KEY, Code TEXT NOT NULL, CONSTRAINT uq_managed_roles_code UNIQUE (Code)); "
-            + "CREATE TABLE managed_assignments ("
-            + "Id INTEGER NOT NULL PRIMARY KEY, RoleId INTEGER NOT NULL, "
-            + "CONSTRAINT fk_managed_assignments_role FOREIGN KEY (RoleId) REFERENCES managed_roles (Id)); "
-            + "INSERT INTO managed_roles (Id, Code) VALUES (1, 'administrator'), (2, 'member'); "
-            + "INSERT INTO managed_assignments (Id, RoleId) VALUES (11, 1);",
-            cancellationToken: cancellationToken);
+    ) => ExecuteSqlAsync(
+        connection,
+        "CREATE TABLE managed_roles ("
+        + "Id INTEGER NOT NULL PRIMARY KEY, Code TEXT NOT NULL, CONSTRAINT uq_managed_roles_code UNIQUE (Code)); "
+        + "CREATE TABLE managed_assignments ("
+        + "Id INTEGER NOT NULL PRIMARY KEY, RoleId INTEGER NOT NULL, "
+        + "CONSTRAINT fk_managed_assignments_role FOREIGN KEY (RoleId) REFERENCES managed_roles (Id)); "
+        + "INSERT INTO managed_roles (Id, Code) VALUES (1, 'administrator'), (2, 'member'); "
+        + "INSERT INTO managed_assignments (Id, RoleId) VALUES (11, 1);",
+        cancellationToken: cancellationToken);
 
     [Fact]
     public async Task OrderedModelManagedDependencyDeletion_IsProjectedAndAppliedWithoutCascade()

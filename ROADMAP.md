@@ -115,6 +115,12 @@ intentional source-breaking exception within the .NET/EF Core 10 package line.
 It retains migration safety and report contracts; timing/allocation results
 remain informational, while execution, coverage and native qualification gates
 remain blocking.
+Version 10.7.1 preserves explicit InnoDB contracts through existing typed table
+callbacks and corrects atomic SQLite retirement and safe rebuild order.
+Its [upgrade guidance](docs/support-and-qualification.md#upgrade-to-1071) keeps
+these internal fixes separate from 10.7.0's source-breaking exception.
+Existing native qualification, recovery and coverage gates remain blocking;
+the release does not activate .NET 11 or another release line.
 These releases follow changed dependency conditions and confirmed correctness
 requirements; they are not deferred initial scope.
 

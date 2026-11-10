@@ -949,7 +949,7 @@ public sealed class MySqlRequiredColumnAddGenerationTests
 
                 return
                 [
-                    MySqlMigrationCommandSpec.CreateScoped([setupSql], body, ["DO 0;"], transactionSuppressed: true)
+                    MySqlMigrationCommandSpec.CreateScoped([setupSql], body, ["DO 0;"], transactionSuppressed: true),
                 ];
             });
 
@@ -1131,12 +1131,11 @@ public sealed class MySqlRequiredColumnAddGenerationTests
     private static string[] Fragments(
         MySqlMigrationCommandSpec command,
         MySqlMigrationCommandFragmentKind kind
-    ) =>
-        command
-            .Fragments
-            .Where(fragment => fragment.Kind == kind)
-            .Select(static fragment => fragment.CommandText.ToString())
-            .ToArray();
+    ) => command
+        .Fragments
+        .Where(fragment => fragment.Kind == kind)
+        .Select(static fragment => fragment.CommandText.ToString())
+        .ToArray();
 
     /// <summary>Decodes actual prepared bodies without interpreting their SQL.</summary>
     /// <param name="sql">The complete prepared transport.</param>

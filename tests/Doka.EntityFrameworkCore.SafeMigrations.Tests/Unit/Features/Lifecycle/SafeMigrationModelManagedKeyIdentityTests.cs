@@ -53,11 +53,12 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
             new[,]
             {
                 {
-                    boundary == "key_value"
-                        ? 2
-                        : boundary == "key_type"
-                            ? (object)1L
-                            : 1,
+                    boundary switch
+                    {
+                        "key_value" => 2,
+                        "key_type" => (object)1L,
+                        _ => 1,
+                    },
                 },
             },
             boundary == "schema"
@@ -385,16 +386,15 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
         string table,
         string key,
         object?[,] values
-    ) =>
-        new(
-            table,
-            [key],
-            ["int"],
-            [key, "Value"],
-            ["int", "int"],
-            values,
-            schema: null,
-            uniqueKeys: null);
+    ) => new(
+        table,
+        [key],
+        ["int"],
+        [key, "Value"],
+        ["int", "int"],
+        values,
+        schema: null,
+        uniqueKeys: null);
 
     /// <summary>Creates a same-row update whose value change does not affect physical row identity.</summary>
     private static UpdateModelManagedDataIntent Update(
@@ -428,14 +428,12 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
     /// <summary>Creates one strict safe operation without inventing provider compatibility facts.</summary>
     private static SafeMigrationOperation Operation(
         SafeMigrationIntent intent
-    ) =>
-        new(intent, SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(intent, SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Creates immutable native evidence used only when no ordered row evidence exists.</summary>
     private static SafeMigrationProviderAnalysis Live(
         SafeMigrationObservedState state
-    ) =>
-        new(state, SafeMigrationRepairCapability.None, false, "test_live");
+    ) => new(state, SafeMigrationRepairCapability.None, false, "test_live");
 
     /// <summary>Accepts a fixture only through the normal decision and observation pipeline.</summary>
     private static void Accept(
@@ -465,10 +463,9 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
         public StringComparer IdentifierComparer => StringComparer.Ordinal;
 
         /// <inheritdoc />
-        public StringComparer ColumnIdentifierComparer =>
-            insensitive
-                ? StringComparer.OrdinalIgnoreCase
-                : StringComparer.Ordinal;
+        public StringComparer ColumnIdentifierComparer => insensitive
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
 
         /// <inheritdoc />
         public string NormalizeIdentifier(

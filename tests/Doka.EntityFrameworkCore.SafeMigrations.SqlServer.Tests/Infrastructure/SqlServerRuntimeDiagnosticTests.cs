@@ -508,9 +508,8 @@ public sealed class SqlServerRuntimeDiagnosticTests
         string sql,
         string code,
         int number
-    )
-        => ReadNativeArgument(sql, code, number)
-            .Replace("%%", "%", StringComparison.Ordinal);
+    ) => ReadNativeArgument(sql, code, number)
+        .Replace("%%", "%", StringComparison.Ordinal);
 
     /// <summary>Decodes SQL quote pairs but retains percent pairs counted in the native argument budget.</summary>
     /// <param name="sql">The decoded operation-private T-SQL guard body.</param>
@@ -579,12 +578,11 @@ public sealed class SqlServerRuntimeDiagnosticTests
     internal static SafeMigrationOperation ColumnOperation(
         string table,
         string column
-    )
-        => new(
-            new EnsureColumnIntent(
-                table,
-                new ExpectedColumnDefinition(column, typeof(bool), false, "bit")),
-            SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(
+        new EnsureColumnIntent(
+            table,
+            new ExpectedColumnDefinition(column, typeof(bool), false, "bit")),
+        SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Creates valid-width composite identifiers that maximize native percent-format expansion.</summary>
     /// <param name="owner">An optional valid-width adversarial table identifier.</param>

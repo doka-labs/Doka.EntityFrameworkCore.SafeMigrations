@@ -352,17 +352,15 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AlterColumnIfDifferentFromModel(
-            operation => operation.AlterColumn<string>(
-                "Caption",
-                "alter_orders",
-                type: "nvarchar(10)",
-                maxLength: 10,
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "nvarchar(80)",
-                oldMaxLength: 80),
-            SafeMigrationPolicy.RepairIfSafe);
+        builder.AlterColumnIfDifferentFromModel(operation => operation.AlterColumn<string>(
+            "Caption",
+            "alter_orders",
+            type: "nvarchar(10)",
+            maxLength: 10,
+            nullable: false,
+            oldClrType: typeof(string),
+            oldType: "nvarchar(80)",
+            oldMaxLength: 80));
 
         // Act
         var report = await context

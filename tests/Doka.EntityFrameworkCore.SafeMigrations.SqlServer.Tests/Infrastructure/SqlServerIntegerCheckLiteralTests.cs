@@ -68,36 +68,85 @@ public sealed class SqlServerIntegerCheckLiteralTests
         Assert.Equal(safe, actual);
     }
 
+    /// <summary>Only comparison operators authorize integer CHECK proofs.</summary>
+    /// <param name="operation">The authored comparison or rejected operator.</param>
+    /// <param name="supported">Whether the complete predicate belongs to the supported whitelist.</param>
+    [Theory]
+    [InlineData(SafeMigrationSqlBinaryOperator.Equal, true)]
+    [InlineData(SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, true)]
+    [InlineData(SafeMigrationSqlBinaryOperator.Add, false)]
+    public void IntegerPredicate_RejectsOperatorsOutsideComparisonWhitelist(
+        SafeMigrationSqlBinaryOperator operation,
+        bool supported
+    )
+    {
+        // Arrange
+        var predicate = new SafeMigrationSqlBinaryExpression(
+            new SafeMigrationSqlIdentifierExpression(["Value"]),
+            operation,
+            new SafeMigrationSqlLiteralExpression(1));
+
+        // Act
+        var actual = SqlServerSafeMigrationCatalogSqlBuilder.IsSafeIntegerCheckPredicate(predicate);
+
+        // Assert
+        Assert.Equal(supported, actual);
+    }
+
+    /// <summary>Unknown operators fail before an invalid expression can reach the provider's whitelist.</summary>
+    /// <param name="operation">The undeclared numeric operator value.</param>
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(int.MaxValue)]
+    public void IntegerPredicate_RejectsUnknownOperatorAtConstruction(
+        int operation
+    )
+    {
+        // Arrange
+        var identifier = new SafeMigrationSqlIdentifierExpression(["Value"]);
+        var literal = new SafeMigrationSqlLiteralExpression(1);
+
+        // Act
+        var failure = Record.Exception(() => new SafeMigrationSqlBinaryExpression(
+            identifier,
+            (SafeMigrationSqlBinaryOperator)operation,
+            literal));
+
+        // Assert
+        var invalid = Assert.IsType<ArgumentOutOfRangeException>(failure);
+
+        Assert.Equal("operator", invalid.ParamName);
+    }
+
     /// <summary>Produces each exact CLR scalar without a lossy intermediate conversion.</summary>
     private static object? Value(
         string kind
-    )
-        => kind switch
-        {
-            "byte" => byte.MaxValue,
-            "sbyte" => sbyte.MinValue,
-            "short" => short.MinValue,
-            "ushort" => ushort.MaxValue,
-            "int" => int.MinValue,
-            "uint" => uint.MaxValue,
-            "long-min" => long.MinValue,
-            "long-max" => long.MaxValue,
-            "ulong-signed-max" => (ulong)long.MaxValue,
-            "ulong-signed-min-magnitude" => (ulong)long.MaxValue + 1,
-            "ulong-max" => ulong.MaxValue,
-            "decimal-min" => (decimal)long.MinValue,
-            "decimal-max" => (decimal)long.MaxValue,
-            "decimal-positive-overflow" => (decimal)long.MaxValue + 1,
-            "decimal-negative-overflow" => (decimal)long.MinValue - 1,
-            "decimal-fraction" => 0.5m,
-            "decimal-type-max" => decimal.MaxValue,
-            "decimal-type-min" => decimal.MinValue,
-            "double" => 0d,
-            "float" => 0f,
-            "bool" => false,
-            "string" => "0",
-            "null" => null,
-            "cast" => 0,
-            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-        };
+    ) => kind switch
+    {
+        "byte" => byte.MaxValue,
+        "sbyte" => sbyte.MinValue,
+        "short" => short.MinValue,
+        "ushort" => ushort.MaxValue,
+        "int" => int.MinValue,
+        "uint" => uint.MaxValue,
+        "long-min" => long.MinValue,
+        "long-max" => long.MaxValue,
+        "ulong-signed-max" => (ulong)long.MaxValue,
+        "ulong-signed-min-magnitude" => (ulong)long.MaxValue + 1,
+        "ulong-max" => ulong.MaxValue,
+        "decimal-min" => (decimal)long.MinValue,
+        "decimal-max" => (decimal)long.MaxValue,
+        "decimal-positive-overflow" => (decimal)long.MaxValue + 1,
+        "decimal-negative-overflow" => (decimal)long.MinValue - 1,
+        "decimal-fraction" => 0.5m,
+        "decimal-type-max" => decimal.MaxValue,
+        "decimal-type-min" => decimal.MinValue,
+        "double" => 0d,
+        "float" => 0f,
+        "bool" => false,
+        "string" => "0",
+        "null" => null,
+        "cast" => 0,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
 }

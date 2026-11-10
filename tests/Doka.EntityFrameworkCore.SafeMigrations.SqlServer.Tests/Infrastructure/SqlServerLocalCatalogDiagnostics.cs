@@ -4,6 +4,10 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 internal static partial class SqlServerLocalCatalogDiagnostics
 {
     /// <summary>Compares all nine result columns, native dispatch and logical connection reset behavior.</summary>
+    /// <param name="rootConnectionString">The explicit local server on which isolated databases are owned.</param>
+    /// <param name="shared">The ordered classifier statements using the shared dispatch shape.</param>
+    /// <param name="standalone">The equivalent ordered classifier statements using standalone literal dispatch.</param>
+    /// <param name="parameters">The parameter sets aligned by statement index for both replay shapes.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     internal static async Task RunAsync(
         string rootConnectionString,
@@ -62,7 +66,15 @@ internal static partial class SqlServerLocalCatalogDiagnostics
         await VerifyManagedTypesAsync(root, rootString, output, cancellationToken: cancellationToken);
     }
 
-    /// <summary>Executes complete statements repeatedly and records raw statistics without summing nested scopes.</summary>
+    /// <summary>
+    /// Executes complete statements repeatedly and records raw statistics without summing nested scopes.
+    /// </summary>
+    /// <param name="root">The caller-owned admin connection used to create and drop the replay database.</param>
+    /// <param name="rootString">The server connection settings used to connect to the isolated replay database.</param>
+    /// <param name="statements">The ordered complete classifier statements to execute on each replay attempt.</param>
+    /// <param name="parameters">The parameter sets aligned by statement index and cloned for each execution.</param>
+    /// <param name="shape">The replay-shape label used to distinguish diagnostic output filenames.</param>
+    /// <param name="output">The existing output directory receiving SQL, timing, statistics and cache evidence.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task<string[]> ReplayAsync(
         SqlConnection root,
@@ -191,7 +203,11 @@ internal static partial class SqlServerLocalCatalogDiagnostics
         }
     }
 
-    /// <summary>Exports bounded cache evidence for this helper's database, without aggregating overlapping scopes.</summary>
+    /// <summary>
+    /// Exports bounded cache evidence for this helper's database, without aggregating overlapping scopes.
+    /// </summary>
+    /// <param name="connection">The caller-owned open session selecting the database for cache inspection.</param>
+    /// <param name="path">The output file receiving serialized rows for the bounded cached-plan sample.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task ExportCachedPlansAsync(
         SqlConnection connection,
@@ -223,7 +239,10 @@ internal static partial class SqlServerLocalCatalogDiagnostics
         await File.WriteAllLinesAsync(path, rows, cancellationToken: cancellationToken);
     }
 
-    /// <summary>Reads only ordinary nine-column classifier results; malformed shapes or duplicate ordinals fail.</summary>
+    /// <summary>
+    /// Reads only ordinary nine-column classifier results; malformed shapes or duplicate ordinals fail.
+    /// </summary>
+    /// <param name="reader">The caller-owned reader whose current and subsequent result sets are consumed.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task<List<string>> ReadRowsAsync(
         SqlDataReader reader,
@@ -258,6 +277,9 @@ internal static partial class SqlServerLocalCatalogDiagnostics
     }
 
     /// <summary>Checks the pooling regression before any database cleanup, with an unchanged pooled control.</summary>
+    /// <param name="root">The caller-owned administrative session used to own each isolated probe database.</param>
+    /// <param name="rootString">The local server connection settings used for pooled and unpooled probes.</param>
+    /// <param name="output">The diagnostic directory receiving the connection-reset comparison log.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task VerifyConnectionResetAsync(
         SqlConnection root,
@@ -306,7 +328,13 @@ internal static partial class SqlServerLocalCatalogDiagnostics
         }
     }
 
-    /// <summary>Changes only a uniquely owned database and never interprets unrelated provider errors as evidence.</summary>
+    /// <summary>
+    /// Changes only a uniquely owned database and never interprets unrelated provider errors as evidence.
+    /// </summary>
+    /// <param name="root">The caller-owned admin connection used to create and drop the probe database.</param>
+    /// <param name="rootString">The local server settings used to construct the probe session connection.</param>
+    /// <param name="pooling">Whether the probe reuses pooled physical sessions when reopening its connection.</param>
+    /// <param name="changeCollation">Whether to change the owned database's collation before reopening.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task<string> ProbeConnectionResetAsync(
         SqlConnection root,
@@ -365,24 +393,24 @@ internal static partial class SqlServerLocalCatalogDiagnostics
     }
 
     /// <summary>Creates the same three populated tables used by the mixed stress contract.</summary>
-    private static string BuildFixtureSql()
-        => "CREATE TABLE dbo.sqlserver_stress_target(id int NOT NULL);"
-            + "INSERT dbo.sqlserver_stress_target VALUES(1);"
-            + "CREATE TABLE dbo.sqlserver_stress_alter(caption varchar(10) NOT NULL);"
-            + "INSERT dbo.sqlserver_stress_alter VALUES('short');"
-            + "CREATE TABLE dbo.sqlserver_stress_managed(id int NOT NULL PRIMARY KEY, managed_value nvarchar(32) NOT NULL);"
-            + string.Join(
-                "",
-                LargeMigrationStressContract
-                    .ModelManagedUpdateOrdinals(LargeMigrationStressDialect.SqlServer)
-                    .TakeWhile(ordinal => ordinal < SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture)
-                    .Select(ordinal => "INSERT dbo.sqlserver_stress_managed VALUES("
-                        + LargeMigrationStressContract
-                            .ModelManagedUpdateKey(ordinal)
-                            .ToString(CultureInfo.InvariantCulture)
-                        + ",N'source');"));
+    private static string BuildFixtureSql() => "CREATE TABLE dbo.sqlserver_stress_target(id int NOT NULL);"
+        + "INSERT dbo.sqlserver_stress_target VALUES(1);"
+        + "CREATE TABLE dbo.sqlserver_stress_alter(caption varchar(10) NOT NULL);"
+        + "INSERT dbo.sqlserver_stress_alter VALUES('short');"
+        + "CREATE TABLE dbo.sqlserver_stress_managed(id int NOT NULL PRIMARY KEY, managed_value nvarchar(32) NOT NULL);"
+        + string.Join(
+            "",
+            LargeMigrationStressContract
+                .ModelManagedUpdateOrdinals(LargeMigrationStressDialect.SqlServer)
+                .TakeWhile(ordinal => ordinal < SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture)
+                .Select(ordinal => "INSERT dbo.sqlserver_stress_managed VALUES("
+                    + LargeMigrationStressContract
+                        .ModelManagedUpdateKey(ordinal)
+                        .ToString(CultureInfo.InvariantCulture)
+                    + ",N'source');"));
 
     /// <summary>Creates a fresh synthetic database and retains its exact name for recoverable cleanup.</summary>
+    /// <param name="root">The caller-owned administrative connection on which admitted creation completes.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task<string> CreateDatabaseAsync(
         SqlConnection root,
@@ -407,13 +435,14 @@ internal static partial class SqlServerLocalCatalogDiagnostics
     private static Task DropDatabaseAsync(
         SqlConnection root,
         string database
-    )
-        => ExecuteAsync(
-            root,
-            $"ALTER DATABASE [{database}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{database}];",
-            cancellationToken: CancellationToken.None);
+    ) => ExecuteAsync(
+        root,
+        $"ALTER DATABASE [{database}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{database}];",
+        cancellationToken: CancellationToken.None);
 
     /// <summary>Executes fixture-only SQL without logging connection strings or source values.</summary>
+    /// <param name="connection">The caller-owned open session on which the fixture command executes.</param>
+    /// <param name="sql">The trusted fixture SQL executed with the diagnostic command timeout.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task ExecuteAsync(
         SqlConnection connection,

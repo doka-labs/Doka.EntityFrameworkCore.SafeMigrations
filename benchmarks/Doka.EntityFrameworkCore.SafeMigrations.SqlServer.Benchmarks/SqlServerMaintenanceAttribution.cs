@@ -40,7 +40,7 @@ public class SqlServerMaintenanceAttribution
             _graph, _graph
                 .Take(EdgeCount - 2)
                 .ToArray(),
-            _graph
+            _graph,
         ];
 
         VerifyTopology();
@@ -89,8 +89,7 @@ public class SqlServerMaintenanceAttribution
     /// <summary>Checks the complete event-aware graph without fixture construction.</summary>
     /// <returns>Whether the sparse graph has an accepted topology.</returns>
     [Benchmark]
-    public bool ValidateTopology()
-        => SqlServerProjectedDependencyGraph.HasValidTopology(_graph);
+    public bool ValidateTopology() => SqlServerProjectedDependencyGraph.HasValidTopology(_graph);
 
     /// <summary>Checks the add/drop/replay sequence without sharing cached topology.</summary>
     /// <returns>An order-sensitive checksum of the four topology results.</returns>
@@ -113,8 +112,7 @@ public class SqlServerMaintenanceAttribution
 
     /// <summary>Verifies positive, negative and restoration results after the measured workload.</summary>
     [GlobalCleanup]
-    public void Cleanup()
-        => VerifyTopology();
+    public void Cleanup() => VerifyTopology();
 
     private void VerifyTopology()
     {

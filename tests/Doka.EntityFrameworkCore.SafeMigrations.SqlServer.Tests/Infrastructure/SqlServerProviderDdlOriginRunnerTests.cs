@@ -98,30 +98,28 @@ public sealed class SqlServerProviderDdlOriginRunnerTests
 
     private static SafeMigrationDbContext Context(
         SqlServerCatalogTestConnection connection
-    )
-        => new(new DbContextOptionsBuilder<SafeMigrationDbContext>().UseSqlServer(connection)
-            .Options);
+    ) => new(new DbContextOptionsBuilder<SafeMigrationDbContext>().UseSqlServer(connection)
+        .Options);
 
     private static MigrationOperation[] Operations(
         bool typed
-    )
-        =>
-        [
-            new SafeMigrationOperation(new EnsureSchemaIntent("dbo"), SafeMigrationPolicy.ThrowIfDifferent),
-            typed
-                ? new DropIndexOperation
-                {
-                    Name = "IX_source",
-                    Table = "source",
-                }
-                : new SafeMigrationOperation(
-                    new DropIndexIntent("IX_source", "source"),
-                    SafeMigrationPolicy.ThrowIfDifferent),
-            new SafeMigrationOperation(
-                new EnsureCheckConstraintIntent(
-                    new ExpectedCheckConstraintDefinition("CK_checked", "checked", "[Value]>=0")),
+    ) =>
+    [
+        new SafeMigrationOperation(new EnsureSchemaIntent("dbo"), SafeMigrationPolicy.ThrowIfDifferent),
+        typed
+            ? new DropIndexOperation
+            {
+                Name = "IX_source",
+                Table = "source",
+            }
+            : new SafeMigrationOperation(
+                new DropIndexIntent("IX_source", "source"),
                 SafeMigrationPolicy.ThrowIfDifferent),
-        ];
+        new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(
+                new ExpectedCheckConstraintDefinition("CK_checked", "checked", "[Value]>=0")),
+            SafeMigrationPolicy.ThrowIfDifferent),
+    ];
 
     /// <summary>Supplies immutable live states while delegating ordered effects to the real SQL Server analyzer.</summary>
     private sealed class OrderedAnalyzer : ISafeMigrationProviderAnalyzer, ISafeMigrationProjectedDependencyAnalyzer,
@@ -189,8 +187,7 @@ public sealed class SqlServerProviderDdlOriginRunnerTests
             SafeMigrationProviderAnalysis liveAnalysis,
             SafeMigrationProviderAnalysis analysis,
             SafeMigrationDecision decision
-        )
-            => _projection.ObserveAcceptedOperation(operation, liveAnalysis, analysis, decision);
+        ) => _projection.ObserveAcceptedOperation(operation, liveAnalysis, analysis, decision);
 
         /// <inheritdoc />
         public void ObserveProviderOperation(
@@ -209,15 +206,13 @@ public sealed class SqlServerProviderDdlOriginRunnerTests
         public Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
             DbContext context,
             CancellationToken cancellationToken
-        )
-            => Task.FromResult(new SafeMigrationProviderEnvironment(ProviderId, "sqlserver", "16.0.0"));
+        ) => Task.FromResult(new SafeMigrationProviderEnvironment(ProviderId, "sqlserver", "16.0.0"));
 
         /// <inheritdoc />
         public Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
             DbContext context,
             CancellationToken cancellationToken
-        )
-            => Task.FromResult<IAsyncDisposable>(new EmptyScope());
+        ) => Task.FromResult<IAsyncDisposable>(new EmptyScope());
 
         /// <inheritdoc />
         public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
@@ -254,8 +249,7 @@ public sealed class SqlServerProviderDdlOriginRunnerTests
             DbContext context,
             IReadOnlyList<MigrationOperation> operations,
             CancellationToken cancellationToken
-        )
-            => Task.FromResult<IReadOnlyList<SafeMigrationUnexpectedObject>>([]);
+        ) => Task.FromResult<IReadOnlyList<SafeMigrationUnexpectedObject>>([]);
     }
 
     private sealed class EmptyScope : IAsyncDisposable

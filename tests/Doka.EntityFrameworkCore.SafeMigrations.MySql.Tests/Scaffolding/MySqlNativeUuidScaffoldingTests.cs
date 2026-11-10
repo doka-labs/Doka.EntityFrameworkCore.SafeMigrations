@@ -1,5 +1,3 @@
-using Microsoft.EntityFrameworkCore.Migrations.Design;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Compiles generated native UUID calls and checks their reconstructed migration contracts.</summary>
@@ -152,7 +150,7 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
 
         // WHY: Reuse the active public mapping source, including its MariaDB
         // profile, instead of constructing or reflecting over Doka internals.
-        services.AddSingleton<ITypeMappingSource>(context.GetService<ITypeMappingSource>());
+        services.AddSingleton(context.GetService<ITypeMappingSource>());
 
         using var provider = services.BuildServiceProvider();
         var generator = new SafeMigrationCSharpMigrationOperationGenerator(
@@ -166,19 +164,19 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
         generator.Generate("migrationBuilder", [operation], builder);
         var operationSource = builder.ToString();
         var source = $$"""
-                       using System;
-                       using Doka.EntityFrameworkCore.MySql;
-                       using Doka.EntityFrameworkCore.SafeMigrations;
-                       using Microsoft.EntityFrameworkCore.Migrations;
+            using System;
+            using Doka.EntityFrameworkCore.MySql;
+            using Doka.EntityFrameworkCore.SafeMigrations;
+            using Microsoft.EntityFrameworkCore.Migrations;
 
-                       public static class GeneratedNativeUuidMigration
-                       {
-                           public static void Up(MigrationBuilder migrationBuilder)
-                           {
-                               {{operationSource}}
-                           }
-                       }
-                       """;
+            public static class GeneratedNativeUuidMigration
+            {
+                public static void Up(MigrationBuilder migrationBuilder)
+                {
+                    {{operationSource}}
+                }
+            }
+            """;
 
         var assembly = MySqlGeneratedMigrationCompiler.Compile(source);
         var method = assembly.GetType("GeneratedNativeUuidMigration", throwOnError: true)!.GetMethod("Up")!;

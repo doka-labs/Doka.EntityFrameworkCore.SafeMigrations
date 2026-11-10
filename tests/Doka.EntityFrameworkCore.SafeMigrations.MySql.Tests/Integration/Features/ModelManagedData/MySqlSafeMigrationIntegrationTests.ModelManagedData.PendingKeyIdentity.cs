@@ -149,8 +149,7 @@ public sealed class ModelManagedPendingKeyModelSnapshot : ModelSnapshot
     /// <inheritdoc />
     protected override void BuildModel(
         ModelBuilder modelBuilder
-    )
-        => ArgumentNullException.ThrowIfNull(modelBuilder);
+    ) => ArgumentNullException.ThrowIfNull(modelBuilder);
 }
 
 /// <summary>Introduces the original row using the physical Id/Code key order.</summary>
@@ -161,26 +160,23 @@ public sealed class ModelManagedPendingKeyEnsureMigration : Migration
     /// <inheritdoc />
     protected override void Up(
         MigrationBuilder migrationBuilder
-    )
-        => migrationBuilder.EnsureModelManagedDataFromModel(
-            "managed_pending_keys",
-            ["Id", "Code"],
-            ["int", "int"],
-            ["Id", "Code", "Marker"],
-            ["int", "int", "int"],
-            new object?[,] { { 1, 7, 0 } });
+    ) => migrationBuilder.EnsureModelManagedDataFromModel(
+        "managed_pending_keys",
+        ["Id", "Code"],
+        ["int", "int"],
+        ["Id", "Code", "Marker"],
+        ["int", "int", "int"],
+        new object?[,] { { 1, 7, 0 } });
 
     /// <inheritdoc />
     protected override void BuildTargetModel(
         ModelBuilder modelBuilder
-    )
-        => ArgumentNullException.ThrowIfNull(modelBuilder);
+    ) => ArgumentNullException.ThrowIfNull(modelBuilder);
 
     /// <inheritdoc />
     protected override void Down(
         MigrationBuilder migrationBuilder
-    )
-        => throw new NotSupportedException("The anonymous typed-key fixture is forward-only.");
+    ) => throw new NotSupportedException("The anonymous typed-key fixture is forward-only.");
 }
 
 /// <summary>Transitions the same row using Code/Id order with correspondingly reordered typed key values.</summary>
@@ -191,26 +187,23 @@ public sealed class ModelManagedPendingKeyUpdateMigration : Migration
     /// <inheritdoc />
     protected override void Up(
         MigrationBuilder migrationBuilder
-    )
-        => migrationBuilder.UpdateModelManagedDataFromModel(
-            "managed_pending_keys",
-            ["Code", "Id"],
-            ["int", "int"],
-            new object?[,] { { 7, 1 } },
-            ["Marker"],
-            ["int"],
-            new object?[,] { { 0 } },
-            new object?[,] { { 1 } });
+    ) => migrationBuilder.UpdateModelManagedDataFromModel(
+        "managed_pending_keys",
+        ["Code", "Id"],
+        ["int", "int"],
+        new object?[,] { { 7, 1 } },
+        ["Marker"],
+        ["int"],
+        new object?[,] { { 0 } },
+        new object?[,] { { 1 } });
 
     /// <inheritdoc />
     protected override void BuildTargetModel(
         ModelBuilder modelBuilder
-    )
-        => ArgumentNullException.ThrowIfNull(modelBuilder);
+    ) => ArgumentNullException.ThrowIfNull(modelBuilder);
 
     /// <inheritdoc />
     protected override void Down(
         MigrationBuilder migrationBuilder
-    )
-        => throw new NotSupportedException("The anonymous typed-key fixture is forward-only.");
+    ) => throw new NotSupportedException("The anonymous typed-key fixture is forward-only.");
 }

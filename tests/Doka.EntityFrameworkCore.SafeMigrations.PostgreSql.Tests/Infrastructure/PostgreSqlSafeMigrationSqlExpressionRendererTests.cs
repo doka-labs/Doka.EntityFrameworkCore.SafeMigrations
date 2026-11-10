@@ -286,8 +286,8 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     }
 
     /// <summary>Creates only the services needed for resource-free rendering contracts.</summary>
-    private static SafeMigrationDbContext CreateContext() =>
-        new("Host=localhost;Database=renderer;Username=test;Password=test");
+    private static SafeMigrationDbContext CreateContext()
+        => new("Host=localhost;Database=renderer;Username=test;Password=test");
 
     /// <summary>Uses the active provider's real mapping and delimiting services.</summary>
     private static PostgreSqlSafeMigrationSqlExpressionRenderer CreateRenderer(

@@ -60,7 +60,7 @@ public sealed partial class MySqlRuntimeRecoveryIntegrationTests : MySqlSafeMigr
                 provider => provider
                     .MigrationsAssembly(typeof(MySqlRuntimeCompactedSetupProbeDbContext).Assembly.FullName)
                     .MigrationsHistoryTable("__RuntimeWorkloadHistory"))
-            .UseMySqlSafeMigrations<MySqlRuntimeCompactedSetupProbeDbContext>()
+            .UseMySqlSafeMigrations()
             .AddInterceptors(observer)
             .Options;
 
@@ -312,6 +312,7 @@ public sealed partial class MySqlRuntimeRecoveryIntegrationTests : MySqlSafeMigr
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Captures proof before recovery can overwrite leaked guard resources.</summary>
+    /// <param name="connection">The caller-owned open session whose guard resources are checked before retry.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     protected static async Task<RuntimeCleanupProof> ReadRuntimeCleanupProofAsync(
         DbConnection connection,
@@ -340,6 +341,8 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     }
 
     /// <summary>Captures resource-absence error codes without swallowing unexpected non-provider failures.</summary>
+    /// <param name="connection">The caller-owned open session in which resource absence is probed.</param>
+    /// <param name="sql">The trusted resource probe returning zero on success or a native provider error code.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<int> RuntimeFailureCodeAsync(
         DbConnection connection,
@@ -364,7 +367,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     }
 }
 
-public sealed partial class MySqlRuntimeRecoveryIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlRuntimeRecoveryIntegrationTests
 {
     /// <summary>Executes a real synchronous scope and inspects resources before retry.</summary>
     private static RuntimeSynchronousRecovery ExecuteRuntimeSynchronousRecovery(
@@ -449,6 +452,9 @@ public sealed partial class MySqlRuntimeRecoveryIntegrationTests : MySqlSafeMigr
     }
 
     /// <summary>Observes forced close and pooled-session replacement after cleanup failure.</summary>
+    /// <param name="context">The caller-owned context whose generated operation cleanup is expected to fail.</param>
+    /// <param name="operations">The guarded operation stream executed before observing forced connection close.</param>
+    /// <param name="connectionString">The database connection used to open and inspect a replacement session.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<RuntimeCleanupFailure> FailRuntimeCleanupAndReconnectAsync(
         DbContext context,

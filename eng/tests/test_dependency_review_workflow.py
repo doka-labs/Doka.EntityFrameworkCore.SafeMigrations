@@ -140,7 +140,7 @@ def sdk_fixture(root: Path, path: str, extra: str = "") -> None:
     workflows.mkdir(parents=True)
     (workflows / "fixture.yml").write_text(
         "steps:\n"
-        "  - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68\n"
+        "  - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73\n"
         "    with:\n"
         f"      global-json-file: {path}\n" + extra,
         encoding="ascii")

@@ -562,9 +562,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
     /// <summary>Checks native enforcement without referring to a field absent before PostgreSQL 18.</summary>
     /// <returns>The version-qualified enforcement proof for the current native constraint alias.</returns>
-    private static string ModelManagedForeignKeyEnforcementContract() =>
-        "COALESCE((pg_catalog.to_jsonb(constraint_row)->>'conenforced')::boolean, "
-        + "pg_catalog.current_setting('server_version_num')::integer < 180000)";
+    private static string ModelManagedForeignKeyEnforcementContract()
+        => "COALESCE((pg_catalog.to_jsonb(constraint_row)->>'conenforced')::boolean, "
+            + "pg_catalog.current_setting('server_version_num')::integer < 180000)";
 
     private static int ColumnOrdinal(
         IReadOnlyList<string> columns,

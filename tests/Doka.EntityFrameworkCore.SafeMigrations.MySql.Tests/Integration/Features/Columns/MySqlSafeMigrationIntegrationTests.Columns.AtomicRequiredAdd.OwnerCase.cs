@@ -498,7 +498,7 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
         await using var observer = new RequiredAddCatalogTransportObserver(connectionString);
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>()
             .UseMySql(observer, Fixture.ServerVersion)
-            .UseMySqlSafeMigrations<SafeMigrationDbContext>()
+            .UseMySqlSafeMigrations()
             .Options;
 
         await using var analysisContext = new SafeMigrationDbContext(options);
@@ -606,7 +606,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     }
 }
 
-public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTests
 {
     /// <summary>Observes case-distinct mode-zero owners without catalog-collation aliases.</summary>
     /// <param name="connectionString">The isolated mode-zero database.</param>

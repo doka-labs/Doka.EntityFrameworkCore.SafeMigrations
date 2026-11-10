@@ -461,21 +461,18 @@ public sealed class PostgreSqlIndexPrerequisiteInterningTests
         return table;
     }
 
-    private static SafeMigrationDbContext Context()
-        => new(
-            "Host=127.0.0.1;Port=1;Database=index_prerequisite;Username=test;Password=test",
-            registerSafeMigrations: false);
+    private static SafeMigrationDbContext Context() => new(
+        "Host=127.0.0.1;Port=1;Database=index_prerequisite;Username=test;Password=test",
+        registerSafeMigrations: false);
 
     private static int CertificateCount(
         string sql
-    )
-        => Regex.Count(sql, "AS MATERIALIZED \\(SELECT");
+    ) => Regex.Count(sql, "AS MATERIALIZED \\(SELECT");
 
     private static List<int> RequestOrdinals(
         string sql
-    )
-        => Regex
-            .Matches(sql, @"SELECT (\d+),")
-            .Select(static match => int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture))
-            .ToList();
+    ) => Regex
+        .Matches(sql, @"SELECT (\d+),")
+        .Select(static match => int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture))
+        .ToList();
 }

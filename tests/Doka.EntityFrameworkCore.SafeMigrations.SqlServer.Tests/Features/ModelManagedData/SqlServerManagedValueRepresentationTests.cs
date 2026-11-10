@@ -198,6 +198,5 @@ public sealed class SqlServerManagedValueRepresentationTests
 
     private static SqlServerSafeMigrationCatalogSqlBuilder Catalog(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 }

@@ -313,8 +313,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
                 if (writer.NativeLiteralForms
                     && value.StoreType is null
-                    && value.Value is long number
-                    && number is < int.MinValue or > int.MaxValue
+                    && value.Value is long and (< int.MinValue or > int.MaxValue)
                     && TryAppendNativeIntegerConstant(
                         writer,
                         new SafeMigrationSqlCastExpression(value, "bigint"),
@@ -475,19 +474,17 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
     /// <summary>Preserves uppercase native SQL special forms without touching ordinary function names.</summary>
     private static bool IsNativeSpecialForm(
         string name
-    )
-        => name.Equals("COALESCE", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("NULLIF", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("GREATEST", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("LEAST", StringComparison.OrdinalIgnoreCase);
+    ) => name.Equals("COALESCE", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("NULLIF", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("GREATEST", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("LEAST", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Requests the native variant only when a binary Boolean tree has an n-ary stored form.</summary>
     private static bool HasFlattenedBooleanOperands(
         SafeMigrationSqlBinaryExpression value
-    )
-        => value.Operator is SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or
-            && ((value.Left is SafeMigrationSqlBinaryExpression left && left.Operator == value.Operator)
-                || (value.Right is SafeMigrationSqlBinaryExpression right && right.Operator == value.Operator));
+    ) => value.Operator is SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or
+        && ((value.Left is SafeMigrationSqlBinaryExpression left && left.Operator == value.Operator)
+            || (value.Right is SafeMigrationSqlBinaryExpression right && right.Operator == value.Operator));
 
     /// <summary>Represents only validated builtin integer literal casts as the native constant deparser does.</summary>
     private void AppendNativeIntegerConstant(

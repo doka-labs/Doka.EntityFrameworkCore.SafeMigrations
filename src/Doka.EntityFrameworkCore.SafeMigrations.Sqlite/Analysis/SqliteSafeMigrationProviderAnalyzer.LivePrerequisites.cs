@@ -9,19 +9,16 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         string table,
         string? schema,
         string column
-    ) =>
-        _livePrerequisiteSource?.HasLiveColumn(table, schema, column) == true;
+    ) => _livePrerequisiteSource?.HasLiveColumn(table, schema, column) == true;
 
     /// <inheritdoc />
     public bool RequiresLiveForeignKeyQualification(
         EnsureForeignKeyIntent intent
-    ) =>
-        _livePrerequisiteSource?.RequiresLiveForeignKeyQualification(intent) == true;
+    ) => _livePrerequisiteSource?.RequiresLiveForeignKeyQualification(intent) == true;
 
     /// <inheritdoc />
     public IReadOnlyList<SafeMigrationLiveCandidateKey>? GetLiveForeignKeyCandidateKeys(
         EnsureForeignKeyIntent intent,
         ISafeMigrationProjectedColumnSource columns
-    ) =>
-        _livePrerequisiteSource?.GetLiveForeignKeyCandidateKeys(intent, columns);
+    ) => _livePrerequisiteSource?.GetLiveForeignKeyCandidateKeys(intent, columns);
 }

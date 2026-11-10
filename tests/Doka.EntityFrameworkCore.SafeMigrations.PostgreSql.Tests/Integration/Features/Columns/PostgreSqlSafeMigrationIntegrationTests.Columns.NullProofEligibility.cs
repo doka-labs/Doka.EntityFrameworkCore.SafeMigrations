@@ -630,7 +630,7 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
     public async Task NullProofEligibility_TimestampRepairRechecksAfterBlockedLock()
     {
         // Arrange
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var cancellation = new CancellationTokenSource();
         var connectionString = await CreateDatabaseAsync(cancellation.Token);
         await ExecuteSqlAsync(
             connectionString,
@@ -651,17 +651,18 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         }
 
         // Act
-        var execution = Task.Run(
-            () => ExecuteOperationsAsync(context, [operation], cancellation.Token),
-            CancellationToken.None);
-
-        await WaitForBlockedPostgreSqlNarrowingCommandAsync(
-            connectionString,
-            "proof_eligibility_rows",
+        var exception = await PostgreSqlOwnedConcurrentAttempt.RunAsync(
+            cancellationToken => ExecuteOperationsAsync(context, [operation], cancellationToken),
+            (pending, cancellationToken) => WaitForBlockedPostgreSqlNarrowingCommandAsync(
+                connectionString,
+                "proof_eligibility_rows",
+                pending,
+                cancellationToken),
+            cancellationToken => transaction.CommitAsync(cancellationToken),
+            () => transaction.RollbackAsync(CancellationToken.None),
+            cancellation,
             cancellation.Token);
 
-        await transaction.CommitAsync(cancellation.Token);
-        var exception = await Record.ExceptionAsync(() => execution);
         var analysis = await context
             .GetService<ISafeMigrationProviderAnalyzer>()
             .AnalyzeAsync(

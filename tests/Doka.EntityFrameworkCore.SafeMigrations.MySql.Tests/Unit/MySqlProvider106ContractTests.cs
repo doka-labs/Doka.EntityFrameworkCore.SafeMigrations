@@ -1,5 +1,3 @@
-using Microsoft.EntityFrameworkCore.Migrations.Design;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Preserves published Doka 10.6 physical facets through SafeMigrations' authoring contracts.</summary>
@@ -368,15 +366,14 @@ public sealed class MySqlProvider106ContractTests
     /// <summary>Captures exactly the finalized model that SafeMigrations' design-time pipeline consumes.</summary>
     internal static IReadOnlyList<MigrationOperation> CreateOperations(
         DbContext context
-    ) =>
-        context
-            .GetService<IMigrationsModelDiffer>()
-            .GetDifferences(
-                null,
-                context
-                    .GetService<IDesignTimeModel>()
-                    .Model
-                    .GetRelationalModel());
+    ) => context
+        .GetService<IMigrationsModelDiffer>()
+        .GetDifferences(
+            null,
+            context
+                .GetService<IDesignTimeModel>()
+                .Model
+                .GetRelationalModel());
 
     /// <summary>Creates one physical owner with a deterministic non-generated integer identity.</summary>
     private static EntityTypeBuilder Owner(

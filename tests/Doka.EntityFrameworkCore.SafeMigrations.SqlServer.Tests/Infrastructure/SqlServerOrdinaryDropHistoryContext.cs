@@ -62,14 +62,12 @@ public sealed class SqlServerOrdinaryDropInitialMigration : Migration
     /// <inheritdoc />
     protected override void Up(
         MigrationBuilder migrationBuilder
-    )
-        => SqlServerOrdinaryDropHistoryOperations.CreateInitial(migrationBuilder, check: false);
+    ) => SqlServerOrdinaryDropHistoryOperations.CreateInitial(migrationBuilder, check: false);
 
     /// <inheritdoc />
     protected override void Down(
         MigrationBuilder migrationBuilder
-    )
-        => migrationBuilder.DropTableIfExists("ordinary_drop_history");
+    ) => migrationBuilder.DropTableIfExists("ordinary_drop_history");
 }
 
 /// <summary>Retains a matching source confirmation before a DROP with a live independent index blocker.</summary>
@@ -83,17 +81,15 @@ public sealed class SqlServerOrdinaryDropBlockedMigration : Migration
     /// <inheritdoc />
     protected override void Up(
         MigrationBuilder migrationBuilder
-    )
-        => SqlServerOrdinaryDropHistoryOperations.AppendBlockedDrop(migrationBuilder);
+    ) => SqlServerOrdinaryDropHistoryOperations.AppendBlockedDrop(migrationBuilder);
 
     /// <inheritdoc />
     protected override void Down(
         MigrationBuilder migrationBuilder
-    )
-        => migrationBuilder.EnsureColumn(
-            "ordinary_drop_history",
-            new ExpectedColumnDefinition("L", typeof(long), true, "bigint"),
-            SafeMigrationPolicy.ThrowIfDifferent);
+    ) => migrationBuilder.EnsureColumn(
+        "ordinary_drop_history",
+        new ExpectedColumnDefinition("L", typeof(long), true, "bigint"),
+        SafeMigrationPolicy.ThrowIfDifferent);
 }
 
 /// <summary>Discovers independent CHECK-only history without changing the index-test migrations.</summary>
@@ -158,14 +154,12 @@ public sealed class SqlServerOrdinaryDropCheckInitialMigration : Migration
     /// <inheritdoc />
     protected override void Up(
         MigrationBuilder migrationBuilder
-    )
-        => SqlServerOrdinaryDropHistoryOperations.CreateInitial(migrationBuilder, check: true);
+    ) => SqlServerOrdinaryDropHistoryOperations.CreateInitial(migrationBuilder, check: true);
 
     /// <inheritdoc />
     protected override void Down(
         MigrationBuilder migrationBuilder
-    )
-        => migrationBuilder.DropTableIfExists("ordinary_drop_history");
+    ) => migrationBuilder.DropTableIfExists("ordinary_drop_history");
 }
 
 /// <summary>Reuses the exact guarded source confirmation and DROP under independent CHECK-only history.</summary>
@@ -179,17 +173,15 @@ public sealed class SqlServerOrdinaryDropCheckBlockedMigration : Migration
     /// <inheritdoc />
     protected override void Up(
         MigrationBuilder migrationBuilder
-    )
-        => SqlServerOrdinaryDropHistoryOperations.AppendBlockedDrop(migrationBuilder);
+    ) => SqlServerOrdinaryDropHistoryOperations.AppendBlockedDrop(migrationBuilder);
 
     /// <inheritdoc />
     protected override void Down(
         MigrationBuilder migrationBuilder
-    )
-        => migrationBuilder.EnsureColumn(
-            "ordinary_drop_history",
-            new ExpectedColumnDefinition("L", typeof(long), true, "bigint"),
-            SafeMigrationPolicy.ThrowIfDifferent);
+    ) => migrationBuilder.EnsureColumn(
+        "ordinary_drop_history",
+        new ExpectedColumnDefinition("L", typeof(long), true, "bigint"),
+        SafeMigrationPolicy.ThrowIfDifferent);
 }
 
 /// <summary>Shares fixed historical operations without inheriting discoverable EF context attributes.</summary>

@@ -740,17 +740,16 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
 
     private static ExpectedTableDefinition InlineDependent(
         string principalTable
-    )
-        => new(
-            "inline_dependent",
-            [new ExpectedColumnDefinition("ParentId", typeof(int), false, "int")],
-            foreignKeys:
-            [
-                new ExpectedForeignKeyDefinition(
-                    "FK_inline_dependent",
-                    "inline_dependent",
-                    ["ParentId"],
-                    principalTable,
-                    ["Id"]),
-            ]);
+    ) => new(
+        "inline_dependent",
+        [new ExpectedColumnDefinition("ParentId", typeof(int), false, "int")],
+        foreignKeys:
+        [
+            new ExpectedForeignKeyDefinition(
+                "FK_inline_dependent",
+                "inline_dependent",
+                ["ParentId"],
+                principalTable,
+                ["Id"]),
+        ]);
 }

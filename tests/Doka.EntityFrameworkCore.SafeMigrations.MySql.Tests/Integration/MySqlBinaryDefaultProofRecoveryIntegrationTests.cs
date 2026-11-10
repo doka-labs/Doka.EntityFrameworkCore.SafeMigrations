@@ -35,7 +35,7 @@ public sealed class MySqlBinaryDefaultProofRecoveryIntegrationTests : MySqlInteg
         var observer = new AcquiredBinaryDefaultCancellationInterceptor(cancellation);
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>()
             .UseMySql(connectionString, Fixture.ServerVersion)
-            .UseMySqlSafeMigrations<SafeMigrationDbContext>()
+            .UseMySqlSafeMigrations()
             .AddInterceptors(observer)
             .Options;
 

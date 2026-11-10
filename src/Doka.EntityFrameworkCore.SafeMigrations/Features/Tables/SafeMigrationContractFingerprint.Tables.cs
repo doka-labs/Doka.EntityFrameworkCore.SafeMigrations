@@ -63,5 +63,22 @@ public static partial class SafeMigrationContractFingerprint
         {
             WriteForeignKey(writer, constraint);
         }
+
+        if (definition.ProviderAnnotations.Count > 0)
+        {
+            // WHY: Extend only annotated contracts; existing table hashes must retain their exact byte stream.
+            writer.Add("table_provider_annotations:v1");
+            writer.Add(definition.ProviderAnnotations.Count);
+
+            // WHY: Preserve indexed immutable-snapshot order in the versioned annotation extension.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var index = 0; index < definition.ProviderAnnotations.Count; index++)
+            {
+                var annotation = definition.ProviderAnnotations[index];
+                writer.Add(annotation.Name);
+                writer.Add(annotation.Fingerprint);
+            }
+        }
     }
 }

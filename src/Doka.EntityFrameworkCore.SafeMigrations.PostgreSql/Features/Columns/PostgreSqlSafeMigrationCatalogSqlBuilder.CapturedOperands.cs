@@ -5,12 +5,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <summary>Reuses finite operand proofs for captured integer arithmetic and Boolean comparisons.</summary>
     internal static bool RequiresCapturedOperandBinding(
         ExpectedColumnDefinition definition
-    )
-        => definition.CapturedComputedSql is not null
-            && definition.ClrType is { } type
-            && (type == typeof(int) || type == typeof(long) || type == typeof(bool))
-            && definition.ComputedExpression is { } expression
-            && IsFiniteCapturedOperand(expression);
+    ) => definition.CapturedComputedSql is not null
+        && definition.ClrType is { } type
+        && (type == typeof(int) || type == typeof(long) || type == typeof(bool))
+        && definition.ComputedExpression is { } expression
+        && IsFiniteCapturedOperand(expression);
 
     /// <summary>Excludes functions, casts and opaque grammar rather than inventing their native binding.</summary>
     private static bool IsFiniteCapturedOperand(
@@ -44,17 +43,15 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <summary>Requires exact integer assignment width when reusing an accepted sparse expression binding.</summary>
     private long? CapturedOperandAssignmentType(
         ExpectedColumnDefinition definition
-    )
-        => _typeMappingSource.FindMapping(definition.ClrType, definition.StoreType)
-                ?.StoreTypeNameBase switch
-            {
-                "integer" or "int4" => 23, "bigint" or "int8" => 20, "boolean" or "bool" => 16, _ => null,
-            };
+    ) => _typeMappingSource.FindMapping(definition.ClrType, definition.StoreType)
+            ?.StoreTypeNameBase switch
+        {
+            "integer" or "int4" => 23, "bigint" or "int8" => 20, "boolean" or "bool" => 16, _ => null,
+        };
 
     /// <summary>Does not confuse a numeric family with proof that the generated assignment cannot narrow it.</summary>
     private bool CapturedOperandInputMatchesAssignment(
         ExpectedColumnDefinition definition,
         long sourceType
-    )
-        => CapturedOperandAssignmentType(definition) is { } target && (target == 16 || target == sourceType);
+    ) => CapturedOperandAssignmentType(definition) is { } target && (target == 16 || target == sourceType);
 }

@@ -128,7 +128,10 @@ public sealed class SafeMigrationExpressionInspectorStackTests
     {
         // Arrange
         var expression = new SafeMigrationSqlCaseExpression(
-            [new(SafeMigrationSql.Identifier("condition"), SafeMigrationSql.Identifier("result"))],
+            [
+                new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.Identifier("condition"),
+                    SafeMigrationSql.Identifier("result")),
+            ],
             SafeMigrationSql.Identifier("fallback"));
 
         var comparer = new RecordingComparer();
@@ -180,11 +183,12 @@ public sealed class SafeMigrationExpressionInspectorStackTests
         var expected = names[..^1]
             .Append("target");
 
-        expected = shape == "in"
-            ? expected.Prepend("operand")
-            : shape == "case"
-                ? expected.Append("fallback")
-                : expected;
+        expected = shape switch
+        {
+            "in" => expected.Prepend("operand"),
+            "case" => expected.Append("fallback"),
+            _ => expected,
+        };
 
         var collected = new RecordingSet();
 
@@ -309,7 +313,8 @@ public sealed class SafeMigrationExpressionInspectorStackTests
                 "between" => new SafeMigrationSqlBetweenExpression(literal, expression, literal),
                 "in" => new SafeMigrationSqlInExpression(literal, [expression, literal]),
                 "function" => SafeMigrationSql.Function("ABS", expression),
-                "case" => new SafeMigrationSqlCaseExpression([new(literal, expression)], literal),
+                "case" => new SafeMigrationSqlCaseExpression([new SafeMigrationSqlCaseWhenClause(literal, expression)],
+                    literal),
                 "cast" => SafeMigrationSql.Cast(expression, "int"),
                 "collate" => SafeMigrationSql.Collate(expression, "binary"),
                 "null-test" => SafeMigrationSql.IsNull(expression),

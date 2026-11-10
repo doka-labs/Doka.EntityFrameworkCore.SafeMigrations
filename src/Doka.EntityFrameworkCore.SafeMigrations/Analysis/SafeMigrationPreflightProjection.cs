@@ -401,7 +401,7 @@ internal sealed partial class SafeMigrationPreflightProjection : ISafeMigrationP
                 Observe(value, decision);
                 break;
             case EnsureTableIntent value:
-                Observe(value, liveAnalysis, analysis, decision, operation.Policy != SafeMigrationPolicy.ExistenceOnly);
+                Observe(value, liveAnalysis, analysis, operation.Policy != SafeMigrationPolicy.ExistenceOnly);
                 break;
             case DropTableIntent value:
                 Observe(value, decision);

@@ -24,8 +24,8 @@ public static class MySqlServiceCollectionExtensions
     public static IServiceCollection AddEntityFrameworkDokaMySqlSafeMigrations<TCanonicalMigrationContext>(
         this IServiceCollection services
     )
-        where TCanonicalMigrationContext : DbContext =>
-        services.AddEntityFrameworkDokaMySqlSafeMigrations(typeof(TCanonicalMigrationContext));
+        where TCanonicalMigrationContext : DbContext
+        => services.AddEntityFrameworkDokaMySqlSafeMigrations(typeof(TCanonicalMigrationContext));
 
     internal static IServiceCollection AddEntityFrameworkDokaMySqlSafeMigrations(
         this IServiceCollection services,

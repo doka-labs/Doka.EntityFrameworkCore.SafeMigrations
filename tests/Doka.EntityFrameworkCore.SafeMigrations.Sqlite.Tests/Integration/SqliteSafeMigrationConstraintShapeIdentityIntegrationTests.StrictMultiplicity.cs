@@ -2,7 +2,6 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
 /// <summary>Exercises constraint shape identity with independently owned SQLite state.</summary>
 public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegrationTests
-    : SqliteSafeMigrationCatalogIntegrationTests
 {
     /// <summary>A dropped different shape cannot authorize a second physical copy of a required constraint.</summary>
     /// <param name="kind">The native constraint family whose allowed shape capacity is checked.</param>

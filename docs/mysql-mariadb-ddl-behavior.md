@@ -1,9 +1,10 @@
 # MySQL and MariaDB DDL behavior
 
-Version 10.7.0 retains the certified generated/CHECK contracts and native
-independent DROP proofs introduced in 10.6.0. Review the
-[current upgrade notes](support-and-qualification.md#upgrade-to-1070) for required
-cancellation arguments and dependency floors, and the earlier
+Version 10.7.1 preserves explicit InnoDB table contracts through existing typed
+table callbacks and retains the certified generated/CHECK contracts
+and native independent DROP proofs introduced in 10.6.0. Review the
+[current upgrade notes](support-and-qualification.md#upgrade-to-1071) for table
+metadata, required cancellation arguments and dependency floors, and the earlier
 [10.6.0 contract changes](support-and-qualification.md#upgrade-to-1060) for
 conditional fingerprint approvals and conservative boundaries.
 
@@ -65,6 +66,62 @@ atomic migration transaction.
   qualifier. It must exactly equal the active connection's `DATABASE()` value.
 - A failure can occur after earlier DDL committed; retry must converge from the
   observed partial state.
+
+## Explicit InnoDB table contracts
+
+An explicitly mapped `UseStorageEngine("InnoDB")` requirement is retained
+through safe scaffolding, the snapshot, native creation and catalog checks.
+The internal scaffolder places table annotations inside the existing typed
+`constraints` callback so they are applied before the immutable expected
+definition is created. No public overload is added. For example:
+
+```csharp
+migrationBuilder.CreateTableIfNotExists(
+    name: "EngineNodes",
+    columns: table => new
+    {
+        Id = table.Column<long>(type: "bigint", nullable: false),
+    },
+    constraints: table =>
+    {
+        table.PrimaryKey("PK_EngineNodes", row => row.Id);
+        table.Annotation("Doka:MySql:StorageEngine", "InnoDB");
+    },
+    policy: SafeMigrationPolicy.ThrowIfDifferent);
+```
+
+Legacy scaffolding uses the existing typed `ConvergeTableFromModel` callback
+overload with an explicit policy. Existing unannotated table builders remain
+supported. Attaching arbitrary annotations to an already frozen safe operation
+is not a substitute for complete capture.
+
+Both strict and convergence-container checks enforce the explicit engine.
+An existing same-name MyISAM/Aria table is not accepted as InnoDB, even with
+an existence-only container policy. No policy automatically converts its engine.
+Unknown annotations, malformed storage metadata and unsupported engines remain
+fail-closed. PostgreSQL, SQLite and SQL Server do not accept MySQL storage
+metadata. A table without explicit storage metadata retains its existing
+default-engine behavior; this feature does not change server settings.
+
+The authored engine also governs prerequisites for later projected operations.
+An explicit InnoDB creation is not classified using an unrelated default engine.
+An unannotated projected creation does not itself prove a later explicit engine
+requirement. When its physical engine cannot be established, analysis retains
+`projected_table_storage_engine_unproven` rather than treating the difference
+as ignorable under an existence-only policy. Declare the required engine on
+the creation itself. Certified `InnoDB` case variants are equivalent, and an
+unannotated target imposes no new engine requirement.
+Replay checks the actual engine without adding a separate table-query roundtrip.
+An actual mismatch exposes `table_storage_engine_different` with the bounded
+`table_storage_engine` difference (`InnoDB` versus the native engine name).
+Doka also emits historical engine, charset and collation annotations on table
+DROP/RENAME and removed primary/unique keys. The adapter certifies only these
+known, nonoperative identity facets before normalizing the operation. Identity
+operations do not create or alter those facets and do not gain an implicit
+old-engine precondition. Unknown, malformed or unsupported metadata still
+rejects; creation and table verification retain their explicit engine contract.
+See [the storage-contract decision](decisions/D-019-explicit-table-storage-contracts.md)
+for the architecture and alternatives.
 
 ## Current-database qualification
 
@@ -740,7 +797,7 @@ Ensure repair. A captured replacement reports
 `projected_foreign_key_set_null_unrepresentable` instead of borrowing stale
 nullable metadata or promoting a previous matching/missing result.
 
-The Doka contract, established in 10.4.2 and retained by the locked 10.6.4,
+The Doka contract, established in 10.4.2 and retained by the locked 10.6.5,
 removes synthetic defaults and marks additions
 or nullable-to-required alterations requiring explicit backfill. Its provider
 generator rejects required additions without an explicit default, computed
@@ -1449,7 +1506,7 @@ contract.
 
 ### GUID storage and native UUID
 
-The Doka dependency range is `[10.6.4,10.7.0)`. `Binary16` remains the default;
+The Doka dependency range is `[10.6.5,10.7.0)`. `Binary16` remains the default;
 `Char36` is unchanged. Native `uuid` is an explicit Doka model choice through
 `DefaultGuidFormat(MySqlGuidFormat.Uuid)` or a property's
 `HasMySqlGuidFormat(MySqlGuidFormat.Uuid)`. It requires MariaDB 10.7 or later;

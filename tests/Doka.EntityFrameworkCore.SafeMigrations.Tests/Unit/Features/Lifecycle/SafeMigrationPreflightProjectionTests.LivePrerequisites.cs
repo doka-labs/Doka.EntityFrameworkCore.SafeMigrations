@@ -115,7 +115,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             EndpointsCompatible = missingProof != "compatibility",
             CandidateKeys = missingProof == "key"
                 ? []
-                : [new(SafeMigrationDatabaseObjectKind.PrimaryKey, "pk_parent")],
+                : [new SafeMigrationLiveCandidateKey(SafeMigrationDatabaseObjectKind.PrimaryKey, "pk_parent")],
         };
 
         var projection = SparseLiveProjection(
@@ -235,7 +235,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var source = new LivePrerequisiteProbe
         {
             CandidateKeys = survivingAlias
-                ? [candidate, new(SafeMigrationDatabaseObjectKind.Index, "other_key")]
+                ? [candidate, new SafeMigrationLiveCandidateKey(SafeMigrationDatabaseObjectKind.Index, "other_key")]
                 : [candidate],
         };
 
@@ -274,7 +274,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     )
     {
         // Arrange
-        var source = new LivePrerequisiteProbe { CandidateKeys = [new(kind, "live_key")] };
+        var source =
+            new LivePrerequisiteProbe { CandidateKeys = [new SafeMigrationLiveCandidateKey(kind, "live_key")] };
+
         var projection = SparseLiveProjection(source);
         SafeMigrationIntent removal = kind switch
         {
@@ -538,7 +540,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Arrange
         var source = new LivePrerequisiteProbe
         {
-            CandidateKeys = [new(SafeMigrationDatabaseObjectKind.Index, "live_key")],
+            CandidateKeys = [new SafeMigrationLiveCandidateKey(SafeMigrationDatabaseObjectKind.Index, "live_key")],
         };
 
         var projection = SparseLiveProjection(source);
@@ -574,7 +576,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Arrange
         var source = new LivePrerequisiteProbe
         {
-            CandidateKeys = [new(SafeMigrationDatabaseObjectKind.Index, "live_key")],
+            CandidateKeys = [new SafeMigrationLiveCandidateKey(SafeMigrationDatabaseObjectKind.Index, "live_key")],
         };
 
         var projection = SparseLiveProjection(source);
@@ -627,7 +629,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             ForceNativeQualification = true,
             EndpointsCompatible = compatible,
             CandidateKeys = nativeCandidate
-                ? [new(SafeMigrationDatabaseObjectKind.PrimaryKey, "pk_parent")]
+                ? [new SafeMigrationLiveCandidateKey(SafeMigrationDatabaseObjectKind.PrimaryKey, "pk_parent")]
                 : [],
         };
 

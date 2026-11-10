@@ -12,6 +12,8 @@
              Link="Infrastructure/%(Filename)%(Extension)" />
     <Compile Include="$(MSBuildThisFileDirectory)Shared/ProcessWideTestGroup.cs"
              Link="Infrastructure/ProcessWideTestGroup.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Shared/OwnedTestOperationCleanup*.cs"
+             Link="Infrastructure/%(Filename)%(Extension)" />
     <Compile Include="$(MSBuildThisFileDirectory)Shared/CancellationTokenContractTests.cs"
              Link="Infrastructure/CancellationTokenContractTests.cs" />
     <None Include="$(MSBuildThisFileDirectory)Shared/xunit.runner.json"

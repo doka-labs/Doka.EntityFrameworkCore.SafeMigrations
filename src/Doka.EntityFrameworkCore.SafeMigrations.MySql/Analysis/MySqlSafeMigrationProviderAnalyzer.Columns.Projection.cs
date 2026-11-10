@@ -94,7 +94,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         }
 
         var innoDb = context.TableWasCreated
-            ? environment.DefaultEngineIsInnoDb
+            ? (context.CreationProviderAnnotations is { } annotations
+                && MySqlSafeMigrationTableMetadata.IsExplicitInnoDb(annotations))
+            || environment.DefaultEngineIsInnoDb
             : environment.ExistingInnoDbTables.Contains(intent.Table);
 
         var sessionIsSafe = sqlDefault

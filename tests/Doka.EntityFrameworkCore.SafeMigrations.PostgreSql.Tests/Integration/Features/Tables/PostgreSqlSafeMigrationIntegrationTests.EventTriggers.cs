@@ -765,30 +765,28 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
         string effect,
         string enabledMode,
         CancellationToken cancellationToken
-    )
-        => ExecuteSqlAsync(
-            connectionString,
-            "CREATE FUNCTION event_trigger_fixture() RETURNS event_trigger "
-            + "LANGUAGE plpgsql AS $$ BEGIN "
-            + effect
-            + " END; $$; "
-            + "CREATE EVENT TRIGGER event_fixture ON ddl_command_end WHEN TAG IN ('CREATE TABLE') "
-            + "EXECUTE FUNCTION event_trigger_fixture(); ALTER EVENT TRIGGER event_fixture "
-            + enabledMode
-            + ";",
-            cancellationToken: cancellationToken);
+    ) => ExecuteSqlAsync(
+        connectionString,
+        "CREATE FUNCTION event_trigger_fixture() RETURNS event_trigger "
+        + "LANGUAGE plpgsql AS $$ BEGIN "
+        + effect
+        + " END; $$; "
+        + "CREATE EVENT TRIGGER event_fixture ON ddl_command_end WHEN TAG IN ('CREATE TABLE') "
+        + "EXECUTE FUNCTION event_trigger_fixture(); ALTER EVENT TRIGGER event_fixture "
+        + enabledMode
+        + ";",
+        cancellationToken: cancellationToken);
 
     /// <summary>Appends the structured CHECK whose row proof must survive only certified earlier effects.</summary>
     /// <param name="builder">The ordered fixture operation stream.</param>
     private static void AppendEventTriggerCheck(
         MigrationBuilder builder
-    )
-        => builder.EnsureCheckConstraint(
-            ExpectedCheckConstraintDefinition.FromExpression(
-                "ck_event_values",
-                "event_created_values",
-                SqlColumnAndInt("id", SafeMigrationSqlBinaryOperator.GreaterThan, 0)),
-            SafeMigrationPolicy.ThrowIfDifferent);
+    ) => builder.EnsureCheckConstraint(
+        ExpectedCheckConstraintDefinition.FromExpression(
+            "ck_event_values",
+            "event_created_values",
+            SqlColumnAndInt("id", SafeMigrationSqlBinaryOperator.GreaterThan, 0)),
+        SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Appends the same table contract through either supported authoring path.</summary>
     /// <param name="builder">The ordered fixture operation stream.</param>

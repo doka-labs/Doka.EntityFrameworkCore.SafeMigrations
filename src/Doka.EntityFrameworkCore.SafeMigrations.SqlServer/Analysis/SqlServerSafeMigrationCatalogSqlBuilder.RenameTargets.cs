@@ -22,8 +22,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <returns>Whether the existing source is an independently owned index the operation can rename.</returns>
     internal string BuildIndexRenameSourceSupportedExpression(
         RenameIndexIntent intent
-    ) =>
-        MemberRenameBit(IndependentIndexExists(intent.Name, intent.Table, intent.Schema));
+    ) => MemberRenameBit(IndependentIndexExists(intent.Name, intent.Table, intent.Schema));
 
     /// <summary>Renders a native Boolean scalar for the strictly typed member-probe reader.</summary>
     /// <param name="predicate">The provider-built catalog predicate.</param>

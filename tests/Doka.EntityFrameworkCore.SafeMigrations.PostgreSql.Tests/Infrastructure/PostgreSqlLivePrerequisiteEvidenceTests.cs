@@ -120,6 +120,12 @@ public sealed class PostgreSqlLivePrerequisiteEvidenceTests
     [InlineData("kind")]
     [InlineData("backing")]
     [InlineData("width")]
+    [InlineData("dependent-oid-int32")]
+    [InlineData("principal-oid-uint64")]
+    [InlineData("principal-oid-float64")]
+    [InlineData("dependent-oid-zero")]
+    [InlineData("principal-oid-negative")]
+    [InlineData("dependent-oid-int64-min")]
     public async Task InvalidEvidencePublishesNothing(
         string fault
     )
@@ -163,6 +169,24 @@ public sealed class PostgreSqlLivePrerequisiteEvidenceTests
                         table
                             .Rows[^1][6] = "unexpected_backing"; break;
                     case "width": table.Columns.Add("unexpected", typeof(int)); break;
+                    case "dependent-oid-int32":
+                        table
+                            .Rows[^1][2] = 2000; break;
+                    case "principal-oid-uint64":
+                        table
+                            .Rows[^1][3] = 1000UL; break;
+                    case "principal-oid-float64":
+                        table
+                            .Rows[^1][3] = 1000D; break;
+                    case "dependent-oid-zero":
+                        table
+                            .Rows[^1][2] = 0L; break;
+                    case "principal-oid-negative":
+                        table
+                            .Rows[^1][3] = -1L; break;
+                    case "dependent-oid-int64-min":
+                        table
+                            .Rows[^1][2] = long.MinValue; break;
                 }
 
                 return table;
@@ -815,8 +839,7 @@ public sealed class PostgreSqlLivePrerequisiteEvidenceTests
     /// <summary>Obtains the actual registered provider rather than constructing a relaxed reader test double.</summary>
     private static PostgreSqlSafeMigrationProviderAnalyzer Analyzer(
         DbContext context
-    )
-        => Assert.IsType<PostgreSqlSafeMigrationProviderAnalyzer>(context.GetService<ISafeMigrationProviderAnalyzer>());
+    ) => Assert.IsType<PostgreSqlSafeMigrationProviderAnalyzer>(context.GetService<ISafeMigrationProviderAnalyzer>());
 
     /// <summary>Builds repeated or distinct sparse FK requests with exactly one earlier nullable addition.</summary>
     private static SafeMigrationOperation[] Operations(
@@ -856,25 +879,22 @@ public sealed class PostgreSqlLivePrerequisiteEvidenceTests
     /// <summary>Separates the missing ADD from FK prerequisite rejection without inventing a table model.</summary>
     private static SafeMigrationProviderAnalysis[] Analyses(
         IReadOnlyList<SafeMigrationOperation> operations
-    )
-        => operations
-            .Select(static operation => Live(
-                operation.Intent is EnsureColumnIntent
-                    ? SafeMigrationObservedState.Missing
-                    : SafeMigrationObservedState.PrerequisiteMissing))
-            .ToArray();
+    ) => operations
+        .Select(static operation => Live(
+            operation.Intent is EnsureColumnIntent
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.PrerequisiteMissing))
+        .ToArray();
 
     /// <summary>Creates immutable live classification inputs for the metadata-only phase.</summary>
     private static SafeMigrationProviderAnalysis Live(
         SafeMigrationObservedState state
-    )
-        => new(state, SafeMigrationRepairCapability.None, false, "test");
+    ) => new(state, SafeMigrationRepairCapability.None, false, "test");
 
     /// <summary>Reads only explicit top-level request ordinals, never nested catalog SELECTs.</summary>
     private static MatchCollection RequestOrdinals(
         string sql
-    )
-        => Regex.Matches(sql, @"SELECT (\d+),");
+    ) => Regex.Matches(sql, @"SELECT (\d+),");
 
     /// <summary>Returns native-shaped typed evidence with a separately named constraint backing index.</summary>
     private static DataTable Results(

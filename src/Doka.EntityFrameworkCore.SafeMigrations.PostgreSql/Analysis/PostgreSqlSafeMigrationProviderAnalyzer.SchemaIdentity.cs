@@ -31,17 +31,15 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     /// <inheritdoc />
     string? ISafeMigrationProviderObjectIdentityNormalizer.NormalizeSchema(
         string? schema
-    )
-        => PostgreSqlSafeMigrationSchemaIdentity.Normalize(schema, _currentSchema);
+    ) => PostgreSqlSafeMigrationSchemaIdentity.Normalize(schema, _currentSchema);
 
     /// <inheritdoc />
     bool ISafeMigrationProviderObjectIdentityNormalizer.IsObjectIdentityMismatch(
         SafeMigrationProviderAnalysis analysis
-    )
-        => analysis.Code == SchemaIdentityMismatchCode
-            && (analysis.IsInvariantUnsupported
-                || !((_schemaIdentityOriginOrdinal is { } origin && _projectedOperationOrdinal > origin)
-                    || (_triggerOriginOrdinal is { } triggerOrigin && _projectedOperationOrdinal > triggerOrigin)));
+    ) => analysis.Code == SchemaIdentityMismatchCode
+        && (analysis.IsInvariantUnsupported
+            || !((_schemaIdentityOriginOrdinal is { } origin && _projectedOperationOrdinal > origin)
+                || (_triggerOriginOrdinal is { } triggerOrigin && _projectedOperationOrdinal > triggerOrigin)));
 
     /// <summary>Scopes postflight aliases to the final stable path without guessing historical owners.</summary>
     /// <param name="operations">The complete executed stream, including ordinary provider boundaries.</param>
@@ -374,14 +372,12 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         /// <inheritdoc />
         public string? NormalizeSchema(
             string? schema
-        )
-            => PostgreSqlSafeMigrationSchemaIdentity.Normalize(schema, currentSchema);
+        ) => PostgreSqlSafeMigrationSchemaIdentity.Normalize(schema, currentSchema);
 
         /// <inheritdoc />
         public bool IsObjectIdentityMismatch(
             SafeMigrationProviderAnalysis analysis
-        )
-            => analysis.Code == SchemaIdentityMismatchCode;
+        ) => analysis.Code == SchemaIdentityMismatchCode;
 
         /// <inheritdoc />
         public bool IsPostflightIdentityProven(

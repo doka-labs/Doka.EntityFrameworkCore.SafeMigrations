@@ -453,8 +453,7 @@ public sealed class MySqlProjectedMissingSqlDefaultColumnTests
 
     private static SafeMigrationProviderAnalysis Proof(
         SafeMigrationObservedState state
-    ) =>
-        new(state, SafeMigrationRepairCapability.None, false, "test_owned_column");
+    ) => new(state, SafeMigrationRepairCapability.None, false, "test_owned_column");
 
     private static DbContext CreateContext() => new(
         new DbContextOptionsBuilder<DbContext>()
@@ -504,7 +503,6 @@ public sealed class MySqlProjectedMissingSqlDefaultColumnTests
             SafeMigrationProjectedAlterColumnContext context,
             SafeMigrationProviderAnalysis liveAnalysis,
             SafeMigrationProviderAnalysis projectedAnalysis
-        ) =>
-            throw new InvalidOperationException("This fixture validates only Missing column adds.");
+        ) => throw new InvalidOperationException("This fixture validates only Missing column adds.");
     }
 }

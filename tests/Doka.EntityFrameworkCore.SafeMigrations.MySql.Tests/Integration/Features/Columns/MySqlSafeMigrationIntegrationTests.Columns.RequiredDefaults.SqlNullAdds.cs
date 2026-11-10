@@ -493,19 +493,18 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     }
 }
 
-public sealed partial class MySqlColumnsRequiredDefaultsSqlNullAddsIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlColumnsRequiredDefaultsSqlNullAddsIntegrationTests
 {
     /// <summary>Captures a SQL NULL expression without confusing it with a rejected CLR literal NULL default.</summary>
     /// <returns>The immutable required integer addition under explicit repair policy.</returns>
-    private static SafeMigrationOperation RequiredDefaultsSqlNullAddOperation()
-        => new(
-            new EnsureColumnIntent(
-                "sql_null_add_items",
-                new ExpectedColumnDefinition(
-                    "value",
-                    typeof(int),
-                    false,
-                    "int",
-                    defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(null)))),
-            SafeMigrationPolicy.RepairIfSafe);
+    private static SafeMigrationOperation RequiredDefaultsSqlNullAddOperation() => new(
+        new EnsureColumnIntent(
+            "sql_null_add_items",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(int),
+                false,
+                "int",
+                defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(null)))),
+        SafeMigrationPolicy.RepairIfSafe);
 }

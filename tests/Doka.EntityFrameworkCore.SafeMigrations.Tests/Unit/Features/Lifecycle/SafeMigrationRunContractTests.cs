@@ -24,6 +24,42 @@ public sealed partial class SafeMigrationRunContractTests
         "minimum",
     };
 
+    /// <summary>Blocking postflight selection distinguishes false from an unknown nullable postcondition.</summary>
+    /// <param name="isSafe">Whether this assessment belongs to a safe operation.</param>
+    /// <param name="postcondition">The independently reported nullable postcondition.</param>
+    /// <param name="expectedBlocking">Whether blocking-only postflight output includes the assessment.</param>
+    [Theory]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    [InlineData(true, null, false)]
+    [InlineData(false, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, null, false)]
+    public void PostflightBlockingSelectionPreservesNullablePostconditionSemantics(
+        bool isSafe,
+        bool? postcondition,
+        bool expectedBlocking
+    )
+    {
+        // Arrange
+        var assessment = new SafeMigrationAssessment(
+            0,
+            "TestOperation",
+            isSafe,
+            SafeMigrationOperationKind.EnsureColumn,
+            "value",
+            SafeMigrationObservedState.Matching,
+            SafeMigrationAction.NoOp,
+            postcondition,
+            "matching");
+
+        // Act
+        var blocking = SafeMigrationReportJson.IsBlockingAssessment(SafeMigrationReportMode.Postflight, assessment);
+
+        // Assert
+        Assert.Equal(expectedBlocking, blocking);
+    }
+
     /// <summary>Requires each caller-supplied identity component to contain a non-whitespace value.</summary>
     /// <param name="instanceId">The pseudonymous instance identity.</param>
     /// <param name="targetMigrationId">The optional target migration identity.</param>
@@ -578,8 +614,8 @@ public sealed partial class SafeMigrationRunContractTests
             ]);
     }
 
-    private static string ModelFingerprint() =>
-        $"safe-relational-model:v1:npgsql_postgresql:sha256:{new string('a', 64)}";
+    private static string ModelFingerprint()
+        => $"safe-relational-model:v1:npgsql_postgresql:sha256:{new string('a', 64)}";
 
     private static JsonDocument LoadReportSchema() => LoadReportSchema(
         SafeMigrationRunReport.CurrentSchemaVersion);

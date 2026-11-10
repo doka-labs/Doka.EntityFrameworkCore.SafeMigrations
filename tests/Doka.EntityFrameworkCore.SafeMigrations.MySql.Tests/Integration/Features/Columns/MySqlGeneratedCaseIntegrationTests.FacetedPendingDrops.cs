@@ -275,24 +275,26 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     }
 
     /// <summary>Seeds native facets independently of EF's candidate model and migration target.</summary>
+    /// <param name="connectionString">The test database receiving the native generated-column fixture.</param>
+    /// <param name="comment">The trusted fixture comment written on the generated column.</param>
+    /// <param name="collation">The native collation token selected by the test for the generated column.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static Task SeedFacetedPendingDropAsync(
         string connectionString,
         string comment,
         string collation,
         CancellationToken cancellationToken
-    )
-        => ExecuteSqlAsync(
-            connectionString,
-            $"CREATE TABLE `{GeneratedFacetPendingDropDbContext.TableName}` (id int NOT NULL PRIMARY KEY, "
-            + "unrelated int NULL, result varchar(20) CHARACTER SET utf8mb4 COLLATE "
-            + collation
-            + " GENERATED ALWAYS AS ('fixed') VIRTUAL COMMENT '"
-            + comment
-            + "') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + $"INSERT INTO `{GeneratedFacetPendingDropDbContext.TableName}` (id, unrelated) "
-            + "VALUES (1, 7), (2, NULL);",
-            cancellationToken: cancellationToken);
+    ) => ExecuteSqlAsync(
+        connectionString,
+        $"CREATE TABLE `{GeneratedFacetPendingDropDbContext.TableName}` (id int NOT NULL PRIMARY KEY, "
+        + "unrelated int NULL, result varchar(20) CHARACTER SET utf8mb4 COLLATE "
+        + collation
+        + " GENERATED ALWAYS AS ('fixed') VIRTUAL COMMENT '"
+        + comment
+        + "') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
+        + $"INSERT INTO `{GeneratedFacetPendingDropDbContext.TableName}` (id, unrelated) "
+        + "VALUES (1, 7), (2, NULL);",
+        cancellationToken: cancellationToken);
 
     /// <summary>Reads the actual migration fixture without constructing replacement operations.</summary>
     private static IReadOnlyList<MigrationOperation> FacetedPendingDropOperations(
@@ -308,6 +310,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     }
 
     /// <summary>Counts applied rows without assuming EF has already bootstrapped its history table.</summary>
+    /// <param name="connectionString">The test database whose migration history is counted.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<int> FacetedPendingHistoryRowsAsync(
         string connectionString,
@@ -331,30 +334,31 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     }
 
     /// <summary>Checks that native DDL did or did not remove the unrelated member.</summary>
+    /// <param name="connectionString">The test database whose unrelated column is located in the catalog.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static Task<int> FacetedPendingUnrelatedColumnsAsync(
         string connectionString,
         CancellationToken cancellationToken
-    )
-        => ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.TableName}' AND COLUMN_NAME = 'unrelated';",
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connectionString,
+        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+        + $"AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.TableName}' AND COLUMN_NAME = 'unrelated';",
+        cancellationToken: cancellationToken);
 
     /// <summary>Checks row preservation, including unrelated values when the DROP is refused.</summary>
+    /// <param name="connectionString">The test database whose original rows are checked.</param>
+    /// <param name="includeUnrelated">Whether retained rows must also preserve the unrelated column's values.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static Task<int> FacetedPendingRetainedRowsAsync(
         string connectionString,
         bool includeUnrelated,
         CancellationToken cancellationToken
-    )
-        => ScalarIntAsync(
-            connectionString,
-            $"SELECT COUNT(*) FROM `{GeneratedFacetPendingDropDbContext.TableName}` "
-            + "WHERE BINARY result = BINARY 'fixed' "
-            + (includeUnrelated
-                ? "AND ((id = 1 AND unrelated = 7) OR (id = 2 AND unrelated IS NULL));"
-                : "AND id IN (1, 2);"),
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connectionString,
+        $"SELECT COUNT(*) FROM `{GeneratedFacetPendingDropDbContext.TableName}` "
+        + "WHERE BINARY result = BINARY 'fixed' "
+        + (includeUnrelated
+            ? "AND ((id = 1 AND unrelated = 7) OR (id = 2 AND unrelated IS NULL));"
+            : "AND id IN (1, 2);"),
+        cancellationToken: cancellationToken);
 }

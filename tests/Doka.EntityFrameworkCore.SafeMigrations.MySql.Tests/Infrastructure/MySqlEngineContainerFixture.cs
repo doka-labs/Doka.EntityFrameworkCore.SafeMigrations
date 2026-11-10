@@ -75,13 +75,12 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
     }
 
     /// <summary>Gets the provider version matching the configured native engine.</summary>
-    public MySqlServerVersion ServerVersion =>
-        _engine switch
-        {
-            "mysql" => MySqlServerVersion.MySql(ParseVersion(_version)),
-            "mariadb" => MySqlServerVersion.MariaDb(ParseVersion(_version)),
-            _ => throw new InvalidOperationException($"Unsupported test engine '{_engine}'."),
-        };
+    public MySqlServerVersion ServerVersion => _engine switch
+    {
+        "mysql" => MySqlServerVersion.MySql(ParseVersion(_version)),
+        "mariadb" => MySqlServerVersion.MariaDb(ParseVersion(_version)),
+        _ => throw new InvalidOperationException($"Unsupported test engine '{_engine}'."),
+    };
 
     /// <summary>Gets whether the configured engine uses MariaDB native contracts.</summary>
     public bool IsMariaDb => _engine == "mariadb";

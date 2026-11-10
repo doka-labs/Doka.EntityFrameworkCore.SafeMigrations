@@ -602,8 +602,7 @@ public sealed class SqlServerGeneratorSafetyTests
         {
             Calls.Add(operations.ToArray());
 
-            if (operations.Count == 1
-                && operations[0] is SqlOperation sqlOperation)
+            if (operations is [SqlOperation sqlOperation])
             {
                 var operationGuard = sqlOperation.Sql.Contains("DECLARE @doka_state", StringComparison.Ordinal);
                 if (GuardedSqlCommands is { } guardedCommands

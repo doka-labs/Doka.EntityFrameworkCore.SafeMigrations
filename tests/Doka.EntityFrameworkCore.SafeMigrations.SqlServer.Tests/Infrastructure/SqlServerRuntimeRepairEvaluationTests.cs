@@ -116,14 +116,13 @@ public sealed class SqlServerRuntimeRepairEvaluationTests
     /// <summary>Creates a metadata-independent fixture for the policy rendering boundary.</summary>
     private static SafeMigrationOperation CreateOperation(
         SafeMigrationPolicy policy
-    )
-        => new(
-            new EnsureColumnIntent(
-                "items",
-                new ExpectedColumnDefinition(
-                    "Caption",
-                    typeof(string),
-                    true,
-                    "nvarchar(80)")),
-            policy);
+    ) => new(
+        new EnsureColumnIntent(
+            "items",
+            new ExpectedColumnDefinition(
+                "Caption",
+                typeof(string),
+                true,
+                "nvarchar(80)")),
+        policy);
 }

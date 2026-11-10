@@ -16,49 +16,50 @@ public sealed class GeneratedInitialMigrationPreflightTests : IClassFixture<Gene
 
     /// <summary>Preserves the strict initial application, idempotent replay and verification scenario.</summary>
     [GeneratedToolingFact("SAFE_MIGRATIONS_GENERATED_STRICT_CONNECTION_STRING")]
-    public Task StrictGeneratedInitialMigrationConvergesThroughPreflightAndReplay() =>
-        VerifyLifecycleAsync(legacy: false, cancellationToken: CancellationToken.None);
+    public Task StrictGeneratedInitialMigrationConvergesThroughPreflightAndReplay()
+        => VerifyLifecycleAsync(legacy: false, cancellationToken: CancellationToken.None);
 
     /// <summary>Preserves the legacy initial application, idempotent replay and verification scenario.</summary>
     [GeneratedToolingFact("SAFE_MIGRATIONS_GENERATED_LEGACY_CONNECTION_STRING")]
-    public Task LegacyGeneratedInitialMigrationConvergesThroughPreflightAndReplay() =>
-        VerifyLifecycleAsync(legacy: true, cancellationToken: CancellationToken.None);
+    public Task LegacyGeneratedInitialMigrationConvergesThroughPreflightAndReplay()
+        => VerifyLifecycleAsync(legacy: true, cancellationToken: CancellationToken.None);
 
     /// <summary>Excludes unknown numeric discriminator rows in the strict profile.</summary>
     [GeneratedToolingFact("SAFE_MIGRATIONS_GENERATED_STRICT_CONNECTION_STRING")]
-    public Task StrictGeneratedNumericDiscriminatorFiltersUnknownRows() =>
-        VerifyNumericFilteringAsync(legacy: false, cancellationToken: CancellationToken.None);
+    public Task StrictGeneratedNumericDiscriminatorFiltersUnknownRows()
+        => VerifyNumericFilteringAsync(legacy: false, cancellationToken: CancellationToken.None);
 
     /// <summary>Excludes unknown numeric discriminator rows in the legacy profile.</summary>
     [GeneratedToolingFact("SAFE_MIGRATIONS_GENERATED_LEGACY_CONNECTION_STRING")]
-    public Task LegacyGeneratedNumericDiscriminatorFiltersUnknownRows() =>
-        VerifyNumericFilteringAsync(legacy: true, cancellationToken: CancellationToken.None);
+    public Task LegacyGeneratedNumericDiscriminatorFiltersUnknownRows()
+        => VerifyNumericFilteringAsync(legacy: true, cancellationToken: CancellationToken.None);
 
     /// <summary>
     /// Resolves attributed string discriminator values and excludes unknown rows in the strict profile.
     /// </summary>
     [GeneratedToolingFact("SAFE_MIGRATIONS_GENERATED_STRICT_CONNECTION_STRING")]
-    public Task StrictGeneratedAttributedDiscriminatorFiltersUnknownRows() =>
-        VerifyAttributedFilteringAsync(legacy: false, cancellationToken: CancellationToken.None);
+    public Task StrictGeneratedAttributedDiscriminatorFiltersUnknownRows()
+        => VerifyAttributedFilteringAsync(legacy: false, cancellationToken: CancellationToken.None);
 
     /// <summary>
     /// Resolves attributed string discriminator values and excludes unknown rows in the legacy profile.
     /// </summary>
     [GeneratedToolingFact("SAFE_MIGRATIONS_GENERATED_LEGACY_CONNECTION_STRING")]
-    public Task LegacyGeneratedAttributedDiscriminatorFiltersUnknownRows() =>
-        VerifyAttributedFilteringAsync(legacy: true, cancellationToken: CancellationToken.None);
+    public Task LegacyGeneratedAttributedDiscriminatorFiltersUnknownRows()
+        => VerifyAttributedFilteringAsync(legacy: true, cancellationToken: CancellationToken.None);
 
     /// <summary>Persists converted attributed discriminator values in the strict profile.</summary>
     [GeneratedToolingFact("SAFE_MIGRATIONS_GENERATED_STRICT_CONNECTION_STRING")]
-    public Task StrictGeneratedAttributedDiscriminatorWritesConvertedValues() =>
-        VerifyAttributedWritesAsync(legacy: false, cancellationToken: CancellationToken.None);
+    public Task StrictGeneratedAttributedDiscriminatorWritesConvertedValues()
+        => VerifyAttributedWritesAsync(legacy: false, cancellationToken: CancellationToken.None);
 
     /// <summary>Persists converted attributed discriminator values in the legacy profile.</summary>
     [GeneratedToolingFact("SAFE_MIGRATIONS_GENERATED_LEGACY_CONNECTION_STRING")]
-    public Task LegacyGeneratedAttributedDiscriminatorWritesConvertedValues() =>
-        VerifyAttributedWritesAsync(legacy: true, cancellationToken: CancellationToken.None);
+    public Task LegacyGeneratedAttributedDiscriminatorWritesConvertedValues()
+        => VerifyAttributedWritesAsync(legacy: true, cancellationToken: CancellationToken.None);
 
     /// <summary>Asserts the captured lifecycle without repeating its destructive initial application.</summary>
+    /// <param name="legacy">Selects the legacy tooling profile instead of the strict profile.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private async Task VerifyLifecycleAsync(
         bool legacy,
@@ -104,6 +105,7 @@ public sealed class GeneratedInitialMigrationPreflightTests : IClassFixture<Gene
     }
 
     /// <summary>Exercises numeric query filtering with transaction-owned rows independent of other contracts.</summary>
+    /// <param name="legacy">Selects the legacy tooling profile instead of the strict profile.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private async Task VerifyNumericFilteringAsync(
         bool legacy,
@@ -144,6 +146,7 @@ public sealed class GeneratedInitialMigrationPreflightTests : IClassFixture<Gene
     }
 
     /// <summary>Exercises attributed read filtering without relying on the separate writer's row population.</summary>
+    /// <param name="legacy">Selects the legacy tooling profile instead of the strict profile.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private async Task VerifyAttributedFilteringAsync(
         bool legacy,
@@ -193,6 +196,7 @@ public sealed class GeneratedInitialMigrationPreflightTests : IClassFixture<Gene
     /// <summary>
     /// Exercises converted writes independently of filtering's unknown-row and preexisting-row inputs.
     /// </summary>
+    /// <param name="legacy">Selects the legacy tooling profile instead of the strict profile.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private async Task VerifyAttributedWritesAsync(
         bool legacy,
@@ -258,6 +262,8 @@ public sealed class GeneratedInitialMigrationPreflightTests : IClassFixture<Gene
     }
 
     /// <summary>Reads exact stored discriminator values in the current test's transaction.</summary>
+    /// <param name="context">The caller-owned context supplying the open connection and current transaction.</param>
+    /// <param name="sql">The scalar query counting rows with the expected stored discriminator values.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<int> ScalarIntAsync(
         DbContext context,

@@ -177,44 +177,42 @@ public sealed class SqlServerCatalogGuardSqlTests
 
     private static SqlServerSafeMigrationCatalogSqlBuilder CreateCatalog(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private static ModelManagedDataIntent CreateModelManagedIntent(
         string operationKind
-    )
-        => operationKind switch
-        {
-            "ensure" => new EnsureModelManagedDataIntent(
-                "catalog_guard_items",
-                ["Id"],
-                ["int"],
-                ["Id", "Value"],
-                ["int", "nvarchar(80)"],
-                new object?[,] { { 1, "target" } },
-                null,
-                null),
-            "update" => new UpdateModelManagedDataIntent(
-                "catalog_guard_items",
-                ["Id"],
-                ["int"],
-                new object?[,] { { 1 } },
-                ["Value"],
-                ["nvarchar(80)"],
-                new object?[,] { { "source" } },
-                new object?[,] { { "target" } },
-                null,
-                null),
-            "delete" => new DeleteModelManagedDataIntent(
-                "catalog_guard_items",
-                ["Id"],
-                ["int"],
-                new object?[,] { { 1 } },
-                ["Id", "Value"],
-                ["int", "nvarchar(80)"],
-                new object?[,] { { 1, "source" } },
-                null,
-                []),
-            _ => throw new ArgumentOutOfRangeException(nameof(operationKind)),
-        };
+    ) => operationKind switch
+    {
+        "ensure" => new EnsureModelManagedDataIntent(
+            "catalog_guard_items",
+            ["Id"],
+            ["int"],
+            ["Id", "Value"],
+            ["int", "nvarchar(80)"],
+            new object?[,] { { 1, "target" } },
+            null,
+            null),
+        "update" => new UpdateModelManagedDataIntent(
+            "catalog_guard_items",
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["Value"],
+            ["nvarchar(80)"],
+            new object?[,] { { "source" } },
+            new object?[,] { { "target" } },
+            null,
+            null),
+        "delete" => new DeleteModelManagedDataIntent(
+            "catalog_guard_items",
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["Id", "Value"],
+            ["int", "nvarchar(80)"],
+            new object?[,] { { 1, "source" } },
+            null,
+            []),
+        _ => throw new ArgumentOutOfRangeException(nameof(operationKind)),
+    };
 }

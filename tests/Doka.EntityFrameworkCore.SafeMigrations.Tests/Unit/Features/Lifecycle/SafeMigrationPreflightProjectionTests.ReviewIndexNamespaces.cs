@@ -433,7 +433,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         ) => identifier;
 
         /// <inheritdoc />
-        public string? NormalizeSchema(
+        public string NormalizeSchema(
             string? schema
         ) => schema ?? "public";
 

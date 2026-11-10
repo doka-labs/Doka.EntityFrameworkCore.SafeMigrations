@@ -99,11 +99,12 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE source_lifetime (value integer NOT NULL, unrelated integer); "
-            + (symbol == "index"
-                ? "CREATE INDEX ix_source_result ON source_lifetime(value);"
-                : symbol == "table"
-                    ? "CREATE TABLE ix_source_result (id integer);"
-                    : string.Empty),
+            + symbol switch
+            {
+                "index" => "CREATE INDEX ix_source_result ON source_lifetime(value);",
+                "table" => "CREATE TABLE ix_source_result (id integer);",
+                _ => string.Empty,
+            },
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

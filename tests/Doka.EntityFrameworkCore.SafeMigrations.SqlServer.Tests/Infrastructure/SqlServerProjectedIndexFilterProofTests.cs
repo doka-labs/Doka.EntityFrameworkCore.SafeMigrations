@@ -147,27 +147,27 @@ public sealed class SqlServerProjectedIndexFilterProofTests
 
     private static SafeMigrationOperation Index(
         string name
-    )
-        => new(
-            new EnsureIndexIntent(
-                new ExpectedIndexDefinition(
-                    name,
-                    "filters",
-                    [new ExpectedIndexKeyDefinition("Code")],
-                    unique: true,
-                    structuredFilter: new SafeMigrationSqlBinaryExpression(
-                        SafeMigrationSql.Identifier("Code"),
-                        SafeMigrationSqlBinaryOperator.Equal,
-                        SafeMigrationSql.Literal("1")))),
-            SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(
+        new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                name,
+                "filters",
+                [new ExpectedIndexKeyDefinition("Code")],
+                unique: true,
+                structuredFilter: new SafeMigrationSqlBinaryExpression(
+                    SafeMigrationSql.Identifier("Code"),
+                    SafeMigrationSqlBinaryOperator.Equal,
+                    SafeMigrationSql.Literal("1")))),
+        SafeMigrationPolicy.ThrowIfDifferent);
 
     private static SqlServerSafeMigrationProviderAnalyzer Analyzer(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
-    private static SafeMigrationProviderAnalysis Missing()
-        => new(SafeMigrationObservedState.Missing, SafeMigrationRepairCapability.None, false, "missing");
+    private static SafeMigrationProviderAnalysis Missing() => new(SafeMigrationObservedState.Missing,
+        SafeMigrationRepairCapability.None,
+        false,
+        "missing");
 
     private sealed class Source(ExpectedColumnDefinition column)
         : ISafeMigrationProjectedColumnSource, ISafeMigrationProjectedTableSource

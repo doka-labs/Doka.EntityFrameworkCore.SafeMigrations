@@ -1,6 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-/// <summary>Exercises the ColumnsApprovedBackfillConcurrency migration contracts in an independent class collection.</summary>
+/// <summary>Exercises approved concurrent column backfills in an independent class collection.</summary>
 public sealed class MySqlColumnsApprovedBackfillConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     private const string ApprovedBackfillGuidValue = "00000000-0000-0000-0000-000000000017";
@@ -165,11 +165,12 @@ public sealed class MySqlColumnsApprovedBackfillConcurrencyIntegrationTests : My
         Assert.Equal(ApprovedBackfillPreservedValue(storageContract), preserved);
         Assert.Equal(0, nullable);
         Assert.Equal(
-            storageContract == "guid"
-                ? 36
-                : storageContract == "integer"
-                    ? 0
-                    : 32,
+            storageContract switch
+            {
+                "guid" => 36,
+                "integer" => 0,
+                _ => 32,
+            },
             targetWidth);
     }
 
@@ -204,56 +205,69 @@ public sealed class MySqlColumnsApprovedBackfillConcurrencyIntegrationTests : My
 
         await using var writer = new MySqlConnection(connectionString);
         await writer.OpenAsync(CancellationToken.None);
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
-        await using var gate = await AcquireAtomicAddWriterGateAsync(writer, deadline.Token);
+
+        // WHY: The observed native checkpoint, not host speed, selects the interleaving.
+        var cancellationToken = CancellationToken.None;
+        using var executionCancellation = new CancellationTokenSource();
+        await using var gate = await AcquireAtomicAddWriterGateAsync(writer, cancellationToken);
         var gateReleased = false;
 
         // Act
-        var execution = Record.ExceptionAsync(() =>
-            ExecuteOperationsAsync(context, [operation], executionCancellation.Token));
+        var execution = ExecuteOperationsAsync(context, [operation], executionCancellation.Token);
 
-        Exception? failure;
+        Exception? failure = null;
+        Exception? coordinationFailure = null;
         try
         {
-            await WaitForApprovedBackfillCheckpointAsync(writer, gate, checkpoint, deadline.Token);
+            await WaitForApprovedBackfillCheckpointAsync(writer, gate, checkpoint, execution, cancellationToken);
             await ExecuteAtomicAddWriterSqlAsync(
                 writer,
                 gate,
                 "INSERT INTO `approved_backfill_items` (`key`, `required_value`) VALUES (3, NULL);",
-                deadline.Token);
+                cancellationToken);
 
-            await gate.CommitAsync(deadline.Token);
+            await gate.CommitAsync(cancellationToken);
             gateReleased = true;
-            failure = await execution.WaitAsync(deadline.Token);
+            failure = await Record.ExceptionAsync(() => execution);
+        }
+        catch (Exception exception)
+        {
+            coordinationFailure = exception;
+
+            throw;
         }
         finally
         {
-            await FinishAtomicAddConcurrentAttemptAsync(execution, executionCancellation, gate, gateReleased);
+            await FinishAtomicAddConcurrentAttemptAsync(
+                coordinationFailure ?? failure,
+                execution,
+                executionCancellation,
+                gate,
+                gateReleased);
         }
 
         var approved = await ScalarStringAsync(
             connectionString,
             "SELECT `required_value` FROM `approved_backfill_items` WHERE `key` = 1;",
-            cancellationToken: deadline.Token);
+            cancellationToken: cancellationToken);
 
         var preserved = await ScalarStringAsync(
             connectionString,
             "SELECT `required_value` FROM `approved_backfill_items` WHERE `key` = 2;",
-            cancellationToken: deadline.Token);
+            cancellationToken: cancellationToken);
 
         var lateNulls = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM `approved_backfill_items` WHERE `key` = 3 AND `required_value` IS NULL;",
-            cancellationToken: deadline.Token);
+            cancellationToken: cancellationToken);
 
         var nullable = await ApprovedBackfillNullableCountAsync(
             connectionString,
-            cancellationToken: deadline.Token);
+            cancellationToken: cancellationToken);
 
         var sourceWidth = await ApprovedBackfillCharacterWidthAsync(
             connectionString,
-            cancellationToken: deadline.Token);
+            cancellationToken: cancellationToken);
 
         // Assert
         Assert.True(checkpoint.BodyWasObserved);
@@ -266,11 +280,12 @@ public sealed class MySqlColumnsApprovedBackfillConcurrencyIntegrationTests : My
         Assert.Equal(1, lateNulls);
         Assert.Equal(1, nullable);
         Assert.Equal(
-            storageContract == "guid"
-                ? 36
-                : storageContract == "integer"
-                    ? 0
-                    : 16,
+            storageContract switch
+            {
+                "guid" => 36,
+                "integer" => 0,
+                _ => 16,
+            },
             sourceWidth);
     }
 
@@ -463,15 +478,14 @@ public sealed class MySqlColumnsApprovedBackfillConcurrencyIntegrationTests : My
     private static string ApprovedBackfillValueSql(
         string storageContract,
         bool declared
-    )
-        => storageContract == "integer"
-            ? declared
-                ? "7"
-                : "11"
-            : AtomicRequiredAddLiteral(
-                declared
-                    ? ApprovedBackfillDeclaredValue(storageContract)
-                    : ApprovedBackfillPreservedValue(storageContract));
+    ) => storageContract == "integer"
+        ? declared
+            ? "7"
+            : "11"
+        : AtomicRequiredAddLiteral(
+            declared
+                ? ApprovedBackfillDeclaredValue(storageContract)
+                : ApprovedBackfillPreservedValue(storageContract));
 
     /// <summary>Gets the exact declared replacement for portable scalar comparison.</summary>
     /// <param name="storageContract">The finite test-owned storage contract.</param>
@@ -506,12 +520,11 @@ public sealed class MySqlColumnsApprovedBackfillConcurrencyIntegrationTests : My
     private static Task<int> ApprovedBackfillNullableCountAsync(
         string connectionString,
         CancellationToken cancellationToken
-    )
-        => ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'approved_backfill_items' AND COLUMN_NAME = 'required_value' AND IS_NULLABLE = 'YES';",
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connectionString,
+        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+        + "AND TABLE_NAME = 'approved_backfill_items' AND COLUMN_NAME = 'required_value' AND IS_NULLABLE = 'YES';",
+        cancellationToken: cancellationToken);
 
     /// <summary>Reads current character width so failed widening cannot masquerade as completed DDL.</summary>
     /// <param name="connectionString">The isolated test database.</param>
@@ -520,23 +533,24 @@ public sealed class MySqlColumnsApprovedBackfillConcurrencyIntegrationTests : My
     private static Task<int> ApprovedBackfillCharacterWidthAsync(
         string connectionString,
         CancellationToken cancellationToken
-    )
-        => ScalarIntAsync(
-            connectionString,
-            "SELECT COALESCE(CHARACTER_MAXIMUM_LENGTH, 0) FROM INFORMATION_SCHEMA.COLUMNS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'approved_backfill_items' "
-            + "AND COLUMN_NAME = 'required_value';",
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connectionString,
+        "SELECT COALESCE(CHARACTER_MAXIMUM_LENGTH, 0) FROM INFORMATION_SCHEMA.COLUMNS "
+        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'approved_backfill_items' "
+        + "AND COLUMN_NAME = 'required_value';",
+        cancellationToken: cancellationToken);
 
     /// <summary>Waits for a committed marker after the real UPDATE and before the real ALTER.</summary>
     /// <param name="writer">The independent writer session.</param>
     /// <param name="transaction">The transaction retaining the existing test-owned gate.</param>
     /// <param name="checkpoint">The scoped approved-backfill body observer.</param>
-    /// <param name="cancellationToken">The bounded test deadline.</param>
+    /// <param name="execution">The owned migration whose completion also ends an unsuccessful observation.</param>
+    /// <param name="cancellationToken">The caller's coordination cancellation.</param>
     private static async Task WaitForApprovedBackfillCheckpointAsync(
         MySqlConnection writer,
         MySqlTransaction transaction,
         ApprovedBackfillCheckpointInterceptor checkpoint,
+        Task execution,
         CancellationToken cancellationToken
     )
     {
@@ -554,6 +568,13 @@ public sealed class MySqlColumnsApprovedBackfillConcurrencyIntegrationTests : My
                 checkpoint.RecordObservedCheckpoint();
 
                 return;
+            }
+
+            if (execution.IsCompleted)
+            {
+                await execution;
+
+                throw new InvalidOperationException("The approved backfill completed before its checkpoint.");
             }
 
             // WHY: Polling merely yields until a real committed marker is

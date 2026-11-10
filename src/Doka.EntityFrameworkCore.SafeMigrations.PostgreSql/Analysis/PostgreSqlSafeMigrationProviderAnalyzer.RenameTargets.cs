@@ -137,8 +137,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     }
 
                     var intent = operations[candidates[offset + row]].Intent;
-                    var hasIntermediate = intent is RenameTableIntent table
-                        && table.NewName is not null
+                    var hasIntermediate = intent is RenameTableIntent { NewName: not null } table
                         && table.NewName != table.Name
                         && table.NewSchema is not null
                         && table.NewSchema != table.Schema;
@@ -195,6 +194,6 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
     /// <summary>Rejects destination protocol faults without exposing identifiers or data.</summary>
     /// <returns>The low-cardinality ownership error.</returns>
-    private static InvalidOperationException InvalidRenameTargetResult() =>
-        new("The PostgreSQL rename destination query returned malformed or incomplete evidence.");
+    private static InvalidOperationException InvalidRenameTargetResult()
+        => new("The PostgreSQL rename destination query returned malformed or incomplete evidence.");
 }

@@ -166,13 +166,11 @@ public sealed class SqlServerColumnLayoutGuardSqlTests
 
     private static SqlServerSafeMigrationCatalogSqlBuilder CreateCatalog(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     /// <summary>Selects the guarded operation batch rather than its shared identifier preamble.</summary>
     private static string GenerateGuardedCommand(
         DbContext context,
         SafeMigrationOperation operation
-    )
-        => SqlServerGuardedSqlTestContract.GenerateBody(context, operation);
+    ) => SqlServerGuardedSqlTestContract.GenerateBody(context, operation);
 }

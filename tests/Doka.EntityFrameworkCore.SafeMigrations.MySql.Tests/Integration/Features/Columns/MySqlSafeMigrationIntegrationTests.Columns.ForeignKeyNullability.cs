@@ -348,16 +348,15 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     /// <returns>The isolated test schema and sentinel rows.</returns>
     protected static string ForeignKeyNullabilityFixture(
         bool alreadyNullable
-    )
-        => "CREATE TABLE `proof_parent` (`id` char(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB "
-            + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "CREATE TABLE `proof_child` (`id` int NOT NULL PRIMARY KEY, `owner_id` char(36) "
-            + (alreadyNullable
-                ? "NULL"
-                : "NOT NULL")
-            + ", CONSTRAINT `fk_proof_child_parent` FOREIGN KEY (`owner_id`) "
-            + "REFERENCES `proof_parent` (`id`) ON DELETE CASCADE) ENGINE=InnoDB "
-            + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `proof_parent` VALUES ('00000000-0000-0000-0000-000000000001'); "
-            + "INSERT INTO `proof_child` VALUES (1, '00000000-0000-0000-0000-000000000001');";
+    ) => "CREATE TABLE `proof_parent` (`id` char(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB "
+        + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
+        + "CREATE TABLE `proof_child` (`id` int NOT NULL PRIMARY KEY, `owner_id` char(36) "
+        + (alreadyNullable
+            ? "NULL"
+            : "NOT NULL")
+        + ", CONSTRAINT `fk_proof_child_parent` FOREIGN KEY (`owner_id`) "
+        + "REFERENCES `proof_parent` (`id`) ON DELETE CASCADE) ENGINE=InnoDB "
+        + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
+        + "INSERT INTO `proof_parent` VALUES ('00000000-0000-0000-0000-000000000001'); "
+        + "INSERT INTO `proof_child` VALUES (1, '00000000-0000-0000-0000-000000000001');";
 }

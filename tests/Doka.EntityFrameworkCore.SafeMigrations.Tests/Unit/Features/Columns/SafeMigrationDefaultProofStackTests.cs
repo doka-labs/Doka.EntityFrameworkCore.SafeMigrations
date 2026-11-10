@@ -75,7 +75,7 @@ public sealed class SafeMigrationDefaultProofStackTests
 
         var expression = any
             ? SafeMigrationSql.Function("COALESCE", decisive, new UnknownExpression())
-            : (SafeMigrationSqlExpression)new SafeMigrationSqlInExpression(decisive, [new UnknownExpression()]);
+            : new SafeMigrationSqlInExpression(decisive, [new UnknownExpression()]);
 
         var candidate = SafeMigrationDefaultValue.Sql(expression);
 
@@ -114,7 +114,9 @@ public sealed class SafeMigrationDefaultProofStackTests
         [
             SafeMigrationSql.Binary(unknown, SafeMigrationSqlBinaryOperator.Add, SafeMigrationSql.Literal(1)),
             SafeMigrationSql.Cast(unknown, "int"),
-            new SafeMigrationSqlCaseExpression([new(unknown, SafeMigrationSql.Literal(1))]),
+            new SafeMigrationSqlCaseExpression([
+                new SafeMigrationSqlCaseWhenClause(unknown, SafeMigrationSql.Literal(1)),
+            ]),
             SafeMigrationSql.Function("UNPROVEN", unknown),
             SafeMigrationSql.Function("COALESCE"),
         ];

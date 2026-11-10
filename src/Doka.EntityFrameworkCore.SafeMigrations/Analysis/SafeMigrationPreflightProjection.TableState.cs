@@ -7,6 +7,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         private readonly List<string> _columnOrder;
         private readonly string? _comment;
         private readonly ISafeMigrationProviderObjectIdentityNormalizer? _objectIdentityNormalizer;
+        private readonly IReadOnlyList<SafeMigrationProviderAnnotation> _providerAnnotations;
 
         public ProjectedTable(
             ExpectedTableDefinition definition,
@@ -23,6 +24,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             Table = definition.Table;
             Schema = definition.Schema;
             _comment = definition.Comment;
+            _providerAnnotations = definition.ProviderAnnotations;
             _columnOrder = definition
                 .Columns
                 .Select(static value => value.Name)
@@ -58,18 +60,23 @@ internal sealed partial class SafeMigrationPreflightProjection
             DataMutationVersion = dataMutationVersion;
         }
 
-        public ExpectedTableDefinition Definition =>
-            new(
-                Table,
-                _columnOrder.Select(name => Columns[name]),
-                Schema,
-                _comment,
-                PrimaryKey,
-                UniqueConstraints.Values,
-                CheckConstraints.Values,
-                ForeignKeys.Values);
+        public ExpectedTableDefinition Definition => new(
+            Table,
+            _columnOrder.Select(name => Columns[name]),
+            Schema,
+            _comment,
+            PrimaryKey,
+            UniqueConstraints.Values,
+            CheckConstraints.Values,
+            ForeignKeys.Values)
+        {
+            ProviderAnnotations = _providerAnnotations,
+        };
 
         public Dictionary<string, ExpectedColumnDefinition> Columns { get; }
+
+        /// <summary>Gets the immutable creation facets without rebuilding the complete projected definition.</summary>
+        internal IReadOnlyList<SafeMigrationProviderAnnotation> ProviderAnnotations => _providerAnnotations;
 
         public long DataMutationVersion { get; }
 
@@ -91,8 +98,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         IEnumerable<ExpectedColumnDefinition> ISafeMigrationProjectedAlterTable.Columns => Columns.Values;
 
-        IEnumerable<ExpectedUniqueConstraintDefinition> ISafeMigrationProjectedAlterTable.UniqueConstraints =>
-            UniqueConstraints.Values;
+        IEnumerable<ExpectedUniqueConstraintDefinition> ISafeMigrationProjectedAlterTable.UniqueConstraints
+            => UniqueConstraints.Values;
 
         IEnumerable<ExpectedIndexDefinition> ISafeMigrationProjectedAlterTable.Indexes => Indexes.Values;
 

@@ -19,12 +19,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         SafeMigrationProjectedAlterColumnContext context,
         SafeMigrationProviderAnalysis liveAnalysis,
         SafeMigrationProviderAnalysis projectedAnalysis
-    )
-        => context.CanReuseLiveProof
-            && liveAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe
-            && _catalogSqlBuilder.IsSupportedIntegerWidening(source, intent.Definition)
-                ? liveAnalysis
-                : projectedAnalysis;
+    ) => context.CanReuseLiveProof
+        && liveAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe
+        && _catalogSqlBuilder.IsSupportedIntegerWidening(source, intent.Definition)
+            ? liveAnalysis
+            : projectedAnalysis;
 
     private void ResetProjectedColumnTransitions(
         bool retainInvalidatedCheckPredicates = false

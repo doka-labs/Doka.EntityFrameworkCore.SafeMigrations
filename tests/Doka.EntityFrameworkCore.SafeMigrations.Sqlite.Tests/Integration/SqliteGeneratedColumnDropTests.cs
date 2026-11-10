@@ -1599,21 +1599,23 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Creates one physical catalog independently of migration generation or model wishes.</summary>
+    /// <param name="connection">The caller-owned connection receiving the native drop-column fixture.</param>
+    /// <param name="expression">The trusted generated-column expression defining the physical dependency.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static Task CreateNativeTableAsync(
         SqliteConnection connection,
         string expression,
         CancellationToken cancellationToken
-    ) =>
-        ExecuteSqlAsync(
-            connection,
-            "CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY KEY, "
-            + "source INTEGER NOT NULL, extra INTEGER NOT NULL, "
-            + $"derived INTEGER GENERATED ALWAYS AS ({expression}) VIRTUAL); "
-            + "INSERT INTO drop_nodes (id, source, extra) VALUES (1, 3, 7);",
-            cancellationToken: cancellationToken);
+    ) => ExecuteSqlAsync(
+        connection,
+        "CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY KEY, "
+        + "source INTEGER NOT NULL, extra INTEGER NOT NULL, "
+        + $"derived INTEGER GENERATED ALWAYS AS ({expression}) VIRTUAL); "
+        + "INSERT INTO drop_nodes (id, source, extra) VALUES (1, 3, 7);",
+        cancellationToken: cancellationToken);
 
     /// <summary>Captures the complete native table SQL so refusal cannot silently rebuild the owner.</summary>
+    /// <param name="connection">The caller-owned connection whose drop_nodes table definition is read.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task<string> ReadSchemaAsync(
         SqliteConnection connection,

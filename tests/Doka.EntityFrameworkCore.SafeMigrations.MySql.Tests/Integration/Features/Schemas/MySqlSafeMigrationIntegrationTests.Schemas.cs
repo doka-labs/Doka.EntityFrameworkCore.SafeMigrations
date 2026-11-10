@@ -759,8 +759,7 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
         Assert.Equal(SafeMigrationAction.RejectUnsupported, report.Assessments[0].Action);
         Assert.Contains(
             report.UnexpectedObjects,
-            value => value.ObjectKind == SafeMigrationDatabaseObjectKind.Table
-                && value.Table is null
+            value => value is { ObjectKind: SafeMigrationDatabaseObjectKind.Table, Table: null }
                 && StringComparer.Ordinal.Equals(value.Name, "legacy"));
 
         Assert.Contains(

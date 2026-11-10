@@ -47,8 +47,7 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         /// <inheritdoc />
         protected override DbTransaction BeginDbTransaction(
             IsolationLevel isolationLevel
-        )
-            => throw new NotSupportedException();
+        ) => throw new NotSupportedException();
 
         /// <inheritdoc />
         protected override DbCommand CreateDbCommand() => new GraphCommand(this);
@@ -207,18 +206,20 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
                             keyKind == "PK-default"
                                 ? "PK_parent"
                                 : "IX_parent",
-                            keyKind == "IX"
-                                ? DBNull.Value
-                                : keyKind == "PK-default"
-                                    ? "PK_parent"
-                                    : keyKind + "_parent",
+                            keyKind switch
+                            {
+                                "IX" => DBNull.Value,
+                                "PK-default" => "PK_parent",
+                                _ => keyKind + "_parent",
+                            },
                             names[ordinal],
                             ordinal + 7,
-                            keyKind == "IX"
-                                ? DBNull.Value
-                                : keyKind == "PK-default"
-                                    ? "PK"
-                                    : keyKind);
+                            keyKind switch
+                            {
+                                "IX" => DBNull.Value,
+                                "PK-default" => "PK",
+                                _ => keyKind,
+                            });
                     }
                 }
             }
@@ -288,8 +289,7 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         protected override DbTransaction? DbTransaction { get; set; }
 
         /// <inheritdoc />
-        protected override DbParameterCollection DbParameterCollection
-            => _parameterOwner.Parameters;
+        protected override DbParameterCollection DbParameterCollection => _parameterOwner.Parameters;
 
         /// <inheritdoc />
         public override void Cancel() { }
@@ -309,8 +309,7 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         /// <inheritdoc />
         protected override DbDataReader ExecuteDbDataReader(
             CommandBehavior behavior
-        )
-            => connection.Read(CommandText);
+        ) => connection.Read(CommandText);
 
         /// <inheritdoc />
         protected override void Dispose(

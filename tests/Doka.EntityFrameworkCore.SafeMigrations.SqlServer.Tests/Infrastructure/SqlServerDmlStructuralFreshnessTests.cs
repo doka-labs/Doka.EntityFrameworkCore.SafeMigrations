@@ -370,20 +370,20 @@ public sealed class SqlServerDmlStructuralFreshnessTests
     /// <summary>Creates the provider analyzer from the real SQL Server service registrations.</summary>
     private static SqlServerSafeMigrationProviderAnalyzer Analyzer(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
-    private static SafeMigrationOperation Index()
-        => new(
-            new EnsureIndexIntent(
-                new ExpectedIndexDefinition(
-                    "IX_matching",
-                    "unrelated",
-                    [new ExpectedIndexKeyDefinition("Value")])),
-            SafeMigrationPolicy.ThrowIfDifferent);
+    private static SafeMigrationOperation Index() => new(
+        new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "IX_matching",
+                "unrelated",
+                [new ExpectedIndexKeyDefinition("Value")])),
+        SafeMigrationPolicy.ThrowIfDifferent);
 
-    private static SafeMigrationProviderAnalysis Matching()
-        => new(SafeMigrationObservedState.Matching, SafeMigrationRepairCapability.None, true, "classified_matching");
+    private static SafeMigrationProviderAnalysis Matching() => new(SafeMigrationObservedState.Matching,
+        SafeMigrationRepairCapability.None,
+        true,
+        "classified_matching");
 
     private sealed class EmptyColumns : ISafeMigrationProjectedColumnSource
     {

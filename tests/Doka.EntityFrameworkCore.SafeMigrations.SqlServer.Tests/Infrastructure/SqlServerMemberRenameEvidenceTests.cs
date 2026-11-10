@@ -294,13 +294,12 @@ public sealed class SqlServerMemberRenameEvidenceTests
         Assert.All(analyses, result => Assert.Null(result.RenameTargetExists));
     }
 
-    private static SafeMigrationDbContext Context() =>
-        new("Server=localhost;Database=catalog;Integrated Security=true;");
+    private static SafeMigrationDbContext Context()
+        => new("Server=localhost;Database=catalog;Integrated Security=true;");
 
     private static SqlServerSafeMigrationProviderAnalyzer Analyzer(
         DbContext context
-    ) =>
-        Assert.IsType<SqlServerSafeMigrationProviderAnalyzer>(context.GetService<ISafeMigrationProviderAnalyzer>());
+    ) => Assert.IsType<SqlServerSafeMigrationProviderAnalyzer>(context.GetService<ISafeMigrationProviderAnalyzer>());
 
     private static SafeMigrationOperation[] Operations(
         int count
@@ -322,8 +321,7 @@ public sealed class SqlServerMemberRenameEvidenceTests
 
     private static SafeMigrationProviderAnalysis Live(
         SafeMigrationObservedState state
-    ) =>
-        new(state, SafeMigrationRepairCapability.None, false, "test");
+    ) => new(state, SafeMigrationRepairCapability.None, false, "test");
 
     /// <summary>Models the explicit top-level SQL scalar types instead of inventing Boolean results.</summary>
     /// <param name="sql">The bounded member-probe statement, including its ordering trailer.</param>

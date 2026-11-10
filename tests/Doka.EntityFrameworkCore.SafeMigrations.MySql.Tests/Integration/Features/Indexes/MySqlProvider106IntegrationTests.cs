@@ -164,9 +164,10 @@ public sealed class MySqlProvider106IntegrationTests : MySqlSafeMigrationIntegra
         Assert.Equal(SafeMigrationAction.RejectDifferent, columnAssessment.Action);
         Assert.Contains(
             columnAssessment.Differences,
-            difference => difference.Facet == "column_store_type"
-                && difference.Expected == "varchar(68)"
-                && difference.Actual == "varchar(69)");
+            difference => difference is
+            {
+                Facet: "column_store_type", Expected: "varchar(68)", Actual: "varchar(69)",
+            });
 
         AssertOwnedGuardFailure(failure);
         Assert.Equal("doka_sm_different",
@@ -343,24 +344,26 @@ public sealed class MySqlProvider106IntegrationTests : MySqlSafeMigrationIntegra
     /// <summary>Captures the finalized provider model in the same immutable safe contracts as scaffolding.</summary>
     private static MigrationOperation[] SafeModelOperations(
         DbContext context
-    ) =>
-        MySqlProvider106ContractTests
-            .CreateOperations(context)
-            .Where(static operation => operation
-                is CreateTableOperation or CreateIndexOperation or AddForeignKeyOperation)
-            .Select(static operation => operation is CreateTableOperation table
-                ? new SafeMigrationOperation(
-                    new EnsureTableIntent(
-                        SafeMigrationExpectedDefinitionFactory.From(table),
-                        SafeMigrationTableMode.StrictDefinition),
-                    SafeMigrationPolicy.ThrowIfDifferent)
-                : SafeMigrationOperationCompatibility.Normalize(
-                        operation,
-                        MySqlSafeMigrationProviderOperationAdapter.Instance)
-                    .Operation)
-            .ToArray();
+    ) => MySqlProvider106ContractTests
+        .CreateOperations(context)
+        .Where(static operation => operation
+            is CreateTableOperation or CreateIndexOperation or AddForeignKeyOperation)
+        .Select(static operation => operation is CreateTableOperation table
+            ? new SafeMigrationOperation(
+                new EnsureTableIntent(
+                    SafeMigrationExpectedDefinitionFactory.From(table),
+                    SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationPolicy.ThrowIfDifferent)
+            : SafeMigrationOperationCompatibility.Normalize(
+                    operation,
+                    MySqlSafeMigrationProviderOperationAdapter.Instance)
+                .Operation)
+        .ToArray();
 
     /// <summary>Declares a real native decimal fixture, not a mocked catalog or reduced byte limit.</summary>
+    /// <param name="precision">The total number of digits declared for the native decimal column.</param>
+    /// <param name="scale">The number of fractional digits declared for the native decimal column.</param>
+    /// <param name="binaryLength">The maximum byte length of the binary column sharing the tested key.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private async Task<string> CreateDecimalOwnerAsync(
         int precision,

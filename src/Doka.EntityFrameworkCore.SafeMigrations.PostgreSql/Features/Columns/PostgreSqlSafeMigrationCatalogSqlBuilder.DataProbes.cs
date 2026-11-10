@@ -67,8 +67,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <summary>Recognizes source-bearing forms before normalization without parsing or rendering them twice.</summary>
     private static bool HasComputedDataProbeSource(
         ExpectedColumnDefinition definition
-    ) =>
-        definition.ComputedColumnSql is not null
+    ) => definition.ComputedColumnSql is not null
         || definition.ComputedExpression is not null
         || definition.CapturedComputedSql is not null;
 

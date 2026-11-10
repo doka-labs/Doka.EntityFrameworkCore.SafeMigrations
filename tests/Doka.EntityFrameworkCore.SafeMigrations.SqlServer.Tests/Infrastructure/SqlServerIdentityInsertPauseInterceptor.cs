@@ -166,8 +166,7 @@ internal sealed class SqlServerIdentityInsertPauseInterceptor
         object? result
     )
     {
-        if (result is not int availability
-            || availability is not (0 or 1))
+        if (result is not (int availability and (0 or 1)))
         {
             throw new InvalidOperationException("The readiness marker observation did not return a lock decision.");
         }

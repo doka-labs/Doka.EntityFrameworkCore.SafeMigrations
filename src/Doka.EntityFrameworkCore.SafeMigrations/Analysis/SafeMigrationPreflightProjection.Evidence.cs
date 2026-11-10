@@ -574,6 +574,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             case DropIndexOperation { Table: not null } value:
                 MarkProjectedTableStructureChanged(value.Table, value.Schema);
                 break;
+
+            // WHY: EF annotations do not prevent a tableless operation from reaching this ownership boundary.
+            // ReSharper disable once RedundantAlwaysMatchSubpattern
             case DropCheckConstraintOperation { Table: not null } value:
                 MarkProjectedTableStructureChanged(value.Table, value.Schema);
                 break;

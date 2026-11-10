@@ -42,22 +42,21 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
     private static SqlServerSafeMigrationRuntimePlan CreatePlan(
         bool delayed,
         string? preamble
-    )
-        => new("N'matching'", "1", SafeMigrationRepairCapability.Safe, "1")
-        {
-            PhysicalTableSupportExpression = "CASE WHEN N'O''Brien' = N'O''Brien' THEN 1 ELSE 0 END",
-            ColumnLayoutFailureExpression = "CAST(NULL AS nvarchar(32))",
-            ColumnCollationSupportExpression = "1",
-            DefaultValueSupportExpression = "CASE WHEN N'\uD83D\uDE80' = N'\uD83D\uDE80' THEN 1 ELSE 0 END",
-            DefaultValueSupportRequiresDelayedBinding = delayed,
-            IndexFilterSupportExpression = "1",
-            PrerequisiteExpression = "1",
-            StateEvaluationGuardExpression = "1",
-            StateEvaluationGuardFailureExpression = "N'unsupported'",
-            RequiresDelayedBinding = delayed,
-            CatalogPreambleSql = preamble,
-            PostApplySql = "SELECT N'post O''Brien';\n",
-        };
+    ) => new("N'matching'", "1", SafeMigrationRepairCapability.Safe, "1")
+    {
+        PhysicalTableSupportExpression = "CASE WHEN N'O''Brien' = N'O''Brien' THEN 1 ELSE 0 END",
+        ColumnLayoutFailureExpression = "CAST(NULL AS nvarchar(32))",
+        ColumnCollationSupportExpression = "1",
+        DefaultValueSupportExpression = "CASE WHEN N'\uD83D\uDE80' = N'\uD83D\uDE80' THEN 1 ELSE 0 END",
+        DefaultValueSupportRequiresDelayedBinding = delayed,
+        IndexFilterSupportExpression = "1",
+        PrerequisiteExpression = "1",
+        StateEvaluationGuardExpression = "1",
+        StateEvaluationGuardFailureExpression = "N'unsupported'",
+        RequiresDelayedBinding = delayed,
+        CatalogPreambleSql = preamble,
+        PostApplySql = "SELECT N'post O''Brien';\n",
+    };
 
     /// <summary>Prepares a non-transaction-suppressed provider command before the measured rendering path.</summary>
     private static MigrationCommand CreateCommand(

@@ -60,14 +60,16 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
 
         await using var observer = new NpgsqlConnection(connectionString);
         await observer.OpenAsync();
+        using var cancellation = new CancellationTokenSource();
         var writerCommitted = false;
-        Exception? failure;
+        Exception? failure = null;
+        Exception? primaryFailure = null;
 
         // Act
-        var deletionTask = Record.ExceptionAsync(() => ExecuteOperationsAsync(
+        var deletionTask = ExecuteOperationsAsync(
             context,
             deletion.Operations,
-            CancellationToken.None));
+            cancellation.Token);
 
         try
         {
@@ -75,21 +77,29 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
                 observer,
                 migrationPid,
                 writer.ProcessID,
-                cancellationToken: CancellationToken.None);
+                deletionTask,
+                cancellationToken: cancellation.Token);
 
-            await writerTransaction.CommitAsync();
+            await writerTransaction.CommitAsync(cancellation.Token);
             writerCommitted = true;
-            failure = await deletionTask;
+            failure = await Record.ExceptionAsync(() => deletionTask);
+        }
+        catch (Exception primaryException)
+        {
+            primaryFailure = primaryException;
+
+            throw;
         }
         finally
         {
-            if (!writerCommitted)
-            {
-                await writerTransaction.RollbackAsync();
-            }
-
-            await deletionTask;
-            await migrationTransaction.RollbackAsync();
+            await OwnedTestOperationCleanup.CompleteAsync(
+                primaryFailure ?? failure,
+                deletionTask,
+                writerCommitted
+                    ? null
+                    : () => writerTransaction.RollbackAsync(CancellationToken.None),
+                cancellation,
+                () => migrationTransaction.RollbackAsync(CancellationToken.None));
         }
 
         // Assert
@@ -539,14 +549,16 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
 
         await using var observer = new NpgsqlConnection(connectionString);
         await observer.OpenAsync();
+        using var cancellation = new CancellationTokenSource();
         var writerCommitted = false;
-        Exception? failure;
+        Exception? failure = null;
+        Exception? primaryFailure = null;
 
         // Act
-        var deletionTask = Record.ExceptionAsync(() => ExecuteOperationsAsync(
+        var deletionTask = ExecuteOperationsAsync(
             context,
             deletion.Operations,
-            CancellationToken.None));
+            cancellation.Token);
 
         try
         {
@@ -554,21 +566,29 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
                 observer,
                 migrationConnection.ProcessID,
                 writer.ProcessID,
-                cancellationToken: CancellationToken.None);
+                deletionTask,
+                cancellationToken: cancellation.Token);
 
-            await writerTransaction.CommitAsync();
+            await writerTransaction.CommitAsync(cancellation.Token);
             writerCommitted = true;
-            failure = await deletionTask;
+            failure = await Record.ExceptionAsync(() => deletionTask);
+        }
+        catch (Exception primaryException)
+        {
+            primaryFailure = primaryException;
+
+            throw;
         }
         finally
         {
-            if (!writerCommitted)
-            {
-                await writerTransaction.RollbackAsync();
-            }
-
-            await deletionTask;
-            await migrationTransaction.RollbackAsync();
+            await OwnedTestOperationCleanup.CompleteAsync(
+                primaryFailure ?? failure,
+                deletionTask,
+                writerCommitted
+                    ? null
+                    : () => writerTransaction.RollbackAsync(CancellationToken.None),
+                cancellation,
+                () => migrationTransaction.RollbackAsync(CancellationToken.None));
         }
 
         // Assert
@@ -616,14 +636,16 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
 
         await using var observer = new NpgsqlConnection(connectionString);
         await observer.OpenAsync();
+        using var cancellation = new CancellationTokenSource();
         var writerCommitted = false;
-        Exception? failure;
+        Exception? failure = null;
+        Exception? primaryFailure = null;
 
         // Act
-        var deletionTask = Record.ExceptionAsync(() => ExecuteOperationsAsync(
+        var deletionTask = ExecuteOperationsAsync(
             context,
             deletion.Operations,
-            CancellationToken.None));
+            cancellation.Token);
 
         try
         {
@@ -631,20 +653,29 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
                 observer,
                 migrationConnection.ProcessID,
                 writer.ProcessID,
-                cancellationToken: CancellationToken.None);
+                deletionTask,
+                cancellationToken: cancellation.Token);
 
-            await writerTransaction.CommitAsync();
+            await writerTransaction.CommitAsync(cancellation.Token);
             writerCommitted = true;
-            failure = await deletionTask;
+            failure = await Record.ExceptionAsync(() => deletionTask);
+        }
+        catch (Exception primaryException)
+        {
+            primaryFailure = primaryException;
+
+            throw;
         }
         finally
         {
-            if (!writerCommitted)
-            {
-                await writerTransaction.RollbackAsync();
-            }
-
-            await deletionTask;
+            await OwnedTestOperationCleanup.CompleteAsync(
+                primaryFailure ?? failure,
+                deletionTask,
+                writerCommitted
+                    ? null
+                    : () => writerTransaction.RollbackAsync(CancellationToken.None),
+                cancellation,
+                afterDrain: null);
         }
 
         // Assert
@@ -690,11 +721,11 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         await using var observer = new NpgsqlConnection(connectionString);
         await observer.OpenAsync();
         using var cancellation = new CancellationTokenSource();
-        Exception? failure;
+        Exception? failure = null;
+        Exception? primaryFailure = null;
 
         // Act
-        var deletionTask = Record.ExceptionAsync(() =>
-            ExecuteOperationsAsync(context, deletion.Operations, cancellation.Token));
+        var deletionTask = ExecuteOperationsAsync(context, deletion.Operations, cancellation.Token);
 
         try
         {
@@ -702,15 +733,26 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
                 observer,
                 migrationConnection.ProcessID,
                 writer.ProcessID,
+                deletionTask,
                 cancellation.Token);
 
-            cancellation.Cancel();
-            failure = await deletionTask;
+            await cancellation.CancelAsync();
+            failure = await Record.ExceptionAsync(() => deletionTask);
+        }
+        catch (Exception primaryException)
+        {
+            primaryFailure = primaryException;
+
+            throw;
         }
         finally
         {
-            await writerTransaction.RollbackAsync();
-            await deletionTask;
+            await OwnedTestOperationCleanup.CompleteAsync(
+                primaryFailure ?? failure,
+                deletionTask,
+                () => writerTransaction.RollbackAsync(CancellationToken.None),
+                cancellation,
+                afterDrain: null);
         }
 
         var remainingSource = await ScalarIntAsync(
@@ -778,16 +820,18 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         await writer.OpenAsync();
         await using var observer = new NpgsqlConnection(connectionString);
         await observer.OpenAsync();
+        using var cancellation = new CancellationTokenSource();
         var released = false;
-        Task<Exception?>? insertionTask = null;
-        Exception? deletionFailure;
-        Exception? insertionFailure;
+        Task? insertionTask = null;
+        Exception? deletionFailure = null;
+        Exception? insertionFailure = null;
+        Exception? primaryFailure = null;
 
         // Act
-        var deletionTask = Record.ExceptionAsync(() => ExecuteOperationsAsync(
+        var deletionTask = ExecuteOperationsAsync(
             context,
             deletion.Operations,
-            CancellationToken.None));
+            cancellation.Token);
 
         try
         {
@@ -795,19 +839,20 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
                 observer,
                 migrationConnection.ProcessID,
                 controller.ProcessID,
-                cancellationToken: CancellationToken.None);
+                deletionTask,
+                cancellationToken: cancellation.Token);
 
-            insertionTask = Record.ExceptionAsync(() =>
-                ExecuteModelDeleteFenceSqlAsync(
-                    writer,
-                    "INSERT INTO model_fence_users VALUES (11, 1);",
-                    cancellationToken: CancellationToken.None));
+            insertionTask = ExecuteModelDeleteFenceSqlAsync(
+                writer,
+                "INSERT INTO model_fence_users VALUES (11, 1);",
+                cancellationToken: cancellation.Token);
 
             await WaitForModelDeleteFenceBlockerAsync(
                 observer,
                 writer.ProcessID,
                 migrationConnection.ProcessID,
-                cancellationToken: CancellationToken.None);
+                insertionTask,
+                cancellationToken: cancellation.Token);
 
             await ExecuteModelDeleteFenceSqlAsync(
                 controller,
@@ -815,24 +860,29 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
                 cancellationToken: CancellationToken.None);
 
             released = true;
-            deletionFailure = await deletionTask;
-            insertionFailure = await insertionTask;
+            deletionFailure = await Record.ExceptionAsync(() => deletionTask);
+            insertionFailure = await Record.ExceptionAsync(() => insertionTask);
+        }
+        catch (Exception primaryException)
+        {
+            primaryFailure = primaryException;
+
+            throw;
         }
         finally
         {
-            if (!released)
-            {
-                await ExecuteModelDeleteFenceSqlAsync(
-                    controller,
-                    "SELECT pg_catalog.pg_advisory_unlock(" + rendezvous + ");",
-                    cancellationToken: CancellationToken.None);
-            }
-
-            await deletionTask;
-            if (insertionTask is not null)
-            {
-                await insertionTask;
-            }
+            await OwnedTestOperationCleanup.CompleteAsync(
+                primaryFailure ?? deletionFailure ?? insertionFailure,
+                insertionTask is null
+                    ? deletionTask
+                    : Task.WhenAll(deletionTask, insertionTask),
+                released
+                    ? null
+                    : () => ExecuteModelDeleteFenceSqlAsync(
+                        controller,
+                        "SELECT pg_catalog.pg_advisory_unlock(" + rendezvous + ");",
+                        cancellationToken: CancellationToken.None),
+                cancellation);
         }
 
         // Assert
@@ -887,36 +937,43 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
 
         await using var observer = new NpgsqlConnection(connectionString);
         await observer.OpenAsync();
+        using var cancellation = new CancellationTokenSource();
         var migrationCommitted = false;
-        Task<Exception?>? writerCommitTask = null;
-        Exception? failure;
+        Task? writerCommitTask = null;
+        Exception? failure = null;
+        Exception? primaryFailure = null;
 
         // Act
         try
         {
-            await ExecuteOperationsAsync(context, deletion.Operations, CancellationToken.None);
-            writerCommitTask = Record.ExceptionAsync(() => writerTransaction.CommitAsync());
+            await ExecuteOperationsAsync(context, deletion.Operations, cancellation.Token);
+            writerCommitTask = writerTransaction.CommitAsync(cancellation.Token);
             await WaitForModelDeleteFenceBlockerAsync(
                 observer,
                 writer.ProcessID,
                 migrationConnection.ProcessID,
-                cancellationToken: CancellationToken.None);
+                writerCommitTask,
+                cancellationToken: cancellation.Token);
 
-            await migrationTransaction.CommitAsync();
+            await migrationTransaction.CommitAsync(cancellation.Token);
             migrationCommitted = true;
-            failure = await writerCommitTask;
+            failure = await Record.ExceptionAsync(() => writerCommitTask);
+        }
+        catch (Exception primaryException)
+        {
+            primaryFailure = primaryException;
+
+            throw;
         }
         finally
         {
-            if (!migrationCommitted)
-            {
-                await migrationTransaction.RollbackAsync();
-            }
-
-            if (writerCommitTask is not null)
-            {
-                await writerCommitTask;
-            }
+            await OwnedTestOperationCleanup.CompleteAsync(
+                primaryFailure ?? failure,
+                writerCommitTask,
+                migrationCommitted
+                    ? null
+                    : () => migrationTransaction.RollbackAsync(CancellationToken.None),
+                cancellation);
         }
 
         // Assert
@@ -1099,28 +1156,36 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
     /// <param name="observer">The independent fixture observer connection.</param>
     /// <param name="blockedPid">The generated-delete backend expected to wait.</param>
     /// <param name="blockingPid">The uncommitted writer backend that must cause the wait.</param>
+    /// <param name="pending">The producer that must remain pending until its blocker is observed.</param>
     /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
     /// <returns>The asynchronous fixture operation or observation.</returns>
     private static async Task WaitForModelDeleteFenceBlockerAsync(
         NpgsqlConnection observer,
         int blockedPid,
         int blockingPid,
+        Task pending,
         CancellationToken cancellationToken
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        // WHY: Keep the fixture's bounded observation window without discarding the caller's earlier cancellation.
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(30));
         await using var command = observer.CreateCommand();
         command.CommandText = "SELECT @blocker = ANY(pg_catalog.pg_blocking_pids(@blocked));";
         command.Parameters.AddWithValue("blocker", blockingPid);
         command.Parameters.AddWithValue("blocked", blockedPid);
 
-        while (!Convert.ToBoolean(await command.ExecuteScalarAsync(timeout.Token), CultureInfo.InvariantCulture))
+        // WHY: A fixed polling deadline rejects slow but correct workers. The
+        // actual producer instead makes a missing blocker terminal on failure.
+        while (!pending.IsCompleted)
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(10), timeout.Token);
+            if (Convert.ToBoolean(await command.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture))
+            {
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(10), cancellationToken);
         }
+
+        throw new InvalidOperationException("The PostgreSQL operation completed before its expected native blocker.");
     }
 }

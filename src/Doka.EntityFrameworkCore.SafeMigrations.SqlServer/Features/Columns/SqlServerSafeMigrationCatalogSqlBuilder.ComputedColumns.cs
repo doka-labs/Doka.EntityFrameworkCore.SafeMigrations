@@ -451,14 +451,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private static string ComputedVariable(
         ExpectedColumnDefinition definition,
         string facet
-    )
-        => "@doka_computed_"
-            + facet
-            + "_"
-            + Convert
-                .ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(definition.Name)))
-                .AsSpan(0, 24)
-                .ToString();
+    ) => "@doka_computed_"
+        + facet
+        + "_"
+        + Convert
+            .ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(definition.Name)))
+            .AsSpan(0, 24)
+            .ToString();
 
     private string ComputedSql(
             ExpectedColumnDefinition definition,
@@ -665,8 +664,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <summary>Rejects authored collation qualifiers and untrusted tokens before private native compilation.</summary>
     private static bool HasSupportedComputedCollation(
         ExpectedColumnDefinition definition
-    )
-        => definition.Collation is not { } collation
-            || (collation.Schema is null
-                && SqlServerSafeMigrationSqlExpressionRenderer.IsSqlServerCollationName(collation.Name));
+    ) => definition.Collation is not { } collation
+        || (collation.Schema is null
+            && SqlServerSafeMigrationSqlExpressionRenderer.IsSqlServerCollationName(collation.Name));
 }

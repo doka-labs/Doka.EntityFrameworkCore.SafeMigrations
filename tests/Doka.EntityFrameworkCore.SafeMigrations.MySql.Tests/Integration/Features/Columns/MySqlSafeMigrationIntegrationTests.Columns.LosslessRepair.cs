@@ -1644,7 +1644,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     );
 }
 
-public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlColumnsLosslessRepairIntegrationTests
 {
     /// <summary>Performs the read session questions test operation with explicit cancellation.</summary>
     /// <param name="context">The context for this operation.</param>

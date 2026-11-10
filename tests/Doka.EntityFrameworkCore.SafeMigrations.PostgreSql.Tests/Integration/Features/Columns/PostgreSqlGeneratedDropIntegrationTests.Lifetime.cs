@@ -258,12 +258,11 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
     /// </summary>
     private static void AppendGeneratedSourceCopy(
         MigrationBuilder builder
-    )
-        => builder.AddColumnIfNotExistsFromModel(operationBuilder => operationBuilder.AddColumn<int>(
-            "derived",
-            "generated_drop",
-            type: "integer",
-            nullable: true,
-            computedColumnSql: "source",
-            stored: true));
+    ) => builder.AddColumnIfNotExistsFromModel(operationBuilder => operationBuilder.AddColumn<int>(
+        "derived",
+        "generated_drop",
+        type: "integer",
+        nullable: true,
+        computedColumnSql: "source",
+        stored: true));
 }

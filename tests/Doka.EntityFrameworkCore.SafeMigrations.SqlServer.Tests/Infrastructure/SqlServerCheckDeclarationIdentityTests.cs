@@ -19,13 +19,11 @@ public sealed class SqlServerCheckDeclarationIdentityTests
         // Assert
         Assert.Contains(
             captured,
-            static reference => reference.Scope == SqlServerIdentifierScope.SchemaObject
-                && reference.Name == "Nodes");
+            static reference => reference is { Scope: SqlServerIdentifierScope.SchemaObject, Name: "Nodes" });
 
         Assert.Contains(
             captured,
-            static reference => reference.Scope == SqlServerIdentifierScope.SchemaObject
-                && reference.Name == "nodes");
+            static reference => reference is { Scope: SqlServerIdentifierScope.SchemaObject, Name: "nodes" });
 
         Assert.Contains(captured, static reference => reference.Name == "CK_source");
         Assert.Contains(

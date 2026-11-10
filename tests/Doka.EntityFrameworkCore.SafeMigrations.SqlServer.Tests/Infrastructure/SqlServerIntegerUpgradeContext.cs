@@ -163,6 +163,5 @@ public sealed class SqlServerIntegerUpgradeMigration : Migration
     /// <inheritdoc />
     protected override void Down(
         MigrationBuilder migrationBuilder
-    )
-        => throw new NotSupportedException("A lossless integer upgrade does not authorize automatic narrowing.");
+    ) => throw new NotSupportedException("A lossless integer upgrade does not authorize automatic narrowing.");
 }

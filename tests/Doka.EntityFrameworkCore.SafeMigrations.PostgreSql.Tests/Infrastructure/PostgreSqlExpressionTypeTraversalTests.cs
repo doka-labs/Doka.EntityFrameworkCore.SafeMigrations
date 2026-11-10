@@ -486,11 +486,10 @@ public sealed class PostgreSqlExpressionTypeTraversalTests
     private static string InferGeneratedCategory(
         PostgreSqlSafeMigrationCatalogSqlBuilder catalog,
         SafeMigrationSqlExpression expression
-    )
-        => catalog
-            .GetType()
-            .GetMethod("InferGeneratedCaseCategory", PrivateInstance)!
-            .Invoke(catalog, [expression, null])!.ToString()!;
+    ) => catalog
+        .GetType()
+        .GetMethod("InferGeneratedCaseCategory", PrivateInstance)!
+        .Invoke(catalog, [expression, null])!.ToString()!;
 
     /// <summary>Publishes only builtin OIDs and the native integer-widening edge used by these tests.</summary>
     private static void SeedNativeFacts(

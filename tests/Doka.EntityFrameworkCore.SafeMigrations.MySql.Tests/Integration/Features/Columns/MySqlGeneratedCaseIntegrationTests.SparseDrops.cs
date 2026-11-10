@@ -740,15 +740,16 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     }
 
     /// <summary>Reads physical presence so a no-op implementation cannot satisfy DROP success assertions.</summary>
+    /// <param name="connectionString">The test database containing the sparse generated-column owner.</param>
+    /// <param name="name">The fixture column whose physical catalog presence is counted.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static Task<int> SparseDropColumnCountAsync(
         string connectionString,
         string name,
         CancellationToken cancellationToken
-    )
-        => ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = 'generated_sparse_drop' AND COLUMN_NAME = '{name}';",
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connectionString,
+        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+        + $"AND TABLE_NAME = 'generated_sparse_drop' AND COLUMN_NAME = '{name}';",
+        cancellationToken: cancellationToken);
 }

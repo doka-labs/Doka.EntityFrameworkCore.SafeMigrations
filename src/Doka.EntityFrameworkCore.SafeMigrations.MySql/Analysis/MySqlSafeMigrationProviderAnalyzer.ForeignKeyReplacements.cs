@@ -13,16 +13,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     private Dictionary<(string? Schema, string Table, string Column), bool>? _projectedForeignKeyColumnNullability;
 
     /// <summary>Retains native member identity under the independently captured table-name profile.</summary>
-    private PhysicalForeignKeyMemberComparer PhysicalMemberComparer =>
-        _tableNamesIgnoreCase
-            ? PhysicalForeignKeyMemberComparer.IgnoreCaseInstance
-            : PhysicalForeignKeyMemberComparer.Instance;
+    private PhysicalForeignKeyMemberComparer PhysicalMemberComparer => _tableNamesIgnoreCase
+        ? PhysicalForeignKeyMemberComparer.IgnoreCaseInstance
+        : PhysicalForeignKeyMemberComparer.Instance;
 
     /// <summary>Retains native table identity under the same profile as provider-neutral projection.</summary>
-    private PhysicalForeignKeyOwnerComparer PhysicalOwnerComparer =>
-        _tableNamesIgnoreCase
-            ? PhysicalForeignKeyOwnerComparer.IgnoreCaseInstance
-            : PhysicalForeignKeyOwnerComparer.Instance;
+    private PhysicalForeignKeyOwnerComparer PhysicalOwnerComparer => _tableNamesIgnoreCase
+        ? PhysicalForeignKeyOwnerComparer.IgnoreCaseInstance
+        : PhysicalForeignKeyOwnerComparer.Instance;
 
     /// <inheritdoc />
     SafeMigrationProviderAnalysis ISafeMigrationProjectedDependencyAnalyzer.ValidateProjectedOperation(

@@ -469,8 +469,7 @@ public sealed class MySqlKeyChangeColumnProofTests
     /// <returns>The native projected-column analyzer.</returns>
     private static ISafeMigrationProjectedColumnAnalyzer GetColumnAnalyzer(
         DbContext context
-    )
-        => (ISafeMigrationProjectedColumnAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
+    ) => (ISafeMigrationProjectedColumnAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
 
     /// <summary>Builds Core projection with the real provider's physical identity and column callbacks.</summary>
     /// <param name="context">The offline provider service scope.</param>
@@ -492,24 +491,23 @@ public sealed class MySqlKeyChangeColumnProofTests
     /// <returns>The immutable operation intent, with no fabricated table convergence.</returns>
     private static SafeMigrationIntent KeyChange(
         string change
-    )
-        => change switch
-        {
-            "primary-drop" => new DropPrimaryKeyIntent("pk_items", "items"),
-            "foreign-drop" => new DropForeignKeyIntent("fk_items_parent", "items"),
-            "primary-create" => new EnsurePrimaryKeyIntent(
-                new ExpectedPrimaryKeyDefinition("pk_items", "items", ["reference_id"])),
-            "foreign-create" => new EnsureForeignKeyIntent(
-                new ExpectedForeignKeyDefinition(
-                    "fk_items_parent",
-                    "items",
-                    ["reference_id"],
-                    "parents",
-                    ["id"])),
-            "index-drop" => new DropIndexIntent("ix_reference", "items"),
-            "column-drop" => new DropColumnIntent("other_id", "items"),
-            _ => new EnsureIndexIntent(Index(change)),
-        };
+    ) => change switch
+    {
+        "primary-drop" => new DropPrimaryKeyIntent("pk_items", "items"),
+        "foreign-drop" => new DropForeignKeyIntent("fk_items_parent", "items"),
+        "primary-create" => new EnsurePrimaryKeyIntent(
+            new ExpectedPrimaryKeyDefinition("pk_items", "items", ["reference_id"])),
+        "foreign-create" => new EnsureForeignKeyIntent(
+            new ExpectedForeignKeyDefinition(
+                "fk_items_parent",
+                "items",
+                ["reference_id"],
+                "parents",
+                ["id"])),
+        "index-drop" => new DropIndexIntent("ix_reference", "items"),
+        "column-drop" => new DropColumnIntent("other_id", "items"),
+        _ => new EnsureIndexIntent(Index(change)),
+    };
 
     /// <summary>Builds index contracts whose independently controlled facets narrow provider certification.</summary>
     /// <param name="shape">The ordinary or disallowed native index shape.</param>
@@ -671,12 +669,11 @@ public sealed class MySqlKeyChangeColumnProofTests
     private static SafeMigrationOperation NullabilityOperation(
         string name,
         bool ensure
-    )
-        => new(
-            ensure
-                ? new EnsureColumnIntent("items", Column(name, nullable: true))
-                : new AlterColumnIntent("items", Column(name, nullable: true), Column(name, nullable: false)),
-            SafeMigrationPolicy.RepairIfSafe);
+    ) => new(
+        ensure
+            ? new EnsureColumnIntent("items", Column(name, nullable: true))
+            : new AlterColumnIntent("items", Column(name, nullable: true), Column(name, nullable: false)),
+        SafeMigrationPolicy.RepairIfSafe);
 
     /// <summary>Creates supported generic GUID storage or one explicit independent source-facet drift.</summary>
     /// <param name="name">The generic column identifier.</param>
@@ -687,28 +684,27 @@ public sealed class MySqlKeyChangeColumnProofTests
         string name,
         bool nullable,
         string drift = "none"
-    )
-        => new(
-            name,
-            typeof(Guid),
-            nullable,
-            drift == "store-type"
-                ? "binary(16)"
-                : "char(36)",
-            collation: drift == "collation"
-                ? new SafeMigrationCollationIdentifier("utf8mb4_bin")
-                : null,
-            comment: drift == "comment"
-                ? "changed"
-                : null,
-            defaultValue: drift == "default"
-                ? SafeMigrationDefaultValue.Literal(Guid.Empty)
-                : null)
-        {
-            ProviderAnnotations = drift == "annotation"
-                ? UnsupportedAnnotations()
-                : [],
-        };
+    ) => new(
+        name,
+        typeof(Guid),
+        nullable,
+        drift == "store-type"
+            ? "binary(16)"
+            : "char(36)",
+        collation: drift == "collation"
+            ? new SafeMigrationCollationIdentifier("utf8mb4_bin")
+            : null,
+        comment: drift == "comment"
+            ? "changed"
+            : null,
+        defaultValue: drift == "default"
+            ? SafeMigrationDefaultValue.Literal(Guid.Empty)
+            : null)
+    {
+        ProviderAnnotations = drift == "annotation"
+            ? UnsupportedAnnotations()
+            : [],
+    };
 
     /// <summary>Captures unsupported metadata through the real provider-annotation immutability boundary.</summary>
     /// <returns>The independently unsupported immutable metadata.</returns>
@@ -732,20 +728,19 @@ public sealed class MySqlKeyChangeColumnProofTests
     /// <returns>The provider certificate, not an authored source declaration.</returns>
     private static SafeMigrationProviderAnalysis ColumnProof(
         bool matching = false
-    )
-        => new(
-            matching
-                ? SafeMigrationObservedState.Matching
-                : SafeMigrationObservedState.Different,
-            matching
-                ? SafeMigrationRepairCapability.None
-                : SafeMigrationRepairCapability.Safe,
-            matching,
-            "captured_column_certificate",
-            SafeMigrationOperationalImpact.TableRewritePossible,
-            matching
-                ? []
-                : [Difference("column_nullability")]);
+    ) => new(
+        matching
+            ? SafeMigrationObservedState.Matching
+            : SafeMigrationObservedState.Different,
+        matching
+            ? SafeMigrationRepairCapability.None
+            : SafeMigrationRepairCapability.Safe,
+        matching,
+        "captured_column_certificate",
+        SafeMigrationOperationalImpact.TableRewritePossible,
+        matching
+            ? []
+            : [Difference("column_nullability")]);
 
     /// <summary>Creates the standard offline provider service scope without a live server or container.</summary>
     /// <returns>The disposable context carrying production provider services.</returns>

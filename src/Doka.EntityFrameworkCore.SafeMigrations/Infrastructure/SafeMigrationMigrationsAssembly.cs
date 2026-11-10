@@ -2,7 +2,6 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
 {
-    private readonly DbContext _context;
     private readonly TypeInfo[] _definedTypes;
     private readonly IMigrationsIdGenerator _idGenerator;
     private readonly Type _migrationContextType;
@@ -22,41 +21,40 @@ internal sealed class SafeMigrationMigrationsAssembly : IMigrationsAssembly
         ArgumentNullException.ThrowIfNull(idGenerator);
         ArgumentNullException.ThrowIfNull(canonicalContext);
 
-        _context = currentContext.Context;
+        var context = currentContext.Context;
         _idGenerator = idGenerator;
 
         var relationalOptions = RelationalOptionsExtension.Extract(options);
         Assembly = relationalOptions.MigrationsAssemblyObject
             ?? (relationalOptions.MigrationsAssembly is null
-                ? _context.GetType()
+                ? context.GetType()
                     .Assembly
                 : Assembly.Load(new AssemblyName(relationalOptions.MigrationsAssembly)));
 
         _definedTypes = GetDefinedTypes(Assembly);
 
-        _migrationContextType = canonicalContext.ContextType ?? _context.GetType();
-        if (!_migrationContextType.IsInstanceOfType(_context))
+        _migrationContextType = canonicalContext.ContextType ?? context.GetType();
+        if (!_migrationContextType.IsInstanceOfType(context))
         {
             throw new InvalidOperationException(
                 $"Canonical migration context '{DisplayType(_migrationContextType)}' is not assignable from runtime "
-                + $"context '{DisplayType(_context.GetType())}'. Configure a canonical base context compatible "
+                + $"context '{DisplayType(context.GetType())}'. Configure a canonical base context compatible "
                 + "with this runtime context, or use a separate migration lineage.");
         }
     }
 
-    public IReadOnlyDictionary<string, TypeInfo> Migrations =>
-        _migrations ??= _definedTypes
-            .Where(type => !type.IsAbstract && typeof(Migration).IsAssignableFrom(type))
-            .Select(type => new
-            {
-                Type = type,
-                Context = type.GetCustomAttribute<DbContextAttribute>()
-                    ?.ContextType,
-                Migration = type.GetCustomAttribute<MigrationAttribute>(),
-            })
-            .Where(candidate => candidate.Context == _migrationContextType && candidate.Migration is not null)
-            .OrderBy(candidate => candidate.Migration!.Id, StringComparer.Ordinal)
-            .ToDictionary(candidate => candidate.Migration!.Id, candidate => candidate.Type, StringComparer.Ordinal);
+    public IReadOnlyDictionary<string, TypeInfo> Migrations => _migrations ??= _definedTypes
+        .Where(type => !type.IsAbstract && typeof(Migration).IsAssignableFrom(type))
+        .Select(type => new
+        {
+            Type = type,
+            Context = type.GetCustomAttribute<DbContextAttribute>()
+                ?.ContextType,
+            Migration = type.GetCustomAttribute<MigrationAttribute>(),
+        })
+        .Where(candidate => candidate.Context == _migrationContextType && candidate.Migration is not null)
+        .OrderBy(candidate => candidate.Migration!.Id, StringComparer.Ordinal)
+        .ToDictionary(candidate => candidate.Migration!.Id, candidate => candidate.Type, StringComparer.Ordinal);
 
     public ModelSnapshot? ModelSnapshot
     {

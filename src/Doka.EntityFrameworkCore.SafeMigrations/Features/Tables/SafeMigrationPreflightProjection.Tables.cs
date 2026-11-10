@@ -17,9 +17,20 @@ internal sealed partial class SafeMigrationPreflightProjection
             return Analysis(SafeMigrationObservedState.Missing);
         }
 
+        if (intent.Definition.ProviderAnnotations.Count > 0
+            && liveAnalysis.ObservedState == SafeMigrationObservedState.Unsupported
+            && (!_prerequisites.TryGetValue(key, out var physicalLifetime) || !physicalLifetime.NewlyCreated))
+        {
+            // WHY: Accepted column/key work does not replace the physical engine.
+            // Keep its mandatory live contract refusal instead of converting it
+            // to ignorable Different under a convergence ExistenceOnly policy.
+            return liveAnalysis;
+        }
+
         if (IsProjectedTableStructureUnknown(intent.Definition.Table, intent.Definition.Schema))
         {
-            return intent.Mode == SafeMigrationTableMode.ConvergenceContainer
+            return intent is
+                { Mode: SafeMigrationTableMode.ConvergenceContainer, Definition.ProviderAnnotations.Count: 0 }
                 ? Analysis(SafeMigrationObservedState.Matching)
                 : StructureStateUnknown();
         }
@@ -28,7 +39,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         {
             if (_prerequisites.TryGetValue(key, out var prerequisites))
             {
-                if (intent.Mode == SafeMigrationTableMode.ConvergenceContainer)
+                if (intent is
+                    { Mode: SafeMigrationTableMode.ConvergenceContainer, Definition.ProviderAnnotations.Count: 0 })
                 {
                     return Analysis(SafeMigrationObservedState.Matching);
                 }
@@ -54,9 +66,30 @@ internal sealed partial class SafeMigrationPreflightProjection
             return liveAnalysis;
         }
 
+        var newlyCreated = _prerequisites.TryGetValue(key, out var acceptedLifetime) && acceptedLifetime.NewlyCreated;
+        var providerFailure = _projectedDependencyAnalyzer?.ValidateProjectedTableProviderMetadata(
+            intent,
+            table.ProviderAnnotations,
+            newlyCreated,
+            liveAnalysis);
+
+        if (providerFailure is not null)
+        {
+            return providerFailure;
+        }
+
+        if (_projectedDependencyAnalyzer is null
+            && intent.Definition.ProviderAnnotations.Count > 0
+            && !SafeMigrationDefinitionEquivalence.ProviderAnnotations(
+                table.ProviderAnnotations,
+                intent.Definition.ProviderAnnotations))
+        {
+            return StructureStateUnknown();
+        }
+
         return Analysis(
             intent.Mode == SafeMigrationTableMode.ConvergenceContainer
-            || SafeMigrationDefinitionEquivalence.Table(table.Definition, intent.Definition)
+            || SafeMigrationDefinitionEquivalence.TableIntrinsic(table.Definition, intent.Definition)
                 ? SafeMigrationObservedState.Matching
                 : SafeMigrationObservedState.Different);
     }
@@ -146,7 +179,6 @@ internal sealed partial class SafeMigrationPreflightProjection
         EnsureTableIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis,
         SafeMigrationProviderAnalysis analysis,
-        SafeMigrationDecision decision,
         bool hasExactTargetDefinition
     )
     {

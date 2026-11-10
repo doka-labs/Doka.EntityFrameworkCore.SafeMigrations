@@ -1257,7 +1257,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     }
 }
 
-public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class MySqlColumnsIntegrationTests
 {
     [Fact]
     public async Task UnmappedClrType_IsClassifiedUnsupportedBeforeDdl()
@@ -1416,7 +1416,7 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
         var version = Fixture.ServerVersion.Version;
 
         return Fixture.IsMariaDb
-            && ((version.Major == 11 && version.Minor == 8) || (version.Major == 12 && version.Minor == 3));
+            && version is { Major: 11, Minor: 8 } or { Major: 12, Minor: 3 };
     }
 
     [Fact]

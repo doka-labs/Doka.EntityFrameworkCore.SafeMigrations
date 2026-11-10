@@ -127,8 +127,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     /// <summary>Identifies classifiers that require isolated dynamic name binding or statement-local setup.</summary>
     private static bool RequiresDelayedCatalogBinding(
         SqlServerSafeMigrationRuntimePlan plan
-    )
-        => plan.RequiresDelayedBinding || plan.CatalogPreambleSql is not null;
+    ) => plan.RequiresDelayedBinding || plan.CatalogPreambleSql is not null;
 
     /// <summary>Reads one bounded transport batch and returns the next index in the stable classifier order.</summary>
     private static async Task<int> ReadCatalogBatchAsync(

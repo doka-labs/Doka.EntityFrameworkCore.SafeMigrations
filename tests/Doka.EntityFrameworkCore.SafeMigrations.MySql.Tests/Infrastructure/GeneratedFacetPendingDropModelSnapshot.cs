@@ -7,6 +7,5 @@ public sealed class GeneratedFacetPendingDropModelSnapshot : ModelSnapshot
     /// <inheritdoc />
     protected override void BuildModel(
         ModelBuilder modelBuilder
-    )
-        => GeneratedFacetPendingDropDbContext.ConfigureModel(modelBuilder);
+    ) => GeneratedFacetPendingDropDbContext.ConfigureModel(modelBuilder);
 }

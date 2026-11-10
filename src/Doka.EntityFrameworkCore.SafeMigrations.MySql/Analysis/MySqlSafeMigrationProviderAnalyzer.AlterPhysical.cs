@@ -81,10 +81,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         )
     {
         var tables = operations
-            .Where(static operation => operation.Intent is AlterColumnIntent alter
-                && alter.OldDefinition is not null
-                && (!StringComparer.OrdinalIgnoreCase.Equals(alter.OldDefinition.StoreType, alter.Definition.StoreType)
-                    || alter.OldDefinition.MaxLength != alter.Definition.MaxLength))
+            .Where(static operation => operation.Intent is AlterColumnIntent { OldDefinition: { } source } alter
+                && (!StringComparer.OrdinalIgnoreCase.Equals(source.StoreType, alter.Definition.StoreType)
+                    || source.MaxLength != alter.Definition.MaxLength))
             .Select(static operation => ((AlterColumnIntent)operation.Intent).Table)
             .Distinct(StringComparer.Ordinal)
             .OrderBy(static table => table, StringComparer.Ordinal)

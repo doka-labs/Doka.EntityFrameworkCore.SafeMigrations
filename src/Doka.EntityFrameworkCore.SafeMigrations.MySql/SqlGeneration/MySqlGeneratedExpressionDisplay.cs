@@ -137,7 +137,7 @@ internal static class MySqlGeneratedExpressionDisplay
                         ChildContext(
                             frame.Children.Expression,
                             index,
-                            frame.Precedence,
+                            frame.ParentPrecedence,
                             out parentPrecedence,
                             out rightOperand);
 
@@ -523,7 +523,7 @@ internal static class MySqlGeneratedExpressionDisplay
         internal MySqlExpressionChildCursor Children = new(expression);
 
         /// <summary>The parent's binding strength for restoring each child context.</summary>
-        internal readonly int Precedence = precedence;
+        internal readonly int ParentPrecedence = precedence;
 
         /// <summary>Whether this continuation must close a native grouping delimiter.</summary>
         internal readonly bool Parentheses = parentheses;

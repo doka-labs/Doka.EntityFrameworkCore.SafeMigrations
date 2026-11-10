@@ -51,9 +51,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         CancellationToken cancellationToken
     )
     {
-        if (!analyses.Any(static analysis => analysis.ObservedState == SafeMigrationObservedState.Unsupported
-            && !analysis.IsInvariantUnsupported
-            && analysis.Code == "foreign_key_multi_valued_supporting_index"))
+        if (!analyses.Any(static analysis => analysis is
+            {
+                ObservedState: SafeMigrationObservedState.Unsupported,
+                IsInvariantUnsupported: false,
+                Code: "foreign_key_multi_valued_supporting_index",
+            }))
         {
             return;
         }

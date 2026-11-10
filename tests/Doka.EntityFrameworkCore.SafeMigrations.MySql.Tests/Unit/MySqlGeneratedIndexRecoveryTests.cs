@@ -109,7 +109,7 @@ public sealed class MySqlGeneratedIndexRecoveryTests
                 builder
                     .Operations
                     .Cast<SafeMigrationOperation>()
-                    .ToArray()
+                    .ToArray(),
             ]);
     }
 

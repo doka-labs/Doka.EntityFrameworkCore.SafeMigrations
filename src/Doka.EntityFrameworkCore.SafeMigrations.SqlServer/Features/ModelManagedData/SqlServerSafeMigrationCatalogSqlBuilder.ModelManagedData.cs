@@ -370,8 +370,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + $"AND ({BuildModelManagedDataWritableColumnGuard(intent)})";
     }
 
-    private static string SqlServerCompatibilityLevel() =>
-        "(SELECT compatibility_level FROM sys.databases WHERE name = DB_NAME())";
+    private static string SqlServerCompatibilityLevel()
+        => "(SELECT compatibility_level FROM sys.databases WHERE name = DB_NAME())";
 
     private static string ModelManagedDataGuardFailure(
         string commonGuard
@@ -757,7 +757,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 : 8_000;
 
             return int.TryParse(args, NumberStyles.None, CultureInfo.InvariantCulture, out var length)
-                && length is > 0
+                && length > 0
                 && length <= maximum;
         }
 

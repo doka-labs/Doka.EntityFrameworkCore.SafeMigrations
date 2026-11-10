@@ -105,7 +105,7 @@ internal static partial class SafeMigrationDefinitionEquivalence
         && principal.ComputedColumnSql is null
         && principal.ComputedExpression is null;
 
-    private static bool ProviderAnnotations(
+    internal static bool ProviderAnnotations(
         IReadOnlyList<SafeMigrationProviderAnnotation> left,
         IReadOnlyList<SafeMigrationProviderAnnotation> right
     )

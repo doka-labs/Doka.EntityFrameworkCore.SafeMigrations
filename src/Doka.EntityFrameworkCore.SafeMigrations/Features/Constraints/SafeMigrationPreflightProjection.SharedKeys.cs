@@ -2,8 +2,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 internal sealed partial class SafeMigrationPreflightProjection
 {
-    private bool SharesUniqueConstraintAndIndexIdentity =>
-        _projectedKeyAnalyzer?.SharesUniqueConstraintAndIndexIdentity == true;
+    private bool SharesUniqueConstraintAndIndexIdentity
+        => _projectedKeyAnalyzer?.SharesUniqueConstraintAndIndexIdentity == true;
 
     private void CaptureSharedUniqueKeys(
         ProjectedPrerequisites prerequisites,

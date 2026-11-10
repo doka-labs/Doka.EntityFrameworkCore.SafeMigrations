@@ -293,7 +293,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                     [
                         owner] =
                     new LivePrerequisiteCreation(
-                        _livePrerequisiteCreationDefaultsCurrent && captured.CreationEngineEligible,
+                        MySqlSafeMigrationTableMetadata.IsExplicitInnoDb(definition)
+                        || (_livePrerequisiteCreationDefaultsCurrent && captured.CreationEngineEligible),
                         captured.CreationCollation);
 
                 return;
@@ -312,7 +313,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                     [
                         owner] =
                     new LivePrerequisiteCreation(
-                        _livePrerequisiteCreationDefaultsCurrent && pair.Value.CreationEngineEligible,
+                        MySqlSafeMigrationTableMetadata.IsExplicitInnoDb(definition)
+                        || (_livePrerequisiteCreationDefaultsCurrent && pair.Value.CreationEngineEligible),
                         pair.Value.CreationCollation);
 
                 return;
@@ -1100,7 +1102,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             namesFree.Value,
             ownedCollision!.Value,
             localIndexNameOccupied!.Value,
-            multiValuedIndexRisk!.Value,
+            multiValuedIndexRisk.Value,
             keys is null
                 ? []
                 : keys.ToArray(),

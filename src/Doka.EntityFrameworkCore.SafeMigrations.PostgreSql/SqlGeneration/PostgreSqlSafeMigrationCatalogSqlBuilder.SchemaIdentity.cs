@@ -119,8 +119,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     private string BuildSingleOwnerIdentityGuard(
         string table,
         string? optionalAbsentBinding = null
-    )
-        => "(current_schema() IS NOT NULL AND " + BuildNativeOwnerPredicate(table, optionalAbsentBinding) + ")";
+    ) => "(current_schema() IS NOT NULL AND " + BuildNativeOwnerPredicate(table, optionalAbsentBinding) + ")";
 
     /// <summary>Builds an exact table plan with runtime-selected current-schema transition alternatives.</summary>
     /// <param name="operation">The EnsureTable operation being generated without a live connection.</param>
@@ -186,15 +185,14 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <returns>The exact, quoted predicate retaining valid foreign-schema operation streams.</returns>
     public string BuildRejectedAliasGuard(
         IReadOnlyList<string> schemas
-    )
-        => schemas.Count == 0
-            ? "TRUE"
-            : "("
-            + string.Join(
-                " AND ",
-                schemas.Select(schema =>
-                    "current_schema() IS DISTINCT FROM " + Literal(schema)))
-            + ")";
+    ) => schemas.Count == 0
+        ? "TRUE"
+        : "("
+        + string.Join(
+            " AND ",
+            schemas.Select(schema =>
+                "current_schema() IS DISTINCT FROM " + Literal(schema)))
+        + ")";
 
     /// <summary>Requires a connected native owner proof only when this qualifier is the active schema.</summary>
     /// <param name="schema">The authored candidate, not an assumed connection identity.</param>
@@ -203,6 +201,5 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     public string BuildConditionalAliasGuard(
         string schema,
         string guard
-    )
-        => "(CASE WHEN current_schema() = " + Literal(schema) + " THEN (" + guard + ") ELSE TRUE END)";
+    ) => "(CASE WHEN current_schema() = " + Literal(schema) + " THEN (" + guard + ") ELSE TRUE END)";
 }

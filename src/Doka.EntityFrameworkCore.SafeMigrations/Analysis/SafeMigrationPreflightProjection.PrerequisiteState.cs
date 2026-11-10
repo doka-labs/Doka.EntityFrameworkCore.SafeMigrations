@@ -167,14 +167,14 @@ internal sealed partial class SafeMigrationPreflightProjection
     // avoids allocating one short-lived prerequisite object for every accepted column.
     private readonly record struct ProjectedColumn(
         bool IsNullable,
-        bool PreservesNullForExistingRows,
+        bool PreservesExistingNulls,
         bool IsComputed,
         bool AddedToExistingTable
     )
     {
         public static ProjectedColumn Unknown { get; } = new(
             IsNullable: false,
-            PreservesNullForExistingRows: false,
+            PreservesExistingNulls: false,
             IsComputed: true,
             AddedToExistingTable: false);
 
@@ -183,7 +183,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             bool addedToExistingTable
         ) => new(
             definition.IsNullable,
-            SafeMigrationPreflightProjection.PreservesNullForExistingRows(definition.DefaultValue),
+            PreservesNullForExistingRows(definition.DefaultValue),
             definition.ComputedColumnSql is not null || definition.ComputedExpression is not null,
             addedToExistingTable);
 

@@ -857,8 +857,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         /// <inheritdoc />
         public bool PreservesIntrinsicColumnSources(
             SafeMigrationIntent intent
-        )
-            => intent is DropPrimaryKeyIntent || (certifiesDrop && intent is DropColumnIntent);
+        ) => intent is DropPrimaryKeyIntent || (certifiesDrop && intent is DropColumnIntent);
 
         /// <inheritdoc />
         public bool CanReuseLiveColumnProofAfterKeyChanges(
@@ -881,8 +880,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             SafeMigrationProjectedAlterColumnContext context,
             SafeMigrationProviderAnalysis liveAnalysis,
             SafeMigrationProviderAnalysis projectedAnalysis
-        )
-            => projectedAnalysis;
+        ) => projectedAnalysis;
 
         /// <inheritdoc />
         public bool SharesUniqueConstraintAndIndexIdentity => false;

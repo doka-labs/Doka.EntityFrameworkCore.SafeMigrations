@@ -361,7 +361,7 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
             + "ExpectedCheckConstraintDefinition.FromExpression definition before applying the migration.");
     }
 
-    private static void ValidateStandaloneConstraint(
+    private void ValidateStandaloneConstraint(
         MigrationOperation operation
     )
     {
@@ -371,6 +371,17 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
 
         if (annotation is null)
         {
+            return;
+        }
+
+        if (operation is DropPrimaryKeyOperation or DropUniqueConstraintOperation
+            && SafeMigrationOperationCompatibility.Normalize(operation, _providerOperationAdapter)
+                .Kind
+            == SafeMigrationOperationCompatibilityKind.Safe)
+        {
+            // WHY: Only the provider adapter may certify inherited removal
+            // metadata as nonoperative. New constraints and unknown facets
+            // still require their complete physical contract below.
             return;
         }
 

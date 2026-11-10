@@ -253,24 +253,23 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     /// <returns>The isolated schema and deterministic sentinel values.</returns>
     protected static string PrimaryKeyRemovalFixture(
         bool supportingIndexExists
-    )
-        => "CREATE TABLE `key_questions` (`id` char(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB "
-            + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "CREATE TABLE `key_users` (`id` char(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB "
-            + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "CREATE TABLE `key_items` (`question_id` char(36) NOT NULL, `user_id` char(36) NOT NULL, "
-            + "`payload` longtext NOT NULL, PRIMARY KEY (`question_id`, `user_id`), "
-            + (supportingIndexExists
-                ? "KEY `ix_key_items_question` (`question_id`), "
-                : string.Empty)
-            + "KEY `ix_key_items_user` (`user_id`), "
-            + "CONSTRAINT `fk_key_items_question` FOREIGN KEY (`question_id`) "
-            + "REFERENCES `key_questions` (`id`) ON DELETE CASCADE, "
-            + "CONSTRAINT `fk_key_items_user` FOREIGN KEY (`user_id`) "
-            + "REFERENCES `key_users` (`id`) ON DELETE CASCADE) ENGINE=InnoDB "
-            + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `key_questions` VALUES ('00000000-0000-0000-0000-000000000001'); "
-            + "INSERT INTO `key_users` VALUES ('00000000-0000-0000-0000-000000000002'); "
-            + "INSERT INTO `key_items` VALUES ('00000000-0000-0000-0000-000000000001', "
-            + "'00000000-0000-0000-0000-000000000002', 'retained');";
+    ) => "CREATE TABLE `key_questions` (`id` char(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB "
+        + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
+        + "CREATE TABLE `key_users` (`id` char(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB "
+        + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
+        + "CREATE TABLE `key_items` (`question_id` char(36) NOT NULL, `user_id` char(36) NOT NULL, "
+        + "`payload` longtext NOT NULL, PRIMARY KEY (`question_id`, `user_id`), "
+        + (supportingIndexExists
+            ? "KEY `ix_key_items_question` (`question_id`), "
+            : string.Empty)
+        + "KEY `ix_key_items_user` (`user_id`), "
+        + "CONSTRAINT `fk_key_items_question` FOREIGN KEY (`question_id`) "
+        + "REFERENCES `key_questions` (`id`) ON DELETE CASCADE, "
+        + "CONSTRAINT `fk_key_items_user` FOREIGN KEY (`user_id`) "
+        + "REFERENCES `key_users` (`id`) ON DELETE CASCADE) ENGINE=InnoDB "
+        + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
+        + "INSERT INTO `key_questions` VALUES ('00000000-0000-0000-0000-000000000001'); "
+        + "INSERT INTO `key_users` VALUES ('00000000-0000-0000-0000-000000000002'); "
+        + "INSERT INTO `key_items` VALUES ('00000000-0000-0000-0000-000000000001', "
+        + "'00000000-0000-0000-0000-000000000002', 'retained');";
 }

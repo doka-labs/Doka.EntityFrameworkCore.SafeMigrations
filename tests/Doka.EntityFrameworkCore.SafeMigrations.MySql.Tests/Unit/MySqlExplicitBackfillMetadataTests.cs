@@ -773,8 +773,7 @@ public sealed class MySqlExplicitBackfillMetadataTests
     /// <returns>The immutable target definition.</returns>
     private static ExpectedColumnDefinition BackfillDefinition(
         object? value
-    )
-        => SafeMigrationExpectedDefinitionFactory.From(BackfillColumn(value));
+    ) => SafeMigrationExpectedDefinitionFactory.From(BackfillColumn(value));
 
     /// <summary>Creates the provider's required GUID-add shape without synthetic data.</summary>
     /// <param name="value">The marker value to preserve.</param>

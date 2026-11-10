@@ -559,6 +559,9 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
     }
 
     /// <summary>Routes both command entry points through the same isolated execution fixture.</summary>
+    /// <param name="context">The caller-owned context supplying the model, generator and relational connection.</param>
+    /// <param name="operations">The ordered operation stream to generate and execute.</param>
+    /// <param name="asynchronous">Whether generated commands use their asynchronous execution entry point.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task ExecuteDiagnosticOperationsAsync(
         DbContext context,
@@ -585,6 +588,9 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
     }
 
     /// <summary>Preserves synchronous exceptions while adapting the fixture to an asynchronous test.</summary>
+    /// <param name="command">The provider-generated command whose execution entry point is under test.</param>
+    /// <param name="connection">The caller-owned relational connection on which the command executes.</param>
+    /// <param name="asynchronous">Whether to await async execution instead of invoking synchronous execution.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task ExecuteDiagnosticCommandAsync(
         MigrationCommand command,
@@ -670,7 +676,8 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
             IReadOnlyList<MigrationOperation> operations,
             IModel? model = null,
             MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default,
-            IReadOnlyList<MigrationOperation>? guardedOperations = null
+            IReadOnlyList<MigrationOperation>? guardedOperations = null,
+            SqliteCatalogSnapshot? snapshot = null
         ) => [command];
     }
 

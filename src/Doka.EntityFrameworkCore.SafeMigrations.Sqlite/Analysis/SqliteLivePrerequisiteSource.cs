@@ -29,8 +29,7 @@ internal sealed class SqliteLivePrerequisiteSource : ISafeMigrationLivePrerequis
     /// <inheritdoc />
     public bool RequiresLiveForeignKeyQualification(
         EnsureForeignKeyIntent intent
-    ) =>
-        IsMain(intent.Definition.Schema)
+    ) => IsMain(intent.Definition.Schema)
         && IsMain(intent.Definition.PrincipalSchema)
         && _snapshot.Tables.ContainsKey(intent.Definition.Table)
         && _snapshot.Tables.ContainsKey(intent.Definition.PrincipalTable);

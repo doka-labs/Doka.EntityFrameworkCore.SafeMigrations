@@ -256,6 +256,6 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
     /// <summary>Rejects malformed destination facts without exposing physical names or data.</summary>
     /// <returns>The low-cardinality ownership protocol error.</returns>
-    private static InvalidOperationException InvalidMemberRenameTargetResult() =>
-        new("The MySQL member rename destination query returned malformed or incomplete evidence.");
+    private static InvalidOperationException InvalidMemberRenameTargetResult()
+        => new("The MySQL member rename destination query returned malformed or incomplete evidence.");
 }

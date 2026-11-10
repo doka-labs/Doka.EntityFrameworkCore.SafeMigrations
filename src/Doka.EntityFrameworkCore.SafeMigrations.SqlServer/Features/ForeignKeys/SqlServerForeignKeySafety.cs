@@ -11,8 +11,7 @@ internal static class SqlServerForeignKeySafety
     /// <returns>Whether cascade-topology validation is necessary.</returns>
     public static bool HasCascadingAction(
         ExpectedForeignKeyDefinition definition
-    )
-        => IsCascading(definition.OnDelete) || IsCascading(definition.OnUpdate);
+    ) => IsCascading(definition.OnDelete) || IsCascading(definition.OnUpdate);
 
     /// <summary>Renders catalog-only trigger, rowversion, and SET DEFAULT prerequisites.</summary>
     /// <param name="definition">The foreign-key contract.</param>
@@ -192,8 +191,7 @@ internal static class SqlServerForeignKeySafety
     /// <summary>Identifies actions that introduce another cascading tree edge.</summary>
     internal static bool IsCascading(
         ReferentialAction action
-    )
-        => action is ReferentialAction.Cascade or ReferentialAction.SetNull or ReferentialAction.SetDefault;
+    ) => action is ReferentialAction.Cascade or ReferentialAction.SetNull or ReferentialAction.SetDefault;
 
     /// <summary>Validates inline column contracts before their table exists.</summary>
     /// <param name="table">The table whose inline FKs will be created.</param>
@@ -216,8 +214,7 @@ internal static class SqlServerForeignKeySafety
                         && !column.IsNullable)
                     || ((foreignKey.OnDelete == ReferentialAction.SetDefault
                             || foreignKey.OnUpdate == ReferentialAction.SetDefault)
-                        && !column.IsNullable
-                        && column.DefaultValue.Kind == SafeMigrationDefaultValueKind.None))
+                        && column is { IsNullable: false, DefaultValue.Kind: SafeMigrationDefaultValueKind.None }))
                 {
                     return "1 = 0";
                 }
@@ -256,11 +253,10 @@ internal static class SqlServerForeignKeySafety
 
     private static bool IsRowVersion(
         ExpectedColumnDefinition column
-    )
-        => column.IsRowVersion
-            || (column.StoreType is { } type
-                && (type.Equals("rowversion", StringComparison.OrdinalIgnoreCase)
-                    || type.Equals("timestamp", StringComparison.OrdinalIgnoreCase)));
+    ) => column.IsRowVersion
+        || (column.StoreType is { } type
+            && (type.Equals("rowversion", StringComparison.OrdinalIgnoreCase)
+                || type.Equals("timestamp", StringComparison.OrdinalIgnoreCase)));
 
     private static void AppendEdge(
         StringBuilder sql,
@@ -296,21 +292,19 @@ internal static class SqlServerForeignKeySafety
     private static string TriggerAbsent(
         string tableId,
         string eventName
-    )
-        => "NOT EXISTS (SELECT 1 FROM sys.triggers tr JOIN sys.trigger_events te ON te.object_id = tr.object_id "
-            + $"WHERE tr.parent_id = {tableId} AND tr.is_instead_of_trigger = 1 AND te.type_desc = N'{eventName}')";
+    ) => "NOT EXISTS (SELECT 1 FROM sys.triggers tr JOIN sys.trigger_events te ON te.object_id = tr.object_id "
+        + $"WHERE tr.parent_id = {tableId} AND tr.is_instead_of_trigger = 1 AND te.type_desc = N'{eventName}')";
 
     private static string TableId(
         string table,
         string? schema,
         Func<string, string> literal
-    )
-        => "OBJECT_ID("
-            + literal(
-                "["
-                + (schema ?? "dbo").Replace("]", "]]", StringComparison.Ordinal)
-                + "].["
-                + table.Replace("]", "]]", StringComparison.Ordinal)
-                + "]")
-            + ", N'U')";
+    ) => "OBJECT_ID("
+        + literal(
+            "["
+            + (schema ?? "dbo").Replace("]", "]]", StringComparison.Ordinal)
+            + "].["
+            + table.Replace("]", "]]", StringComparison.Ordinal)
+            + "]")
+        + ", N'U')";
 }

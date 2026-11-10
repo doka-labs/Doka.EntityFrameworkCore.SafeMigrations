@@ -76,12 +76,11 @@ internal sealed class PostgreSqlIndexPrerequisiteCertificates
     }
 
     /// <summary>Emits only retained catalog certificates; a rolled-back empty prefix emits no WITH.</summary>
-    internal string RenderPrefix()
-        => Count == 0
-            ? string.Empty
-            : "WITH "
-            + string.Join(", ", _definitions.Select(static value => value.Definition))
-            + "\n";
+    internal string RenderPrefix() => Count == 0
+        ? string.Empty
+        : "WITH "
+        + string.Join(", ", _definitions.Select(static value => value.Definition))
+        + "\n";
 
     /// <summary>Reserves exact unqualified zero-row owners once, then retains only one statement's aliases.</summary>
     /// <param name="operations">The actual authored stream; reservation is never a structural certificate.</param>

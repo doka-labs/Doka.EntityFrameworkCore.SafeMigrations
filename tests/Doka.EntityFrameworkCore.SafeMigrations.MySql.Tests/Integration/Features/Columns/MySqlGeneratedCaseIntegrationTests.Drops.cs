@@ -591,22 +591,27 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     }
 
     /// <summary>Supplies the same exact historical model to the established analyzer target-model contract.</summary>
+    /// <param name="context">The caller-owned context supplying the provider analyzer and live database.</param>
+    /// <param name="operations">The ordered operation stream to analyze against the historical target.</param>
+    /// <param name="model">The complete historical target model supplied for every operation.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeGeneratedTargetAsync(
         DbContext context,
         List<MigrationOperation> operations,
         IModel model,
         CancellationToken cancellationToken
-    ) =>
-        ((ISafeMigrationProviderTargetModelAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>()).AnalyzeAsync(
-            context,
-            operations,
-            Enumerable
-                .Repeat<IModel?>(model, operations.Count)
-                .ToArray(),
-            cancellationToken);
+    ) => ((ISafeMigrationProviderTargetModelAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>()).AnalyzeAsync(
+        context,
+        operations,
+        Enumerable
+            .Repeat<IModel?>(model, operations.Count)
+            .ToArray(),
+        cancellationToken);
 
     /// <summary>Exercises ordinary generated commands with the exact complete model passed by a migration.</summary>
+    /// <param name="context">The caller-owned context supplying the SQL generator and relational connection.</param>
+    /// <param name="operations">The ordered operations whose generated commands are executed.</param>
+    /// <param name="model">The complete migration target model used for SQL generation.</param>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task ExecuteGeneratedTargetAsync(
         DbContext context,

@@ -531,11 +531,12 @@ public sealed class SqlServerSafeMigrationOrdinaryDropIntegrationTests : SqlServ
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn("ordinary_drop_nodes", definition, SafeMigrationPolicy.ThrowIfDifferent);
         builder.DropIndexIfExists(
-            scenario == 0
-                ? "IX_missing"
-                : scenario == 4
-                    ? "PK_ordinary_L"
-                    : "IX_ordinary_L",
+            scenario switch
+            {
+                0 => "IX_missing",
+                4 => "PK_ordinary_L",
+                _ => "IX_ordinary_L",
+            },
             scenario == 1
                 ? "other_nodes"
                 : "ordinary_drop_nodes");
@@ -1176,42 +1177,40 @@ public sealed class SqlServerSafeMigrationOrdinaryDropIntegrationTests : SqlServ
 
     private static string BlockerCountSql(
         int kind
-    )
-        => kind switch
-        {
-            0 => "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') "
-                + "AND name=N'IX_ordinary_L';",
-            1 => "SELECT COUNT(*) FROM sys.check_constraints "
-                + "WHERE parent_object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') AND name=N'CK_ordinary_L';",
-            2 or 3 => "SELECT COUNT(*) FROM sys.key_constraints "
-                + "WHERE parent_object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') AND name=N'"
-                + (kind == 2
-                    ? "PK_ordinary_L"
-                    : "UQ_ordinary_L")
-                + "';",
-            4 or 5 => "SELECT COUNT(*) FROM sys.foreign_keys WHERE name=N'"
-                + (kind == 4
-                    ? "FK_ordinary_L"
-                    : "FK_child_L")
-                + "';",
-            6 => "SELECT COUNT(*) FROM sys.stats WHERE object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') "
-                + "AND name=N'ST_ordinary_L';",
-            7 => "SELECT COUNT(*) FROM sys.views WHERE object_id=OBJECT_ID(N'dbo.ordinary_L_view') "
-                + "AND OBJECTPROPERTY(object_id,'IsSchemaBound')=1;",
-            8 => "SELECT COUNT(*) FROM sys.default_constraints "
-                + "WHERE parent_object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') "
-                + "AND parent_column_id=COLUMNPROPERTY(parent_object_id,N'L','ColumnId');",
-            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-        };
+    ) => kind switch
+    {
+        0 => "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') "
+            + "AND name=N'IX_ordinary_L';",
+        1 => "SELECT COUNT(*) FROM sys.check_constraints "
+            + "WHERE parent_object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') AND name=N'CK_ordinary_L';",
+        2 or 3 => "SELECT COUNT(*) FROM sys.key_constraints "
+            + "WHERE parent_object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') AND name=N'"
+            + (kind == 2
+                ? "PK_ordinary_L"
+                : "UQ_ordinary_L")
+            + "';",
+        4 or 5 => "SELECT COUNT(*) FROM sys.foreign_keys WHERE name=N'"
+            + (kind == 4
+                ? "FK_ordinary_L"
+                : "FK_child_L")
+            + "';",
+        6 => "SELECT COUNT(*) FROM sys.stats WHERE object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') "
+            + "AND name=N'ST_ordinary_L';",
+        7 => "SELECT COUNT(*) FROM sys.views WHERE object_id=OBJECT_ID(N'dbo.ordinary_L_view') "
+            + "AND OBJECTPROPERTY(object_id,'IsSchemaBound')=1;",
+        8 => "SELECT COUNT(*) FROM sys.default_constraints "
+            + "WHERE parent_object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') "
+            + "AND parent_column_id=COLUMNPROPERTY(parent_object_id,N'L','ColumnId');",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
 
     private static Task<int> SourceCountAsync(
         string connectionString,
         CancellationToken cancellationToken
-    )
-        => ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') AND name=N'L';",
-            cancellationToken: cancellationToken);
+    ) => ScalarIntAsync(
+        connectionString,
+        "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') AND name=N'L';",
+        cancellationToken: cancellationToken);
 
     private static string RetainedStatisticsSql(
             string name

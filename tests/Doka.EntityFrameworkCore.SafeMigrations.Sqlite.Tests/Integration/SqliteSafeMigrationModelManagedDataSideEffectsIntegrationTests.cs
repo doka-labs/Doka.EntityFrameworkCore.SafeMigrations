@@ -355,14 +355,13 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
     private static void AppendSideEffectEnsure(
         MigrationBuilder builder,
         string table
-    )
-        => builder.EnsureModelManagedDataFromModel(
-            table,
-            ["id"],
-            ["INTEGER"],
-            ["id", "managed_value"],
-            ["INTEGER", "TEXT"],
-            new object?[,] { { 1, "expected" } });
+    ) => builder.EnsureModelManagedDataFromModel(
+        table,
+        ["id"],
+        ["INTEGER"],
+        ["id", "managed_value"],
+        ["INTEGER", "TEXT"],
+        new object?[,] { { 1, "expected" } });
 
     private static void AppendSideEffectWrite(
         MigrationBuilder builder,
@@ -412,32 +411,30 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
     private static void AppendSideEffectChildDelete(
         MigrationBuilder builder,
         int id
-    )
-        => builder.DeleteModelManagedDataFromModel(
-            "side_effect_children",
-            ["id"],
-            ["INTEGER"],
-            new object?[,] { { id } },
-            ["id", "parent_id"],
-            ["INTEGER", "INTEGER"],
-            new object?[,] { { id, 1 } });
+    ) => builder.DeleteModelManagedDataFromModel(
+        "side_effect_children",
+        ["id"],
+        ["INTEGER"],
+        new object?[,] { { id } },
+        ["id", "parent_id"],
+        ["INTEGER", "INTEGER"],
+        new object?[,] { { id, 1 } });
 
     private static void AppendSideEffectParentDelete(
         MigrationBuilder builder
-    )
-        => builder.DeleteModelManagedDataFromModel(
-            "side_effect_parents",
-            ["id"],
-            ["INTEGER"],
-            new object?[,] { { 1 } },
-            ["id"],
-            ["INTEGER"],
-            new object?[,] { { 1 } },
-            foreignKeys:
-            [
-                new ExpectedModelManagedDataForeignKeyDefinition(
-                    "side_effect_children",
-                    ["parent_id"],
-                    ["id"]),
-            ]);
+    ) => builder.DeleteModelManagedDataFromModel(
+        "side_effect_parents",
+        ["id"],
+        ["INTEGER"],
+        new object?[,] { { 1 } },
+        ["id"],
+        ["INTEGER"],
+        new object?[,] { { 1 } },
+        foreignKeys:
+        [
+            new ExpectedModelManagedDataForeignKeyDefinition(
+                "side_effect_children",
+                ["parent_id"],
+                ["id"]),
+        ]);
 }

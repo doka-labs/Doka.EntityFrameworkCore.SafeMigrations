@@ -539,13 +539,12 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
     private static SafeMigrationOperation CatalogTargetTable(
         string name,
         string? schema = null
-    )
-        => new(
-            new EnsureTableIntent(
-                new ExpectedTableDefinition(
-                    name,
-                    [new ExpectedColumnDefinition("Id", typeof(int), false, "int")],
-                    schema: schema),
-                SafeMigrationTableMode.StrictDefinition),
-            SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(
+        new EnsureTableIntent(
+            new ExpectedTableDefinition(
+                name,
+                [new ExpectedColumnDefinition("Id", typeof(int), false, "int")],
+                schema: schema),
+            SafeMigrationTableMode.StrictDefinition),
+        SafeMigrationPolicy.ThrowIfDifferent);
 }

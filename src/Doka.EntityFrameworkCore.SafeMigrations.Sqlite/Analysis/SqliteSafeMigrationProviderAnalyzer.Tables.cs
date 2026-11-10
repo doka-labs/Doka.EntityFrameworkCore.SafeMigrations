@@ -55,7 +55,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
     }
 
     /// <summary>Classifies a table drop without bypassing retained incoming dependencies.</summary>
-    private static SafeMigrationProviderAnalysis AnalyzeDropTable(
+    private SafeMigrationProviderAnalysis AnalyzeDropTable(
         SqliteCatalogSnapshot snapshot,
         DropTableIntent intent,
         SafeMigrationOperation operation,
@@ -67,9 +67,22 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             return Unsupported("table_drop_foreign_key_dependency");
         }
 
-        return snapshot.Tables.ContainsKey(intent.Table)
+        var analysis = snapshot.Tables.ContainsKey(intent.Table)
             ? Matching(postconditionSatisfied: false, matchedObjectName: intent.Table)
             : Missing(postconditionSatisfied: true);
+
+        if (analysis.ObservedState == SafeMigrationObservedState.Matching
+            && rebuildArtifacts.PreservesRetirementDropAnalysis(snapshot, operation))
+        {
+            // WHY: The exact unchanged retiring owner and ordered native dependency graph are fully proved.
+            // An independent principal rename cannot invalidate that narrower terminal-removal certificate.
+            _retirementDropAnalyses ??= new Dictionary<SafeMigrationOperation, SafeMigrationProviderAnalysis>(
+                ReferenceEqualityComparer.Instance);
+
+            _retirementDropAnalyses[operation] = analysis;
+        }
+
+        return analysis;
     }
 
     /// <summary>Classifies a table rename against both source and target identities.</summary>
@@ -183,31 +196,28 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         bool UniqueMatches(
             SqliteUniqueSnapshot actual,
             ExpectedUniqueConstraintDefinition definition
-        )
-            => SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
-                table,
-                actual.Keys,
-                definition.Columns,
-                requireDefaultSortOrder: true);
+        ) => SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
+            table,
+            actual.Keys,
+            definition.Columns,
+            requireDefaultSortOrder: true);
 
         bool ForeignKeyMatches(
             SqliteForeignKeySnapshot actual,
             ExpectedForeignKeyDefinition definition
-        )
-            => SqliteCatalogEquivalence.ForeignKeyMatches(
-                snapshot,
-                actual,
-                definition.PrincipalTable,
-                definition.Columns,
-                definition.PrincipalColumns,
-                definition.OnUpdate,
-                definition.OnDelete);
+        ) => SqliteCatalogEquivalence.ForeignKeyMatches(
+            snapshot,
+            actual,
+            definition.PrincipalTable,
+            definition.Columns,
+            definition.PrincipalColumns,
+            definition.OnUpdate,
+            definition.OnDelete);
 
         bool CheckMatches(
             SqliteCheckSnapshot actual,
             ExpectedCheckConstraintDefinition definition
-        )
-            => RenderCheck(definition) is { } sql && ExpressionMatches(actual.Expression, sql, definition.Expression);
+        ) => RenderCheck(definition) is { } sql && ExpressionMatches(actual.Expression, sql, definition.Expression);
     }
 
     /// <summary>Identifies unsupported table or nested column/check contracts before data probes.</summary>
@@ -215,6 +225,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         ExpectedTableDefinition definition
     )
     {
+        if (definition.ProviderAnnotations.Count != 0)
+        {
+            // WHY: Metadata captured by another provider is not a SQLite physical-table contract.
+            return "table_annotation";
+        }
+
         if (definition.Comment is not null)
         {
             return "table_comments";

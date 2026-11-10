@@ -126,7 +126,7 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
 
         if (state.Unknown
             || state.UnsafeOpaqueBoundary
-            || (_opaqueBoundary && !state.Fresh && !state.Dropped))
+            || (_opaqueBoundary && state is { Fresh: false, Dropped: false }))
         {
             return true;
         }
@@ -236,8 +236,8 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
                 InvalidateColumn(column.Table, column.Schema, column.Name);
                 InvalidateColumn(column.Table, column.Schema, column.NewName);
                 break;
-            case AlterColumnIntent column when column.OldDefinition is { } source
-                && MySqlSafeMigrationProviderAnalyzer.IsSameLayoutNullabilityTransition(source, column.Definition):
+            case AlterColumnIntent { OldDefinition: { } source } column
+                when MySqlSafeMigrationProviderAnalyzer.IsSameLayoutNullabilityTransition(source, column.Definition):
                 // WHY: An accepted nullability-only transition preserves the
                 // exact child-key layout and its physical index lifetimes.
                 // Reuse the analyzer's metadata proof; row safety stays there.
@@ -577,10 +577,13 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
         && definition.IncludedColumns.Count == 0
         && definition.NullsDistinct is null
         && (definition.Method is null || StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE"))
-        && definition.Keys.All(static key => key.Column is not null
-            && key.NullOrder == SafeMigrationIndexNullOrder.ProviderDefault
-            && key.Collation is null
-            && key.OperatorClass is null);
+        && definition.Keys.All(static key => key is
+        {
+            Column: not null,
+            NullOrder: SafeMigrationIndexNullOrder.ProviderDefault,
+            Collation: null,
+            OperatorClass: null,
+        });
 
     /// <summary>Checks the requested full-column ordered left prefix without requiring an exact index length.</summary>
     private static bool Covers(

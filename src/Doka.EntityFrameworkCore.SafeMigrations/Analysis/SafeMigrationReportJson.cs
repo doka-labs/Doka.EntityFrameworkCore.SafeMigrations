@@ -253,8 +253,7 @@ public static class SafeMigrationReportJson
     {
         SafeMigrationReportMode.Preflight => assessment.Action is { } action
             && action.RejectsExecution(),
-        SafeMigrationReportMode.Postflight => assessment.IsSafeOperation
-            && assessment.PostconditionSatisfied == false,
+        SafeMigrationReportMode.Postflight => assessment is { IsSafeOperation: true, PostconditionSatisfied: false },
         _ => throw new ArgumentOutOfRangeException(nameof(mode)),
     };
 

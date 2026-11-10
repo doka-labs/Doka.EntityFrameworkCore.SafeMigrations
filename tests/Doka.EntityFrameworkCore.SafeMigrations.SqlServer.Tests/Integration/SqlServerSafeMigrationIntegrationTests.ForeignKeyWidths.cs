@@ -344,10 +344,9 @@ public sealed class SqlServerSafeMigrationForeignKeyWidthsIntegrationTests : Sql
     private static Task CreateForeignKeyWidthAuditAsync(
         string connectionString,
         CancellationToken cancellationToken
-    )
-        => ExecuteSqlAsync(
-            connectionString,
-            "CREATE TRIGGER doka_width_ddl_audit ON DATABASE "
-            + "FOR DDL_TABLE_EVENTS, DDL_INDEX_EVENTS AS INSERT dbo.width_ddl_events VALUES (1);",
-            cancellationToken: cancellationToken);
+    ) => ExecuteSqlAsync(
+        connectionString,
+        "CREATE TRIGGER doka_width_ddl_audit ON DATABASE "
+        + "FOR DDL_TABLE_EVENTS, DDL_INDEX_EVENTS AS INSERT dbo.width_ddl_events VALUES (1);",
+        cancellationToken: cancellationToken);
 }

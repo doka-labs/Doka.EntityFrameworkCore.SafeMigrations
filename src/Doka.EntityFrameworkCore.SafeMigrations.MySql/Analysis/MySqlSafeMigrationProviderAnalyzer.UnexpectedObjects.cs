@@ -305,48 +305,48 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     };
 
     private static string BuildUnexpectedTableSql() => """
-                                                       SELECT 'table', t.TABLE_NAME, t.TABLE_NAME, FALSE
-                                                       FROM INFORMATION_SCHEMA.TABLES t
-                                                       WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_TYPE = 'BASE TABLE'
-                                                       ORDER BY 1, 2, 3;
-                                                       """;
+        SELECT 'table', t.TABLE_NAME, t.TABLE_NAME, FALSE
+        FROM INFORMATION_SCHEMA.TABLES t
+        WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_TYPE = 'BASE TABLE'
+        ORDER BY 1, 2, 3;
+        """;
 
     private static string BuildUnexpectedChildObjectSql(
         string tableScope,
         bool isMariaDb
     ) => $"""
-          SELECT 'column', c.TABLE_NAME, c.COLUMN_NAME, FALSE
-          FROM INFORMATION_SCHEMA.COLUMNS c
-          WHERE c.TABLE_SCHEMA = DATABASE()
-            AND c.TABLE_NAME IN ({tableScope})
-          UNION ALL
-          SELECT CASE tc.CONSTRAINT_TYPE
-              WHEN 'PRIMARY KEY' THEN 'primary_key'
-              WHEN 'UNIQUE' THEN 'unique_constraint'
-              WHEN 'CHECK' THEN 'check_constraint'
-              WHEN 'FOREIGN KEY' THEN 'foreign_key'
-              END,
-              tc.TABLE_NAME,
-              tc.CONSTRAINT_NAME,
-              {(isMariaDb ? MariaDbImplicitJsonCheckInventoryExpression : "FALSE")}
-          FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-          {(isMariaDb ? MariaDbImplicitJsonCheckInventoryJoins : string.Empty)}
-          WHERE tc.CONSTRAINT_SCHEMA = DATABASE()
-            AND tc.TABLE_NAME IN ({tableScope})
-            AND tc.CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE', 'CHECK', 'FOREIGN KEY')
-          UNION ALL
-          SELECT 'index', s.TABLE_NAME, s.INDEX_NAME, FALSE
-          FROM INFORMATION_SCHEMA.STATISTICS s
-          WHERE s.TABLE_SCHEMA = DATABASE()
-            AND s.TABLE_NAME IN ({tableScope})
-            AND s.SEQ_IN_INDEX = 1
-            AND s.INDEX_NAME <> 'PRIMARY'
-            AND NOT EXISTS (
-                SELECT 1
-                FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-                WHERE tc.CONSTRAINT_SCHEMA = s.TABLE_SCHEMA
-                  AND tc.TABLE_NAME = s.TABLE_NAME
-                  AND tc.CONSTRAINT_NAME = s.INDEX_NAME)
-          ORDER BY 1, 2, 3;
-          """;
+        SELECT 'column', c.TABLE_NAME, c.COLUMN_NAME, FALSE
+        FROM INFORMATION_SCHEMA.COLUMNS c
+        WHERE c.TABLE_SCHEMA = DATABASE()
+          AND c.TABLE_NAME IN ({tableScope})
+        UNION ALL
+        SELECT CASE tc.CONSTRAINT_TYPE
+            WHEN 'PRIMARY KEY' THEN 'primary_key'
+            WHEN 'UNIQUE' THEN 'unique_constraint'
+            WHEN 'CHECK' THEN 'check_constraint'
+            WHEN 'FOREIGN KEY' THEN 'foreign_key'
+            END,
+            tc.TABLE_NAME,
+            tc.CONSTRAINT_NAME,
+            {(isMariaDb ? MariaDbImplicitJsonCheckInventoryExpression : "FALSE")}
+        FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+        {(isMariaDb ? MariaDbImplicitJsonCheckInventoryJoins : string.Empty)}
+        WHERE tc.CONSTRAINT_SCHEMA = DATABASE()
+          AND tc.TABLE_NAME IN ({tableScope})
+          AND tc.CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE', 'CHECK', 'FOREIGN KEY')
+        UNION ALL
+        SELECT 'index', s.TABLE_NAME, s.INDEX_NAME, FALSE
+        FROM INFORMATION_SCHEMA.STATISTICS s
+        WHERE s.TABLE_SCHEMA = DATABASE()
+          AND s.TABLE_NAME IN ({tableScope})
+          AND s.SEQ_IN_INDEX = 1
+          AND s.INDEX_NAME <> 'PRIMARY'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+              WHERE tc.CONSTRAINT_SCHEMA = s.TABLE_SCHEMA
+                AND tc.TABLE_NAME = s.TABLE_NAME
+                AND tc.CONSTRAINT_NAME = s.INDEX_NAME)
+        ORDER BY 1, 2, 3;
+        """;
 }

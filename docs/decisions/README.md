@@ -39,6 +39,8 @@ record the implemented ownership and lossless-repair contracts selected on
 | [D-016](D-016-actionable-diagnostics-and-operation-identity.md) | Shared structural diagnostic identity and provider-owned error transport |
 | [D-017](D-017-generated-expression-and-dependency-contracts.md) | Bounded generated expressions, native identity and ordered source dependencies |
 | [D-018](D-018-release-lines-and-monotonic-publication.md) | Exact release lines, current publication authority and monotonic Latest |
+| [D-019](D-019-explicit-table-storage-contracts.md) | Immutable provider-certified explicit table storage contracts |
+| [D-020](D-020-atomic-retiring-table-foreign-keys.md) | Exact-window foreign-key retirement on atomically removed SQLite tables |
 
 ## Authoring and review
 

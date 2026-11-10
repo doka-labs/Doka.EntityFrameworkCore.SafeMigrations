@@ -251,8 +251,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <returns>An exact native expression-wrapper predicate without interpreting quoted operand text.</returns>
     private static string BuildNativeMultiValuedIndexPart(
         string alias
-    ) =>
-        alias
+    ) => alias
         + ".EXPRESSION IS NOT NULL "
         + "AND CAST(LEFT("
         + alias

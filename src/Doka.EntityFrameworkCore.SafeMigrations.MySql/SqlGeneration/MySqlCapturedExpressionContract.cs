@@ -150,9 +150,7 @@ internal static class MySqlCapturedExpressionContract
         var flags = 0;
         foreach (var character in text)
         {
-            if (character is '\'' or '\\'
-                || character < ' '
-                || character > '~')
+            if (character is '\'' or '\\' or < ' ' or > '~')
             {
                 flags |= StableText;
             }

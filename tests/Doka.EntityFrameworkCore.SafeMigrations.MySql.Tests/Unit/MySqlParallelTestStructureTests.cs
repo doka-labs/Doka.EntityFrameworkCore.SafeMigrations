@@ -44,12 +44,12 @@ public sealed class MySqlParallelTestStructureTests
         Assert.Empty(inheritedTests);
 
         // WHY: Exact feature-family coverage includes custom Fact subclasses; approximate counts can hide omissions.
-        Assert.Equal(79, featureClasses.Length);
+        Assert.Equal(80, featureClasses.Length);
 
         // WHY: Serialization/independent admission and transitions/drift each have their own selectable fact.
         // Generated tooling facts are not integration-helper subclasses and do not belong to this count.
-        Assert.Equal(632, declaredTests.Length);
-        Assert.Equal(632,
+        Assert.Equal(647, declaredTests.Length);
+        Assert.Equal(647,
             declaredTests
                 .Select(method => method.Name)
                 .Distinct(StringComparer.Ordinal)
@@ -63,6 +63,7 @@ public sealed class MySqlParallelTestStructureTests
             projectedProtectionMethod.DeclaringType);
 
         Assert.Contains(typeof(MySqlTablesIntegrationTests), featureClasses);
+        Assert.Contains(typeof(MySqlInnoDbTableIntegrationTests), featureClasses);
         Assert.Contains(typeof(MySqlColumnsIntegrationTests), featureClasses);
         Assert.Contains(typeof(MySqlPerformanceIntegrationTests), featureClasses);
         Assert.Contains(typeof(MySqlGeneratedCaseIntegrationTests), featureClasses);
@@ -91,6 +92,8 @@ public sealed class MySqlParallelTestStructureTests
     /// <param name="expected">Whether this selection owns a native startup.</param>
     [Theory]
     [InlineData(typeof(MySqlTablesIntegrationTests), null, true)]
+    [InlineData(typeof(MySqlInnoDbTableIntegrationTests), null, true)]
+    [InlineData(typeof(MySqlInnoDbTableIntegrationTests), "native unavailable", false)]
     [InlineData(typeof(MySqlColumnsIntegrationTests), "", true)]
     [InlineData(typeof(MySqlIndexDropIntegerWideningIntegrationTests), null, true)]
     [InlineData(typeof(MySqlIndexDropIntegerWideningIntegrationTests), "native unavailable", false)]

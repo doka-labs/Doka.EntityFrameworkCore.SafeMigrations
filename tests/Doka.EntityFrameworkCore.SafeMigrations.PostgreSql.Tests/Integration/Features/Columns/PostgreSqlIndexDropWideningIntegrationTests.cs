@@ -324,19 +324,20 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var before = caseId == "domain"
-            ? "CREATE DOMAIN guarded_integer AS integer; "
-            : caseId == "inherited-child"
-                ? "CREATE TABLE inherited_base (value integer NOT NULL); "
-                : string.Empty;
+        var before = caseId switch
+        {
+            "domain" => "CREATE DOMAIN guarded_integer AS integer; ",
+            "inherited-child" => "CREATE TABLE inherited_base (value integer NOT NULL); ",
+            _ => string.Empty,
+        };
 
-        var columns = caseId == "domain"
-            ? "value guarded_integer NOT NULL, payload text NOT NULL"
-            : caseId == "inherited-child"
-                ? "payload text NOT NULL"
-                : caseId == "foreign-key-inbound"
-                    ? "value integer NOT NULL PRIMARY KEY, payload text NOT NULL"
-                    : "value integer NOT NULL, payload text NOT NULL";
+        var columns = caseId switch
+        {
+            "domain" => "value guarded_integer NOT NULL, payload text NOT NULL",
+            "inherited-child" => "payload text NOT NULL",
+            "foreign-key-inbound" => "value integer NOT NULL PRIMARY KEY, payload text NOT NULL",
+            _ => "value integer NOT NULL, payload text NOT NULL",
+        };
 
         var inheritance = caseId == "inherited-child"
             ? " INHERITS (inherited_base)"
@@ -740,12 +741,11 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
         /// <inheritdoc />
         protected override void OnConfiguring(
             DbContextOptionsBuilder optionsBuilder
-        )
-            => optionsBuilder
-                .UseNpgsql(
-                    connectionString,
-                    options => options.MigrationsHistoryTable("__IntegerUpgradeHistory"))
-                .UsePostgreSqlSafeMigrations<IntegerUpgradeDbContext>();
+        ) => optionsBuilder
+            .UseNpgsql(
+                connectionString,
+                options => options.MigrationsHistoryTable("__IntegerUpgradeHistory"))
+            .UsePostgreSqlSafeMigrations<IntegerUpgradeDbContext>();
     }
 
     /// <summary>Declares the intentionally model-free schema contract of these authored fixture migrations.</summary>
@@ -755,8 +755,7 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
         /// <inheritdoc />
         protected override void BuildModel(
             ModelBuilder modelBuilder
-        )
-            => ArgumentNullException.ThrowIfNull(modelBuilder);
+        ) => ArgumentNullException.ThrowIfNull(modelBuilder);
     }
 
     /// <summary>Creates a historical Int32 owner with a removable ordinary index and boundary payload.</summary>
@@ -770,17 +769,15 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
         /// <inheritdoc />
         protected override void Up(
             MigrationBuilder migrationBuilder
-        )
-            => migrationBuilder.Sql(
-                "CREATE TABLE pending_integer_rows (coordinate integer NOT NULL, "
-                + "payload text NOT NULL); CREATE INDEX ix_pending_integer ON pending_integer_rows (coordinate); "
-                + "INSERT INTO pending_integer_rows VALUES (2147483647, 'retained');");
+        ) => migrationBuilder.Sql(
+            "CREATE TABLE pending_integer_rows (coordinate integer NOT NULL, "
+            + "payload text NOT NULL); CREATE INDEX ix_pending_integer ON pending_integer_rows (coordinate); "
+            + "INSERT INTO pending_integer_rows VALUES (2147483647, 'retained');");
 
         /// <inheritdoc />
         protected override void Down(
             MigrationBuilder migrationBuilder
-        )
-            => migrationBuilder.DropTable("pending_integer_rows");
+        ) => migrationBuilder.DropTable("pending_integer_rows");
     }
 
     /// <summary>Executes the owned index-drop then exact integer-widening upgrade through EF.</summary>
@@ -807,7 +804,6 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
         /// <inheritdoc />
         protected override void Down(
             MigrationBuilder migrationBuilder
-        )
-            => throw new NotSupportedException("This regression verifies only the reviewed widening upgrade.");
+        ) => throw new NotSupportedException("This regression verifies only the reviewed widening upgrade.");
     }
 }

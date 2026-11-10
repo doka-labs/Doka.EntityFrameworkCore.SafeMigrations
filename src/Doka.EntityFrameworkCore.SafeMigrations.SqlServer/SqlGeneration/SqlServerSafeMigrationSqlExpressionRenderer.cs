@@ -183,11 +183,12 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
                 : value.Right,
             SafeMigrationSqlNullTestExpression value when index == 0 => value.Operand,
             SafeMigrationSqlBetweenExpression value when index < 3
-                => index == 0
-                    ? value.Operand
-                    : index == 1
-                        ? value.Lower
-                        : value.Upper,
+                => index switch
+                {
+                    0 => value.Operand,
+                    1 => value.Lower,
+                    _ => value.Upper,
+                },
             SafeMigrationSqlInExpression value when index == 0 => value.Operand,
             SafeMigrationSqlInExpression value when index <= value.Values.Count => value.Values[index - 1],
             SafeMigrationSqlFunctionExpression value when index < value.Arguments.Count => value.Arguments[index],

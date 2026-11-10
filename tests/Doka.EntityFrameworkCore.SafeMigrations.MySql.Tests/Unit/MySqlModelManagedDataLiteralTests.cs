@@ -102,6 +102,7 @@ public sealed class MySqlModelManagedDataLiteralTests
         Assert.Contains(payloads, payload => payload.Contains("AS `n0`", StringComparison.Ordinal));
         Assert.Contains(payloads, payload => payload.Contains("'A'", StringComparison.Ordinal));
         Assert.Contains(payloads, payload => payload.Contains("'B'", StringComparison.Ordinal));
+        Assert.Equal(1, (int)LiteralState.Active);
     }
 
     [Fact]
@@ -193,8 +194,7 @@ public sealed class MySqlModelManagedDataLiteralTests
         Assert.Equal(insert.Values.GetLength(1), intent.Values.ColumnCount);
     }
 
-    private static DbContext CreateContext()
-        => CreateContext(isMariaDb: false);
+    private static DbContext CreateContext() => CreateContext(isMariaDb: false);
 
     private static DbContext CreateContext(
         bool isMariaDb
@@ -249,8 +249,7 @@ public sealed class MySqlModelManagedDataLiteralTests
 
     private enum LiteralState
     {
-        Inactive,
-        Active,
+        Active = 1,
     }
 
     private sealed class UnsupportedLiteral;

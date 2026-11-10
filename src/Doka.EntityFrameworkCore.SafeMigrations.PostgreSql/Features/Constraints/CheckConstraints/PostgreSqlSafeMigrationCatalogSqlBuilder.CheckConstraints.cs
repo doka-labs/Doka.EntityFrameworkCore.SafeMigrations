@@ -130,15 +130,4 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + "AS required(ordinal, conname) WHERE NOT COALESCE("
             + $"({exact}) OR (NOT ({exists}) AND ({alias})), FALSE))";
     }
-
-    private string CheckSatisfied(
-        ExpectedCheckConstraintDefinition definition
-    )
-    {
-        var exists = ConstraintExists(definition.Table, definition.Schema, definition.Name, 'c');
-        var exact = CheckMatches(definition, requireExpectedName: true);
-        var semanticAlias = CheckMatches(definition, requireExpectedName: false);
-
-        return $"({exact}) OR (NOT ({exists}) AND ({semanticAlias}))";
-    }
 }

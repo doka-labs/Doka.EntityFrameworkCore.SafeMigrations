@@ -146,11 +146,12 @@ public sealed class MySqlColumnsOrderedAlterIntegrationTests : MySqlSafeMigratio
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        var blockedOrdinal = failure == "rename_collision"
-            ? 1
-            : failure == "source_row_format"
-                ? 4
-                : 2;
+        var blockedOrdinal = failure switch
+        {
+            "rename_collision" => 1,
+            "source_row_format" => 4,
+            _ => 2,
+        };
 
         Assert.Contains(
             report.Assessments[blockedOrdinal].Action,

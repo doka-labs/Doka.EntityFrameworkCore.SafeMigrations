@@ -128,9 +128,8 @@ internal sealed partial class SafeMigrationPreflightProjection
     private bool AreProjectedCheckTargetsEquivalent(
         ExpectedCheckConstraintDefinition accepted,
         ExpectedCheckConstraintDefinition target
-    )
-        => StringComparer.Ordinal.Equals(accepted.Name, target.Name)
-            && AreProjectedCheckSemanticsEquivalent(accepted, target);
+    ) => StringComparer.Ordinal.Equals(accepted.Name, target.Name)
+        && AreProjectedCheckSemanticsEquivalent(accepted, target);
 
     /// <summary>
     /// Only native terminal-member quotes and verified member identity may differ in a captured CHECK.
@@ -138,8 +137,7 @@ internal sealed partial class SafeMigrationPreflightProjection
     private bool AreProjectedCheckSemanticsEquivalent(
         ExpectedCheckConstraintDefinition accepted,
         ExpectedCheckConstraintDefinition target
-    )
-        => AreProjectedCheckSemanticsEquivalent(accepted, target, _objectIdentityNormalizer);
+    ) => AreProjectedCheckSemanticsEquivalent(accepted, target, _objectIdentityNormalizer);
 
     /// <summary>Shares only the scoped native CHECK token certificate across known projection lineages.</summary>
     /// <param name="accepted">The previously accepted, possibly source-renamed CHECK contract.</param>

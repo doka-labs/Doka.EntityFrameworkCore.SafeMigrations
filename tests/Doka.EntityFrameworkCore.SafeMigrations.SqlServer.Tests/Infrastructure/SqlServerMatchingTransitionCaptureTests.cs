@@ -368,27 +368,24 @@ public sealed class SqlServerMatchingTransitionCaptureTests(ITestOutputHelper ou
     /// <summary>Creates a widening with a source contract that cannot match an already widened replay.</summary>
     private static SafeMigrationOperation Widening(
         string table
-    )
-        => new(
-            new AlterColumnIntent(
-                table,
-                new ExpectedColumnDefinition("Value", typeof(long), false, "bigint"),
-                new ExpectedColumnDefinition("Value", typeof(int), false, "int")),
-            SafeMigrationPolicy.RepairIfSafe);
+    ) => new(
+        new AlterColumnIntent(
+            table,
+            new ExpectedColumnDefinition("Value", typeof(long), false, "bigint"),
+            new ExpectedColumnDefinition("Value", typeof(int), false, "int")),
+        SafeMigrationPolicy.RepairIfSafe);
 
     /// <summary>Creates a scoped analyzer with the SQL Server mapping and identifier services.</summary>
     private static SqlServerSafeMigrationProviderAnalyzer Analyzer(
         DbContext context
-    )
-        => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     /// <summary>Creates the immutable initial state used only to select transition capture work.</summary>
     private static SafeMigrationProviderAnalysis Analysis(
         SafeMigrationObservedState state
-    )
-        => new(
-            state,
-            SafeMigrationRepairCapability.None,
-            state == SafeMigrationObservedState.Matching,
-            "classified_state");
+    ) => new(
+        state,
+        SafeMigrationRepairCapability.None,
+        state == SafeMigrationObservedState.Matching,
+        "classified_state");
 }
