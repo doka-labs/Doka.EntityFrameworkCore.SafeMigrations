@@ -6,6 +6,17 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+### Fixed
+
+- Complete an already admitted release from its original qualification and
+  package bytes through an explicit protected completion-only workflow mode.
+  Preserve original tag, run, artifact and admission identities; recheck current
+  authority, signatures, provenance, public package content and the exact existing
+  Release before immutable publication. Never rebuild or upload packages, create
+  tags, replace assets or mint NuGet credentials in this mode. Correct artifact
+  download negotiation on retries and restore the one-hour NuGet readback window
+  with a sufficient publisher job budget and explicit pending-state diagnostics.
+
 ## [10.7.1] - 2026-11-09
 
 Version 10.7.1 preserves explicit InnoDB contracts and corrects atomic SQLite

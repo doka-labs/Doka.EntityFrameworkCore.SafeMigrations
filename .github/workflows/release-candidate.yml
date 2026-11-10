@@ -13,6 +13,11 @@ on:
         required: false
         default: false
         type: boolean
+      finalize-run-id:
+        description: Complete an existing publication run without building or uploading packages; otherwise leave empty.
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -23,6 +28,7 @@ concurrency:
 
 jobs:
   preflight:
+    if: ${{ inputs.finalize-run-id == '' || inputs.qualification-only }}
     name: Validate untagged candidate
     runs-on: ubuntu-26.04
     timeout-minutes: 10
@@ -37,6 +43,15 @@ jobs:
       contents: read
       actions: read
     steps:
+      - name: Reject incompatible qualification and finalization intent
+        env:
+          FINALIZE_RUN_ID: ${{ inputs.finalize-run-id }}
+        run: |
+          if [[ -n "$FINALIZE_RUN_ID" ]]; then
+            echo "Qualification-only cannot finalize an existing publication." >&2
+            exit 2
+          fi
+
       - name: Checkout candidate source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -207,7 +222,7 @@ jobs:
       - quality-gates
       - attest
     runs-on: ubuntu-26.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     concurrency:
       group: safe-migrations-publication
       cancel-in-progress: false
@@ -540,7 +555,7 @@ jobs:
           bash eng/readback-nuget.sh
           --package-dir artifacts/packages
           --version "$PACKAGE_VERSION"
-          --timeout-seconds 1200
+          --timeout-seconds 3600
 
       - name: Publish or verify immutable GitHub Release
         env:
@@ -557,3 +572,144 @@ jobs:
             publish "$PACKAGE_VERSION" "$RELEASE_TAG"
           echo "SafeMigrations $PACKAGE_VERSION was published and verified." \
             >>"$GITHUB_STEP_SUMMARY"
+
+  finalize:
+    name: Verify and complete existing publication
+    if: ${{ inputs.finalize-run-id != '' && !inputs.qualification-only }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    concurrency:
+      group: safe-migrations-publication
+      cancel-in-progress: false
+      queue: max
+    environment:
+      name: nuget
+    permissions:
+      actions: read
+      attestations: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PACKAGE_VERSION: ${{ inputs.version }}
+      ORIGINAL_RUN_ID: ${{ inputs.finalize-run-id }}
+      QUALIFICATION_ONLY: ${{ inputs.qualification-only }}
+      SAFE_MIGRATIONS_PUBLICATION_LOCK_GROUP: safe-migrations-publication
+      SAFE_MIGRATIONS_PUBLICATION_LOCK_HELD: '1'
+    steps:
+      - name: Checkout reviewed completion controls
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup verification SDK
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+
+      - name: Restore original admission and successful qualification
+        id: original
+        run: >-
+          python3 -m eng.release.publication prepare-finalization
+          --version "$PACKAGE_VERSION"
+          --original-run-id "$ORIGINAL_RUN_ID"
+          --output-dir artifacts/release-lines
+
+      - name: Download original qualified packages without rebuilding
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.original.outputs.original-run-id }}
+          artifact-ids: ${{ steps.original.outputs.qualified-artifact-id }}
+          path: artifacts
+
+      - name: Download original portable SLSA provenance
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.original.outputs.original-run-id }}
+          artifact-ids: ${{ steps.original.outputs.provenance-artifact-id }}
+          path: artifacts/release-provenance
+
+      - name: Checkout exact original signed source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.original.outputs.source-commit }}
+          path: original-source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify original tag and exact qualified content
+        env:
+          SOURCE_COMMIT: ${{ steps.original.outputs.source-commit }}
+          RECEIPT_SHA256: ${{ steps.original.outputs.receipt-sha256 }}
+        run: |
+          python3 -m eng.release.publication recheck-finalization \
+            --receipt artifacts/release-lines/finalization.json \
+            --receipt-sha256 "$RECEIPT_SHA256" --artifact-dir artifacts
+          tag="v$PACKAGE_VERSION"
+          test "$(git -C original-source rev-parse HEAD)" = "$SOURCE_COMMIT"
+          test "$(git -C original-source cat-file -t "refs/tags/$tag")" = tag
+          test "$(git -C original-source rev-parse "refs/tags/$tag^{commit}")" = "$SOURCE_COMMIT"
+          git -C original-source -c gpg.format=ssh \
+            -c "gpg.ssh.allowedSignersFile=$GITHUB_WORKSPACE/eng/release/allowed-signers" \
+            verify-tag "$tag"
+          (cd artifacts/packages && sha256sum --check SHA256SUMS)
+          bash original-source/eng/verify-package-contents.sh \
+            --package-dir "$GITHUB_WORKSPACE/artifacts/packages" --version "$PACKAGE_VERSION"
+
+      - name: Cryptographically verify original portable SLSA provenance
+        env:
+          SOURCE_COMMIT: ${{ steps.original.outputs.source-commit }}
+          SOURCE_REF: ${{ steps.original.outputs.source-ref }}
+        run: |
+          arguments=(
+            verify-github --bundle artifacts/release-provenance/release-provenance.intoto.jsonl
+            --repository "$GITHUB_REPOSITORY"
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-candidate.yml"
+            --signer-digest "$SOURCE_COMMIT" --source-ref "$SOURCE_REF" --source-digest "$SOURCE_COMMIT"
+          )
+          for subject in artifacts/packages/*.nupkg artifacts/packages/*.snupkg \
+            artifacts/packages/SHA256SUMS artifacts/sbom/_manifest/spdx_2.2/manifest.spdx.json; do
+            arguments+=(--subject "$subject")
+          done
+          bash eng/release-provenance.sh "${arguments[@]}"
+
+      - name: Verify all existing public NuGet signatures and package contents
+        run: >-
+          bash eng/readback-nuget.sh --package-dir artifacts/packages
+          --version "$PACKAGE_VERSION" --timeout-seconds 3600
+
+      - name: Recheck authorization and complete only the existing GitHub Release
+        env:
+          RECEIPT_SHA256: ${{ steps.original.outputs.receipt-sha256 }}
+          FINALIZATION_RELEASE_ID: ${{ steps.original.outputs.release-id }}
+          SOURCE_COMMIT: ${{ steps.original.outputs.source-commit }}
+        run: |
+          python3 -m eng.release.publication recheck-finalization \
+            --receipt artifacts/release-lines/finalization.json \
+            --receipt-sha256 "$RECEIPT_SHA256" --artifact-dir artifacts
+          git -C original-source fetch --no-tags origin \
+            "refs/tags/v$PACKAGE_VERSION:refs/tags/v$PACKAGE_VERSION"
+          test "$(git -C original-source rev-parse "refs/tags/v$PACKAGE_VERSION^{commit}")" = "$SOURCE_COMMIT"
+          git -C original-source -c gpg.format=ssh \
+            -c "gpg.ssh.allowedSignersFile=$GITHUB_WORKSPACE/eng/release/allowed-signers" \
+            verify-tag "v$PACKAGE_VERSION"
+          # WHY: Notes belong to the original qualified source, not today's main.
+          FINALIZATION_CHANGELOG="$GITHUB_WORKSPACE/original-source/CHANGELOG.md" \
+            bash eng/reconcile-github-release.sh finalize "$PACKAGE_VERSION" "v$PACKAGE_VERSION"
+          echo "Completed original run $ORIGINAL_RUN_ID without rebuilding or uploading packages." \
+            >>"$GITHUB_STEP_SUMMARY"
+          jq '. + {verificationStatus: "verified"}' artifacts/release-lines/finalization.json \
+            >artifacts/release-lines/completion.json
+
+      - name: Retain linked completion evidence
+        if: always() && steps.original.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: safe-migrations-finalization-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/release-lines
+          if-no-files-found: error
+          retention-days: 30

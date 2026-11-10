@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest import mock
 
@@ -86,7 +87,7 @@ class ReleaseLineFlowTests(unittest.TestCase):
 
         return result, stdout.getvalue(), stderr.getvalue()
 
-    def invoke_shell(self, operation, verification_failures=0, attempt="1"):
+    def invoke_shell(self, operation, verification_failures=0, attempt="1", release_id="42", extra_env=None):
         """Execute the actual publisher with the shared fake gh and real local asset hashes."""
         self.shell_operations.append(operation)
         env = {
@@ -97,12 +98,205 @@ class ReleaseLineFlowTests(unittest.TestCase):
             "FAKE_GH_RELEASE_VERIFY_FAILURES": str(verification_failures),
             "SAFE_MIGRATIONS_RELEASE_READBACK_ATTEMPTS": "1",
             "SAFE_MIGRATIONS_RELEASE_READBACK_DELAY_SECONDS": "0",
+            "FINALIZATION_RELEASE_ID": release_id,
+            **(extra_env or {}),
         }
 
         return subprocess.run(
             ["bash", str(ROOT / "eng/reconcile-github-release.sh"), operation, VERSION, f"v{VERSION}"],
             cwd=self.root, env=env, capture_output=True, text=True, check=False, timeout=60,
         )
+
+    def test_existing_draft_finalization_edits_once_without_upload_or_creation(self):
+        # Arrange
+        staged = self.invoke_shell("stage")
+        self.assertEqual(0, staged.returncode, staged.stderr)
+        log = self.state / "commands.log"
+        log.write_text("", encoding="ascii")
+        original = publication.candidate_manifest(self.artifacts, VERSION)
+
+        # Act
+        completed = self.invoke_shell("finalize")
+        replay = self.invoke_shell("finalize")
+
+        # Assert
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual(0, replay.returncode, replay.stderr)
+        self.assertEqual(original, publication.candidate_manifest(self.artifacts, VERSION))
+        commands = log.read_text(encoding="ascii").splitlines()
+        self.assertEqual(1, sum(line.startswith("api --method PATCH ") for line in commands))
+        self.assertFalse(any(line.startswith("release edit ") for line in commands))
+        self.assertFalse(any(line.startswith(("release create ", "release upload ")) for line in commands))
+        self.assertEqual(26, sum(line.startswith("release verify-asset ") for line in commands))
+
+    def test_finalization_never_creates_a_missing_release(self):
+        # Arrange
+        log = self.state / "commands.log"
+
+        # Act
+        result = self.invoke_shell("finalize")
+
+        # Assert
+        self.assertNotEqual(0, result.returncode)
+        self.assertFalse((self.state / "release.json").exists())
+        self.assertNotIn("release create ", log.read_text(encoding="ascii"))
+
+    def test_finalization_rejects_replaced_release_id_before_any_write(self):
+        # Arrange
+        staged = self.invoke_shell("stage")
+        self.assertEqual(0, staged.returncode, staged.stderr)
+        log = self.state / "commands.log"
+        log.write_text("", encoding="ascii")
+
+        # Act
+        result = self.invoke_shell("finalize", release_id="43")
+
+        # Assert
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("Release ID changed", result.stderr)
+        self.assertFalse(any(line.startswith(("release edit ", "release upload ", "release create ",
+                                             "api --method PATCH "))
+                             for line in log.read_text(encoding="ascii").splitlines()))
+
+    def test_finalization_rejects_release_replacement_after_initial_observation(self):
+        # Arrange
+        staged = self.invoke_shell("stage")
+        self.assertEqual(0, staged.returncode, staged.stderr)
+        (self.state / "release-visibility-count").write_text("0", encoding="ascii")
+        log = self.state / "commands.log"
+        log.write_text("", encoding="ascii")
+
+        # Act
+        result = self.invoke_shell("finalize", extra_env={"FAKE_GH_REPLACE_RELEASE_AT": "2"})
+
+        # Assert
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("Release ID changed", result.stderr)
+        self.assertFalse(any(line.startswith(("release edit ", "api --method PATCH "))
+                             for line in log.read_text(encoding="ascii").splitlines()))
+
+    def test_finalization_rejects_changed_or_incomplete_assets_without_repairing_them(self):
+        for change in ("missing", "digest", "unexpected"):
+            with self.subTest(change=change):
+                # Arrange
+                staged = self.invoke_shell("stage")
+                self.assertEqual(0, staged.returncode, staged.stderr)
+                path = self.state / "release.json"
+                original = path.read_bytes()
+                value = json.loads(original)
+                if change == "missing":
+                    value["assets"].pop()
+                elif change == "digest":
+                    value["assets"][0]["digest"] = "sha256:" + "0" * 64
+                else:
+                    value["assets"].append({"name": "unexpected.txt", "digest": "sha256:" + "0" * 64})
+
+                path.write_text(json.dumps(value), encoding="ascii")
+                log = self.state / "commands.log"
+                log.write_text("", encoding="ascii")
+
+                # Act
+                result = self.invoke_shell("finalize")
+
+                # Assert
+                self.assertNotEqual(0, result.returncode)
+                self.assertFalse(any(line.startswith(("release edit ", "release upload ", "release create ",
+                                                     "api --method PATCH "))
+                                     for line in log.read_text(encoding="ascii").splitlines()))
+                path.write_bytes(original)
+
+    def run_public_readback(self, change=None, signature_exit=0):
+        """Exercise real ZIP comparison and signature-command gating without contacting NuGet."""
+        public = self.root / "public"
+        public.mkdir()
+        for package in publication.PACKAGES:
+            original = self.artifacts / f"packages/{package}.{VERSION}.nupkg"
+            with zipfile.ZipFile(original, "w") as archive:
+                archive.writestr("payload", b"qualified content")
+
+            with zipfile.ZipFile(public / original.name.lower(), "w") as archive:
+                archive.writestr("payload", b"changed" if change == "content" else b"qualified content")
+                if change != "unsigned":
+                    archive.writestr(".signature.p7s", b"synthetic signature; verifier is a test double")
+
+        curl = self.bin / "curl"
+        curl.write_text("""#!/usr/bin/env bash
+set -euo pipefail
+url="${!#}"
+while (($#)); do
+    if [[ "$1" == --output ]]; then
+        cp "$PUBLIC_ROOT/${url##*/}" "$2"
+        break
+    fi
+    shift
+done
+printf '%s' "${FAKE_HTTP_STATUS:-200}"
+""", encoding="ascii")
+        curl.chmod(0o755)
+        dotnet = self.bin / "dotnet"
+        dotnet.write_text("""#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" == nuget && "$2" == verify && "${!#}" == --all ]]
+printf '%s\\n' "$*" >>"$VERIFY_LOG"
+exit "$VERIFY_EXIT"
+""", encoding="ascii")
+        dotnet.chmod(0o755)
+        sleep = self.bin / "sleep"
+        sleep.write_text("#!/bin/sh\nexit 0\n", encoding="ascii")
+        sleep.chmod(0o755)
+
+        return subprocess.run(
+            ["bash", str(ROOT / "eng/readback-nuget.sh"), "--package-dir", str(self.artifacts / "packages"),
+             "--version", VERSION, "--timeout-seconds", "1" if change == "unsigned" else "3600"],
+            env={**os.environ, "PATH": str(self.bin) + os.pathsep + os.environ["PATH"],
+                 "PUBLIC_ROOT": str(public), "VERIFY_LOG": str(self.root / "verify.log"),
+                 "VERIFY_EXIT": str(signature_exit)}, capture_output=True, text=True, timeout=20, check=False)
+
+    def test_real_public_readback_requires_all_five_signature_checks_and_exact_content(self):
+        # Arrange
+        expected_count = len(publication.PACKAGES)
+
+        # Act
+        result = self.run_public_readback()
+
+        # Assert
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(expected_count, len((self.root / "verify.log").read_text(encoding="ascii").splitlines()))
+        self.assertEqual(expected_count, result.stdout.count("Verified published package:"))
+
+    def test_real_public_readback_rejects_invalid_signatures(self):
+        # Arrange
+        signature_exit = 1
+
+        # Act
+        result = self.run_public_readback(signature_exit=signature_exit)
+
+        # Assert
+        self.assertNotEqual(0, result.returncode)
+        self.assertNotIn("NuGet repository signatures and package contents verified.", result.stdout)
+
+    def test_real_public_readback_rejects_changed_public_content(self):
+        # Arrange
+        change = "content"
+
+        # Act
+        result = self.run_public_readback(change=change)
+
+        # Assert
+        self.assertNotEqual(0, result.returncode)
+        self.assertNotIn("NuGet repository signatures and package contents verified.", result.stdout)
+
+    def test_real_public_readback_never_accepts_an_unsigned_public_package(self):
+        # Arrange
+        change = "unsigned"
+
+        # Act
+        result = self.run_public_readback(change=change)
+
+        # Assert
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("NuGet readback timed out", result.stderr)
+        self.assertIn("Waiting for NuGet repository signature", result.stderr)
 
     def test_failed_readback_resumes_original_admission_without_republishing(self):
         """An interrupted write/readback boundary keeps its original source and exact thirteen assets."""
