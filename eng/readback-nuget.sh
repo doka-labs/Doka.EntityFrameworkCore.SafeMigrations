@@ -8,7 +8,8 @@ usage() {
 
 package_dir=""
 package_version=""
-timeout_seconds=1200
+# WHY: NuGet validation is asynchronous; retain the original one-hour window.
+timeout_seconds=3600
 
 while (($# > 0)); do
     case "$1" in
@@ -110,9 +111,13 @@ for package_id in "${package_ids[@]}"; do
                     dotnet nuget verify "$published_package" --all
                     compare_package_content "$expected_package" "$published_package"
                     verified=true
+                else
+                    echo "Waiting for NuGet repository signature: $package_id $package_version." >&2
                 fi
                 ;;
-            404 | 408 | 429 | 5??) ;;
+            404 | 408 | 429 | 5??)
+                echo "Waiting for NuGet readback: $package_id $package_version; HTTP $http_code." >&2
+                ;;
             *)
                 echo "NuGet readback failed for $package_id with HTTP $http_code." >&2
                 exit 1

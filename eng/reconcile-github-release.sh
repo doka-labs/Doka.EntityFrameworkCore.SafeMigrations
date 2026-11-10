@@ -3,7 +3,7 @@
 set -euo pipefail
 
 usage() {
-    echo "Usage: $0 <stage|publish> <package-version> <release-tag>" >&2
+    echo "Usage: $0 <stage|publish|finalize> <package-version> <release-tag>" >&2
 }
 
 if (($# != 3)); then
@@ -15,8 +15,13 @@ operation="$1"
 package_version="$2"
 release_tag="$3"
 
-if [[ "$operation" != stage && "$operation" != publish ]]; then
+if [[ "$operation" != stage && "$operation" != publish && "$operation" != finalize ]]; then
     usage
+    exit 2
+fi
+
+if [[ "$operation" == finalize && ! "${FINALIZATION_RELEASE_ID:-}" =~ ^[1-9][0-9]{0,17}$ ]]; then
+    echo "Finalization requires the exact existing Release ID." >&2
     exit 2
 fi
 
@@ -135,7 +140,7 @@ prepare_release_notes() {
         found && /^## \[/ { exit }
         found { print }
         END { if (!found) exit 1 }
-    ' CHANGELOG.md >"$release_notes_file"
+    ' "${FINALIZATION_CHANGELOG:-CHANGELOG.md}" >"$release_notes_file"
     expected_release_notes="$(<"$release_notes_file")"
 }
 
@@ -179,6 +184,7 @@ read_release() {
     jq -c --arg tag "$release_tag" '
         [.[][] | select(.tag_name == $tag)][0]
         | {
+            releaseId: .id,
             tagName: .tag_name,
             name: .name,
             body: .body,
@@ -217,6 +223,13 @@ release_identity_is_valid() {
     local actual_release_notes
 
     actual_release_notes="$(jq -r '.body // ""' <<<"$release_json")"
+    if [[ "$operation" == finalize ]] && ! jq -e \
+        --arg id "$FINALIZATION_RELEASE_ID" '(.releaseId | tostring) == $id' \
+        <<<"$release_json" >/dev/null; then
+        echo "The existing Release ID changed; finalization cannot replace it." >&2
+        return 1
+    fi
+
     if jq -e \
         --arg tag "$release_tag" \
         --arg name "$expected_release_title" \
@@ -279,6 +292,10 @@ release_state_and_assets_match() {
     local actual_assets
 
     if ! release_json="$(read_release 2>/dev/null)"; then
+        return 1
+    fi
+
+    if ! release_identity_is_valid; then
         return 1
     fi
 
@@ -461,9 +478,17 @@ publish_release() {
             publication_arguments+=(--prerelease)
         fi
 
-        gh release edit "$release_tag" \
-            --draft=false \
-            "${publication_arguments[@]}"
+        if [[ "$operation" == finalize ]]; then
+            # WHY: The tag could resolve to a replacement draft after the last
+            # observation. Address only the independently frozen numeric ID.
+            gh api --method PATCH \
+                "/repos/{owner}/{repo}/releases/$FINALIZATION_RELEASE_ID" \
+                -F draft=false -f "make_latest=$promote_latest" >/dev/null
+        else
+            gh release edit "$release_tag" \
+                --draft=false \
+                "${publication_arguments[@]}"
+        fi
     fi
 
     wait_for_release_state "published immutable GitHub Release" false true
@@ -476,7 +501,7 @@ case "$operation" in
     stage)
         stage_release
         ;;
-    publish)
+    publish | finalize)
         publish_release
         ;;
 esac

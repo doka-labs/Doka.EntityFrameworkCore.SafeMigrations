@@ -226,7 +226,11 @@ but the workflow's bounded signed-package readback must already have passed.
 - Before a tag exists, fix the source or workflow through review and start a
   new candidate run. No release identity has been consumed.
 - After the tag exists, never move or delete it to hide a failure. Rerun only
-  the failed publication job in the same workflow run.
+  the failed publication job in the same workflow run when that original code
+  can resume safely. A rerun retains its original SHA/ref; merging corrected
+  controls into main does not replace code inside the old run. If the original
+  publisher itself is broken after uploads, use the completion-only procedure
+  below rather than a new candidate dispatch or rebuilt package.
 - If draft staging fails, no NuGet credential has been requested and no package
   has been pushed. The same job may resume only matching draft assets.
 - Missing, malformed, ambiguous, or cryptographically invalid portable
@@ -261,6 +265,75 @@ but the workflow's bounded signed-package readback must already have passed.
 Stable releases use the same procedure. A stable package is independently
 qualified for its own version; an RC package is never renamed into a stable
 package.
+
+## Complete an existing publication without uploading packages
+
+This mode is available only after its reviewed controls reach protected main.
+It is a new control run, not a new package release. The original run remains
+unchanged, including its failed conclusion. A successful completion receipt
+links that run and its original source/admission/artifacts to the new verified
+completion. It does not relabel an old failure as successful qualification.
+
+Before starting it, confirm the public symbol validation status for all five
+packages in NuGet.org, as required for normal publication. Successful upload
+steps prove acceptance, not completed symbol indexing. If validation failed,
+stop; this mode cannot repair or re-upload symbols. Review the failed publisher,
+the exact signed tag and the original qualified source. Do not rebuild or move
+the tag. Original line, admission, package and provenance artifacts must still
+exist and be unexpired. A missing admission after uploads cannot be replaced.
+
+In **Release candidate**, select the reviewed current **main** and enter:
+
+```text
+version: 10.7.1
+qualification-only: false
+finalize-run-id: 42767338686
+```
+
+These values identify the interrupted 10.7.1 publication; substitute independently
+verified identities when completing another release. Leave finalize-run-id empty
+for ordinary new releases. Combining it with qualification-only is rejected
+before requesting the protected environment. Starting this workflow and approving
+it are operator actions; preparation or local tests do not authorize either.
+
+The completion job retains the existing nuget review gate and the shared
+non-cancelling publication lock. It has no OIDC write permission, NuGet login,
+package build/pack, primary or symbol upload, tag write or asset staging step.
+It can only finalize one existing Release ID with the complete original assets:
+
+1. Authenticate the actual control run at current protected main. Independently
+   restore the original publication admission and frozen source-line identity,
+   checking archive digests and original repository, run, source and version.
+2. Require every original matrix cell, preflight and attestation producer to have
+   succeeded at its own admitted attempt. Require all five original symbol-upload
+   steps to have succeeded. A failed aggregate publisher alone does not invalidate
+   its successful qualification; missing or skipped producers do.
+3. Download original package/provenance artifact IDs. Check the unchanged signed
+   tag with the currently trusted signers, original package contract/checksums,
+   exact thirteen-asset manifest and cryptographic portable provenance
+   pinned to the original signer workflow, source ref and commit.
+4. Read all five public primary packages, require valid repository signatures and
+   compare all contents with the originals, excluding only the repository
+   signature entry. The shared NuGet wait is one hour; timeout is not permission
+   to accept a missing package or skip verification. The 90-minute job budget
+   leaves time for the remaining evidence checks.
+5. Recheck current authority, original evidence, candidate bytes and the exact
+   existing Release ID immediately before completion. Verify the tag again and
+   use release notes from the original signed source. Never create a missing
+   release, fill missing assets, overwrite a mismatch or replace original admission.
+6. Publish only that complete draft, then verify immutable Release state and
+   every asset attestation. Repeating completion on a matching immutable release
+   verifies it without another edit. Retain line/admission/finalization evidence
+   under safe-migrations-finalization-RUN-ATTEMPT; completion.json is written only
+   after all final checks succeed. A retained preparation receipt alone is not
+   proof of successful completion.
+
+Any foreign, expired, ambiguous, replaced or revoked evidence is blocking. Stop
+for maintainer recovery if the original evidence is unavailable. Do not disable
+identity checks, change GITHUB_SHA/GITHUB_RUN_ID to impersonate the old run,
+publish replacement bytes under the same version, or manually mark the old run
+successful. The normal signed-content and immutable-release acceptance gates
+remain mandatory.
 
 ## Primary sources
 

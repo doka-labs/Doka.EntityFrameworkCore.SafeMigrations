@@ -151,7 +151,7 @@ package_version='YOUR_APPROVED_VERSION_WITHOUT_V'
 bash eng/readback-nuget.sh \
   --package-dir "$verification_dir" \
   --version "$package_version" \
-  --timeout-seconds 1200
+  --timeout-seconds 3600
 ```
 
 It requires valid NuGet repository signatures and compares every public

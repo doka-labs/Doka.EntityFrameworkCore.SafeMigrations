@@ -46,9 +46,69 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("group: safe-migrations-publication\n"
                       "      cancel-in-progress: false\n      queue: max", publisher)
         for name, block in blocks.items():
-            if name != "publish":
+            if name not in ("publish", "finalize"):
                 self.assertNotIn("name: nuget", block)
                 self.assertNotIn("NuGet/login@", block)
+
+    def test_finalization_is_a_separate_nonbuilding_nonuploading_protected_path(self):
+        # Arrange
+        blocks = jobs(ROOT / ".github/workflows/release-candidate.yml")
+
+        # Act
+        finish = blocks["finalize"]
+
+        # Assert
+        self.assertIn("if: ${{ inputs.finalize-run-id == '' || inputs.qualification-only }}", blocks["preflight"])
+        self.assertIn("if: ${{ inputs.finalize-run-id != '' && !inputs.qualification-only }}", finish)
+        self.assertIn("environment:\n      name: nuget", finish)
+        self.assertIn("group: safe-migrations-publication", finish)
+        self.assertIn("cancel-in-progress: false\n      queue: max", finish)
+        for forbidden in ("dotnet build", "dotnet pack", "dotnet nuget push", "NuGet/login@", "id-token: write",
+                          "release upload", "release create", "gh workflow run", "git tag -", "git push"):
+            self.assertNotIn(forbidden, finish)
+
+        self.assertNotIn("uses: ./.github/workflows/quality-gates.yml", finish)
+        self.assertEqual(2, finish.count("artifact-ids: ${{ steps.original.outputs."))
+        self.assertEqual(2, finish.count("run-id: ${{ steps.original.outputs.original-run-id }}"))
+        self.assertIn('--signer-digest "$SOURCE_COMMIT"', finish)
+        self.assertIn('--source-ref "$SOURCE_REF" --source-digest "$SOURCE_COMMIT"', finish)
+        self.assertIn('verify-tag "$tag"', finish)
+        self.assertIn('reconcile-github-release.sh finalize "$PACKAGE_VERSION"', finish)
+        self.assertIn("FINALIZATION_RELEASE_ID: ${{ steps.original.outputs.release-id }}", finish)
+
+    def test_finalization_cannot_publish_before_all_original_and_public_checks(self):
+        # Arrange
+        finish = jobs(ROOT / ".github/workflows/release-candidate.yml")["finalize"]
+
+        # Act
+        positions = [finish.index("- name: " + name) for name in (
+            "Restore original admission and successful qualification",
+            "Download original qualified packages without rebuilding", "Download original portable SLSA provenance",
+            "Verify original tag and exact qualified content",
+            "Cryptographically verify original portable SLSA provenance",
+            "Verify all existing public NuGet signatures and package contents",
+            "Recheck authorization and complete only the existing GitHub Release")]
+
+        # Assert
+        self.assertEqual(sorted(positions), positions)
+        self.assertEqual(2, finish.count("publication recheck-finalization"))
+        self.assertIn('--receipt-sha256 "$RECEIPT_SHA256"', finish)
+        self.assertIn("retention-days: 30", finish)
+
+    def test_conflicting_intent_fails_before_any_protected_job(self):
+        # Arrange
+        preflight = jobs(ROOT / ".github/workflows/release-candidate.yml")["preflight"]
+        body = preflight.split("- name: Reject incompatible qualification and finalization intent\n", 1)[1]
+        command = textwrap.dedent(body.split("        run: |\n", 1)[1].split("\n      - name:", 1)[0])
+
+        # Act
+        result = subprocess.run(["bash", "-euo", "pipefail", "-c", command],
+                                env={**os.environ, "FINALIZE_RUN_ID": "7"}, capture_output=True, text=True,
+                                check=False, timeout=5)
+
+        # Assert
+        self.assertEqual(2, result.returncode)
+        self.assertIn("Qualification-only cannot finalize", result.stderr)
 
     def test_original_artifact_and_receipt_identities_survive_failed_job_retry(self):
         # Arrange

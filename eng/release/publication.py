@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from eng.release import lines
+from eng.release import lines, maintenance
 
 
 POLICY_PATH = "eng/release/lines-policy.json"
@@ -68,7 +68,9 @@ class GitHubClient:
 
     def download(self, route: str) -> bytes:
         """Download a small immutable receipt archive, not arbitrary candidate files."""
-        return self._read(["gh", "api", "-H", "Accept: application/octet-stream", route])
+        # WHY: The REST artifact endpoint negotiates JSON before redirecting to
+        # ZIP storage. An octet-stream Accept header is rejected with HTTP 415.
+        return self._read(["gh", "api", "--method", "GET", "-H", "Accept: application/vnd.github+json", route])
 
     @staticmethod
     def _read(arguments: list[str]) -> bytes:
@@ -563,8 +565,8 @@ def prior_publication_is_unstarted(frozen: dict, current_attempt: str, api: GitH
             raise PublicationAdmissionError("Earlier publication may have started; original admission is required.")
 
 
-def restore_admission(frozen: dict, inventory: list[dict], api: GitHubClient) -> dict | None:
-    """Restore the original immutable archive, never synthesize an expired admission."""
+def _admission_archive(frozen: dict, inventory: list[dict], api: GitHubClient) -> tuple[dict, bytes] | None:
+    """Restore the original JSON bytes and validated identity without reserialization."""
     prefix = f"{ADMISSION_PREFIX}{frozen['workflowRunId']}-"
     matches = [entry for entry in inventory if str(entry.get("name", "")).startswith(prefix)]
     if not matches:
@@ -576,27 +578,19 @@ def restore_admission(frozen: dict, inventory: list[dict], api: GitHubClient) ->
     metadata = _artifact(matches[0], frozen)
     suffix = metadata["name"].removeprefix(prefix)
     _number(suffix, "Original publication artifact attempt")
-    raw = api.download(f"repos/{frozen['repository']}/actions/artifacts/{metadata['id']}/zip")
-    if hashlib.sha256(raw).hexdigest() != metadata["digest"].removeprefix("sha256:"):
-        raise PublicationAdmissionError("Original admission archive digest differs from GitHub metadata.")
-
-    try:
-        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-            entries = archive.infolist()
-            if (len(entries) != 1 or entries[0].filename != "admission.json"
-                    or entries[0].file_size > 1024 * 1024
-                    or (entries[0].external_attr >> 16) & 0o170000 == 0o120000):
-                raise PublicationAdmissionError("Original admission archive has an invalid inventory.")
-
-            value = json.loads(archive.read(entries[0]), object_pairs_hook=lines.unique_object)
-    except (ValueError, OSError, RuntimeError, zipfile.BadZipFile, UnicodeError) as error:
-        raise PublicationAdmissionError("Original admission archive cannot be verified.") from error
-
+    value, content = _json_archive(metadata, "admission.json", frozen["repository"], api)
     value = validate_admission(value)
     if value["identity"]["originalPublicationAttempt"] != suffix:
         raise PublicationAdmissionError("Original admission archive name differs from its frozen attempt.")
 
-    return value
+    return value, content
+
+
+def restore_admission(frozen: dict, inventory: list[dict], api: GitHubClient) -> dict | None:
+    """Restore the original immutable archive, never synthesize an expired admission."""
+    result = _admission_archive(frozen, inventory, api)
+
+    return result[0] if result is not None else None
 
 
 def _current_grant(frozen: dict, api: GitHubClient) -> dict:
@@ -683,6 +677,201 @@ def recheck(frozen: dict, line_hash: str, receipt: dict, artifact_root: Path, ap
         raise PublicationAdmissionError("Publication identity or candidate bytes changed after admission.")
 
 
+def _json_archive(metadata: dict, filename: str, repository: str, api: GitHubClient) -> tuple[dict, bytes]:
+    """Read one bounded original JSON subject after validating its ZIP digest."""
+    raw = api.download(f"repos/{repository}/actions/artifacts/{metadata['id']}/zip")
+    if hashlib.sha256(raw).hexdigest() != metadata["digest"].removeprefix("sha256:"):
+        raise PublicationAdmissionError("Original evidence archive digest differs from GitHub metadata.")
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            entries = archive.infolist()
+            if (len(entries) != 1 or entries[0].filename != filename or entries[0].file_size > 1024 * 1024
+                    or (entries[0].external_attr >> 16) & 0o170000 == 0o120000):
+                raise PublicationAdmissionError("Original evidence archive has an invalid inventory.")
+
+            content = archive.read(entries[0])
+            value = json.loads(content, object_pairs_hook=lines.unique_object)
+    except (ValueError, OSError, RuntimeError, zipfile.BadZipFile, UnicodeError) as error:
+        raise PublicationAdmissionError("Original evidence archive cannot be verified.") from error
+
+    return value, content
+
+
+def _finalization_host(api: GitHubClient, environment=None) -> dict:
+    """Require reviewed current main without impersonating the original hosted run."""
+    require_lock(environment)
+    host = hosted_identity(environment)
+    authority = observe_authority(host["repository"], api)
+    env = os.environ if environment is None else environment
+    if (host["sourceRef"] != lines.AUTHORITY_REF or host["sourceCommit"] != authority["controlCommit"]
+            or env.get("QUALIFICATION_ONLY") != "false"):
+        raise PublicationAdmissionError("Finalization requires current protected main and explicit publication intent.")
+
+    current = api.request(f"repos/{host['repository']}/actions/runs/{host['workflowRunId']}")
+    if (not isinstance(current, dict) or current.get("id") != int(host["workflowRunId"])
+            or current.get("head_sha") != host["sourceCommit"] or current.get("head_branch") != "main"
+            or current.get("path") != lines.WORKFLOW_PATH or current.get("event") != "workflow_dispatch"
+            or current.get("run_attempt") != int(host["currentAttempt"])):
+        raise PublicationAdmissionError("Finalization host does not match its actual dispatched identity.")
+
+    return host
+
+
+def _original_producers(frozen: dict, identity: dict, api: GitHubClient) -> None:
+    """Require every original matrix cell and attestation, never the failed aggregate verdict."""
+    repository, commit = frozen["repository"], frozen["sourceCommit"]
+    source = maintenance.source_file(api, repository, ".github/workflows/quality-gates.yml", commit)
+    qualified = re.fullmatch(r"safe-migrations-release-" + re.escape(identity["version"]) + r"-([1-9][0-9]*)",
+                             identity["qualifiedArtifact"]["name"])
+    provenance = re.fullmatch(r"safe-migrations-release-provenance-" + re.escape(identity["workflowRunId"])
+                              + r"-([1-9][0-9]*)", identity["provenanceArtifact"]["name"])
+    if qualified is None or provenance is None:
+        raise PublicationAdmissionError("Original producer artifact names do not identify their actual attempts.")
+
+    # WHY: A failed qualification/attestation job can be retried without rerunning
+    # preflight. Each producer must be checked at its own admitted attempt.
+    expected = [("Validate untagged candidate", frozen["qualificationAttempt"], False),
+                ("Attest qualified packages", provenance[1], False)]
+    producers = maintenance.qualification_producers(source)
+    core_section = maintenance._job_sections(source)["package-and-core"]
+    core_name = "Full qualification / " + maintenance._scalar(re.findall(r"^    name: ([^\n]+)$", core_section,
+                                                                         re.MULTILINE)[0])
+    expected.extend((name.replace("Full qualification / ", "Full reversible qualification / ", 1),
+                     qualified[1] if name == core_name else identity["originalPublicationAttempt"], name != core_name)
+                    for name in producers if name != "schedule-identity")
+    jobs_by_attempt = {}
+    for name, attempt, retained in expected:
+        if not int(frozen["qualificationAttempt"]) <= int(attempt) <= int(identity["originalPublicationAttempt"]) <= 50:
+            raise PublicationAdmissionError("A producer attempt lies outside the original admission.")
+
+        # WHY: Failed-job reruns retain successful provider jobs and their outputs.
+        # Select the latest observation up to original admission, not a later
+        # run verdict and never an older success after a newer failure. The
+        # package-producing job itself must match its exact artifact attempt.
+        for number in range(int(attempt), 0 if retained else int(attempt) - 1, -1):
+            observed_attempt = str(number)
+            if observed_attempt not in jobs_by_attempt:
+                jobs_by_attempt[observed_attempt] = api.pages(
+                    f"repos/{repository}/actions/runs/{frozen['workflowRunId']}/attempts/{observed_attempt}/jobs",
+                    "jobs")
+
+            matches = [job for job in jobs_by_attempt[observed_attempt] if job.get("name") == name]
+            if matches:
+                break
+
+        if (len(matches) != 1 or matches[0].get("status") != "completed"
+                or matches[0].get("conclusion") != "success"
+                or matches[0].get("run_attempt") != int(observed_attempt)):
+            raise PublicationAdmissionError("An original qualification producer is missing or unsuccessful.")
+
+    attempt = identity["originalPublicationAttempt"]
+    if attempt not in jobs_by_attempt:
+        jobs_by_attempt[attempt] = api.pages(
+            f"repos/{repository}/actions/runs/{frozen['workflowRunId']}/attempts/{attempt}/jobs", "jobs")
+
+    publishers = [job for job in jobs_by_attempt[attempt] if job.get("name") == PUBLISHER_JOB]
+    if (len(publishers) != 1 or publishers[0].get("status") != "completed"
+            or publishers[0].get("run_attempt") != int(attempt)):
+        raise PublicationAdmissionError("Original publisher completion is unavailable or ambiguous.")
+
+    steps = publishers[0].get("steps")
+    if not isinstance(steps, list) or any(not isinstance(step, dict) for step in steps):
+        raise PublicationAdmissionError("Original symbol-upload evidence is unavailable.")
+
+    # WHY: Completion never retries symbol uploads. All five original accepted
+    # uploads are mandatory; a partial original publication cannot use this mode.
+    for name in ("Publish Core symbols", "Publish MySQL symbols", "Publish PostgreSQL symbols",
+                 "Publish SQLite symbols", "Publish SQL Server symbols"):
+        matches = [step for step in steps if step.get("name") == name]
+        if len(matches) != 1 or matches[0].get("conclusion") != "success":
+            raise PublicationAdmissionError("An original symbol upload is missing or unsuccessful.")
+
+
+def finalization_evidence(version: str, original_run: str, api: GitHubClient,
+                          environment=None) -> tuple[dict, bytes, bytes]:
+    """Bind a new control run to existing original evidence without granting fresh admission."""
+    lines.parse_version(version)
+    _number(original_run, "Original publication run")
+    if len(original_run) > 18:
+        raise PublicationAdmissionError("Original publication run exceeds the bounded GitHub identity.")
+    host = _finalization_host(api, environment)
+    if original_run == host["workflowRunId"]:
+        raise PublicationAdmissionError("Finalization must identify a separate original publication run.")
+
+    repository = host["repository"]
+    run = api.request(f"repos/{repository}/actions/runs/{original_run}")
+    if (not isinstance(run, dict) or run.get("id") != int(original_run) or run.get("status") != "completed"
+            or run.get("event") != "workflow_dispatch" or run.get("path") != lines.WORKFLOW_PATH
+            or not isinstance(run.get("repository"), dict) or run["repository"].get("full_name") != repository
+            or not isinstance(run.get("head_repository"), dict)
+            or run["head_repository"].get("full_name") != repository):
+        raise PublicationAdmissionError("Original publication run is foreign, incomplete or has the wrong workflow.")
+
+    source = _sha(run.get("head_sha"), "Original source commit", SHA1)
+    original = {"repository": repository, "workflowRunId": original_run, "sourceCommit": source}
+    inventory = api.pages(f"repos/{repository}/actions/runs/{original_run}/artifacts", "artifacts")
+    restored = _admission_archive(original, inventory, api)
+    if restored is None:
+        raise PublicationAdmissionError(
+            "Finalization requires the original publication admission; replacement is forbidden.")
+
+    admission, admission_bytes = restored
+    identity = admission["identity"]
+    if (identity["repository"] != repository or identity["workflowRunId"] != original_run
+            or identity["sourceCommit"] != source or identity["version"] != version
+            or identity["sourceRef"] != f"refs/heads/{run.get('head_branch')}"):
+        raise PublicationAdmissionError("Original admission differs from the requested publication identity.")
+
+    line_name = f"safe-migrations-release-line-{original_run}-{identity['qualificationAttempt']}"
+    line_metadata = resolve_artifact(line_name, original, api, inventory)
+    frozen, line_bytes = _json_archive(line_metadata, "line.json", repository, api)
+    validate_frozen(frozen)
+    if (not frozen["qualifiedForPublication"] or hashlib.sha256(line_bytes).hexdigest() != identity["releaseLineSha256"]
+            or any(frozen[key] != identity[key] for key in ("repository", "sourceRef", "sourceCommit", "version",
+                                                           "tag", "workflowPath", "workflowRunId",
+                                                           "qualificationAttempt"))):
+        raise PublicationAdmissionError("Original qualification does not match the admitted publication.")
+
+    _current_grant(frozen, api)
+    _original_producers(frozen, identity, api)
+    qualified = resolve_artifact(identity["qualifiedArtifact"]["name"], frozen, api, inventory)
+    provenance = resolve_artifact(identity["provenanceArtifact"]["name"], frozen, api, inventory)
+    if qualified != identity["qualifiedArtifact"] or provenance != identity["provenanceArtifact"]:
+        raise PublicationAdmissionError("Original producer artifacts were replaced.")
+
+    releases = api.pages(f"repos/{repository}/releases", "releases")
+    matches = [release for release in releases if release.get("tag_name") == identity["tag"]]
+    if len(matches) != 1 or type(matches[0].get("id")) is not int or matches[0]["id"] <= 0:
+        raise PublicationAdmissionError(
+            "Finalization requires one existing release; creating a replacement is forbidden.")
+
+    # WHY: The completion receipt links two real identities. It never rewrites
+    # GITHUB_SHA/GITHUB_RUN_ID or substitutes a new receipt for original admission.
+    result = {"schemaVersion": 1, "kind": "safe-migrations-publication-finalization", "host": host,
+              "originalIdentity": identity, "admissionId": admission["admissionId"],
+              "releaseId": str(matches[0]["id"])}
+    return result, line_bytes, admission_bytes
+
+
+def check_finalization(receipt: dict, artifact_root: Path, api: GitHubClient, environment=None) -> None:
+    """Recheck current authority, original producers and exact candidate immediately before completion."""
+    identity = receipt.get("originalIdentity") if isinstance(receipt, dict) else None
+    if not isinstance(identity, dict):
+        raise PublicationAdmissionError("Finalization receipt has no original identity.")
+
+    lines.exact_object(receipt, {"schemaVersion", "kind", "host", "originalIdentity", "admissionId", "releaseId"},
+                       "Finalization receipt")
+    lines.exact_object(identity, IDENTITY_FIELDS, "Original finalization identity")
+    current, _, _ = finalization_evidence(identity["version"], identity["workflowRunId"], api, environment)
+    if current != receipt:
+        raise PublicationAdmissionError("Finalization host, original evidence or existing release identity changed.")
+
+    manifest = candidate_manifest(artifact_root, identity["version"])
+    if canonical_digest(manifest) != identity["manifestSha256"]:
+        raise PublicationAdmissionError("Finalization candidate bytes differ from original admission.")
+
+
 def _output(values: dict[str, str]) -> None:
     """Expose only finite canonical workflow outputs, never arbitrary remote text."""
     target = os.environ.get("GITHUB_OUTPUT")
@@ -703,6 +892,14 @@ def main() -> int:
     preflight.add_argument("--version", required=True)
     preflight.add_argument("--qualification-only", choices=("true", "false"), required=True)
     preflight.add_argument("--output", type=Path, required=True)
+    finish = commands.add_parser("prepare-finalization")
+    finish.add_argument("--version", required=True)
+    finish.add_argument("--original-run-id", required=True)
+    finish.add_argument("--output-dir", type=Path, required=True)
+    finish_check = commands.add_parser("recheck-finalization")
+    finish_check.add_argument("--receipt", type=Path, required=True)
+    finish_check.add_argument("--receipt-sha256", required=True)
+    finish_check.add_argument("--artifact-dir", type=Path, required=True)
     for name in ("admit", "recheck"):
         command = commands.add_parser(name)
         command.add_argument("--line-file", type=Path, required=True)
@@ -719,7 +916,28 @@ def main() -> int:
     args = parser.parse_args()
     try:
         api = GitHubClient()
-        if args.command == "preflight":
+        if args.command == "prepare-finalization":
+            value, line_bytes, admission_bytes = finalization_evidence(args.version, args.original_run_id, api)
+            target = args.output_dir
+            _regular_parents(target / "line.json")
+            target.mkdir(parents=True, exist_ok=True)
+            (target / "line.json").write_bytes(line_bytes)
+            _regular_parents(target / "admission.json")
+            (target / "admission.json").write_bytes(admission_bytes)
+            write_json(target / "finalization.json", value)
+            identity = value["originalIdentity"]
+            _output({"source-commit": identity["sourceCommit"], "source-ref": identity["sourceRef"],
+                     "original-run-id": identity["workflowRunId"], "release-id": value["releaseId"],
+                     "qualified-artifact-id": str(identity["qualifiedArtifact"]["id"]),
+                     "provenance-artifact-id": str(identity["provenanceArtifact"]["id"]),
+                     "receipt-sha256": file_digest(target / "finalization.json")})
+        elif args.command == "recheck-finalization":
+            _sha(args.receipt_sha256, "Finalization receipt digest")
+            if file_digest(args.receipt) != args.receipt_sha256:
+                raise PublicationAdmissionError("Finalization receipt bytes changed after preparation.")
+
+            check_finalization(lines.read_json(args.receipt), args.artifact_dir, api)
+        elif args.command == "preflight":
             value = create_qualification(args.version, args.qualification_only == "true", Path.cwd(), api)
             write_json(args.output, value)
             _output({"source-ref": value["sourceRef"],
@@ -746,7 +964,7 @@ def main() -> int:
                 recheck(frozen, args.line_sha256, lines.read_json(args.admission), args.artifact_dir, api)
 
         print(f"Release-line {args.command} verified.")
-    except (PublicationAdmissionError, lines.LinePolicyError, OSError) as error:
+    except (PublicationAdmissionError, lines.LinePolicyError, maintenance.MaintenanceError, OSError) as error:
         print(f"Release-line {args.command} failed: {error}", file=sys.stderr)
 
         return 1

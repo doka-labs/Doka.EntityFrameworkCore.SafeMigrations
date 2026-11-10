@@ -82,6 +82,12 @@ case "${1:-} ${2:-}" in
         visibility_counter=$((visibility_counter + 1))
         printf '%s\n' "$visibility_counter" >"$visibility_counter_file"
 
+        if [[ "${FAKE_GH_REPLACE_RELEASE_AT:-}" =~ ^[1-9][0-9]*$ ]] \
+            && ((visibility_counter >= FAKE_GH_REPLACE_RELEASE_AT)); then
+            jq '.releaseId = 43' "$release_file" >"$release_file.tmp"
+            mv "$release_file.tmp" "$release_file"
+        fi
+
         if ((visibility_counter <= ${FAKE_GH_RELEASE_VISIBILITY_FAILURES:-0})); then
             echo '[[]]'
             exit 0
@@ -89,6 +95,7 @@ case "${1:-} ${2:-}" in
 
         release_json="$(
             jq '{
+                  id: (.releaseId // 42),
                   tag_name: .tagName,
                   name: .name,
                   body: .body,
@@ -163,7 +170,15 @@ case "${1:-} ${2:-}" in
         mv "$temporary_file" "$release_file"
         echo "uploaded $asset_name"
         ;;
-    "release edit")
+    "api --method" | "release edit")
+        if [[ "$1" == api ]]; then
+            if [[ "$3" != PATCH || "$4" != "/repos/{owner}/{repo}/releases/42" \
+                || "$(jq -r '.releaseId // 42' "$release_file")" != 42 ]]; then
+                echo "Completion attempted to patch a replacement release." >&2
+                exit 1
+            fi
+        fi
+
         temporary_file="$release_file.tmp"
         jq \
             '.isDraft = false | .isImmutable = true' \
