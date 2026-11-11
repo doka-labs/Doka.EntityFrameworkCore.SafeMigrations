@@ -1,20 +1,20 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
-/// <summary>Measures canonical key identity allocation without concurrent process-wide collections.</summary>
+/// <summary>Verifies canonical key identity with isolated process-wide collections.</summary>
 
-// WHY: Keep both collection and warmed-cache cases in one exclusive theory with unchanged case data.
+// WHY: Keep forced collections from interrupting other process-wide contracts.
 [Collection(ProcessWideTestGroup.Name)]
 public sealed class SafeMigrationModelManagedKeyIdentityAllocationTests
 {
-    /// <summary>Canonical key orders allocate no permutation or comparer, including after garbage collection.</summary>
+    /// <summary>Canonical keys retain the authored list without a permutation after garbage collection.</summary>
     /// <param name="singleMember">Whether the input contains only one key member.</param>
-    /// <param name="collect">Whether to collect after warming the canonicalization path.</param>
+    /// <param name="collect">Whether to collect after initially canonicalizing the key.</param>
     [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void CompositeKeyAlreadyOrderedPathAvoidsAllocations(
+    public void CompositeKeyAlreadyOrderedPathPreservesReference(
         bool singleMember,
         bool collect
     )
@@ -24,15 +24,14 @@ public sealed class SafeMigrationModelManagedKeyIdentityAllocationTests
             ? ["Id"]
             : ["Code", "Id"];
 
-        for (var iteration = 0; iteration < 256; iteration++)
-        {
-            _ = SafeMigrationModelManagedKeyIdentity.CanonicalizeColumns(columns, normalizer: null, out _);
-        }
+        var initial = SafeMigrationModelManagedKeyIdentity.CanonicalizeColumns(
+            columns,
+            normalizer: null,
+            out var initialOrdinals);
 
         if (collect)
         {
-            // WHY: The ordered path must not depend on a weak runtime cache
-            // retaining an earlier comparer or permutation allocation.
+            // WHY: Reference preservation must not depend on surviving weak runtime caches.
             GC.Collect();
             GC.WaitForPendingFinalizers();
             GC.Collect();
@@ -42,7 +41,6 @@ public sealed class SafeMigrationModelManagedKeyIdentityAllocationTests
         int[]? ordinals = null;
 
         // Act
-        var before = GC.GetAllocatedBytesForCurrentThread();
         for (var iteration = 0; iteration < 512; iteration++)
         {
             canonical = SafeMigrationModelManagedKeyIdentity.CanonicalizeColumns(
@@ -51,10 +49,9 @@ public sealed class SafeMigrationModelManagedKeyIdentityAllocationTests
                 out ordinals);
         }
 
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-
         // Assert
-        Assert.Equal(0L, allocated);
+        Assert.Same(columns, initial);
+        Assert.Null(initialOrdinals);
         Assert.Same(columns, canonical);
         Assert.Null(ordinals);
     }

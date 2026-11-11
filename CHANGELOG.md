@@ -27,6 +27,15 @@ Updating packages alone requires no additional database migration or history rew
 
 ### Fixed
 
+- Validate provider-analysis enum inputs without rebuilding weak runtime metadata
+  after garbage collection. Preserve every declared value, invalid-input rejection,
+  validation order and independent result ownership; measure the post-GC constructor
+  through informational BenchmarkDotNet diagnostics rather than a functional budget.
+- Move prepared projection and related allocation measurements into the existing
+  BenchmarkDotNet suites. Remove sampled heap-byte pass/fail budgets from
+  functional tests while retaining exact results, SQL, reference ownership,
+  post-GC behavior and structural safety limits. Allocation and timing values
+  remain informational; invalid execution or evidence still fails qualification.
 - Recognize SQL Server cancellation-test acquisition statements and operation
   guards independently of SQL layout, without treating quoted values or names
   as executable markers. Cover real generated runtime, script and idempotent

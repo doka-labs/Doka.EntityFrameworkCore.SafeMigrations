@@ -144,9 +144,9 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
         Assert.Equal(ConnectionState.Closed, connection.DbConnection.State);
     }
 
-    /// <summary>Counts prepared wrapping against the former captured selector without measuring list growth.</summary>
+    /// <summary>Preserves prepared wrapping against the former captured selector for every destination.</summary>
     [Fact]
-    public void CommandWrapping_AllocatesLessThanOriginalCapturedSelector()
+    public void CommandWrapping_MatchesOriginalCapturedSelector()
     {
         // Arrange
         const int renderCount = 128;
@@ -158,7 +158,7 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
             .Create()
             .Build();
 
-        var source = Array.AsReadOnly(new[] { CreateCommand(context, "SELECT 7;\n") });
+        var source = Array.AsReadOnly<MigrationCommand>([CreateCommand(context, "SELECT 7;\n")]);
         var currentDestinations = Enumerable
             .Range(0, renderCount)
             .Select(_ => new List<MigrationCommand>(source.Count))
@@ -169,38 +169,30 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
             .Select(_ => new List<MigrationCommand>(source.Count))
             .ToArray();
 
-        Action<int> current = index => SqlServerSafeMigrationsSqlGenerator.AppendGuardedCommands(
+        void Current(
+            int index
+        ) => SqlServerSafeMigrationsSqlGenerator.AppendGuardedCommands(
             currentDestinations[index],
             source,
             dependencies,
             analyzer,
             metadata);
 
-        Action<int> original = index => originalDestinations[index]
+        void Original(
+            int index
+        ) => originalDestinations[index]
             .AddRange(
                 source.Select(command =>
                     new SqlServerSafeMigrationGuardedCommand(command, dependencies, analyzer, metadata)));
 
-        // WHY: Prepare both destination capacities and warm wrapper creation
-        // before counting. The former per-operation selector is the only extra
-        // allocation work under comparison; neither path executes SQL.
-        SqlServerSafeMigrationsSqlGenerator.AppendGuardedCommands(
-            new List<MigrationCommand>(source.Count),
-            source,
-            dependencies,
-            analyzer,
-            metadata);
-
-        new List<MigrationCommand>(source.Count).AddRange(
-            source.Select(command =>
-                new SqlServerSafeMigrationGuardedCommand(command, dependencies, analyzer, metadata)));
-
         // Act
-        var currentBytes = MeasureWrappingAllocations(current, renderCount);
-        var originalBytes = MeasureWrappingAllocations(original, renderCount);
+        for (var index = 0; index < renderCount; index++)
+        {
+            Current(index);
+            Original(index);
+        }
 
         // Assert
-        Assert.InRange(currentBytes, 1, originalBytes - 1);
         Assert.All(
             currentDestinations.Concat(originalDestinations),
             destination =>

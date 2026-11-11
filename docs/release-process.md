@@ -64,7 +64,7 @@ CI and release call the same reusable quality workflow. It enforces:
 - SPDX 2.2 SBOM generation and validation.
 
 It also runs Core, MySQL/MariaDB, PostgreSQL, SQLite, and SQL Server through
-BenchmarkDotNet 0.15.8 with `--filter '*' --job Dry`. This smoke checks all 56
+BenchmarkDotNet 0.15.8 with `--filter '*' --job Dry`. This smoke checks all
 default cases and native full JSON export, not statistical performance.
 Duration and managed allocation values never determine qualification success.
 Invalid configuration, generated-build or execution failures, missing/failed

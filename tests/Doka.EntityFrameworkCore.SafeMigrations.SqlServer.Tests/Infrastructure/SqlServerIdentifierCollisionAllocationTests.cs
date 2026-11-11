@@ -285,7 +285,7 @@ public sealed class SqlServerIdentifierCollisionAllocationTests
             .Where(static sql => sql.StartsWith("INSERT INTO ", StringComparison.Ordinal))
             .ToArray();
 
-        var lastCommand = commands[commands.Count - 1];
+        var lastCommand = commands[^1];
 
         // Assert
         Assert.True(OriginalHasRepeatedScope(references));
@@ -297,12 +297,11 @@ public sealed class SqlServerIdentifierCollisionAllocationTests
         Assert.Equal(snapshot, references);
     }
 
-    /// <summary>Counts only repeated-scope detection on a completed 1000-reference workload.</summary>
+    /// <summary>Matches the original grouping result without changing the completed 1000-reference input.</summary>
     [Fact]
-    public void RepeatedScope_PreparedThousandReferencesAllocateLessThanOriginalGrouping()
+    public void RepeatedScope_PreparedThousandReferencesMatchOriginalGrouping()
     {
         // Arrange
-        const int renderCount = 64;
         var references = Enumerable
             .Range(0, 1000)
             .Select(static index => new SqlServerIdentifierReference(
@@ -313,23 +312,14 @@ public sealed class SqlServerIdentifierCollisionAllocationTests
             .ToArray();
 
         var snapshot = references.ToArray();
-        var current = () => SqlServerIdentifierContract.HasRepeatedPhysicalScope(references);
-        var original = () => OriginalHasRepeatedScope(references);
-
-        // WHY: Both paths receive the same completed input. Warm the exact
-        // grouping and scan paths before measuring per-thread allocations;
-        // input preparation and machine-specific timings are not counted.
-        _ = current();
-        _ = original();
 
         // Act
-        var currentResult = MeasureDetectionAllocations(current, renderCount);
-        var originalResult = MeasureDetectionAllocations(original, renderCount);
+        var currentResult = SqlServerIdentifierContract.HasRepeatedPhysicalScope(references);
+        var originalResult = OriginalHasRepeatedScope(references);
 
         // Assert
-        Assert.True(currentResult.Repeated);
-        Assert.Equal(originalResult.Repeated, currentResult.Repeated);
-        Assert.InRange(currentResult.Bytes, 1, originalResult.Bytes - 1);
+        Assert.True(currentResult);
+        Assert.Equal(originalResult, currentResult);
         Assert.Equal(snapshot, references);
     }
 
@@ -392,22 +382,4 @@ public sealed class SqlServerIdentifierCollisionAllocationTests
     private static string LiteralReference(
         string value
     ) => "N'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
-
-    /// <summary>Counts detector allocations on the current thread while retaining the Boolean result.</summary>
-    private static (long Bytes, bool Repeated) MeasureDetectionAllocations(
-        Func<bool> detect,
-        int count
-    )
-    {
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        var repeated = false;
-        for (var index = 0; index < count; index++)
-        {
-            repeated = detect();
-        }
-
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-
-        return (allocated, repeated);
-    }
 }

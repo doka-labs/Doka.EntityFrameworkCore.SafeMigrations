@@ -802,8 +802,8 @@ used to hide an uncovered regression.
 ## Performance and memory
 
 Core, MySQL/MariaDB, PostgreSQL, SQLite and SQL Server each have an isolated
-BenchmarkDotNet 0.15.8 executable. The default workload families retain all 56
-parameterized cases, including operation-count parameters where applicable.
+BenchmarkDotNet 0.15.8 executable. The default workload families include all
+registered parameterized cases, including operation-count parameters where applicable.
 BenchmarkDotNet owns process isolation, warmup, timing, statistics, managed
 allocation diagnostics and native full JSON export. The former custom timer,
 median sampler, budget configuration and result schema are retired.
@@ -846,6 +846,36 @@ allocation and timing numbers are not methodologically comparable with the
 new engine, even when a workload name is unchanged. Managed bytes allocated
 are neither peak live managed memory nor native process/database memory.
 
+### Allocation-counter limitations
+
+Runtime allocation counters are not an exact object census in every execution
+window. In .NET 10, the [thread-local implementation][runtime-thread-allocation]
+subtracts the unused portion of the current allocation context from its charged
+bytes. The [background-GC accounting defect][runtime-bgc-accounting] can retire
+that context without retiring its unused-byte charge. A counter delta can then
+increase without a corresponding managed object. The related
+[runtime correction][runtime-bgc-correction] is a draft, not a released fix, as
+checked on 2026-11-11. The process-total counter also depends on allocation-context
+accounting; switching counters alone does not establish exact object attribution.
+
+For an unexplained delta, retain the source revision, exact runtime, collector
+configuration and measured-thread boundaries. Distinguish sampled allocation
+events from complete object events; check event loss, object-size alignment and
+known positive/empty controls before attributing bytes to a call stack. A new
+trace or a matching upstream mechanism does not retroactively identify an old
+untraced CI outlier. BenchmarkDotNet remains the informational measurement
+mechanism, not an exemption from these evidence limits.
+
+Do not disable background GC, introduce a no-GC region, subtract an estimated
+offset or add retry-until-pass behavior in functional qualification. Keep result,
+ownership, SQL and recovery assertions independent of observed heap-byte totals.
+
+[runtime-thread-allocation]: https://github.com/dotnet/runtime/blob/v10.0.0/src/coreclr/vm/comutilnative.cpp#L851-L865
+[runtime-bgc-accounting]: https://github.com/dotnet/runtime/issues/134724
+[runtime-bgc-correction]: https://github.com/dotnet/runtime/pull/134855
+
+### Provider attribution boundaries
+
 PostgreSQL eligibility attribution records exact SQL, transport and replay
 evidence during setup. Its measured deterministic transport disables diagnostic
 retention and disposal counters; no observation cleanup is included in each
@@ -855,9 +885,14 @@ client-side measurements are not native server timings.
 [bdn-json]: https://github.com/dotnet/BenchmarkDotNet/blob/v0.15.8/src/BenchmarkDotNet/Exporters/Json/JsonExporter.cs
 [bdn-gc]: https://github.com/dotnet/BenchmarkDotNet/blob/v0.15.8/src/BenchmarkDotNet/Engines/GcStats.cs#L126-L146
 
-Prepared-input CPU regressions separately bound shared seed and diagnostic
-evidence parsing, accepted-column projection, MySQL/MariaDB runtime generation
-and SQL Server catalog-string assembly allocations. Runtime-generation SQL
+Prepared-input BenchmarkDotNet workloads measure shared seed and diagnostic
+evidence parsing, accepted-column projection, no-FK dependency and certificate
+reuse, MySQL/MariaDB runtime generation, PostgreSQL table-definition composition
+and SQL Server catalog-string assembly allocations. Numeric allocation samples
+are informational, including absolute amounts, relative comparisons and
+zero-byte observations; none determines functional-test or coverage success.
+Functional regressions separately require exact results and reference ownership.
+Runtime-generation SQL
 fingerprints retain exact MySQL/MariaDB guards, statement order and cleanup;
 PostgreSQL text and SQLite catalog regressions cover whitespace, comments,
 quoted tokens and ordered keys. They exclude input construction and asynchronous
@@ -989,16 +1024,18 @@ Separate live execution tests apply and replay at least 50,000 mixed absent,
 source, and already-target row transitions using the production
 128-row/4,096-cell partitioning. Their JSON evidence records elapsed time,
 managed allocations, command count, maximum batch rows/cells, and maximum
-generated command bytes. These are scalability and allocation gates, not an
-absolute wall-clock promise across different runner hardware.
+generated command bytes. Semantic results, command counts and transport limits
+remain blocking contracts. Recorded duration and managed-allocation values are
+informational, not cross-machine or instrumented-run pass/fail budgets.
 
 SQLite has engine-appropriate gates instead of inheriting server-transport
 claims. Its live suite applies and replays 50,000 mixed model-managed row
-transitions. Its allocation and duration budgets analyze the same 384-row
+transitions. Its allocation and duration evidence analyzes the same 384-row
 operation set against both a 200-table catalog and a 1,000-table catalog whose
 foreign tables carry indexes and foreign keys. The latter intentionally
 measures whole-catalog discovery cost and prevents that cost from remaining
-outside the release budget.
+outside the retained release evidence. Numeric measurements are informational;
+state, scope, recovery and replay correctness remain blocking.
 
 After restoring the locked publishable package graphs, the quality workflow
 rejects warning-level Roslyn style violations and unnecessary imports.

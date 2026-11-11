@@ -1,6 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
-/// <summary>Isolates process-wide collections from concurrent allocation measurements.</summary>
+/// <summary>Isolates forced process-wide collections from concurrent tests.</summary>
 [CollectionDefinition(nameof(SafeMigrationDecisionPlannerGarbageCollectionDefinition), DisableParallelization = true)]
 public sealed class SafeMigrationDecisionPlannerGarbageCollectionDefinition;
 
@@ -8,63 +8,56 @@ public sealed class SafeMigrationDecisionPlannerGarbageCollectionDefinition;
 [Collection(nameof(SafeMigrationDecisionPlannerGarbageCollectionDefinition))]
 public sealed class SafeMigrationDecisionPlannerGarbageCollectionTests
 {
-    /// <summary>Remains allocation-free after one or repeated full collections discard weak runtime caches.</summary>
-    /// <param name="collectionCount">The number of independently collected measurement windows.</param>
+    /// <summary>Preserves actions after one or repeated full collections discard weak runtime caches.</summary>
+    /// <param name="collectionCount">The number of independently collected planning windows.</param>
     [Theory]
     [InlineData(1)]
     [InlineData(2)]
-    public void ActionOnly_DoesNotAllocateAfterGarbageCollection(
+    public void ActionOnly_PreservesRepairAfterGarbageCollection(
         int collectionCount
     )
     {
         // Arrange
-        _ = SafeMigrationDecisionPlanner.PlanAction(
+        var initial = SafeMigrationDecisionPlanner.PlanAction(
             SafeMigrationOperationKind.EnsureColumn,
             SafeMigrationObservedState.Different,
             SafeMigrationPolicy.RepairIfSafe,
             SafeMigrationRepairCapability.Safe);
 
         // Act
-        var result = MeasureAfterCollections(collectionCount);
+        var actions = PlanAfterCollections(collectionCount);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.Repair, result.Action);
-        Assert.Equal(0, result.Bytes);
+        Assert.Equal(SafeMigrationAction.Repair, initial);
+        Assert.All(actions, action => Assert.Equal(SafeMigrationAction.Repair, action));
     }
 
-    /// <summary>Measures only synchronous planner calls after each forced collection completes.</summary>
-    /// <param name="collectionCount">The number of independently collected measurement windows.</param>
-    /// <returns>The last action and the sum of planner allocations across all windows.</returns>
-    private static (SafeMigrationAction Action, long Bytes) MeasureAfterCollections(
+    /// <summary>Captures synchronous planner results after each forced collection completes.</summary>
+    /// <param name="collectionCount">The number of independently collected planning windows.</param>
+    /// <returns>Every planned action after collection.</returns>
+    private static SafeMigrationAction[] PlanAfterCollections(
         int collectionCount
     )
     {
-        var action = default(SafeMigrationAction);
-        var bytes = 0L;
+        var actions = new SafeMigrationAction[collectionCount * 1000];
 
         for (var collection = 0; collection < collectionCount; collection++)
         {
-            // WHY: Runtime enum metadata can disappear despite warming the planner.
-            // Isolate process-wide GC from other tests and exclude collection work
-            // from the allocation window rather than relaxing the zero-byte contract.
+            // WHY: Runtime enum metadata can disappear after an earlier planning call.
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
             GC.WaitForPendingFinalizers();
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
 
-            var before = GC.GetAllocatedBytesForCurrentThread();
-
             for (var index = 0; index < 1000; index++)
             {
-                action = SafeMigrationDecisionPlanner.PlanAction(
+                actions[collection * 1000 + index] = SafeMigrationDecisionPlanner.PlanAction(
                     SafeMigrationOperationKind.EnsureColumn,
                     SafeMigrationObservedState.Different,
                     SafeMigrationPolicy.RepairIfSafe,
                     SafeMigrationRepairCapability.Safe);
             }
-
-            bytes += GC.GetAllocatedBytesForCurrentThread() - before;
         }
 
-        return (action, bytes);
+        return actions;
     }
 }

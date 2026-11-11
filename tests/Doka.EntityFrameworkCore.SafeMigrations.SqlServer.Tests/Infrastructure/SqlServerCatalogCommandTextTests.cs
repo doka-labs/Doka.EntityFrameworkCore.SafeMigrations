@@ -1,8 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-/// <summary>Verifies exact catalog command assembly independently of asynchronous transport allocations.</summary>
-/// <param name="output">The diagnostic output retaining the observed allocation count.</param>
-public sealed class SqlServerCatalogCommandTextTests(ITestOutputHelper output)
+/// <summary>Verifies exact catalog command assembly independently of asynchronous transport.</summary>
+public sealed class SqlServerCatalogCommandTextTests
 {
     /// <summary>Retains empty, direct and delayed statement text including quoted and Unicode payloads.</summary>
     /// <param name="count">The selection count.</param>
@@ -48,9 +47,9 @@ public sealed class SqlServerCatalogCommandTextTests(ITestOutputHelper output)
         Assert.Equal(Encoding.UTF8.GetByteCount(expected), Encoding.UTF8.GetByteCount(actual));
     }
 
-    /// <summary>Large catalog statements require only their final string, not a full joined scratch copy.</summary>
+    /// <summary>Repeated assembly preserves the complete large prepared statement and its length checksum.</summary>
     [Fact]
-    public void AssemblyKeepsPreparedStatementAllocationsBounded()
+    public void AssemblyPreservesRepeatedPreparedStatements()
     {
         // Arrange
         const int repetitions = 100;
@@ -67,37 +66,30 @@ public sealed class SqlServerCatalogCommandTextTests(ITestOutputHelper output)
             + (selections.Length - 1) * separator.Length
             + trailer.Length;
 
-        var allocations = new long[samples];
-        _ = SqlServerSafeMigrationProviderAnalyzer.BuildCatalogCommandText(selections, prefix, separator, trailer);
+        var expected = prefix + string.Join(separator, selections) + trailer;
+        var snapshot = selections.ToArray();
+        var statements = new string[repetitions * samples];
 
         // Act
         var checksum = 0L;
         for (var sample = 0; sample < samples; sample++)
         {
-            var before = GC.GetAllocatedBytesForCurrentThread();
             for (var index = 0; index < repetitions; index++)
             {
-                checksum += SqlServerSafeMigrationProviderAnalyzer.BuildCatalogCommandText(
-                        selections,
-                        prefix,
-                        separator,
-                        trailer)
-                    .Length;
-            }
+                var statement = SqlServerSafeMigrationProviderAnalyzer.BuildCatalogCommandText(
+                    selections,
+                    prefix,
+                    separator,
+                    trailer);
 
-            allocations[sample] = GC.GetAllocatedBytesForCurrentThread() - before;
+                statements[sample * repetitions + index] = statement;
+                checksum += statement.Length;
+            }
         }
 
         // Assert
-        // WHY: Match the benchmark's five-sample median for the steady-state contract.
-        // An intermediate joined buffer recurs in every sample and cannot pass this unchanged cap.
-        Array.Sort(allocations);
-        var median = allocations[samples / 2];
-        output.WriteLine(
-            $"Prepared catalog assembly: {median} median bytes for {repetitions} statements; "
-            + $"samples {string.Join(",", allocations)}.");
-
         Assert.Equal((long)expectedLength * repetitions * samples, checksum);
-        Assert.InRange(median, 0, repetitions * (2L * expectedLength + 64));
+        Assert.All(statements, statement => Assert.Equal(expected, statement));
+        Assert.Equal(snapshot, selections);
     }
 }

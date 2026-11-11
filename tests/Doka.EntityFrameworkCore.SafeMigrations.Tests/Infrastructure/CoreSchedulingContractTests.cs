@@ -81,9 +81,9 @@ public sealed class CoreSchedulingContractTests
             [typeof(SafeMigrationOperationIdentityAllocationTests)] =
             [
                 nameof(SafeMigrationOperationIdentityAllocationTests
-                    .SingleColumnProductionReducesRetainedMetadataAllocation),
+                    .SingleColumnProductionPreservesRetainedMetadata),
                 nameof(SafeMigrationOperationIdentityAllocationTests
-                    .OrdinaryColumnProductionReducesRetainedMetadataAllocation),
+                    .OrdinaryColumnProductionPreservesRetainedMetadata),
             ],
             [typeof(SafeMigrationRuntimeDiagnosticContextGarbageCollectionTests)] =
             [
@@ -92,17 +92,18 @@ public sealed class CoreSchedulingContractTests
             ],
             [typeof(SafeMigrationDiagnosticTruncationAllocationTests)] =
             [
-                nameof(SafeMigrationDiagnosticTruncationAllocationTests.DisplayBoundarySelectionDoesNotAllocate),
+                nameof(SafeMigrationDiagnosticTruncationAllocationTests
+                    .DisplayBoundarySelectionPreservesEscapeAfterGarbageCollection),
             ],
             [typeof(SafeMigrationDiagnosticMessagesAllocationTests)] =
             [
                 nameof(SafeMigrationDiagnosticMessagesAllocationTests
-                    .ExplanationLookupDoesNotAllocateAfterGarbageCollection),
+                    .ExplanationLookupPreservesReasonAfterGarbageCollection),
             ],
             [typeof(SafeMigrationModelManagedKeyIdentityAllocationTests)] =
             [
                 nameof(SafeMigrationModelManagedKeyIdentityAllocationTests
-                    .CompositeKeyAlreadyOrderedPathAvoidsAllocations),
+                    .CompositeKeyAlreadyOrderedPathPreservesReference),
             ],
         };
 
@@ -183,7 +184,7 @@ public sealed class CoreSchedulingContractTests
         Assert.Equal(
             [
                 nameof(SafeMigrationDecisionPlannerGarbageCollectionTests
-                    .ActionOnly_DoesNotAllocateAfterGarbageCollection),
+                    .ActionOnly_PreservesRepairAfterGarbageCollection),
             ],
             methods);
     }

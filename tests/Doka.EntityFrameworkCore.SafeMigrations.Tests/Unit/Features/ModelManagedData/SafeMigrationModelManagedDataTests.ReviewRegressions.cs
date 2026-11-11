@@ -2,7 +2,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed partial class SafeMigrationModelManagedDataTests
 {
-    /// <summary>An empty evidence cache must not allocate per-row scratch storage before live fallback.</summary>
+    /// <summary>An empty evidence cache preserves live or deferred classification across batch cardinalities.</summary>
     /// <param name="kind">The managed operation family.</param>
     /// <param name="invalidated">Whether a preceding write requires deferred classification.</param>
     [Theory]
@@ -12,7 +12,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
     [InlineData("ensure", true)]
     [InlineData("update", true)]
     [InlineData("delete", true)]
-    public void EmptyManagedEvidenceDoesNotAllocateWithBatchCardinality(
+    public void EmptyManagedEvidencePreservesClassificationAcrossBatchCardinality(
         string kind,
         bool invalidated
     )
@@ -29,28 +29,17 @@ public sealed partial class SafeMigrationModelManagedDataTests
             projection.ObserveDeferredModelManagedMutation();
         }
 
-        _ = MeasureManagedProjection(projection, small, live, repetitions);
-        _ = MeasureManagedProjection(projection, large, live, repetitions);
-
         // Act
-        var smallResult = MeasureManagedProjection(projection, small, live, repetitions);
-        var largeResult = MeasureManagedProjection(projection, large, live, repetitions);
+        var smallResult = SumManagedProjectionStates(projection, small, live, repetitions);
+        var largeResult = SumManagedProjectionStates(projection, large, live, repetitions);
 
         // Assert
         var expectedState = invalidated
             ? SafeMigrationObservedState.PrerequisiteMissing
             : SafeMigrationObservedState.Matching;
 
-        Assert.Equal(repetitions * (int)expectedState, smallResult.StateSum);
-        Assert.Equal(smallResult.StateSum, largeResult.StateSum);
-
-        // WHY: Compare structural growth, not time or an exact zero-byte result.
-        // The allowance tolerates runtime cache refreshes but cannot hide the
-        // former 128-element state array allocated on every fallback call.
-        Assert.True(
-            largeResult.Bytes <= smallResult.Bytes + repetitions * 256L,
-            $"Empty-cache projection allocated {smallResult.Bytes} bytes for single-row batches "
-            + $"and {largeResult.Bytes} bytes for 128-row batches.");
+        Assert.Equal(repetitions * (int)expectedState, smallResult);
+        Assert.Equal(smallResult, largeResult);
     }
 
     /// <summary>Projected composite FK shapes use the same ordered-column contract as runtime guards.</summary>
@@ -118,7 +107,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
         }
     }
 
-    private static (long Bytes, int StateSum) MeasureManagedProjection(
+    private static int SumManagedProjectionStates(
         SafeMigrationPreflightProjection projection,
         SafeMigrationOperation operation,
         SafeMigrationProviderAnalysis live,
@@ -126,14 +115,13 @@ public sealed partial class SafeMigrationModelManagedDataTests
     )
     {
         var stateSum = 0;
-        var before = GC.GetAllocatedBytesForCurrentThread();
         for (var iteration = 0; iteration < repetitions; iteration++)
         {
             stateSum += (int)projection.Project(operation, live)
                 .ObservedState;
         }
 
-        return (GC.GetAllocatedBytesForCurrentThread() - before, stateSum);
+        return stateSum;
     }
 
     private static SafeMigrationOperation ReviewManagedBatch(

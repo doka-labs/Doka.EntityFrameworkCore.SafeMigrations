@@ -1052,7 +1052,7 @@ and dependencies outside the approved license policy before merge.
 
 The five isolated benchmark suites use BenchmarkDotNet 0.15.8 and retain native
 full JSON evidence under `artifacts/performance`. CI uses `--job Dry` to exercise
-all 56 default cases and validate export, not to establish statistically
+all default cases and validate export, not to establish statistically
 meaningful performance. Configuration, build, execution and missing/invalid
 evidence failures block qualification; numeric duration and managed allocation
 values do not. For measurement runs and the changed allocation methodology, see

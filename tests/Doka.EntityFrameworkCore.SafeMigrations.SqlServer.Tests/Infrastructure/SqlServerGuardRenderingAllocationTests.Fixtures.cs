@@ -3,7 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 public sealed partial class SqlServerGuardRenderingAllocationTests
 {
     /// <summary>
-    /// Creates a quoted fixture intent without catalog access or input allocations during measurement.
+    /// Creates a quoted fixture intent without catalog access.
     /// </summary>
     private static SafeMigrationOperation CreateOperation(
         SafeMigrationPolicy policy,
@@ -58,7 +58,7 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
         PostApplySql = "SELECT N'post O''Brien';\n",
     };
 
-    /// <summary>Prepares a non-transaction-suppressed provider command before the measured rendering path.</summary>
+    /// <summary>Prepares a non-transaction-suppressed provider command for guard rendering.</summary>
     private static MigrationCommand CreateCommand(
         DbContext context,
         string sql
@@ -74,40 +74,7 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
         return new MigrationCommand(command, context, dependencies.Logger);
     }
 
-    /// <summary>Counts only prepared guard rendering on the executing thread, excluding delegate creation.</summary>
-    private static (long Bytes, string Sql) MeasureAllocations(
-        Func<string> render,
-        int count
-    )
-    {
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        var sql = string.Empty;
-        for (var index = 0; index < count; index++)
-        {
-            sql = render();
-        }
-
-        var bytes = GC.GetAllocatedBytesForCurrentThread() - before;
-
-        return (bytes, sql);
-    }
-
-    /// <summary>Counts prepared command wrapping while excluding fixture and destination allocations.</summary>
-    private static long MeasureWrappingAllocations(
-        Action<int> wrap,
-        int count
-    )
-    {
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var index = 0; index < count; index++)
-        {
-            wrap(index);
-        }
-
-        return GC.GetAllocatedBytesForCurrentThread() - before;
-    }
-
-    /// <summary>Exposes a completed batch whose enumeration would reveal an allocation-path regression.</summary>
+    /// <summary>Exposes a completed batch whose enumeration would violate the indexed-access contract.</summary>
     private sealed class IndexedOnlyCommands : IReadOnlyList<MigrationCommand>
     {
         private readonly IReadOnlyList<MigrationCommand> _commands;

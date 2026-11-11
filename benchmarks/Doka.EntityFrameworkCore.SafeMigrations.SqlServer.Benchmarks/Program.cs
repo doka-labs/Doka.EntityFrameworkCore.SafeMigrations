@@ -17,4 +17,5 @@ return BenchmarkProgram.Run(
     typeof(SqlServerAnalyzerBenchmarks),
     typeof(SqlServerRepairBenchmarks),
     typeof(SqlServerModelManagedDataBenchmarks),
-    typeof(SqlServerCanonicalModelBenchmarks));
+    typeof(SqlServerCanonicalModelBenchmarks),
+    typeof(SqlServerCatalogCommandAssemblyBenchmarks));

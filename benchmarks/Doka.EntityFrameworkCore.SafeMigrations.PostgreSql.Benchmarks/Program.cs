@@ -12,7 +12,10 @@ return BenchmarkProgram.Run(
     args,
     typeof(PostgreSqlGenerationBenchmarks),
     typeof(PostgreSqlAnalyzerBenchmarks),
-    typeof(PostgreSqlMigrationBenchmarks));
+    typeof(PostgreSqlMigrationBenchmarks),
+    typeof(PostgreSqlAllocationBenchmarks),
+    typeof(PostgreSqlPlaceholderBenchmarks),
+    typeof(PostgreSqlGuardBenchmarks));
 
 internal sealed class PostgreSqlGenerationContext : DbContext
 {

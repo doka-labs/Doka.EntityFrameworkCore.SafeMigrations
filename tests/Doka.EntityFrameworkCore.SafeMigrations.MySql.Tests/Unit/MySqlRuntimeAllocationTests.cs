@@ -2,8 +2,8 @@ using System.Security.Cryptography;
 
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-/// <summary>Measures prepared runtime generation on both MySQL and MariaDB without database latency.</summary>
-/// <param name="output">The diagnostic allocation and SQL fingerprint output.</param>
+/// <summary>Protects exact runtime generation on both MySQL and MariaDB without database latency.</summary>
+/// <param name="output">The diagnostic SQL fingerprint output.</param>
 public sealed class MySqlRuntimeAllocationTests(ITestOutputHelper output)
 {
     private const string CanonicalCorrelation = "00000000000000000000000000000000";
@@ -14,7 +14,7 @@ public sealed class MySqlRuntimeAllocationTests(ITestOutputHelper output)
     [Theory]
     [InlineData(false, "A02E375AC2E3C39E92C450F4D0B7C4719364B787C68F1D245951BEB8185D37DE")]
     [InlineData(true, "61BAEBBD09C6794649E77995C8F0ECF548A3AA920591027E810763AD7AA07A11")]
-    public void PreparedRuntimeColumnGenerationRemainsBounded(
+    public void RuntimeColumnGenerationPreservesCanonicalSql(
         bool isMariaDb,
         string expectedSqlHash
     )
@@ -24,19 +24,15 @@ public sealed class MySqlRuntimeAllocationTests(ITestOutputHelper output)
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var operations = Enumerable
             .Range(0, 128)
-            .Select(index => (MigrationOperation)new SafeMigrationOperation(
+            .Select(static MigrationOperation (index) => new SafeMigrationOperation(
                 new EnsureColumnIntent(
                     "items",
                     new ExpectedColumnDefinition($"value_{index}", typeof(int), true, "int")),
                 SafeMigrationPolicy.ThrowIfDifferent))
             .ToArray();
 
-        _ = generator.Generate(operations, context.Model);
-
         // Act
-        var before = GC.GetAllocatedBytesForCurrentThread();
         var commands = generator.Generate(operations, context.Model);
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         var canonicalSql = string.Concat(
             commands.Select(static command =>
@@ -46,6 +42,7 @@ public sealed class MySqlRuntimeAllocationTests(ITestOutputHelper output)
             SHA256.HashData(Encoding.UTF8.GetBytes(canonicalSql)));
 
         const string exactCommentComparison = "CAST(COALESCE(c.COLUMN_COMMENT, '') AS BINARY)";
+
         // WHY: Exact reference chunks fold at compile time; source wrapping must not alter the golden SQL bytes.
         const string exactNullDefaultComparison = "(c.COLUMN_DEFAULT IS NULL OR "
             + "(CAST(c.COLUMN_DEFAULT AS BINARY) = 'NULL' "
@@ -74,7 +71,7 @@ public sealed class MySqlRuntimeAllocationTests(ITestOutputHelper output)
         }
 
         output.WriteLine(
-            $"Prepared {(isMariaDb ? "MariaDB" : "MySQL")} generation: {allocated} bytes, SQL SHA256 {hash}.");
+            $"{(isMariaDb ? "MariaDB" : "MySQL")} generation SQL SHA256 {hash}.");
 
         output.WriteLine($"Legacy-facet reference SQL SHA256 {legacyHash}.");
         output.WriteLine(
@@ -102,8 +99,6 @@ public sealed class MySqlRuntimeAllocationTests(ITestOutputHelper output)
             commands,
             command =>
                 Assert.Contains("@doka_sm_state", command.CommandText, StringComparison.Ordinal));
-
-        Assert.InRange(allocated, 0, 4_000_000);
     }
 
     /// <summary>Canonicalization preserves authored GUID identifiers, literals and unrelated statements.</summary>
@@ -234,7 +229,7 @@ public sealed class MySqlRuntimeAllocationTests(ITestOutputHelper output)
 
         options.UseMySqlSafeMigrations();
 
-        // WHY: SQL generation needs provider services but must never open a live connection for this allocation proof.
+        // WHY: SQL generation needs provider services but must never open a live connection for this SQL contract.
         return new DbContext(options.Options);
     }
 }

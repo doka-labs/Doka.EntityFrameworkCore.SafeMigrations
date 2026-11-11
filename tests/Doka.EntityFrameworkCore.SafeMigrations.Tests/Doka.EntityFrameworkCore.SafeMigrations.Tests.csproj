@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <Compile Include="..\..\benchmarks\Doka.EntityFrameworkCore.SafeMigrations.Benchmarks\Features\Columns\PreparedColumnProjectionWorkload.cs"
+             Link="Infrastructure\PreparedColumnProjectionWorkload.cs" />
     <Compile Include="..\..\benchmarks\Shared\BenchmarkProgram.cs" Link="Infrastructure\BenchmarkProgram.cs" />
     <Compile Include="..\..\benchmarks\Shared\SourceBoundToolchain.cs"
              Link="Infrastructure\SourceBoundToolchain.cs" />
