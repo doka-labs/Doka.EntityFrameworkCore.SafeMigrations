@@ -124,7 +124,7 @@ public sealed class MySqlExplicitBackfillMetadataTests
                 StringComparison.Ordinal));
 
         Assert.Contains(
-            "WHEN EXISTS (SELECT 1 FROM `items` LIMIT 1) THEN 'data_blocked' ELSE 'missing'",
+            "WHEN EXISTS (SELECT 1 FROM `items` LIMIT 1)\nTHEN 'data_blocked' ELSE 'missing'",
             guard,
             StringComparison.Ordinal);
 
@@ -390,7 +390,7 @@ public sealed class MySqlExplicitBackfillMetadataTests
                     && payload.EndsWith("INTO @doka_sm_state", StringComparison.Ordinal));
 
             Assert.Contains(
-                "WHEN EXISTS (SELECT 1 FROM `items` LIMIT 1) THEN 'data_blocked' ELSE 'missing'",
+                "WHEN EXISTS (SELECT 1 FROM `items` LIMIT 1)\nTHEN 'data_blocked' ELSE 'missing'",
                 guard,
                 StringComparison.Ordinal);
 
@@ -618,25 +618,44 @@ public sealed class MySqlExplicitBackfillMetadataTests
     {
         AssertStrictModeEligibility(sql);
         var nativeOwner = sql.Contains(
-            "CAST(c.TABLE_NAME AS BINARY) = CAST('items' AS BINARY)",
+            "CAST(c.TABLE_NAME AS BINARY) = CAST('items'\nAS BINARY)",
             StringComparison.Ordinal)
-            ? "AND (CASE WHEN @@lower_case_table_names = 0 THEN "
-            + "CAST(c.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY) "
-            + "WHEN @@lower_case_table_names IN (1, 2) THEN "
-            + "CAST(LOWER(c.TABLE_SCHEMA) AS BINARY) = CAST(LOWER(DATABASE()) AS BINARY) ELSE FALSE END) "
-            + "AND (CASE WHEN @@lower_case_table_names = 0 THEN "
-            + "CAST(c.TABLE_NAME AS BINARY) = CAST('items' AS BINARY) "
-            + "WHEN @@lower_case_table_names IN (1, 2) THEN "
-            + "CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('items') AS BINARY) ELSE FALSE END) "
-            : string.Empty;
+            ? """
+              AND (CASE WHEN @@lower_case_table_names = 0
+              THEN CAST(c.TABLE_SCHEMA AS BINARY) = CAST(DATABASE()
+              AS BINARY)
+              WHEN @@lower_case_table_names IN (1, 2)
+              THEN CAST(LOWER(c.TABLE_SCHEMA) AS BINARY) = CAST(LOWER(DATABASE())
+              AS BINARY)
+              ELSE FALSE END)
+              AND (CASE WHEN @@lower_case_table_names = 0
+              THEN CAST(c.TABLE_NAME AS BINARY) = CAST('items'
+              AS BINARY)
+              WHEN @@lower_case_table_names IN (1, 2)
+              THEN CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('items')
+              AS BINARY)
+              ELSE FALSE END)
+              """
+            : null;
+
+        var expected = nativeOwner is null
+            ? $"""
+                NOT (EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c
+                WHERE c.TABLE_SCHEMA = DATABASE()
+                AND c.TABLE_NAME = 'items'
+                AND c.COLUMN_NAME = 'id'
+                AND (c.IS_NULLABLE = 'YES'))) OR ({StrictSqlModeCondition})
+                """
+            : $"""
+                NOT (EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c
+                WHERE c.TABLE_SCHEMA = DATABASE()
+                AND c.TABLE_NAME = 'items'
+                AND c.COLUMN_NAME = 'id'
+                {nativeOwner} AND (c.IS_NULLABLE = 'YES'))) OR ({StrictSqlModeCondition})
+                """;
 
         Assert.Contains(
-            "NOT (EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c "
-            + "WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = 'items' AND c.COLUMN_NAME = 'id' "
-            + nativeOwner
-            + "AND (c.IS_NULLABLE = 'YES'))) OR ("
-            + StrictSqlModeCondition
-            + ")",
+            expected,
             sql,
             StringComparison.Ordinal);
     }
@@ -690,9 +709,13 @@ public sealed class MySqlExplicitBackfillMetadataTests
     )
     {
         Assert.Contains(
-            "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS nullable_primary "
-            + "WHERE nullable_primary.TABLE_SCHEMA = DATABASE() AND nullable_primary.TABLE_NAME = 'items' "
-            + "AND nullable_primary.COLUMN_NAME = 'id' AND nullable_primary.INDEX_NAME = 'PRIMARY')",
+            """
+            NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS nullable_primary
+            WHERE nullable_primary.TABLE_SCHEMA = DATABASE()
+            AND nullable_primary.TABLE_NAME = 'items'
+            AND nullable_primary.COLUMN_NAME = 'id'
+            AND nullable_primary.INDEX_NAME = 'PRIMARY')
+            """,
             sql,
             StringComparison.Ordinal);
 
@@ -708,15 +731,19 @@ public sealed class MySqlExplicitBackfillMetadataTests
     )
     {
         Assert.Contains(
-            "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS nullable_fk "
-            + "JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE nullable_fk_column "
-            + "ON nullable_fk_column.CONSTRAINT_SCHEMA = nullable_fk.CONSTRAINT_SCHEMA "
-            + "AND nullable_fk_column.CONSTRAINT_NAME = nullable_fk.CONSTRAINT_NAME "
-            + "AND nullable_fk_column.TABLE_SCHEMA = nullable_fk.CONSTRAINT_SCHEMA "
-            + "AND nullable_fk_column.TABLE_NAME = nullable_fk.TABLE_NAME "
-            + "WHERE nullable_fk.CONSTRAINT_SCHEMA = DATABASE() AND nullable_fk.TABLE_NAME = 'items' "
-            + "AND nullable_fk_column.COLUMN_NAME = 'id' "
-            + "AND (nullable_fk.DELETE_RULE = 'SET NULL' OR nullable_fk.UPDATE_RULE = 'SET NULL'))",
+            """
+            NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS nullable_fk
+            JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE nullable_fk_column ON nullable_fk_column.CONSTRAINT_SCHEMA
+            = nullable_fk.CONSTRAINT_SCHEMA
+            AND nullable_fk_column.CONSTRAINT_NAME = nullable_fk.CONSTRAINT_NAME
+            AND nullable_fk_column.TABLE_SCHEMA = nullable_fk.CONSTRAINT_SCHEMA
+            AND nullable_fk_column.TABLE_NAME = nullable_fk.TABLE_NAME
+            WHERE nullable_fk.CONSTRAINT_SCHEMA = DATABASE()
+            AND nullable_fk.TABLE_NAME = 'items'
+            AND nullable_fk_column.COLUMN_NAME = 'id'
+            AND (nullable_fk.DELETE_RULE = 'SET NULL'
+            OR nullable_fk.UPDATE_RULE = 'SET NULL'))
+            """,
             sql,
             StringComparison.Ordinal);
 

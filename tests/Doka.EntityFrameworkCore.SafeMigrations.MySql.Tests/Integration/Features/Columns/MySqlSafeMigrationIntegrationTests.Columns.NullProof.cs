@@ -3,9 +3,12 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 /// <summary>Verifies operation-local NULL-proof safety against generic live MySQL and MariaDB databases.</summary>
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-    protected const string NullProofVariablesClearedSql = "SELECT @doka_sm_nullability_blocked IS NULL "
-        + "AND @doka_sm_data_blocked IS NULL AND @doka_sm_data_probe_required IS NULL "
-        + "AND @doka_sm_column_repair_eligible IS NULL;";
+    protected const string NullProofVariablesClearedSql = """
+        SELECT @doka_sm_nullability_blocked IS NULL
+        AND @doka_sm_data_blocked IS NULL
+        AND @doka_sm_data_probe_required IS NULL
+        AND @doka_sm_column_repair_eligible IS NULL;
+        """;
 }
 
 /// <summary>Exercises the ColumnsNullProof migration contracts in an independent class collection.</summary>
@@ -43,9 +46,13 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `value` {storeType} NULL COMMENT 'legacy', "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + $"INSERT INTO `null_proof_rows` (`id`, `value`) VALUES {values};",
+            $"""
+            CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `value` {storeType}
+            NULL COMMENT 'legacy',
+            PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE
+            utf8mb4_unicode_ci; INSERT INTO `null_proof_rows` (`id`,
+            `value`) VALUES {values};
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -154,9 +161,13 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' "
-                + "AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO' AND COLUMN_COMMENT = 'canonical';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'null_proof_rows'
+                AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO'
+                AND COLUMN_COMMENT = 'canonical';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -199,9 +210,13 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `value` {storeType} NULL COMMENT 'legacy', "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + $"INSERT INTO `null_proof_rows` (`id`, `value`) VALUES (1, {firstValue}), (2, NULL);",
+            $"""
+            CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `value` {storeType}
+            NULL COMMENT 'legacy',
+            PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE
+            utf8mb4_unicode_ci; INSERT INTO `null_proof_rows` (`id`,
+            `value`) VALUES (1, {firstValue}), (2, NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -281,9 +296,13 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' "
-                + "AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'YES' AND COLUMN_COMMENT = 'legacy';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'null_proof_rows'
+                AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'YES'
+                AND COLUMN_COMMENT = 'legacy';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -309,8 +328,12 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `value` int NOT NULL, PRIMARY KEY (`id`)); "
-            + "INSERT INTO `null_proof_rows` (`id`, `value`) VALUES (1, 7), (2, 0);",
+            """
+            CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `value` int NOT NULL,
+            PRIMARY KEY (`id`)); INSERT INTO `null_proof_rows` (`id`, `value`) VALUES
+            (1,
+            7), (2, 0);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -414,9 +437,12 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' "
-                + "AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'null_proof_rows'
+                AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -457,9 +483,13 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `value` varchar(20) NULL COMMENT 'legacy', "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + $"INSERT INTO `null_proof_rows` (`id`, `value`) VALUES (1, {firstValue}), (2, {secondValue});",
+            $"""
+            CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `value` varchar(20) NULL
+            COMMENT 'legacy',
+            PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE
+            utf8mb4_unicode_ci; INSERT INTO `null_proof_rows` (`id`,
+            `value`) VALUES (1, {firstValue}), (2, {secondValue});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -550,8 +580,13 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
                 : 5,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' AND COLUMN_NAME = 'value';",
+                """
+                SELECT CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'null_proof_rows'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -560,8 +595,12 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
                 : 0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT IS_NULLABLE = 'YES' FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' AND COLUMN_NAME = 'value';",
+                """
+                SELECT IS_NULLABLE = 'YES' FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'null_proof_rows'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -570,8 +609,12 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
                 : "canonical",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT COLUMN_COMMENT FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' AND COLUMN_NAME = 'value';",
+                """
+                SELECT COLUMN_COMMENT FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'null_proof_rows'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -585,8 +628,11 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
             2,
             await ScalarIntAsync(
                 connectionString,
-                $"SELECT COUNT(*) FROM `null_proof_rows` WHERE (`id` = 1 AND BINARY `value` = BINARY {firstValue}) "
-                + $"OR (`id` = 2 AND {secondPredicate});",
+                $"""
+                SELECT COUNT(*) FROM `null_proof_rows`
+                WHERE (`id` = 1 AND BINARY `value` = BINARY {firstValue})
+                OR (`id` = 2 AND {secondPredicate});
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -603,8 +649,12 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `first_value` int NULL, `second_value` int NULL, "
-            + "PRIMARY KEY (`id`)); INSERT INTO `null_proof_rows` VALUES (1, 7, 9), (2, 0, 0);",
+            """
+            CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `first_value` int NULL,
+            `second_value` int NULL, PRIMARY KEY (`id`)); INSERT INTO `null_proof_rows`
+            VALUES (1,
+            7, 9), (2, 0, 0);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -673,18 +723,24 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
                 : 0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT IS_NULLABLE = 'YES' FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' "
-                + "AND COLUMN_NAME = 'first_value';",
+                """
+                SELECT IS_NULLABLE = 'YES' FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'null_proof_rows'
+                AND COLUMN_NAME = 'first_value';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT IS_NULLABLE = 'YES' FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' "
-                + $"AND COLUMN_NAME = '{secondColumn}';",
+                $"""
+                SELECT IS_NULLABLE = 'YES' FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'null_proof_rows'
+                AND COLUMN_NAME = '{secondColumn}';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -717,8 +773,11 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `value` varchar(40) NULL COMMENT 'legacy'); "
-            + "INSERT INTO `null_proof_rows` VALUES (1, NULL), (2, 'preserved');",
+            """
+            CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `value` varchar(40) NULL
+            COMMENT 'legacy'); INSERT INTO `null_proof_rows` VALUES (1,
+            NULL), (2, 'preserved');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -766,10 +825,14 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' AND COLUMN_NAME = 'value' "
-                + "AND DATA_TYPE = 'varchar' AND CHARACTER_MAXIMUM_LENGTH = 40 "
-                + "AND IS_NULLABLE = 'YES' AND COLUMN_COMMENT = 'legacy';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'null_proof_rows'
+                AND COLUMN_NAME = 'value' AND DATA_TYPE = 'varchar'
+                AND CHARACTER_MAXIMUM_LENGTH = 40
+                AND IS_NULLABLE = 'YES' AND COLUMN_COMMENT = 'legacy';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -783,8 +846,11 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM `null_proof_rows` "
-                + "WHERE (`id` = 1 AND `value` IS NULL) OR (`id` = 2 AND BINARY `value` = BINARY 'preserved');",
+                """
+                SELECT COUNT(*) FROM `null_proof_rows`
+                WHERE (`id` = 1 AND `value` IS NULL)
+                OR (`id` = 2 AND BINARY `value` = BINARY 'preserved');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -806,8 +872,11 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `value` int NULL COMMENT 'legacy'); "
-            + "INSERT INTO `null_proof_rows` VALUES (1, NULL), (2, 7);",
+            """
+            CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `value` int NULL COMMENT
+            'legacy'); INSERT INTO `null_proof_rows` VALUES (1,
+            NULL), (2, 7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -853,9 +922,13 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' "
-                + "AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'YES' AND COLUMN_COMMENT = 'legacy';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'null_proof_rows'
+                AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'YES'
+                AND COLUMN_COMMENT = 'legacy';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -888,9 +961,13 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `value` varchar(40) NULL COMMENT 'legacy', "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `null_proof_rows` VALUES (1, 'preserved'), (2, '');",
+            """
+            CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `value` varchar(40) NULL
+            COMMENT 'legacy',
+            PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE
+            utf8mb4_unicode_ci; INSERT INTO `null_proof_rows` VALUES (1,
+            'preserved'), (2, '');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var blocker = failureMode == "error"
@@ -986,9 +1063,11 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
         CancellationToken cancellationToken
     )
     {
-        const string preservedRowsSql = "SELECT COUNT(*) FROM `null_proof_rows` "
-            + "WHERE (`id` = 1 AND BINARY `value` = BINARY 'preserved') "
-            + "OR (`id` = 2 AND OCTET_LENGTH(`value`) = 0);";
+        const string preservedRowsSql = """
+            SELECT COUNT(*) FROM `null_proof_rows`
+            WHERE (`id` = 1 AND BINARY `value` = BINARY 'preserved')
+            OR (`id` = 2 AND OCTET_LENGTH(`value`) = 0);
+            """;
 
         var sessionBefore = await ContextScalarIntAsync(
             context,
@@ -1018,9 +1097,13 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
 
         var legacySchema = await ContextScalarIntAsync(
             context,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' AND COLUMN_NAME = 'value' "
-            + "AND CHARACTER_MAXIMUM_LENGTH = 40 AND IS_NULLABLE = 'YES' AND COLUMN_COMMENT = 'legacy';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'null_proof_rows'
+            AND COLUMN_NAME = 'value' AND CHARACTER_MAXIMUM_LENGTH = 40
+            AND IS_NULLABLE = 'YES' AND COLUMN_COMMENT = 'legacy';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rowsBefore = await ContextScalarIntAsync(
@@ -1054,9 +1137,13 @@ public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIn
 
         var canonicalSchema = await ContextScalarIntAsync(
             context,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' AND COLUMN_NAME = 'value' "
-            + "AND CHARACTER_MAXIMUM_LENGTH = 40 AND IS_NULLABLE = 'NO' AND COLUMN_COMMENT = 'canonical';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'null_proof_rows'
+            AND COLUMN_NAME = 'value' AND CHARACTER_MAXIMUM_LENGTH = 40
+            AND IS_NULLABLE = 'NO' AND COLUMN_COMMENT = 'canonical';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rowsAfterReplay = await ContextScalarIntAsync(

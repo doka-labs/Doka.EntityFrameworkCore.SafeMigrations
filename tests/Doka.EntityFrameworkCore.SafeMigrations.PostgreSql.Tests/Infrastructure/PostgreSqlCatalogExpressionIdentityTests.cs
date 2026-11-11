@@ -5,6 +5,122 @@ public sealed class PostgreSqlCatalogExpressionIdentityTests
 {
     private const string OfflineConnection = "Host=localhost;Database=offline;Username=test;Password=test";
 
+    /// <summary>MySQL's exact multiline eligibility shape remains distinct from native row-probe purposes.</summary>
+    /// <param name="native">Whether the SQL is submitted through a real native-batch test transport.</param>
+    /// <param name="matchingMarker">Whether the eligibility statement carries its required catalog marker.</param>
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    public async Task MySqlEligibilityPurposePreservesSequentialAndNativeBoundaries(
+        bool native,
+        bool matchingMarker
+    )
+    {
+        // Arrange
+        var sql = "SELECT 0, COALESCE((TRUE),\nFALSE), COALESCE(("
+            + (matchingMarker ? "narrowing_column.CHARACTER_MAXIMUM_LENGTH" : "unrelated_column.maximum_length")
+            + ">5), FALSE) ORDER BY 1;";
+
+        var inner = new CatalogStatementTestConnection(native, (_, _) =>
+        {
+            var result = new DataTable();
+            result.Columns.Add("ordinal", typeof(int));
+            result.Columns.Add("eligible", typeof(bool));
+            result.Columns.Add("narrowing", typeof(bool));
+
+            return result;
+        });
+
+        await using var connection = new CatalogClassificationCountingConnection(inner, nativeBatch: native);
+
+        // Act
+        if (native)
+        {
+            await using var batch = connection.CreateBatch();
+            var command = batch.CreateBatchCommand();
+            command.CommandText = sql;
+            batch.BatchCommands.Add(command);
+            await using var reader = await batch.ExecuteReaderAsync(CancellationToken.None);
+        }
+        else
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = sql;
+            await using var reader = await command.ExecuteReaderAsync(CancellationToken.None);
+        }
+
+        // Assert
+        Assert.Equal(!native && matchingMarker ? 1 : 0, connection.NarrowingEligibilityStatementCount);
+        Assert.Equal(native ? 1 : 0, connection.NativeBatchExecutionCount);
+        Assert.Equal(0, connection.NativeNarrowingStatementCount);
+        Assert.Equal(0, connection.NarrowingDataStatementCount);
+        Assert.Equal(0, connection.StateEvaluationGuardStatementCount);
+        Assert.Equal(0, connection.ClassificationStatementCount);
+    }
+
+    /// <summary>The counting instrument distinguishes complete producer shapes without normalizing SQL.</summary>
+    /// <param name="purpose">The independent producer or deliberately incomplete shape.</param>
+    /// <param name="fieldCount">The actual reader shape.</param>
+    /// <param name="eligibility">The expected narrowing-eligibility count.</param>
+    /// <param name="guard">The expected state-guard count.</param>
+    [Theory]
+    [InlineData("raw", 3, 1, 0)]
+    [InlineData("legacy", 3, 1, 0)]
+    [InlineData("guard", 3, 0, 1)]
+    [InlineData("diagnostic", 3, 0, 0)]
+    [InlineData("mixed", 3, 0, 0)]
+    [InlineData("no-trailer", 3, 0, 0)]
+    [InlineData("no-marker", 3, 0, 0)]
+    [InlineData("raw", 4, 0, 0)]
+    public async Task CountingReaderPurposePreservesExactProducerBoundaries(
+        string purpose,
+        int fieldCount,
+        int eligibility,
+        int guard
+    )
+    {
+        // Arrange
+        var sql = purpose switch
+        {
+            "legacy" => "SELECT 0, COALESCE((TRUE), FALSE), COALESCE(("
+                + "narrowing_column.CHARACTER_MAXIMUM_LENGTH > 5), FALSE) ORDER BY 1;",
+            "guard" => "SELECT 0, CASE WHEN NOT COALESCE((FALSE), FALSE) THEN 'unsupported' "
+                + "ELSE NULL END, CASE WHEN NOT COALESCE((FALSE), FALSE) THEN 'code' ELSE NULL END ORDER BY 1;",
+            "diagnostic" => "SELECT 0, 'column_store_type', 'narrowing_column.CHARACTER_MAXIMUM_LENGTH' ORDER BY 1;",
+            "mixed" => "SELECT 0,\nCOALESCE((TRUE), FALSE), COALESCE(("
+                + "narrowing_column.CHARACTER_MAXIMUM_LENGTH > 5), FALSE) ORDER BY 1;",
+            _ => "SELECT 0,\nCOALESCE((TRUE),\nFALSE), COALESCE(("
+                + (purpose == "no-marker" ? "other_column.length" : "narrowing_column.CHARACTER_MAXIMUM_LENGTH")
+                + ">5), FALSE)" + (purpose == "no-trailer" ? ";" : " ORDER BY 1;"),
+        };
+
+        await using var inner = new CatalogStatementTestConnection(false, (_, _) =>
+        {
+            var result = new DataTable();
+            for (var index = 0; index < fieldCount; index++)
+            {
+                result.Columns.Add("field" + index, typeof(string));
+            }
+
+            return result;
+        });
+
+        await using var connection = new CatalogClassificationCountingConnection(inner);
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+
+        // Act
+        await using var reader = await command.ExecuteReaderAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(eligibility, connection.NarrowingEligibilityStatementCount);
+        Assert.Equal(guard, connection.StateEvaluationGuardStatementCount);
+        Assert.Equal(0, connection.ClassificationStatementCount);
+        Assert.Equal(0, connection.NarrowingDataStatementCount);
+    }
+
     /// <summary>An unqualified explicit collation must be visible under the active native search path.</summary>
     [Fact]
     public void UnqualifiedIndexCollationRequiresVisibleNativeIdentity()
@@ -101,6 +217,10 @@ public sealed class PostgreSqlCatalogExpressionIdentityTests
     [InlineData(-1_765_231_234_560L, "INTERVAL '-2 days -3723.123456 seconds'")]
     [InlineData(-10L, "INTERVAL '0 days -0.000001 seconds'")]
     [InlineData(-9L, "INTERVAL '0 days 0 seconds'")]
+    [InlineData(9L, "INTERVAL '0 days 0 seconds'")]
+    [InlineData(10L, "INTERVAL '0 days 0.000001 seconds'")]
+    [InlineData(11L, "INTERVAL '0 days 0.000001 seconds'")]
+    [InlineData(-11L, "INTERVAL '0 days -0.000001 seconds'")]
     [InlineData(long.MinValue, "INTERVAL '-10675199 days -10085.47758 seconds'")]
     [InlineData(long.MaxValue, "INTERVAL '10675199 days 10085.47758 seconds'")]
     public void DurationLiteralPreservesWholeSignWithoutFloatingPoint(

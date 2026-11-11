@@ -24,8 +24,14 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 : TableMatches(definition, expectedTableConstraints: null);
 
         return Plan(
-                $"CASE WHEN NOT {exists} THEN 'missing' WHEN NOT {table} THEN 'unsupported' "
-                + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
+                $"""
+                CASE WHEN NOT {exists}
+                THEN 'missing'
+                WHEN NOT {table}
+                THEN 'unsupported'
+                WHEN {matching}
+                THEN 'matching' ELSE 'different' END
+                """,
                 matching) with
             {
                 ExecutionPostcondition = executionPostcondition,
@@ -40,7 +46,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var table = TableExists(intent.Table, intent.Schema);
 
         return Plan(
-            $"CASE WHEN NOT {exists} THEN 'missing' WHEN {table} THEN 'matching' " + "ELSE 'different' END",
+            $"""
+            CASE WHEN NOT {exists}
+            THEN 'missing'
+            WHEN {table}
+            THEN 'matching' ELSE 'different' END
+            """,
             $"NOT {exists}");
     }
 
@@ -57,9 +68,14 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             : $"({target}) OR ({intermediateTarget})";
 
         return Plan(
-            $"CASE WHEN NOT {sourceObject} THEN 'missing' WHEN NOT {source} THEN 'different' "
-            + $"WHEN {collision} THEN 'different' "
-            + "ELSE 'matching' END",
+            $"""
+            CASE WHEN NOT {sourceObject}
+            THEN 'missing'
+            WHEN NOT {source}
+            THEN 'different'
+            WHEN {collision}
+            THEN 'different' ELSE 'matching' END
+            """,
             $"NOT {RelationExists(intent.Name, intent.Schema)}");
     }
 
@@ -109,12 +125,15 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var conditions = new List<string>
         {
             TableExists(definition.Table, definition.Schema),
-            "(SELECT COUNT(*) FROM pg_catalog.pg_attribute a "
-            + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
-            + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-            + $"WHERE n.nspname = {schema} AND c.relname = {Literal(definition.Table)} "
-            + "AND a.attnum > 0 AND NOT a.attisdropped) "
-            + $"= {definition.Columns.Count.ToString(CultureInfo.InvariantCulture)}",
+            $"""
+            (SELECT COUNT(*) FROM pg_catalog.pg_attribute a
+            JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = {schema}
+            AND c.relname = {Literal(definition.Table)}
+            AND a.attnum > 0 AND NOT a.attisdropped) = {definition.Columns.Count.ToString(
+                CultureInfo.InvariantCulture)}
+            """,
             AllUniqueConstraintsModeled(definition.Table, definition.Schema, allowedUniqueConstraints),
             AllCheckConstraintsModeled(definition.Table, definition.Schema, allowedCheckConstraints),
             AllForeignKeysModeled(definition.Table, definition.Schema, allowedForeignKeys),
@@ -240,8 +259,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     "allowed.columns",
                     "co.conname = candidate_co.conname");
 
-                return $"EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) AS allowed(columns) "
-                    + $"WHERE EXISTS ({matcher}))";
+                return $"""
+                    EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) AS allowed(columns)
+                    WHERE EXISTS ({matcher}))
+                    """;
             })
             .ToArray();
 
@@ -291,8 +312,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     + " AND co.conname = candidate_co.conname"
                     + CheckFacets($"CASE allowed.ordinal {string.Join(" ", arms)} END");
 
-                return $"EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) AS allowed(ordinal) "
-                    + $"WHERE EXISTS ({matcher}))";
+                return $"""
+                    EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) AS allowed(ordinal)
+                    WHERE EXISTS ({matcher}))
+                    """;
             })
             .ToArray();
 
@@ -341,9 +364,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                         "allowed.confupdtype",
                         "allowed.confdeltype");
 
-                return $"EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) AS allowed(columns, "
-                    + "principal, principal_columns, confupdtype, confdeltype) "
-                    + $"WHERE EXISTS ({matcher}))";
+                return $"""
+                    EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) AS allowed(columns,
+                    principal, principal_columns, confupdtype, confdeltype)
+                    WHERE EXISTS ({matcher}))
+                    """;
             })
             .ToArray();
 
@@ -352,26 +377,34 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
     private string TableCommentMatches(
         ExpectedTableDefinition definition
-    ) => "(SELECT pg_catalog.obj_description(c.oid, 'pg_class') FROM pg_catalog.pg_class c "
-        + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-        + $"WHERE n.nspname = {SchemaExpression(definition.Schema)} "
-        + $"AND c.relname = {Literal(definition.Table)}) IS NOT DISTINCT FROM "
-        + (definition.Comment is null
+    ) => $"""
+        (SELECT pg_catalog.obj_description(c.oid, 'pg_class')
+        FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = {SchemaExpression(definition.Schema)}
+        AND c.relname = {Literal(definition.Table)}) IS NOT DISTINCT
+        FROM {(definition.Comment is null
             ? "NULL"
-            : Literal(definition.Comment));
+            : Literal(definition.Comment))}
+        """;
 
     private string RelationExists(
         string table,
         string? schema
-    ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_class c "
-        + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-        + $"WHERE n.nspname = {SchemaExpression(schema)} AND c.relname = {Literal(table)})";
+    ) => $"""
+        EXISTS (SELECT 1 FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = {SchemaExpression(schema)}
+        AND c.relname = {Literal(table)})
+        """;
 
     private string TableExists(
         string table,
         string? schema
-    ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_class c "
-        + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-        + $"WHERE n.nspname = {SchemaExpression(schema)} AND c.relname = {Literal(table)} "
-        + "AND c.relkind IN ('r', 'p'))";
+    ) => $"""
+        EXISTS (SELECT 1 FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = {SchemaExpression(schema)}
+        AND c.relname = {Literal(table)}
+        AND c.relkind IN ('r', 'p'))
+        """;
 }

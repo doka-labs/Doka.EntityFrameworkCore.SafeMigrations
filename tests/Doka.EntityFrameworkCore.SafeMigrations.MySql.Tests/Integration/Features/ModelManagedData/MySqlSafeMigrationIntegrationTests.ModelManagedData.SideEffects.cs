@@ -29,22 +29,25 @@ public sealed class MySqlModelManagedDataSideEffectsIntegrationTests : MySqlSafe
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE side_effect_rows (id int NOT NULL PRIMARY KEY, "
-            + "managed_value varchar(64) NOT NULL) ENGINE=InnoDB; "
-            + "CREATE TABLE side_effect_writes (id int NOT NULL PRIMARY KEY, "
-            + "managed_value varchar(64) NOT NULL) ENGINE=InnoDB; "
-            + "INSERT INTO side_effect_rows (id, managed_value) VALUES (1, 'expected');"
-            + (writeKind == "INSERT"
+            $"""
+            CREATE TABLE side_effect_rows (id int NOT NULL PRIMARY KEY, managed_value
+            varchar(64) NOT NULL) ENGINE=InnoDB; CREATE TABLE side_effect_writes (id
+            int NOT NULL PRIMARY KEY,
+            managed_value varchar(64) NOT NULL) ENGINE=InnoDB; INSERT INTO side_effect_rows
+            (id,
+            managed_value) VALUES (1, 'expected');{(writeKind == "INSERT"
                 ? string.Empty
-                : "INSERT INTO side_effect_writes (id, managed_value) VALUES (1, 'source');"),
+                : "INSERT INTO side_effect_writes (id, managed_value) VALUES (1, 'source');")}
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER side_effect_trigger AFTER "
-            + writeKind
-            + " ON side_effect_writes FOR EACH ROW "
-            + "UPDATE side_effect_rows SET managed_value = 'trigger-change' WHERE id = 1;",
+            $"""
+            CREATE TRIGGER side_effect_trigger AFTER {writeKind} ON side_effect_writes
+            FOR EACH ROW UPDATE side_effect_rows SET managed_value = 'trigger-change'
+            WHERE id = 1;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -218,12 +221,15 @@ public sealed class MySqlModelManagedDataSideEffectsIntegrationTests : MySqlSafe
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE side_effect_parents (id int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-            + "CREATE TABLE side_effect_children (id int NOT NULL PRIMARY KEY, "
-            + "parent_id int NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY (parent_id) "
-            + "REFERENCES side_effect_parents (id) ON DELETE CASCADE) ENGINE=InnoDB; "
-            + "INSERT INTO side_effect_parents (id) VALUES (1); "
-            + "INSERT INTO side_effect_children (id, parent_id) VALUES (11, 1), (12, 1);",
+            """
+            CREATE TABLE side_effect_parents (id int NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+            CREATE TABLE side_effect_children (id int NOT NULL PRIMARY KEY,
+            parent_id int NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY (parent_id)
+            REFERENCES side_effect_parents (id) ON DELETE CASCADE) ENGINE=InnoDB; INSERT
+            INTO side_effect_parents (id) VALUES (1); INSERT INTO side_effect_children
+            (id,
+            parent_id) VALUES (11, 1), (12, 1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -280,23 +286,27 @@ public sealed class MySqlModelManagedDataSideEffectsIntegrationTests : MySqlSafe
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE side_effect_parents (id int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-            + "CREATE TABLE side_effect_children (id int NOT NULL PRIMARY KEY, "
-            + "parent_id int NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY (parent_id) "
-            + "REFERENCES side_effect_parents (id) ON DELETE CASCADE) ENGINE=InnoDB; "
-            + "CREATE TABLE side_effect_writes (id int NOT NULL PRIMARY KEY, "
-            + "managed_value varchar(64) NOT NULL) ENGINE=InnoDB; "
-            + "INSERT INTO side_effect_parents (id) VALUES (1); "
-            + "INSERT INTO side_effect_children (id, parent_id) VALUES (11, 1);",
+            """
+            CREATE TABLE side_effect_parents (id int NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+            CREATE TABLE side_effect_children (id int NOT NULL PRIMARY KEY,
+            parent_id int NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY (parent_id)
+            REFERENCES side_effect_parents (id) ON DELETE CASCADE) ENGINE=InnoDB; CREATE
+            TABLE side_effect_writes (id int NOT NULL PRIMARY KEY,
+            managed_value varchar(64) NOT NULL) ENGINE=InnoDB; INSERT INTO side_effect_parents
+            (id) VALUES (1); INSERT INTO side_effect_children (id,
+            parent_id) VALUES (11, 1);
+            """,
             cancellationToken: CancellationToken.None);
 
         const string writeKind = "INSERT";
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER side_effect_trigger AFTER "
-            + writeKind
-            + " ON side_effect_writes FOR EACH ROW INSERT INTO side_effect_children (id, parent_id) VALUES (99, 1);",
+            $"""
+            CREATE TRIGGER side_effect_trigger AFTER {writeKind} ON side_effect_writes
+            FOR EACH ROW INSERT INTO side_effect_children (id,
+            parent_id) VALUES (99, 1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

@@ -12,15 +12,16 @@ public sealed class MySqlNestedBooleanCheckIntegrationTests : MySqlSafeMigration
     ) : base(fixture) { }
 
     /// <summary>Retains independent native DDL rather than deriving catalog expectations from the renderer.</summary>
-    private static string NativeTableSql => $"CREATE TABLE `{Table}` ("
-        + "`S0` bigint NOT NULL PRIMARY KEY, `ActiveGeneration` bigint unsigned NULL, "
-        + "`ActiveProof` tinyint unsigned NULL, `ActiveShape` binary(32) NULL, "
-        + "`NextGeneration` bigint unsigned NOT NULL, `TargetGeneration` bigint unsigned NULL, "
-        + "`TargetShape` binary(32) NULL, CONSTRAINT `ck_active` CHECK ("
-        + MySqlNestedBooleanCatalogCases.ActiveSource
-        + "), CONSTRAINT `ck_target` CHECK ("
-        + MySqlNestedBooleanCatalogCases.TargetSource
-        + ")) ENGINE=InnoDB";
+    private static string NativeTableSql => $"""
+        CREATE TABLE `{Table}` (`S0` bigint NOT NULL PRIMARY
+        KEY,
+        `ActiveGeneration` bigint unsigned NULL, `ActiveProof` tinyint unsigned
+        NULL,
+        `ActiveShape` binary(32) NULL, `NextGeneration` bigint unsigned NOT NULL,
+        `TargetGeneration` bigint unsigned NULL, `TargetShape` binary(32) NULL,
+        CONSTRAINT `ck_active` CHECK ({MySqlNestedBooleanCatalogCases.ActiveSource}), CONSTRAINT `ck_target`
+        CHECK ({MySqlNestedBooleanCatalogCases.TargetSource})) ENGINE=InnoDB
+        """;
 
     /// <summary>Checks table creation, populated replay and individual CHECKs against the actual catalog.</summary>
     /// <param name="script">Whether to execute the generated script rather than provider commands.</param>
@@ -175,11 +176,13 @@ public sealed class MySqlNestedBooleanCheckIntegrationTests : MySqlSafeMigration
 
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE `or_groups` (`id` int NOT NULL PRIMARY KEY, `a` int NULL, `b` int NULL, "
-            + $"`c` int NULL, `d` int NULL, `e` int NULL, CONSTRAINT `ck_or_groups` CHECK ({actual})) ENGINE=InnoDB; "
-            + (different
+            $"""
+            CREATE TABLE `or_groups` (`id` int NOT NULL PRIMARY KEY, `a` int NULL,
+            `b` int NULL, `c` int NULL, `d` int NULL, `e` int NULL, CONSTRAINT `ck_or_groups`
+            CHECK ({actual})) ENGINE=InnoDB; {(different
                 ? "INSERT INTO `or_groups` VALUES (42, NULL, 1, 1, 1, 1);"
-                : "INSERT INTO `or_groups` VALUES (42, NULL, NULL, NULL, NULL, NULL);"),
+                : "INSERT INTO `or_groups` VALUES (42, NULL, NULL, NULL, NULL, NULL);")}
+            """,
             CancellationToken.None);
 
         await using var context = CreateRegisteredContext(connectionString, safeFirst: false);
@@ -337,8 +340,11 @@ public sealed class MySqlNestedBooleanCheckIntegrationTests : MySqlSafeMigration
         string name,
         CancellationToken cancellationToken
     ) => ScalarStringAsync(connectionString,
-        $"SELECT CHECK_CLAUSE FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() "
-        + $"AND CONSTRAINT_NAME='{name}';",
+        $"""
+        SELECT CHECK_CLAUSE FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS
+        WHERE CONSTRAINT_SCHEMA=DATABASE()
+        AND CONSTRAINT_NAME='{name}';
+        """,
         cancellationToken);
 
     /// <summary>Chooses provider commands or generated-script execution with explicit cancellation.</summary>

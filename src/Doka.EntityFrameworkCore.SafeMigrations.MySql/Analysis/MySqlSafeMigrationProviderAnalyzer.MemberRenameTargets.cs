@@ -245,13 +245,16 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             alias + ".TABLE_SCHEMA",
             "DATABASE()");
 
-        return $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.{catalog} {alias} "
-            + $"WHERE {alias}.TABLE_SCHEMA = DATABASE() AND {alias}.TABLE_NAME = {owner} "
-            + $"AND {alias}.{member} = {literal(name)} AND {ownerMatch} AND {databaseMatch}"
-            + (invariant is null
+        return $"""
+            EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.{catalog} {alias}
+            WHERE {alias}.TABLE_SCHEMA = DATABASE()
+            AND {alias}.TABLE_NAME = {owner}
+            AND {alias}.{member} = {literal(name)}
+            AND {ownerMatch}
+            AND {databaseMatch}{(invariant is null
                 ? string.Empty
-                : $" AND {invariant}")
-            + ")";
+                : $" AND {invariant}")})
+            """;
     }
 
     /// <summary>Rejects malformed destination facts without exposing physical names or data.</summary>

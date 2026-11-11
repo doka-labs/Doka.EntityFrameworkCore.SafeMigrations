@@ -23,8 +23,10 @@ public sealed class PostgreSqlIndexesSimpleFiltersIntegrationTests : PostgreSqlS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer NOT NULL);"
-            + "INSERT INTO hierarchy.simple_filters VALUES (1);",
+            """
+            CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer
+            NOT NULL);INSERT INTO hierarchy.simple_filters VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -67,8 +69,10 @@ public sealed class PostgreSqlIndexesSimpleFiltersIntegrationTests : PostgreSqlS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer NOT NULL);"
-            + "INSERT INTO hierarchy.simple_filters VALUES (1);",
+            """
+            CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer
+            NOT NULL);INSERT INTO hierarchy.simple_filters VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -295,9 +299,11 @@ public sealed class PostgreSqlIndexesSimpleFiltersIntegrationTests : PostgreSqlS
             "(parent IS NULL)",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT pg_catalog.pg_get_expr(i.indpred, i.indrelid) FROM pg_catalog.pg_index i "
-                + "JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid "
-                + "WHERE c.relname = 'simple_filter_lookup';",
+                """
+                SELECT pg_catalog.pg_get_expr(i.indpred, i.indrelid)
+                FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
+                WHERE c.relname = 'simple_filter_lookup';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 }

@@ -16,14 +16,15 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (s int NULL, other int NULL, "
-            + "`e` int GENERATED ALWAYS AS (other + 1) VIRTUAL, "
-            + "`\u00e9` int GENERATED ALWAYS AS ("
-            + (dependentAccentMember
+            $"""
+            CREATE TABLE `{Table}` (s int NULL, other int NULL,
+            `e` int GENERATED ALWAYS AS (other + 1) VIRTUAL, `{"\u00E9"}`
+            int GENERATED ALWAYS AS ({(dependentAccentMember
                 ? "s"
-                : "other")
-            + " + 1) VIRTUAL); "
-            + $"INSERT INTO `{Table}` (s, other) VALUES (7, 11);",
+                : "other")} + 1) VIRTUAL); INSERT
+            INTO `{Table}` (s,
+            other) VALUES (7, 11);
+            """,
             cancellationToken: CancellationToken.None);
 
         var expression = SafeMigrationSql.Binary(
@@ -153,8 +154,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var unchanged = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-            + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'left_bound';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}'
+            AND COLUMN_NAME = 'left_bound';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -272,9 +277,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (id int NOT NULL, unrelated int NULL, "
-            + "derived int GENERATED ALWAYS AS (id + 1) VIRTUAL); "
-            + $"INSERT INTO `{Table}` (id, unrelated) VALUES (1, 7);",
+            $"""
+            CREATE TABLE `{Table}` (id int NOT NULL, unrelated int
+            NULL,
+            derived int GENERATED ALWAYS AS (id + 1) VIRTUAL); INSERT INTO `{Table}`
+            (id,
+            unrelated) VALUES (1, 7);
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);

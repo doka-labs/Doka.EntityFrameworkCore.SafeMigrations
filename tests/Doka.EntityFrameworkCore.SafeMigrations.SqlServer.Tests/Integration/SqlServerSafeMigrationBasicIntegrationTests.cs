@@ -157,9 +157,11 @@ public sealed class SqlServerSafeMigrationBasicIntegrationTests : SqlServerSafeM
 
         var indexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes "
-            + "WHERE object_id = OBJECT_ID(N'dbo.legacy_orders', N'U') "
-            + "AND name = N'IX_legacy_orders_Caption';",
+            """
+            SELECT COUNT(*) FROM sys.indexes
+            WHERE object_id = OBJECT_ID(N'dbo.legacy_orders', N'U')
+            AND name = N'IX_legacy_orders_Caption';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert

@@ -58,22 +58,30 @@ public sealed class MySqlColumnsPrimaryKeyRemovalIntegrationTests : MySqlSafeMig
         await ExecuteOperationsAsync(context, operations, CancellationToken.None);
         var nullable = await ScalarStringAsync(
             connectionString,
-            "SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'key_items' AND COLUMN_NAME = 'user_id';",
+            """
+            SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'key_items' AND COLUMN_NAME = 'user_id';
+            """,
             cancellationToken: CancellationToken.None);
 
         var retained = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM `key_items` WHERE `question_id` = "
-            + "'00000000-0000-0000-0000-000000000001' AND `user_id` = "
-            + "'00000000-0000-0000-0000-000000000002' AND `payload` = 'retained';",
+            """
+            SELECT COUNT(*) FROM `key_items`
+            WHERE `question_id` = '00000000-0000-0000-0000-000000000001'
+            AND `user_id` = '00000000-0000-0000-0000-000000000002'
+            AND `payload` = 'retained';
+            """,
             cancellationToken: CancellationToken.None);
 
         var remainingForeignKey = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'key_items' "
-            + "AND CONSTRAINT_NAME = 'fk_key_items_question';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'key_items' AND CONSTRAINT_NAME = 'fk_key_items_question';
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
@@ -169,9 +177,11 @@ public sealed class MySqlColumnsPrimaryKeyRemovalIntegrationTests : MySqlSafeMig
         // Act
         await ExecuteSqlAsync(
             connectionString,
-            "ALTER TABLE `key_items` DROP FOREIGN KEY `fk_key_items_user`; "
-            + "ALTER TABLE `key_items` DROP PRIMARY KEY; "
-            + "ALTER TABLE `key_items` MODIFY COLUMN `user_id` char(36) NULL;",
+            """
+            ALTER TABLE `key_items` DROP FOREIGN KEY `fk_key_items_user`; ALTER TABLE
+            `key_items` DROP PRIMARY KEY; ALTER TABLE `key_items` MODIFY COLUMN `user_id`
+            char(36) NULL;
+            """,
             cancellationToken: CancellationToken.None);
 
         var retained = await ScalarIntAsync(
@@ -182,8 +192,11 @@ public sealed class MySqlColumnsPrimaryKeyRemovalIntegrationTests : MySqlSafeMig
 
         var nullable = await ScalarStringAsync(
             connectionString,
-            "SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'key_items' AND COLUMN_NAME = 'user_id';",
+            """
+            SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'key_items' AND COLUMN_NAME = 'user_id';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -253,23 +266,23 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     /// <returns>The isolated schema and deterministic sentinel values.</returns>
     protected static string PrimaryKeyRemovalFixture(
         bool supportingIndexExists
-    ) => "CREATE TABLE `key_questions` (`id` char(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB "
-        + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-        + "CREATE TABLE `key_users` (`id` char(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB "
-        + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-        + "CREATE TABLE `key_items` (`question_id` char(36) NOT NULL, `user_id` char(36) NOT NULL, "
-        + "`payload` longtext NOT NULL, PRIMARY KEY (`question_id`, `user_id`), "
-        + (supportingIndexExists
+    ) => $"""
+        CREATE TABLE `key_questions` (`id` char(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB
+        DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; CREATE TABLE `key_users`
+        (`id` char(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        COLLATE=utf8mb4_unicode_ci; CREATE TABLE `key_items` (`question_id` char(36)
+        NOT NULL,
+        `user_id` char(36) NOT NULL, `payload` longtext NOT NULL, PRIMARY KEY (`question_id`,
+        `user_id`), {(supportingIndexExists
             ? "KEY `ix_key_items_question` (`question_id`), "
-            : string.Empty)
-        + "KEY `ix_key_items_user` (`user_id`), "
-        + "CONSTRAINT `fk_key_items_question` FOREIGN KEY (`question_id`) "
-        + "REFERENCES `key_questions` (`id`) ON DELETE CASCADE, "
-        + "CONSTRAINT `fk_key_items_user` FOREIGN KEY (`user_id`) "
-        + "REFERENCES `key_users` (`id`) ON DELETE CASCADE) ENGINE=InnoDB "
-        + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-        + "INSERT INTO `key_questions` VALUES ('00000000-0000-0000-0000-000000000001'); "
-        + "INSERT INTO `key_users` VALUES ('00000000-0000-0000-0000-000000000002'); "
-        + "INSERT INTO `key_items` VALUES ('00000000-0000-0000-0000-000000000001', "
-        + "'00000000-0000-0000-0000-000000000002', 'retained');";
+            : string.Empty)}KEY `ix_key_items_user` (`user_id`),
+        CONSTRAINT `fk_key_items_question` FOREIGN KEY (`question_id`) REFERENCES
+        `key_questions` (`id`) ON DELETE CASCADE,
+        CONSTRAINT `fk_key_items_user` FOREIGN KEY (`user_id`) REFERENCES `key_users`
+        (`id`) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO `key_questions` VALUES ('00000000-0000-0000-0000-000000000001');
+        INSERT INTO `key_users` VALUES ('00000000-0000-0000-0000-000000000002');
+        INSERT INTO `key_items` VALUES ('00000000-0000-0000-0000-000000000001',
+        '00000000-0000-0000-0000-000000000002', 'retained');
+        """;
 }

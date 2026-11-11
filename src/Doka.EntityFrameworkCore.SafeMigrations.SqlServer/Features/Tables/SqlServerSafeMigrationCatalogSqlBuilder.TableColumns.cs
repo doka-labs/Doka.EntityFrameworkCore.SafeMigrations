@@ -138,67 +138,97 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             sql.Append(')');
         }
 
+        // WHY: Constant-folded boundary spaces survive cleanup; the raw command
+        // only replaces existing SQL separator spaces with single LF characters.
         sql
-            .Append(") expected(name, type_name, is_nullable, is_identity, max_length, precision_value, scale_value, ")
-            .Append("is_character, collation_name, identity_seed, identity_increment, default_fingerprint) ")
-            .Append("LEFT JOIN sys.columns c ON c.object_id = ")
+            .Append(
+                """
+                ) expected(name, type_name, is_nullable, is_identity, max_length, precision_value, scale_value,
+                is_character, collation_name, identity_seed, identity_increment, default_fingerprint)
+                LEFT JOIN sys.columns c ON c.object_id =
+                """
+                + " ")
             .Append(TableId(definition.Table, definition.Schema))
-            .Append(" AND c.name = expected.name ")
-            .Append("LEFT JOIN sys.types ty ON ty.user_type_id = c.user_type_id ");
+            .Append(" "
+                + """
+                AND c.name = expected.name
+                LEFT JOIN sys.types ty ON ty.user_type_id = c.user_type_id
+                """
+                + " ");
 
         // WHY: SQL Server expands these catalog views during compilation. Ordinary
         // no-identity/no-default contracts need only the sys.columns absence facets,
         // not optional metadata joins. Mixed authored contracts retain their proofs.
         if (hasIdentity)
         {
-            sql
-                .Append("LEFT JOIN sys.identity_columns identity_column ON identity_column.object_id = c.object_id ")
-                .Append("AND identity_column.column_id = c.column_id ");
+            sql.Append(
+                """
+                LEFT JOIN sys.identity_columns identity_column ON identity_column.object_id = c.object_id
+                AND identity_column.column_id = c.column_id
+                """
+                + " ");
         }
 
         if (hasDefaults)
         {
-            sql
-                .Append("LEFT JOIN sys.default_constraints dc ON dc.parent_object_id = c.object_id ")
-                .Append("AND dc.parent_column_id = c.column_id ")
-                .Append("LEFT JOIN sys.extended_properties ep ON ep.class = 1 AND ep.major_id = dc.object_id ")
-                .Append("AND ep.minor_id = 0 AND ep.name = N'Doka:SafeMigrations:Contract' ");
+            sql.Append(
+                """
+                LEFT JOIN sys.default_constraints dc ON dc.parent_object_id = c.object_id
+                AND dc.parent_column_id = c.column_id
+                LEFT JOIN sys.extended_properties ep ON ep.class = 1 AND ep.major_id = dc.object_id
+                AND ep.minor_id = 0 AND ep.name = N'Doka:SafeMigrations:Contract'
+                """
+                + " ");
         }
 
         // WHY: NOT(predicate) would discard UNKNOWN. CASE treats absent
         // columns, missing identity metadata, and missing stamps as a
         // mismatch, preserving the original positive EXISTS semantics.
         sql
-            .Append("WHERE CASE WHEN c.column_id IS NOT NULL ")
-            .Append("AND ty.name = expected.type_name AND ty.is_user_defined = 0 AND ty.is_assembly_type = 0 ")
-            .Append("AND c.is_nullable = expected.is_nullable AND c.is_identity = expected.is_identity ")
-            .Append("AND c.is_computed = 0 AND c.is_sparse = 0 AND c.is_column_set = 0 AND c.is_rowguidcol = 0 ")
-            .Append("AND c.is_filestream = 0 AND c.is_hidden = 0 AND c.generated_always_type = 0 ")
+            .Append(
+                """
+                WHERE CASE WHEN c.column_id IS NOT NULL
+                AND ty.name = expected.type_name AND ty.is_user_defined = 0 AND ty.is_assembly_type = 0
+                AND c.is_nullable = expected.is_nullable AND c.is_identity = expected.is_identity
+                AND c.is_computed = 0 AND c.is_sparse = 0 AND c.is_column_set = 0 AND c.is_rowguidcol = 0
+                AND c.is_filestream = 0 AND c.is_hidden = 0 AND c.generated_always_type = 0
+                """
+                + " ")
 
             // WHY: Whole-table matching must reject the same unsupported storage as
             // standalone column matching, rather than certifying an encrypted or RULE-bound column.
-            .Append("AND c.rule_object_id = 0 AND c.encryption_type IS NULL ")
-            .Append("AND (expected.max_length IS NULL OR c.max_length = expected.max_length) ")
-            .Append("AND (expected.precision_value IS NULL OR c.precision = expected.precision_value) ")
-            .Append("AND (expected.scale_value IS NULL OR c.scale = expected.scale_value) ")
-            .Append("AND (expected.is_character = 0 OR c.collation_name = expected.collation_name) ");
+            .Append(
+                """
+                AND c.rule_object_id = 0 AND c.encryption_type IS NULL
+                AND (expected.max_length IS NULL OR c.max_length = expected.max_length)
+                AND (expected.precision_value IS NULL OR c.precision = expected.precision_value)
+                AND (expected.scale_value IS NULL OR c.scale = expected.scale_value)
+                AND (expected.is_character = 0 OR c.collation_name = expected.collation_name)
+                """
+                + " ");
 
         if (hasIdentity)
         {
-            sql
-                .Append("AND (expected.is_identity = 0 OR (identity_column.is_not_for_replication = 0 ")
-                .Append("AND TRY_CONVERT(decimal(38,0), identity_column.seed_value) = expected.identity_seed ")
-                .Append("AND TRY_CONVERT(decimal(38,0), identity_column.increment_value) ")
-                .Append("= expected.identity_increment)) ");
+            sql.Append(
+                """
+                AND (expected.is_identity = 0 OR (identity_column.is_not_for_replication = 0
+                AND TRY_CONVERT(decimal(38,0), identity_column.seed_value) = expected.identity_seed
+                AND TRY_CONVERT(decimal(38,0), identity_column.increment_value)
+                = expected.identity_increment))
+                """
+                + " ");
         }
 
         if (hasDefaults)
         {
-            sql
-                .Append("AND ((expected.default_fingerprint IS NULL AND c.default_object_id = 0) ")
-                .Append("OR (expected.default_fingerprint IS NOT NULL AND dc.object_id IS NOT NULL ")
-                .Append("AND CONVERT(nvarchar(64), ep.value) = expected.default_fingerprint ")
-                .Append("COLLATE Latin1_General_100_BIN2)) ");
+            sql.Append(
+                """
+                AND ((expected.default_fingerprint IS NULL AND c.default_object_id = 0)
+                OR (expected.default_fingerprint IS NOT NULL AND dc.object_id IS NOT NULL
+                AND CONVERT(nvarchar(64), ep.value) = expected.default_fingerprint
+                COLLATE Latin1_General_100_BIN2))
+                """
+                + " ");
         }
         else
         {

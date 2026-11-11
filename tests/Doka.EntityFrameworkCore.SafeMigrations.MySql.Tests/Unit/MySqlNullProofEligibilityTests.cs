@@ -32,7 +32,14 @@ public sealed class MySqlNullProofEligibilityTests
         var runtime = plan.RenderPreparedStateExpression([]);
 
         // Assert
-        Assert.Equal($"CASE WHEN ({nullable}) AND ({eligible}) THEN ({rowProbe}) ELSE FALSE END", state);
+        Assert.Equal(
+            $"""
+            CASE WHEN ({nullable})
+            AND ({eligible})
+            THEN ({rowProbe})
+            ELSE FALSE END
+            """,
+            state);
         Assert.Equal(state, repair);
         Assert.Equal("@doka_sm_nullability_blocked", runtime);
         Assert.DoesNotContain("@doka_sm_", state, StringComparison.Ordinal);
@@ -68,6 +75,10 @@ public sealed class MySqlNullProofEligibilityTests
                 "fresh_null_probe"),
         };
 
+        var transition = transitionEligible
+            ? "TRUE"
+            : "FALSE";
+
         // Act
         var analysis = plan.RenderStateExpression(
             static _ => throw new InvalidOperationException(),
@@ -77,14 +88,13 @@ public sealed class MySqlNullProofEligibilityTests
         var runtimeInvariant = plan.RenderPreparedNullabilityRepairInvariantExpression([]);
 
         // Assert
-        var transition = transitionEligible
-            ? "TRUE"
-            : "FALSE";
-
         Assert.Equal(
-            "CASE WHEN (physical_nullable) AND (physical_same OR "
-            + transition
-            + ") THEN (fresh_null_probe) ELSE FALSE END",
+            $"""
+            CASE WHEN (physical_nullable)
+            AND (physical_same OR {transition})
+            THEN (fresh_null_probe)
+            ELSE FALSE END
+            """,
             analysis);
 
         Assert.Equal("physical_same OR @doka_sm_transition_eligible", runtimeInvariant);

@@ -240,10 +240,12 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
             "C",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT coll.collname FROM pg_catalog.pg_index i "
-                + "JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid "
-                + "JOIN pg_catalog.pg_collation coll ON coll.oid = i.indcollation[1] "
-                + "WHERE idx.relname = 'ix_collation_set';",
+                """
+                SELECT coll.collname FROM pg_catalog.pg_index i
+                JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid
+                JOIN pg_catalog.pg_collation coll ON coll.oid = i.indcollation[1]
+                WHERE idx.relname = 'ix_collation_set';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -272,8 +274,10 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE collation_sets (value text COLLATE pg_catalog.\"POSIX\"); "
-            + "CREATE INDEX ix_collation_set ON collation_sets (lower(value) COLLATE pg_catalog.\"C\");",
+            """
+            CREATE TABLE collation_sets (value text COLLATE pg_catalog."POSIX"); CREATE
+            INDEX ix_collation_set ON collation_sets (lower(value) COLLATE pg_catalog."C");
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -348,11 +352,12 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE collation_sets (value text COLLATE pg_catalog.\"POSIX\"); "
-            + (populated
+            $"""
+            CREATE TABLE collation_sets (value text COLLATE pg_catalog."POSIX"); {(populated
                 ? "INSERT INTO collation_sets VALUES ('entry'); "
-                : string.Empty)
-            + "CREATE INDEX ix_collation_set ON collation_sets (lower(value));",
+                : string.Empty)}CREATE
+            INDEX ix_collation_set ON collation_sets (lower(value));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -449,10 +454,10 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE collation_sets (value text COLLATE pg_catalog.\"POSIX\"); "
-            + "CREATE INDEX ix_collation_set ON collation_sets ("
-            + storedExpression
-            + ");",
+            $"""
+            CREATE TABLE collation_sets (value text COLLATE pg_catalog."POSIX"); CREATE
+            INDEX ix_collation_set ON collation_sets ({storedExpression});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -507,8 +512,10 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE collation_sets (value text COLLATE pg_catalog.\"POSIX\"); "
-            + "CREATE INDEX ix_collation_set ON collation_sets (lower(value) COLLATE pg_catalog.\"C\");",
+            """
+            CREATE TABLE collation_sets (value text COLLATE pg_catalog."POSIX"); CREATE
+            INDEX ix_collation_set ON collation_sets (lower(value) COLLATE pg_catalog."C");
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -542,10 +549,12 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
             "C",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT coll.collname FROM pg_catalog.pg_index i "
-                + "JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid "
-                + "JOIN pg_catalog.pg_collation coll ON coll.oid = i.indcollation[0] "
-                + "WHERE idx.relname = 'ix_collation_set';",
+                """
+                SELECT coll.collname FROM pg_catalog.pg_index i
+                JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid
+                JOIN pg_catalog.pg_collation coll ON coll.oid = i.indcollation[0]
+                WHERE idx.relname = 'ix_collation_set';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -607,11 +616,11 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA custom; CREATE COLLATION custom.\"C\" FROM pg_catalog.\"C\"; "
-            + "CREATE TABLE collation_sets (value text COLLATE pg_catalog.\"POSIX\"); "
-            + "CREATE INDEX ix_collation_set ON collation_sets ("
-            + storedExpression
-            + ");",
+            $"""
+            CREATE SCHEMA custom; CREATE COLLATION custom."C"
+            FROM pg_catalog."C"; CREATE TABLE collation_sets (value text COLLATE pg_catalog."POSIX"); CREATE
+            INDEX ix_collation_set ON collation_sets ({storedExpression});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -686,15 +695,14 @@ public sealed class PostgreSqlIndexesCollationSetsIntegrationTests : PostgreSqlS
         string collationName = "C"
     ) => ExecuteSqlAsync(
         connectionString,
-        "CREATE TABLE collation_sets (first_key integer NOT NULL, "
-        + "value text COLLATE pg_catalog.\"POSIX\", last_key integer NOT NULL);"
-        + "INSERT INTO collation_sets VALUES (1, 'entry', 2);"
-        + "CREATE INDEX ix_collation_set ON collation_sets "
-        + "(first_key DESC NULLS LAST, value COLLATE "
-        + PostgreSqlIdentifier(collationSchema)
-        + "."
-        + PostgreSqlIdentifier(collationName)
-        + " ASC NULLS LAST, last_key DESC NULLS FIRST);",
+        $"""
+        CREATE TABLE collation_sets (first_key integer NOT NULL, value text COLLATE pg_catalog."POSIX",
+        last_key integer NOT NULL);INSERT INTO collation_sets VALUES (1, 'entry',
+        2);CREATE INDEX ix_collation_set ON collation_sets (first_key DESC NULLS LAST,
+        value COLLATE {PostgreSqlIdentifier(collationSchema)}.{PostgreSqlIdentifier(collationName)} ASC
+        NULLS LAST,
+        last_key DESC NULLS FIRST);
+        """,
         cancellationToken: cancellationToken);
 
     /// <summary>Builds the mixed contract without moving explicit collations into the plain-key set.</summary>

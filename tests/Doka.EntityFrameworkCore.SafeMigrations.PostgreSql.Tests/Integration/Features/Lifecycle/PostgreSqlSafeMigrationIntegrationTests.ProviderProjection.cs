@@ -15,10 +15,12 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE projection_parents (id integer NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE projection_children (id integer NOT NULL PRIMARY KEY); "
-            + "INSERT INTO projection_parents (id) VALUES (1); "
-            + "INSERT INTO projection_children (id) VALUES (1);",
+            """
+            CREATE TABLE projection_parents (id integer NOT NULL PRIMARY KEY); CREATE
+            TABLE projection_children (id integer NOT NULL PRIMARY KEY); INSERT INTO
+            projection_parents (id) VALUES (1); INSERT INTO projection_children (id)
+            VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -78,10 +80,12 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE projection_parents (id integer NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE projection_children (id integer NOT NULL PRIMARY KEY); "
-            + "INSERT INTO projection_parents (id) VALUES (1); "
-            + "INSERT INTO projection_children (id) VALUES (1);",
+            """
+            CREATE TABLE projection_parents (id integer NOT NULL PRIMARY KEY); CREATE
+            TABLE projection_children (id integer NOT NULL PRIMARY KEY); INSERT INTO
+            projection_parents (id) VALUES (1); INSERT INTO projection_children (id)
+            VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -106,9 +110,12 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'projection_children' "
-                + "AND column_name = 'parent_id';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'projection_children'
+                AND column_name = 'parent_id';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -118,10 +125,11 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE alias_projection_parents ("
-            + "id integer NOT NULL, code integer NOT NULL, "
-            + "CONSTRAINT pk_alias_projection_parents PRIMARY KEY (id), "
-            + "CONSTRAINT uq_alias_projection_parents_code UNIQUE (code));",
+            """
+            CREATE TABLE alias_projection_parents (id integer NOT NULL, code integer NOT NULL,
+            CONSTRAINT pk_alias_projection_parents PRIMARY KEY (id), CONSTRAINT
+            uq_alias_projection_parents_code UNIQUE (code));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -162,17 +170,16 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE identity_parents ("
-            + "id integer NOT NULL, code integer NOT NULL, quantity integer NOT NULL, "
-            + "CONSTRAINT pk_identity_parents PRIMARY KEY (id), "
-            + "CONSTRAINT uq_identity_code UNIQUE (code), "
-            + "CONSTRAINT ck_identity_quantity CHECK (quantity >= 0)); "
-            + "CREATE INDEX ix_identity_quantity ON identity_parents (quantity); "
-            + "CREATE TABLE identity_children ("
-            + "id integer NOT NULL, parent_id integer NULL, "
-            + "CONSTRAINT pk_identity_children PRIMARY KEY (id), "
-            + "CONSTRAINT fk_identity_parent FOREIGN KEY (parent_id) "
-            + "REFERENCES identity_parents (id) ON DELETE CASCADE);",
+            """
+            CREATE TABLE identity_parents (id integer NOT NULL, code integer NOT NULL,
+            quantity integer NOT NULL, CONSTRAINT pk_identity_parents PRIMARY KEY (id),
+            CONSTRAINT uq_identity_code UNIQUE (code), CONSTRAINT ck_identity_quantity CHECK (quantity >=
+            0)); CREATE INDEX ix_identity_quantity ON identity_parents (quantity); CREATE TABLE
+            identity_children (id integer NOT NULL,
+            parent_id integer NULL, CONSTRAINT pk_identity_children PRIMARY KEY (id),
+            CONSTRAINT fk_identity_parent FOREIGN KEY (parent_id) REFERENCES identity_parents (id) ON DELETE
+            CASCADE);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -208,23 +215,20 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE ambiguous_parents ("
-            + "id integer NOT NULL, code integer NOT NULL, quantity integer NOT NULL, "
-            + "CONSTRAINT pk_ambiguous_parents PRIMARY KEY (id), "
-            + "CONSTRAINT uq_ambiguous_code_a UNIQUE (code), "
-            + "CONSTRAINT ck_ambiguous_quantity_a CHECK (quantity >= 0), "
-            + "CONSTRAINT ck_ambiguous_quantity_b CHECK (quantity >= 0)); "
-            + "ALTER TABLE ambiguous_parents "
-            + "ADD CONSTRAINT uq_ambiguous_code_b UNIQUE (code); "
-            + "CREATE INDEX ix_ambiguous_quantity_a ON ambiguous_parents (quantity); "
-            + "CREATE INDEX ix_ambiguous_quantity_b ON ambiguous_parents (quantity); "
-            + "CREATE TABLE ambiguous_children ("
-            + "id integer NOT NULL, parent_id integer NULL, "
-            + "CONSTRAINT pk_ambiguous_children PRIMARY KEY (id), "
-            + "CONSTRAINT fk_ambiguous_parent_a FOREIGN KEY (parent_id) "
-            + "REFERENCES ambiguous_parents (id) ON DELETE CASCADE, "
-            + "CONSTRAINT fk_ambiguous_parent_b FOREIGN KEY (parent_id) "
-            + "REFERENCES ambiguous_parents (id) ON DELETE CASCADE);",
+            """
+            CREATE TABLE ambiguous_parents (id integer NOT NULL, code integer NOT NULL,
+            quantity integer NOT NULL, CONSTRAINT pk_ambiguous_parents PRIMARY KEY (id),
+            CONSTRAINT uq_ambiguous_code_a UNIQUE (code), CONSTRAINT ck_ambiguous_quantity_a CHECK (quantity >= 0),
+            CONSTRAINT ck_ambiguous_quantity_b CHECK (quantity >= 0)); ALTER TABLE ambiguous_parents ADD
+            CONSTRAINT uq_ambiguous_code_b UNIQUE (code); CREATE INDEX ix_ambiguous_quantity_a ON
+            ambiguous_parents (quantity); CREATE INDEX ix_ambiguous_quantity_b ON ambiguous_parents
+            (quantity); CREATE TABLE ambiguous_children (id integer NOT NULL,
+            parent_id integer NULL, CONSTRAINT pk_ambiguous_children PRIMARY KEY (id),
+            CONSTRAINT fk_ambiguous_parent_a FOREIGN KEY (parent_id) REFERENCES ambiguous_parents (id) ON
+            DELETE CASCADE,
+            CONSTRAINT fk_ambiguous_parent_b FOREIGN KEY (parent_id) REFERENCES ambiguous_parents (id) ON
+            DELETE CASCADE);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -340,16 +344,15 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE {parentTable} ("
-            + "id integer NOT NULL, code integer NOT NULL, quantity integer NOT NULL, "
-            + $"CONSTRAINT {primaryKey} PRIMARY KEY (id), "
-            + $"CONSTRAINT {uniqueConstraint} UNIQUE (code), "
-            + $"CONSTRAINT {checkConstraint} CHECK (quantity >= 0)); "
-            + $"CREATE INDEX {index} ON {parentTable} (quantity); "
-            + $"CREATE TABLE {childTable} ("
-            + "id integer NOT NULL PRIMARY KEY, parent_id integer NULL, "
-            + $"CONSTRAINT {foreignKey} FOREIGN KEY (parent_id) "
-            + $"REFERENCES {parentTable} (id) ON DELETE CASCADE);",
+            $"""
+            CREATE TABLE {parentTable} (id integer NOT NULL, code integer NOT NULL,
+            quantity integer NOT NULL, CONSTRAINT {primaryKey} PRIMARY KEY (id),
+            CONSTRAINT {uniqueConstraint} UNIQUE (code), CONSTRAINT {checkConstraint} CHECK (quantity >=
+            0)); CREATE INDEX {index} ON {parentTable} (quantity); CREATE TABLE {childTable} (id
+            integer NOT NULL PRIMARY KEY,
+            parent_id integer NULL, CONSTRAINT {foreignKey} FOREIGN KEY (parent_id) REFERENCES
+            {parentTable} (id) ON DELETE CASCADE);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -434,9 +437,10 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE {table} ("
-            + "id integer NOT NULL PRIMARY KEY, code integer NOT NULL, "
-            + $"CONSTRAINT {constraint} UNIQUE (code));",
+            $"""
+            CREATE TABLE {table} (id integer NOT NULL PRIMARY KEY,
+            code integer NOT NULL, CONSTRAINT {constraint} UNIQUE (code));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

@@ -28,10 +28,12 @@ public sealed partial class SqlServerModelManagedDataCancellationTests
         if (markerHeld)
         {
             await using var acquire = owner.CreateCommand();
-            acquire.CommandText = "DECLARE @result int; "
-                + "EXEC @result = sys.sp_getapplock @DbPrincipal = N'public', @Resource = @resource, "
-                + "@LockMode = N'Exclusive', @LockOwner = N'Session', @LockTimeout = 0; "
-                + "IF @result < 0 THROW 51006, 'identity readiness lock failed', 1;";
+            acquire.CommandText = """
+            DECLARE @result int; EXEC @result = sys.sp_getapplock @DbPrincipal = N'public',
+            @Resource = @resource, @LockMode = N'Exclusive', @LockOwner = N'Session',
+            @LockTimeout = 0; IF @result < 0 THROW 51006, 'identity readiness lock failed',
+            1;
+            """;
 
             acquire.Parameters.Add(new SqlParameter("@resource", SqlDbType.NVarChar, 255) { Value = resource });
 

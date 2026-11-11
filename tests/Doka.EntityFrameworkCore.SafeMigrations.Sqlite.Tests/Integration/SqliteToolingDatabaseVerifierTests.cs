@@ -78,9 +78,12 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
         await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "DELETE FROM __EFMigrationsHistory WHERE MigrationId = '"
-            + missingMigrationId
-            + "'; CREATE UNIQUE INDEX unrelated_unique ON tooling_entities (Code, Id);",
+            $"""
+            DELETE FROM __EFMigrationsHistory
+            WHERE MigrationId = '{missingMigrationId}'; CREATE UNIQUE INDEX unrelated_unique
+            ON tooling_entities (Code,
+            Id);
+            """,
             cancellationToken: CancellationToken.None);
 
         // Act
@@ -220,9 +223,12 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
         await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "DROP INDEX IX_scaffolding_generated_nodes_HasDescendants_LeftBound_RightBound; "
-            + "CREATE INDEX IX_scaffolding_generated_nodes_HasDescendants_LeftBound_RightBound "
-            + "ON scaffolding_generated_nodes (HasDescendants, RightBound, LeftBound);",
+            """
+            DROP INDEX IX_scaffolding_generated_nodes_HasDescendants_LeftBound_RightBound;
+            CREATE INDEX IX_scaffolding_generated_nodes_HasDescendants_LeftBound_RightBound
+            ON scaffolding_generated_nodes (HasDescendants,
+            RightBound, LeftBound);
+            """,
             cancellationToken: CancellationToken.None);
 
         // Act
@@ -314,10 +320,13 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
         await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "PRAGMA foreign_keys = OFF; "
-            + "CREATE TABLE extra_parent (Id INTEGER PRIMARY KEY); "
-            + "CREATE TABLE extra_child (ParentId INTEGER REFERENCES extra_parent (Id)); "
-            + "INSERT INTO extra_child VALUES (1); PRAGMA foreign_keys = ON;",
+            """
+            PRAGMA foreign_keys = OFF;
+            CREATE TABLE extra_parent (Id INTEGER PRIMARY KEY);
+            CREATE TABLE extra_child (ParentId INTEGER REFERENCES extra_parent (Id));
+            INSERT INTO extra_child VALUES (1);
+            PRAGMA foreign_keys = ON;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Act
@@ -358,17 +367,19 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
 
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE __EFMigrationsHistory (MigrationId TEXT NOT NULL PRIMARY KEY, ProductVersion TEXT NOT NULL); "
-            + "INSERT INTO __EFMigrationsHistory VALUES ('"
-            + InitialMigrationId
-            + "', '10.0.13'); "
-            + (baselineOnly
+            $"""
+            CREATE TABLE __EFMigrationsHistory (MigrationId TEXT NOT NULL PRIMARY KEY,
+            ProductVersion TEXT NOT NULL); INSERT INTO __EFMigrationsHistory VALUES
+            ('{InitialMigrationId}',
+            '10.0.13'); {(baselineOnly
                 ? string.Empty
-                : "INSERT INTO __EFMigrationsHistory VALUES ('" + TransitionMigrationId + "', '10.0.13'); ")
-            + "CREATE TABLE tooling_entities (Id INTEGER NOT NULL PRIMARY KEY, Code TEXT NOT NULL, "
-            + transitionColumns
-            + "); CREATE UNIQUE INDEX IX_tooling_entities_Code ON tooling_entities (Code); "
-            + "INSERT INTO tooling_entities (Id, Code) VALUES (1, 'baseline');",
+                : "INSERT INTO __EFMigrationsHistory VALUES ('" + TransitionMigrationId + "', '10.0.13'); "
+            )}CREATE TABLE tooling_entities (Id
+            INTEGER NOT NULL PRIMARY KEY,
+            Code TEXT NOT NULL, {transitionColumns}); CREATE UNIQUE INDEX IX_tooling_entities_Code
+            ON tooling_entities (Code); INSERT INTO tooling_entities (Id,
+            Code) VALUES (1, 'baseline');
+            """,
             cancellationToken: cancellationToken);
 
         if (includeGeneratedTable)
@@ -383,15 +394,14 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
 
             await ExecuteSqlAsync(
                 connection,
-                "CREATE TABLE scaffolding_generated_nodes (Id INTEGER NOT NULL PRIMARY KEY, "
-                + "LeftBound INTEGER NOT NULL, RightBound INTEGER NOT NULL, HasDescendants INTEGER NOT NULL "
-                + "GENERATED ALWAYS AS ("
-                + expression
-                + ") VIRTUAL"
-                + check
-                + "); "
-                + "CREATE INDEX IX_scaffolding_generated_nodes_HasDescendants_LeftBound_RightBound "
-                + "ON scaffolding_generated_nodes (HasDescendants, LeftBound, RightBound);",
+                $"""
+                CREATE TABLE scaffolding_generated_nodes (Id INTEGER NOT NULL PRIMARY KEY,
+                LeftBound INTEGER NOT NULL, RightBound INTEGER NOT NULL, HasDescendants
+                INTEGER NOT NULL GENERATED ALWAYS AS ({expression}) VIRTUAL{check});
+                CREATE INDEX IX_scaffolding_generated_nodes_HasDescendants_LeftBound_RightBound
+                ON scaffolding_generated_nodes (HasDescendants,
+                LeftBound, RightBound);
+                """,
                 cancellationToken: cancellationToken);
         }
     }

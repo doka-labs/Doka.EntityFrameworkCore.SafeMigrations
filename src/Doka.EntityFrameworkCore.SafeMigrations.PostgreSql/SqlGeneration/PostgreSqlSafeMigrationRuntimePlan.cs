@@ -340,11 +340,12 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
 
         var nullabilityReplacement = NullabilityDataProbe is null
             ? "FALSE"
-            : "CASE WHEN ("
-            + repairInvariantReplacement
-            + $") AND NOT ({NullabilityDataProbe.NotNullContractExpression}) THEN ("
-            + NullabilityDataProbe.BlockedExpression
-            + ") ELSE FALSE END";
+            : $"""
+            CASE WHEN ({repairInvariantReplacement})
+            AND NOT ({NullabilityDataProbe.NotNullContractExpression})
+            THEN ({NullabilityDataProbe.BlockedExpression})
+            ELSE FALSE END
+            """;
 
         return ReplaceTransitionPlaceholders(
             expression,
@@ -679,7 +680,10 @@ internal sealed record PostgreSqlSafeMigrationDataProbe(
 {
     /// <summary>Builds the bounded row probe used only after catalog qualification.</summary>
     /// <returns>The provider-delimited Boolean SQL expression.</returns>
-    public string BuildBlockedExpression() => "EXISTS(SELECT 1 FROM "
-        + $"{QualifiedTable} WHERE {DelimitedColumn} IS NOT NULL "
-        + $"AND char_length({DelimitedColumn}) > {TargetLength.ToString(CultureInfo.InvariantCulture)} LIMIT 1)";
+    public string BuildBlockedExpression() => $"""
+        EXISTS(SELECT 1 FROM {QualifiedTable}
+        WHERE {DelimitedColumn} IS NOT NULL
+        AND char_length({DelimitedColumn}) > {TargetLength.ToString(CultureInfo.InvariantCulture)}
+        LIMIT 1)
+        """;
 }

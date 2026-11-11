@@ -253,7 +253,10 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE parent_nodes (id INTEGER NOT NULL PRIMARY KEY); INSERT INTO parent_nodes VALUES (7);",
+            """
+            CREATE TABLE parent_nodes (id INTEGER NOT NULL PRIMARY KEY);
+            INSERT INTO parent_nodes VALUES (7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new DroppedSourceContext(connection, _internalServices);
@@ -328,9 +331,13 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         await CreateNativeOwnerAsync(connection, "none", cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE inbound_children (id INTEGER NOT NULL PRIMARY KEY, parent_id INTEGER NOT NULL, "
-            + "FOREIGN KEY (parent_id) REFERENCES parent_nodes (id)); "
-            + "INSERT INTO inbound_children VALUES (1, 7);",
+            """
+            CREATE TABLE inbound_children (id INTEGER NOT NULL PRIMARY KEY, parent_id
+            INTEGER NOT NULL,
+            FOREIGN KEY (parent_id) REFERENCES parent_nodes (id)); INSERT INTO inbound_children
+            VALUES (1,
+            7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new DroppedSourceContext(connection, _internalServices);
@@ -1284,19 +1291,25 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
 
         await CreateNativeOwnerAsync(connection, "none", cancellationToken: cancellationToken);
         var source = sourceExists
-            ? "ALTER TABLE rebuild_nodes ADD COLUMN source INTEGER NULL; UPDATE rebuild_nodes SET source = 42; "
+            ? """
+            ALTER TABLE rebuild_nodes ADD COLUMN source INTEGER NULL;
+            UPDATE rebuild_nodes SET source = 42;
+            """
             : string.Empty;
 
         await ExecuteSqlAsync(
             connection,
-            source
-            + "CREATE TABLE orphan_children (id INTEGER NOT NULL CONSTRAINT pk_orphan_children PRIMARY KEY, "
-            + "owner_id INTEGER NULL, CONSTRAINT fk_orphan_owner FOREIGN KEY (owner_id) REFERENCES rebuild_nodes(id)); "
-            + "PRAGMA foreign_keys = OFF; INSERT INTO orphan_children VALUES (11, "
-            + (orphan
-                ? "999"
-                : "1")
-            + "); PRAGMA foreign_keys = ON;",
+            $"""
+            {source}
+            CREATE TABLE orphan_children (
+                id INTEGER NOT NULL CONSTRAINT pk_orphan_children PRIMARY KEY,
+                owner_id INTEGER NULL,
+                CONSTRAINT fk_orphan_owner FOREIGN KEY (owner_id) REFERENCES rebuild_nodes(id)
+            );
+            PRAGMA foreign_keys = OFF;
+            INSERT INTO orphan_children VALUES (11, {(orphan ? "999" : "1")});
+            PRAGMA foreign_keys = ON;
+            """,
             cancellationToken: cancellationToken);
     }
 
@@ -1422,19 +1435,26 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
 
         var after = artifact switch
         {
-            "trigger" => "CREATE TRIGGER retained_trigger AFTER UPDATE ON rebuild_nodes BEGIN SELECT 1; END;",
+            "trigger" => """
+                CREATE TRIGGER retained_trigger AFTER UPDATE ON rebuild_nodes
+                BEGIN
+                    SELECT 1;
+                END;
+                """,
             "index" => "CREATE INDEX retained_index ON rebuild_nodes (extra);",
             _ => string.Empty,
         };
 
         return ExecuteSqlAsync(
             connection,
-            "CREATE TABLE parent_nodes (id INTEGER NOT NULL PRIMARY KEY); INSERT INTO parent_nodes VALUES (7); "
-            + "CREATE TABLE rebuild_nodes (id INTEGER NOT NULL CONSTRAINT pk_rebuild_nodes PRIMARY KEY, "
-            + "extra INTEGER NOT NULL, derived INTEGER GENERATED ALWAYS AS (extra + 1) VIRTUAL"
-            + suffix
-            + "); INSERT INTO rebuild_nodes (id, extra) VALUES (1, 7); "
-            + after,
+            $"""
+            CREATE TABLE parent_nodes (id INTEGER NOT NULL PRIMARY KEY); INSERT INTO
+            parent_nodes VALUES (7); CREATE TABLE rebuild_nodes (id INTEGER NOT NULL
+            CONSTRAINT pk_rebuild_nodes PRIMARY KEY,
+            extra INTEGER NOT NULL, derived INTEGER GENERATED ALWAYS AS (extra + 1)
+            VIRTUAL{suffix}); INSERT INTO rebuild_nodes (id,
+            extra) VALUES (1, 7); {after}
+            """,
             cancellationToken: cancellationToken);
     }
 
@@ -1469,8 +1489,11 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             "trigger" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'trigger' "
                 + "AND name = 'retained_trigger';",
             "index" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'index' AND name = 'retained_index';",
-            "check" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'table' AND name = 'rebuild_nodes' "
-                + "AND instr(sql, 'retained_check') > 0;",
+            "check" => """
+                SELECT COUNT(*) FROM main.sqlite_schema
+                WHERE type = 'table' AND name = 'rebuild_nodes'
+                AND instr(sql, 'retained_check') > 0;
+                """,
             "foreign_key" => "SELECT COUNT(*) FROM pragma_foreign_key_list('rebuild_nodes');",
             _ => "SELECT COUNT(*) FROM pragma_table_xinfo('rebuild_nodes') WHERE name = 'retained_payload';",
         },

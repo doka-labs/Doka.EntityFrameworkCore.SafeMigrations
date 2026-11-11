@@ -28,9 +28,11 @@ internal static class ToolingDatabaseVerifier
         // from compensating for missing history or an unapplied transition.
         using (var history = connection.CreateCommand())
         {
-            history.CommandText = "SELECT COUNT(*) = 2 "
-                + "AND COUNT(CASE WHEN MigrationId = $initial THEN 1 END) = 1 "
-                + "AND COUNT(CASE WHEN MigrationId = $transition THEN 1 END) = 1 FROM __EFMigrationsHistory;";
+            history.CommandText = """
+            SELECT COUNT(*) = 2 AND COUNT(CASE WHEN MigrationId = $initial
+            THEN 1 END) = 1 AND COUNT(CASE WHEN MigrationId = $transition
+            THEN 1 END) = 1 FROM __EFMigrationsHistory;
+            """;
 
             _ = history.Parameters.AddWithValue("$initial", initialMigrationId);
             _ = history.Parameters.AddWithValue("$transition", transitionMigrationId);
@@ -40,68 +42,91 @@ internal static class ToolingDatabaseVerifier
         Require(
             Scalar(
                 connection,
-                "SELECT COUNT(*) = 4 "
-                + "AND COUNT(CASE WHEN name = 'Id' AND type = 'INTEGER' AND \"notnull\" = 1 AND pk = 1 "
-                + "AND hidden = 0 THEN 1 END) = 1 "
-                + "AND COUNT(CASE WHEN name = 'Code' AND type = 'TEXT' AND \"notnull\" = 1 AND pk = 0 "
-                + "AND hidden = 0 THEN 1 END) = 1 "
-                + "AND COUNT(CASE WHEN name IN ('AddedCode', 'renamed_code') AND type = 'TEXT' "
-                + "AND \"notnull\" = 0 AND pk = 0 AND hidden = 0 THEN 1 END) = 2 "
-                + "FROM pragma_table_xinfo('tooling_entities');")
+                """
+                SELECT COUNT(*) = 4 AND COUNT(CASE WHEN name = 'Id'
+                AND type = 'INTEGER' AND "notnull" = 1
+                AND pk = 1 AND hidden = 0 THEN 1 END) = 1
+                AND COUNT(CASE WHEN name = 'Code'
+                AND type = 'TEXT' AND "notnull" = 1
+                AND pk = 0 AND hidden = 0 THEN 1 END) = 1
+                AND COUNT(CASE WHEN name IN ('AddedCode', 'renamed_code')
+                AND type = 'TEXT' AND "notnull" = 0
+                AND pk = 0 AND hidden = 0 THEN 1 END) = 2
+                FROM pragma_table_xinfo('tooling_entities');
+                """)
             == 1,
             "target_columns");
 
         Require(
             Scalar(
                 connection,
-                "SELECT EXISTS (SELECT 1 FROM pragma_index_list('tooling_entities') "
-                + "WHERE name = 'IX_tooling_entities_Code' AND \"unique\" = 1 AND partial = 0) "
-                + "AND (SELECT COUNT(*) = 1 AND COUNT(CASE WHEN seqno = 0 AND name = 'Code' THEN 1 END) = 1 "
-                + "FROM pragma_index_info('IX_tooling_entities_Code'));")
+                """
+                SELECT EXISTS (SELECT 1 FROM pragma_index_list('tooling_entities')
+                WHERE name = 'IX_tooling_entities_Code'
+                AND "unique" = 1 AND partial = 0)
+                AND (SELECT COUNT(*) = 1 AND COUNT(CASE WHEN seqno = 0
+                AND name = 'Code' THEN 1 END) = 1
+                FROM pragma_index_info('IX_tooling_entities_Code'));
+                """)
             == 1,
             "code_index");
 
         Require(
             Scalar(
                 connection,
-                "SELECT COUNT(*) = 1 AND COUNT(CASE WHEN Id = 1 AND Code = 'baseline' "
-                + "AND AddedCode IS NULL AND renamed_code IS NULL THEN 1 END) = 1 FROM tooling_entities;")
+                """
+                SELECT COUNT(*) = 1 AND COUNT(CASE WHEN Id = 1
+                AND Code = 'baseline' AND AddedCode IS NULL
+                AND renamed_code IS NULL THEN 1 END) = 1
+                FROM tooling_entities;
+                """)
             == 1,
             "model_managed_data");
 
         Require(
             Scalar(
                 connection,
-                "SELECT COUNT(*) = 4 "
-                + "AND COUNT(CASE WHEN name = 'Id' AND type = 'INTEGER' AND \"notnull\" = 1 AND pk = 1 "
-                + "AND hidden = 0 THEN 1 END) = 1 "
-                + "AND COUNT(CASE WHEN name IN ('LeftBound', 'RightBound') AND type = 'INTEGER' "
-                + "AND \"notnull\" = 1 AND pk = 0 AND hidden = 0 THEN 1 END) = 2 "
-                + "AND COUNT(CASE WHEN name = 'HasDescendants' AND type = 'INTEGER' "
-                + "AND \"notnull\" = 1 AND pk = 0 AND hidden = 2 THEN 1 END) = 1 "
-                + "FROM pragma_table_xinfo('scaffolding_generated_nodes');")
+                """
+                SELECT COUNT(*) = 4 AND COUNT(CASE WHEN name = 'Id'
+                AND type = 'INTEGER' AND "notnull" = 1
+                AND pk = 1 AND hidden = 0 THEN 1 END) = 1
+                AND COUNT(CASE WHEN name IN ('LeftBound', 'RightBound')
+                AND type = 'INTEGER' AND "notnull" = 1
+                AND pk = 0 AND hidden = 0 THEN 1 END) = 2
+                AND COUNT(CASE WHEN name = 'HasDescendants'
+                AND type = 'INTEGER' AND "notnull" = 1
+                AND pk = 0 AND hidden = 2 THEN 1 END) = 1
+                FROM pragma_table_xinfo('scaffolding_generated_nodes');
+                """)
             == 1,
             "generated_columns");
 
         Require(
             Scalar(
                 connection,
-                "SELECT EXISTS (SELECT 1 FROM pragma_index_list('scaffolding_generated_nodes') "
-                + "WHERE name = 'IX_scaffolding_generated_nodes_HasDescendants_LeftBound_RightBound' "
-                + "AND \"unique\" = 0 AND partial = 0) "
-                + "AND (SELECT COUNT(*) = 3 "
-                + "AND COUNT(CASE WHEN seqno = 0 AND name = 'HasDescendants' THEN 1 END) = 1 "
-                + "AND COUNT(CASE WHEN seqno = 1 AND name = 'LeftBound' THEN 1 END) = 1 "
-                + "AND COUNT(CASE WHEN seqno = 2 AND name = 'RightBound' THEN 1 END) = 1 "
-                + "FROM pragma_index_info('IX_scaffolding_generated_nodes_HasDescendants_LeftBound_RightBound'));")
+                """
+                SELECT EXISTS (SELECT 1 FROM pragma_index_list('scaffolding_generated_nodes')
+                WHERE name = 'IX_scaffolding_generated_nodes_HasDescendants_LeftBound_RightBound'
+                AND "unique" = 0 AND partial = 0)
+                AND (SELECT COUNT(*) = 3 AND COUNT(CASE WHEN seqno = 0
+                AND name = 'HasDescendants' THEN 1 END) = 1
+                AND COUNT(CASE WHEN seqno = 1
+                AND name = 'LeftBound' THEN 1 END) = 1
+                AND COUNT(CASE WHEN seqno = 2
+                AND name = 'RightBound' THEN 1 END) = 1
+                FROM pragma_index_info('IX_scaffolding_generated_nodes_HasDescendants_LeftBound_RightBound'));
+                """)
             == 1,
             "generated_index");
 
         Require(
             Scalar(
                 connection,
-                "SELECT COUNT(*) = 1 FROM sqlite_schema WHERE type = 'table' "
-                + "AND name = 'scaffolding_generated_nodes' AND instr(sql, 'ck_scaffolding_generated_bounds') > 0;")
+                """
+                SELECT COUNT(*) = 1 FROM sqlite_schema
+                WHERE type = 'table' AND name = 'scaffolding_generated_nodes'
+                AND instr(sql, 'ck_scaffolding_generated_bounds') > 0;
+                """)
             == 1,
             "generated_check");
 
@@ -123,17 +148,24 @@ internal static class ToolingDatabaseVerifier
         Execute(
             connection,
             transaction,
-            "INSERT INTO scaffolding_generated_nodes (Id, LeftBound, RightBound) VALUES "
-            + "(910001, 1, 2), (910002, 1, 3), (910003, 9223372036854775806, 9223372036854775807);");
+            """
+            INSERT INTO scaffolding_generated_nodes (Id, LeftBound, RightBound) VALUES
+            (910001,
+            1, 2), (910002, 1, 3), (910003, 9223372036854775806, 9223372036854775807);
+            """);
 
         Require(
             Scalar(
                 connection,
-                "SELECT COUNT(*) = 3 "
-                + "AND COUNT(CASE WHEN Id = 910001 AND HasDescendants = 0 THEN 1 END) = 1 "
-                + "AND COUNT(CASE WHEN Id = 910002 AND HasDescendants = 1 THEN 1 END) = 1 "
-                + "AND COUNT(CASE WHEN Id = 910003 AND HasDescendants = 0 THEN 1 END) = 1 "
-                + "FROM scaffolding_generated_nodes;",
+                """
+                SELECT COUNT(*) = 3 AND COUNT(CASE WHEN Id = 910001
+                AND HasDescendants = 0 THEN 1 END) = 1
+                AND COUNT(CASE WHEN Id = 910002
+                AND HasDescendants = 1 THEN 1 END) = 1
+                AND COUNT(CASE WHEN Id = 910003
+                AND HasDescendants = 0 THEN 1 END) = 1
+                FROM scaffolding_generated_nodes;
+                """,
                 transaction)
             == 1,
             "generated_values");

@@ -31,14 +31,16 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     private const string PostconditionAssignmentSuffix = "), FALSE) ELSE TRUE END;\n";
     private const string PostconditionBodySuffix = PostconditionAssignmentSuffix + PostconditionAssertionSql;
 
-    private const string DecisionAssertionSql = "INSERT INTO `__doka_sm_assert` "
-        + "SELECT @doka_sm_diag, @doka_sm_diag, @doka_sm_diag, @doka_sm_diag, @doka_sm_diag "
-        + "UNION ALL SELECT @doka_sm_diag, 2, 2, 2, 2 WHERE @doka_sm_action = 'reject_different' "
-        + "UNION ALL SELECT 2, @doka_sm_diag, 3, 3, 3 WHERE @doka_sm_action = 'reject_unsupported' "
-        + "UNION ALL SELECT 3, 4, "
-        + "CASE WHEN @doka_sm_action = 'reject_data_blocked' THEN @doka_sm_diag ELSE 5 END, "
-        + "CASE WHEN @doka_sm_action = 'reject_prerequisite_missing' THEN @doka_sm_diag ELSE 5 END, 4 "
-        + "WHERE @doka_sm_action IN ('reject_data_blocked', 'reject_prerequisite_missing');";
+    private const string DecisionAssertionSql = """
+        INSERT INTO `__doka_sm_assert` SELECT @doka_sm_diag, @doka_sm_diag, @doka_sm_diag,
+        @doka_sm_diag, @doka_sm_diag UNION ALL SELECT @doka_sm_diag, 2, 2, 2,
+        2 WHERE @doka_sm_action = 'reject_different' UNION ALL SELECT 2, @doka_sm_diag,
+        3, 3, 3 WHERE @doka_sm_action = 'reject_unsupported' UNION ALL SELECT 3,
+        4, CASE WHEN @doka_sm_action = 'reject_data_blocked'
+        THEN @doka_sm_diag ELSE 5 END, CASE WHEN @doka_sm_action = 'reject_prerequisite_missing'
+        THEN @doka_sm_diag ELSE 5 END, 4
+        WHERE @doka_sm_action IN ('reject_data_blocked', 'reject_prerequisite_missing');
+        """;
 
     private const string MatchingStatePrefix =
         "SET @doka_sm_state = CASE WHEN @doka_sm_state IS NULL THEN CASE WHEN COALESCE((";
@@ -555,19 +557,20 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         _ => throw new ArgumentOutOfRangeException(nameof(action)),
     };
 
-    private static string BuildAssertionSetupSql() => "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`; "
-        + "CREATE TEMPORARY TABLE `__doka_sm_assert` ("
-        + "`different_code` VARCHAR(40) NOT NULL, "
-        + "`unsupported_code` VARCHAR(40) NOT NULL, "
-        + "`data_blocked_code` VARCHAR(40) NOT NULL, "
-        + "`prerequisite_missing_code` VARCHAR(40) NOT NULL, "
-        + "`postcondition_code` VARCHAR(40) NOT NULL, "
-        + "CONSTRAINT `doka_sm_different` UNIQUE (`different_code`), "
-        + "CONSTRAINT `doka_sm_unsupported` UNIQUE (`unsupported_code`), "
-        + "CONSTRAINT `doka_sm_data_blocked` UNIQUE (`data_blocked_code`), "
-        + "CONSTRAINT `doka_sm_prerequisite_missing` UNIQUE (`prerequisite_missing_code`), "
-        + "CONSTRAINT `doka_sm_postcondition` UNIQUE (`postcondition_code`)"
-        + ") CHARACTER SET ascii COLLATE ascii_bin;";
+    // WHY: The owned table header is also a purpose marker; keep it contiguous while laying out complete definitions.
+    private static string BuildAssertionSetupSql() => """
+        DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`;
+        CREATE TEMPORARY TABLE `__doka_sm_assert` (`different_code` VARCHAR(40) NOT NULL,
+        `unsupported_code` VARCHAR(40) NOT NULL,
+        `data_blocked_code` VARCHAR(40) NOT NULL,
+        `prerequisite_missing_code` VARCHAR(40) NOT NULL,
+        `postcondition_code` VARCHAR(40) NOT NULL,
+        CONSTRAINT `doka_sm_different` UNIQUE (`different_code`),
+        CONSTRAINT `doka_sm_unsupported` UNIQUE (`unsupported_code`),
+        CONSTRAINT `doka_sm_data_blocked` UNIQUE (`data_blocked_code`),
+        CONSTRAINT `doka_sm_prerequisite_missing` UNIQUE (`prerequisite_missing_code`),
+        CONSTRAINT `doka_sm_postcondition` UNIQUE (`postcondition_code`)) CHARACTER SET ascii COLLATE ascii_bin;
+        """;
 
     /// <summary>Seeds and rejects in the same existing assertion statement without another transport exchange.</summary>
     private static string BuildDecisionAssertionSql(

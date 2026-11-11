@@ -16,9 +16,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` "
-            + "(`id` int NOT NULL PRIMARY KEY, `right_bound` bigint NOT NULL); "
-            + $"INSERT INTO `{Table}` VALUES (1, 3);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY,
+            `right_bound` bigint NOT NULL); INSERT INTO `{Table}`
+            VALUES (1,
+            3);
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -54,8 +57,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var generated = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'has_descendants';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}'
+            AND COLUMN_NAME = 'has_descendants';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -88,9 +95,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` "
-            + "(`id` int NOT NULL PRIMARY KEY, `left_bound` bigint NOT NULL, `right_bound` bigint NOT NULL); "
-            + $"INSERT INTO `{Table}` VALUES (1, 1, 3);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY,
+            `left_bound` bigint NOT NULL, `right_bound` bigint NOT NULL); INSERT INTO
+            `{Table}` VALUES (1,
+            1, 3);
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -126,8 +136,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var generated = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'has_descendants';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}'
+            AND COLUMN_NAME = 'has_descendants';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -163,8 +177,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         {
             await ExecuteSqlAsync(
                 connectionString,
-                $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY); "
-                + $"INSERT INTO `{Table}` VALUES (17);",
+                $"""
+                CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY);
+                INSERT INTO `{Table}` VALUES (17);
+                """,
                 cancellationToken: CancellationToken.None);
 
             builder.EnsureColumn(Table, definition, SafeMigrationPolicy.ThrowIfDifferent);
@@ -186,8 +202,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var generated = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'has_descendants';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}'
+            AND COLUMN_NAME = 'has_descendants';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -214,9 +234,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` "
-            + "(`id` int NOT NULL PRIMARY KEY, `nullable_condition` bigint NULL); "
-            + $"INSERT INTO `{Table}` VALUES (1, NULL), (2, 1), (3, 0);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY,
+            `nullable_condition` bigint NULL); INSERT INTO `{Table}`
+            VALUES (1,
+            NULL), (2, 1), (3, 0);
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -243,8 +266,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var rows = exception is null
             ? await ScalarIntAsync(
                 connectionString,
-                $"SELECT COUNT(*) FROM `{Table}` WHERE (id = 1 AND has_descendants = 0) "
-                + "OR (id = 2 AND has_descendants = 1) OR (id = 3 AND has_descendants = 0);",
+                $"""
+                SELECT COUNT(*) FROM `{Table}`
+                WHERE (id = 1 AND has_descendants = 0)
+                OR (id = 2 AND has_descendants = 1)
+                OR (id = 3 AND has_descendants = 0);
+                """,
                 cancellationToken: CancellationToken.None)
             : -1;
 
@@ -330,8 +357,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var tables = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{Table}';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -356,9 +386,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` "
-            + "(`id` int NOT NULL PRIMARY KEY, `left_bound` bigint NULL, `right_bound` bigint NOT NULL); "
-            + $"INSERT INTO `{Table}` VALUES (1, 1, 3);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY,
+            `left_bound` bigint NULL, `right_bound` bigint NOT NULL); INSERT INTO `{Table}`
+            VALUES (1,
+            1, 3);
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -380,8 +413,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var generated = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'has_descendants';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}'
+            AND COLUMN_NAME = 'has_descendants';
+            """,
             cancellationToken: CancellationToken.None);
 
         var originalRows = await ScalarIntAsync(
@@ -422,8 +459,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` "
-            + "(`id` int NOT NULL PRIMARY KEY, `left_bound` bigint NOT NULL, `right_bound` bigint NOT NULL);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY,
+            `left_bound` bigint NOT NULL, `right_bound` bigint NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         if (matchingTarget)

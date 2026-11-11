@@ -227,6 +227,48 @@ public sealed class SqlServerCatalogTailBatchingTests
         Assert.Equal("id", row[2]);
     }
 
+    /// <summary>Multiline key statements retain quoted punctuation and exact metadata identities.</summary>
+    /// <param name="newline">The command's physical newline sequence.</param>
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public void KeyFixture_PreservesMultilineQuotedMetadata(
+        string newline
+    )
+    {
+        // Arrange
+        var sql = "DECLARE @doka_key_tables TABLE(ordinal int);" + newline
+            + "INSERT @doka_key_tables VALUES (3, 1, -1," + newline
+            + "(SELECT N'not;a delimiter'), 1, N'dbo', N'tail''{0}\u20ac');";
+
+        // Act
+        using var rows = MetadataResults(sql, []);
+
+        // Assert
+        var row = Assert.Single(rows.Rows.Cast<DataRow>());
+        Assert.Equal(3, row[0]);
+        Assert.Equal("dbo", row[5]);
+        Assert.Equal("tail'{0}\u20ac", row[6]);
+    }
+
+    /// <summary>An incomplete statement cannot steal a later statement's owned metadata identity.</summary>
+    [Fact]
+    public void KeyFixture_DoesNotReadAcrossAnIncompleteStatement()
+    {
+        // Arrange
+        const string sql = "DECLARE @doka_key_tables TABLE(ordinal int);\n"
+            + "INSERT @doka_key_tables VALUES (3, 1, -1, NULL, 1);\n"
+            + "INSERT @doka_key_tables VALUES (4, 1, -1, NULL, 1, N'dbo', N'owned');";
+
+        // Act
+        using var rows = MetadataResults(sql, []);
+
+        // Assert
+        var row = Assert.Single(rows.Rows.Cast<DataRow>());
+        Assert.Equal(4, row[0]);
+        Assert.Equal("owned", row[6]);
+    }
+
     /// <summary>The boundary at 512 bindings remains a two-statement transport, not 32-value fragments.</summary>
     /// <param name="native">Whether the connection exposes native batching.</param>
     [Theory]
@@ -546,9 +588,12 @@ public sealed class SqlServerCatalogTailBatchingTests
                 typeof(string),
                 typeof(string));
 
+            // WHY: Metadata expressions can span lines and contain quoted
+            // semicolons; only an unquoted terminator ends this owned INSERT.
             foreach (Match match in Regex.Matches(
                 sql,
-                @"INSERT @doka_key_tables VALUES \((\d+),[^\n]*, N'((?:[^']|'')*)', N'((?:[^']|'')*)'\);"))
+                @"INSERT @doka_key_tables VALUES \((\d+),(?:'(?:''|[^'])*'|[^';])*?, "
+                + @"N'((?:[^']|'')*)', N'((?:[^']|'')*)'\);"))
             {
                 rows.Rows.Add(
                     int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture),

@@ -358,8 +358,8 @@ public sealed class SqlServerModelManagedDataSqlTests
         Assert.Single(identityCommands);
         var guardedBody = Assert.Single(guardedBodies);
 
-        Assert.Contains("IDENTITY_INSERT [dbo].[O''Brien] ON", guardedBody, StringComparison.Ordinal);
-        Assert.Contains("IDENTITY_INSERT [dbo].[O''Brien] OFF", guardedBody, StringComparison.Ordinal);
+        Assert.Contains("IDENTITY_INSERT [dbo].[O''Brien]\nON", guardedBody, StringComparison.Ordinal);
+        Assert.Contains("IDENTITY_INSERT [dbo].[O''Brien]\nOFF", guardedBody, StringComparison.Ordinal);
     }
 
     /// <summary>

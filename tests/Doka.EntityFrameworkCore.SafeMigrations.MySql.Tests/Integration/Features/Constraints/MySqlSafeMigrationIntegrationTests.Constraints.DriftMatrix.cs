@@ -15,19 +15,25 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `constraint_identity` ("
-            + "`code` int NULL, `tenant_id` int NULL, `quantity` int NOT NULL, "
-            + "CONSTRAINT `uq_constraint_identity_legacy_a` UNIQUE (`code`, `tenant_id`), "
-            + "CONSTRAINT `uq_constraint_identity_legacy_b` UNIQUE (`code`, `tenant_id`), "
-            + "CONSTRAINT `ck_constraint_identity_legacy_a` CHECK (`quantity` >= 0), "
-            + "CONSTRAINT `ck_constraint_identity_legacy_b` CHECK (`quantity` >= 0));",
+            """
+            CREATE TABLE `constraint_identity` (`code` int NULL, `tenant_id` int NULL,
+            `quantity` int NOT NULL, CONSTRAINT `uq_constraint_identity_legacy_a` UNIQUE
+            (`code`,
+            `tenant_id`), CONSTRAINT `uq_constraint_identity_legacy_b` UNIQUE (`code`,
+            `tenant_id`), CONSTRAINT `ck_constraint_identity_legacy_a` CHECK (`quantity`
+            >= 0),
+            CONSTRAINT `ck_constraint_identity_legacy_b` CHECK (`quantity` >= 0));
+            """,
             cancellationToken: CancellationToken.None);
 
         var legacyConstraintCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'constraint_identity' "
-            + "AND CONSTRAINT_TYPE IN ('UNIQUE', 'CHECK');",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'constraint_identity'
+            AND CONSTRAINT_TYPE IN ('UNIQUE', 'CHECK');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -73,19 +79,24 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'constraint_identity' "
-                + "AND CONSTRAINT_NAME IN ('uq_constraint_identity_expected', "
-                + "'ck_constraint_identity_expected');",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'constraint_identity'
+                AND CONSTRAINT_NAME IN ('uq_constraint_identity_expected', 'ck_constraint_identity_expected');
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             legacyConstraintCount,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'constraint_identity' "
-                + "AND CONSTRAINT_TYPE IN ('UNIQUE', 'CHECK');",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'constraint_identity'
+                AND CONSTRAINT_TYPE IN ('UNIQUE', 'CHECK');
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.True(legacyConstraintCount >= 3);
@@ -97,10 +108,13 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `constraint_nonidentity` ("
-            + "`code` int NULL, `alternate_code` int NULL, `quantity` int NOT NULL, "
-            + "CONSTRAINT `uq_constraint_nonidentity_legacy` UNIQUE (`code`), "
-            + "CONSTRAINT `ck_constraint_nonidentity_legacy` CHECK (`quantity` >= 0));",
+            """
+            CREATE TABLE `constraint_nonidentity` (`code` int NULL, `alternate_code`
+            int NULL,
+            `quantity` int NOT NULL, CONSTRAINT `uq_constraint_nonidentity_legacy` UNIQUE
+            (`code`),
+            CONSTRAINT `ck_constraint_nonidentity_legacy` CHECK (`quantity` >= 0));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -161,10 +175,12 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `check_scope_target` (`value` int NOT NULL, "
-            + "CONSTRAINT `ck_shared_identity` CHECK (`value` <= 100));"
-            + "CREATE TABLE `check_scope_other` (`value` int NOT NULL, "
-            + "CONSTRAINT `ck_shared_identity` CHECK (`value` >= 0));",
+            """
+            CREATE TABLE `check_scope_target` (`value` int NOT NULL, CONSTRAINT `ck_shared_identity`
+            CHECK (`value` <= 100));CREATE TABLE `check_scope_other` (`value` int NOT
+            NULL,
+            CONSTRAINT `ck_shared_identity` CHECK (`value` >= 0));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -208,8 +224,10 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `check_enforcement_drift` (`quantity` int NOT NULL, "
-            + "CONSTRAINT `ck_check_enforcement_drift` CHECK (`quantity` >= 0) NOT ENFORCED);",
+            """
+            CREATE TABLE `check_enforcement_drift` (`quantity` int NOT NULL, CONSTRAINT
+            `ck_check_enforcement_drift` CHECK (`quantity` >= 0) NOT ENFORCED);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -253,8 +271,10 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `check_enforcement_identity` (`quantity` int NOT NULL, "
-            + "CONSTRAINT `ck_check_enforcement_legacy` CHECK (`quantity` >= 0) NOT ENFORCED);",
+            """
+            CREATE TABLE `check_enforcement_identity` (`quantity` int NOT NULL, CONSTRAINT
+            `ck_check_enforcement_legacy` CHECK (`quantity` >= 0) NOT ENFORCED);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -307,15 +327,17 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `namespace_owner_parent` (`id` int NOT NULL, PRIMARY KEY (`id`));"
-            + "CREATE TABLE `namespace_target_parent` (`id` int NOT NULL, PRIMARY KEY (`id`));"
-            + "CREATE TABLE `namespace_owner` ("
-            + "`id` int NOT NULL, `quantity` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`), "
-            + "CONSTRAINT `ck_namespace_collision` CHECK (`quantity` >= 0), "
-            + "CONSTRAINT `fk_namespace_collision` FOREIGN KEY (`parent_id`) "
-            + "REFERENCES `namespace_owner_parent` (`id`));"
-            + "CREATE TABLE `namespace_target` ("
-            + "`id` int NOT NULL, `quantity` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`));",
+            """
+            CREATE TABLE `namespace_owner_parent` (`id` int NOT NULL, PRIMARY KEY (`id`));CREATE
+            TABLE `namespace_target_parent` (`id` int NOT NULL,
+            PRIMARY KEY (`id`));CREATE TABLE `namespace_owner` (`id` int NOT NULL,
+            `quantity` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`), CONSTRAINT
+            `ck_namespace_collision` CHECK (`quantity` >= 0),
+            CONSTRAINT `fk_namespace_collision` FOREIGN KEY (`parent_id`) REFERENCES
+            `namespace_owner_parent` (`id`));CREATE TABLE `namespace_target` (`id` int
+            NOT NULL,
+            `quantity` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -365,9 +387,12 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'namespace_target' "
-                + "AND CONSTRAINT_NAME IN ('ck_namespace_collision', 'fk_namespace_collision');",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'namespace_target'
+                AND CONSTRAINT_NAME IN ('ck_namespace_collision', 'fk_namespace_collision');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -382,14 +407,15 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `fk_scope_owner_parent` (`id` int NOT NULL, PRIMARY KEY (`id`));"
-            + "CREATE TABLE `fk_scope_target_parent` (`id` int NOT NULL, PRIMARY KEY (`id`));"
-            + "CREATE TABLE `fk_scope_owner` ("
-            + "`id` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`), "
-            + "CONSTRAINT `fk_scope_shared` FOREIGN KEY (`parent_id`) "
-            + "REFERENCES `fk_scope_owner_parent` (`id`));"
-            + "CREATE TABLE `fk_scope_target` ("
-            + "`id` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`));",
+            """
+            CREATE TABLE `fk_scope_owner_parent` (`id` int NOT NULL, PRIMARY KEY (`id`));CREATE
+            TABLE `fk_scope_target_parent` (`id` int NOT NULL,
+            PRIMARY KEY (`id`));CREATE TABLE `fk_scope_owner` (`id` int NOT NULL,
+            `parent_id` int NULL, PRIMARY KEY (`id`), CONSTRAINT `fk_scope_shared` FOREIGN
+            KEY (`parent_id`) REFERENCES `fk_scope_owner_parent` (`id`));CREATE TABLE
+            `fk_scope_target` (`id` int NOT NULL,
+            `parent_id` int NULL, PRIMARY KEY (`id`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -426,8 +452,11 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
                 1,
                 await ScalarIntAsync(
                     connectionString,
-                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-                    + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = 'fk_scope_shared';",
+                    """
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+                    WHERE CONSTRAINT_SCHEMA = DATABASE()
+                    AND CONSTRAINT_NAME = 'fk_scope_shared';
+                    """,
                     cancellationToken: CancellationToken.None));
 
             return;
@@ -456,8 +485,11 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = 'fk_scope_shared';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND CONSTRAINT_NAME = 'fk_scope_shared';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -473,18 +505,24 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         var secondLegacyName = new string('s', 64);
         var expectedName = new string('e', 64);
         var secondConstraint = legacyConstraintCount == 2
-            ? $", CONSTRAINT `{secondLegacyName}` FOREIGN KEY (`parent_id`, `tenant_id`) "
-            + "REFERENCES `identity_parents` (`id`, `tenant_id`) ON DELETE CASCADE"
+            ? $"""
+            , CONSTRAINT `{secondLegacyName}` FOREIGN KEY (`parent_id`, `tenant_id`)
+            REFERENCES `identity_parents` (`id`, `tenant_id`) ON DELETE CASCADE
+            """
             : string.Empty;
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `identity_parents` (`id` int NOT NULL, `tenant_id` int NOT NULL, "
-            + "PRIMARY KEY (`id`, `tenant_id`));"
-            + "CREATE TABLE `identity_children` ("
-            + "`id` int NOT NULL, `parent_id` int NOT NULL, `tenant_id` int NOT NULL, PRIMARY KEY (`id`), "
-            + $"CONSTRAINT `{legacyName}` FOREIGN KEY (`parent_id`, `tenant_id`) "
-            + $"REFERENCES `identity_parents` (`id`, `tenant_id`) ON DELETE CASCADE{secondConstraint});",
+            $"""
+            CREATE TABLE `identity_parents` (`id` int NOT NULL, `tenant_id` int NOT
+            NULL,
+            PRIMARY KEY (`id`, `tenant_id`));CREATE TABLE `identity_children` (`id`
+            int NOT NULL,
+            `parent_id` int NOT NULL, `tenant_id` int NOT NULL, PRIMARY KEY (`id`),
+            CONSTRAINT `{legacyName}` FOREIGN KEY (`parent_id`, `tenant_id`)
+            REFERENCES `identity_parents` (`id`,
+            `tenant_id`) ON DELETE CASCADE{secondConstraint});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -521,8 +559,11 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
             legacyConstraintCount,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'identity_children';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'identity_children';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -532,20 +573,23 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `identity_precedence_parents` (`id` int NOT NULL, PRIMARY KEY (`id`));"
-            + "CREATE TABLE `identity_precedence_children` ("
-            + "`id` int NOT NULL, `code` int NULL, `alternate_code` int NULL, "
-            + "`quantity` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`), "
-            + "CONSTRAINT `uq_identity_precedence_expected` UNIQUE (`alternate_code`), "
-            + "CONSTRAINT `uq_identity_precedence_legacy` UNIQUE (`code`), "
-            + "CONSTRAINT `ck_identity_precedence_expected` CHECK (`quantity` <= 100), "
-            + "CONSTRAINT `ck_identity_precedence_legacy` CHECK (`quantity` >= 0), "
-            + "CONSTRAINT `fk_identity_precedence_expected` FOREIGN KEY (`parent_id`) "
-            + "REFERENCES `identity_precedence_parents` (`id`) ON DELETE RESTRICT, "
-            + "CONSTRAINT `fk_identity_precedence_legacy` FOREIGN KEY (`parent_id`) "
-            + "REFERENCES `identity_precedence_parents` (`id`) ON DELETE CASCADE, "
-            + "INDEX `ix_identity_precedence_expected` (`alternate_code`), "
-            + "INDEX `ix_identity_precedence_legacy` (`code`));",
+            """
+            CREATE TABLE `identity_precedence_parents` (`id` int NOT NULL, PRIMARY KEY
+            (`id`));CREATE TABLE `identity_precedence_children` (`id` int NOT NULL,
+            `code` int NULL, `alternate_code` int NULL, `quantity` int NOT NULL, `parent_id`
+            int NULL,
+            PRIMARY KEY (`id`), CONSTRAINT `uq_identity_precedence_expected` UNIQUE
+            (`alternate_code`),
+            CONSTRAINT `uq_identity_precedence_legacy` UNIQUE (`code`), CONSTRAINT `ck_identity_precedence_expected`
+            CHECK (`quantity` <= 100),
+            CONSTRAINT `ck_identity_precedence_legacy` CHECK (`quantity` >= 0), CONSTRAINT
+            `fk_identity_precedence_expected` FOREIGN KEY (`parent_id`) REFERENCES `identity_precedence_parents`
+            (`id`) ON DELETE RESTRICT,
+            CONSTRAINT `fk_identity_precedence_legacy` FOREIGN KEY (`parent_id`) REFERENCES
+            `identity_precedence_parents` (`id`) ON DELETE CASCADE,
+            INDEX `ix_identity_precedence_expected` (`alternate_code`), INDEX `ix_identity_precedence_legacy`
+            (`code`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -606,9 +650,11 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() "
-                + "AND TABLE_NAME = 'identity_precedence_children';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'identity_precedence_children';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -623,11 +669,13 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `identity_action_parents` (`id` int NOT NULL, PRIMARY KEY (`id`));"
-            + "CREATE TABLE `identity_action_children` ("
-            + "`id` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`), "
-            + "CONSTRAINT `fk_identity_action_legacy` FOREIGN KEY (`parent_id`) "
-            + "REFERENCES `identity_action_parents` (`id`) ON DELETE CASCADE);",
+            """
+            CREATE TABLE `identity_action_parents` (`id` int NOT NULL, PRIMARY KEY (`id`));CREATE
+            TABLE `identity_action_children` (`id` int NOT NULL,
+            `parent_id` int NULL, PRIMARY KEY (`id`), CONSTRAINT `fk_identity_action_legacy`
+            FOREIGN KEY (`parent_id`) REFERENCES `identity_action_parents` (`id`) ON
+            DELETE CASCADE);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -661,8 +709,11 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'identity_action_children';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'identity_action_children';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -672,16 +723,18 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `constraint_matrix_parents` ("
-            + "`id` int NOT NULL, `alternate_id` int NOT NULL, "
-            + "PRIMARY KEY (`id`, `alternate_id`)); "
-            + "CREATE TABLE `constraint_matrix_other_parents` ("
-            + "`id` int NOT NULL, `alternate_id` int NOT NULL, "
-            + "PRIMARY KEY (`id`, `alternate_id`)); "
-            + "CREATE TABLE `constraint_matrix_children` ("
-            + "`id` int NOT NULL, `alternate_id` int NOT NULL, "
-            + "`code` varchar(30) NULL, `alternate_code` varchar(30) NULL, "
-            + "`quantity` int NOT NULL, `parent_id` int NULL, `alternate_parent_id` int NULL);",
+            """
+            CREATE TABLE `constraint_matrix_parents` (`id` int NOT NULL, `alternate_id`
+            int NOT NULL,
+            PRIMARY KEY (`id`, `alternate_id`)); CREATE TABLE `constraint_matrix_other_parents`
+            (`id` int NOT NULL,
+            `alternate_id` int NOT NULL, PRIMARY KEY (`id`, `alternate_id`)); CREATE
+            TABLE `constraint_matrix_children` (`id` int NOT NULL,
+            `alternate_id` int NOT NULL, `code` varchar(30) NULL, `alternate_code` varchar(30)
+            NULL,
+            `quantity` int NOT NULL, `parent_id` int NULL, `alternate_parent_id` int
+            NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -730,13 +783,15 @@ public sealed class MySqlConstraintsDriftMatrixIntegrationTests : MySqlSafeMigra
 
         await ExecuteSqlAsync(
             connectionString,
-            "ALTER TABLE `constraint_matrix_children` "
-            + "ADD CONSTRAINT `uq_constraint_matrix_duplicate` UNIQUE (`code`, `alternate_code`), "
-            + "ADD CONSTRAINT `ck_constraint_matrix_duplicate` CHECK (`quantity` >= 0), "
-            + "ADD CONSTRAINT `fk_constraint_matrix_duplicate` "
-            + "FOREIGN KEY (`parent_id`, `alternate_parent_id`) "
-            + "REFERENCES `constraint_matrix_parents` (`id`, `alternate_id`) "
-            + "ON UPDATE CASCADE ON DELETE SET NULL;",
+            """
+            ALTER TABLE `constraint_matrix_children` ADD CONSTRAINT `uq_constraint_matrix_duplicate`
+            UNIQUE (`code`,
+            `alternate_code`), ADD CONSTRAINT `ck_constraint_matrix_duplicate` CHECK
+            (`quantity` >= 0),
+            ADD CONSTRAINT `fk_constraint_matrix_duplicate` FOREIGN KEY (`parent_id`,
+            `alternate_parent_id`) REFERENCES `constraint_matrix_parents` (`id`, `alternate_id`)
+            ON UPDATE CASCADE ON DELETE SET NULL;
+            """,
             cancellationToken: CancellationToken.None);
 
         var strictDefinition = CreateStrictConstraintMatrixTable(ReferentialAction.SetNull);

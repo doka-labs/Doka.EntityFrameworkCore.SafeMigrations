@@ -15,15 +15,16 @@ public sealed class MySqlDiagnosticsIntegrationTests : MySqlSafeMigrationIntegra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `diagnostic_principal` ("
-            + "`id` int NOT NULL, PRIMARY KEY (`id`)); "
-            + "CREATE TABLE `diagnostic_dependent` ("
-            + "`id` int NOT NULL, `principal_id` int NULL, "
-            + "`first_value` varchar(40) NULL, `second_value` varchar(40) NULL, "
-            + "PRIMARY KEY (`id`), "
-            + "CONSTRAINT `fk_diagnostic_dependent_principal` FOREIGN KEY (`principal_id`) "
-            + "REFERENCES `diagnostic_principal` (`id`) ON UPDATE CASCADE ON DELETE CASCADE, "
-            + "INDEX `ix_diagnostic_dependent_values` (`second_value`(4), `first_value`));",
+            """
+            CREATE TABLE `diagnostic_principal` (`id` int NOT NULL, PRIMARY KEY (`id`));
+            CREATE TABLE `diagnostic_dependent` (`id` int NOT NULL,
+            `principal_id` int NULL, `first_value` varchar(40) NULL, `second_value`
+            varchar(40) NULL,
+            PRIMARY KEY (`id`), CONSTRAINT `fk_diagnostic_dependent_principal` FOREIGN
+            KEY (`principal_id`) REFERENCES `diagnostic_principal` (`id`) ON UPDATE
+            CASCADE ON DELETE CASCADE,
+            INDEX `ix_diagnostic_dependent_values` (`second_value`(4), `first_value`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -109,13 +110,15 @@ public sealed class MySqlDiagnosticsIntegrationTests : MySqlSafeMigrationIntegra
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `long_diagnostic_principal` "
-            + $"({principalDefinitions}, PRIMARY KEY ({reversedPrincipalKeys})); "
-            + $"CREATE TABLE `long_diagnostic_dependent` (`id` int NOT NULL, {dependentDefinitions}, "
-            + "PRIMARY KEY (`id`), "
-            + "CONSTRAINT `fk_long_diagnostic` FOREIGN KEY "
-            + $"({reversedDependentKeys}) REFERENCES `long_diagnostic_principal` ({reversedPrincipalKeys}), "
-            + $"INDEX `ix_long_diagnostic` ({reversedDependentKeys}));",
+            $"""
+            CREATE TABLE `long_diagnostic_principal` ({principalDefinitions},
+            PRIMARY KEY ({reversedPrincipalKeys})); CREATE TABLE `long_diagnostic_dependent`
+            (`id` int NOT NULL,
+            {dependentDefinitions}, PRIMARY KEY (`id`), CONSTRAINT `fk_long_diagnostic`
+            FOREIGN KEY ({reversedDependentKeys}) REFERENCES `long_diagnostic_principal`
+            ({reversedPrincipalKeys}),
+            INDEX `ix_long_diagnostic` ({reversedDependentKeys}));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

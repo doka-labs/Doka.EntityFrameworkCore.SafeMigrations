@@ -240,12 +240,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         // WHY: The ordinal bound is implied by the arms, which yield NULL beyond the expected
         // count, but it lets the engine drop surplus columns before evaluating any facet.
-        return "(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c WHERE c.TABLE_SCHEMA = DATABASE() "
-            + $"AND c.TABLE_NAME = {Literal(table)} AND c.ORDINAL_POSITION <= {columnCount} "
-            + (sharedCollation is null
+        return $"""
+            (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c
+            WHERE c.TABLE_SCHEMA = DATABASE()
+            AND c.TABLE_NAME = {Literal(table)}
+            AND c.ORDINAL_POSITION <= {columnCount} {(sharedCollation is null
                 ? string.Empty
-                : $"AND {sharedCollation} ")
-            + $"AND (CASE c.ORDINAL_POSITION{arms} END)) = {columnCount}";
+                : $"AND {sharedCollation} ")}AND
+            (CASE c.ORDINAL_POSITION{arms} END)) = {columnCount}
+            """;
     }
 
     /// <summary>Builds the column facets whose SQL shape depends on the expected column itself.</summary>
@@ -410,9 +413,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             ? $"{canonicalType} unsigned"
             : canonicalType;
 
-        return $"CONCAT(LOWER(c.DATA_TYPE), "
-            + $"CASE WHEN LOCATE('unsigned', LOWER(c.COLUMN_TYPE)) > 0 "
-            + $"THEN ' unsigned' ELSE '' END) = {Literal(expected)}";
+        return $"""
+            CONCAT(LOWER(c.DATA_TYPE), CASE WHEN LOCATE('unsigned', LOWER(c.COLUMN_TYPE)) > 0
+            THEN ' unsigned' ELSE '' END) = {Literal(expected)}
+            """;
     }
 
     private string BuildComputedMatches(

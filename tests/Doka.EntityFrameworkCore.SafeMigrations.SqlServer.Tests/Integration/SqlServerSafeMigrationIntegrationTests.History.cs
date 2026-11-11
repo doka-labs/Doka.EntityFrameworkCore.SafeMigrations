@@ -64,9 +64,11 @@ public sealed class SqlServerSafeMigrationHistoryIntegrationTests : SqlServerSaf
 
         var historyRowCount = await ScalarIntAsync(
             connectionString,
-            "IF OBJECT_ID(N'dbo.__EFMigrationsHistory', N'U') IS NULL SELECT 0; "
-            + "ELSE SELECT COUNT(*) FROM dbo.__EFMigrationsHistory "
-            + $"WHERE MigrationId = N'{SqlServerHistoryMigration.MigrationIdentifier}';",
+            $"""
+            IF OBJECT_ID(N'dbo.__EFMigrationsHistory', N'U') IS NULL SELECT 0;
+            ELSE SELECT COUNT(*) FROM dbo.__EFMigrationsHistory
+            WHERE MigrationId = N'{SqlServerHistoryMigration.MigrationIdentifier}';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -85,8 +87,11 @@ public sealed class SqlServerSafeMigrationHistoryIntegrationTests : SqlServerSaf
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER reject_contract_stamp ON DATABASE FOR CREATE_EXTENDED_PROPERTY AS "
-            + "BEGIN THROW 51009, N'Injected extended-property failure', 1; END;",
+            """
+            CREATE TRIGGER reject_contract_stamp ON DATABASE FOR CREATE_EXTENDED_PROPERTY
+            AS BEGIN THROW 51009,
+            N'Injected extended-property failure', 1; END;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -102,9 +107,11 @@ public sealed class SqlServerSafeMigrationHistoryIntegrationTests : SqlServerSaf
 
         var historyRowCount = await ScalarIntAsync(
             connectionString,
-            "IF OBJECT_ID(N'dbo.__EFMigrationsHistory', N'U') IS NULL SELECT 0; "
-            + "ELSE SELECT COUNT(*) FROM dbo.__EFMigrationsHistory "
-            + $"WHERE MigrationId = N'{SqlServerHistoryMigration.MigrationIdentifier}';",
+            $"""
+            IF OBJECT_ID(N'dbo.__EFMigrationsHistory', N'U') IS NULL SELECT 0;
+            ELSE SELECT COUNT(*) FROM dbo.__EFMigrationsHistory
+            WHERE MigrationId = N'{SqlServerHistoryMigration.MigrationIdentifier}';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert

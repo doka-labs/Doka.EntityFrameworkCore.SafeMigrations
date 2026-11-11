@@ -74,8 +74,10 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
                 : 1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='sparse_generated'::regclass "
-                + "AND attnum>0 AND NOT attisdropped;",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='sparse_generated'::regclass
+                AND attnum>0 AND NOT attisdropped;
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -119,8 +121,10 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='sparse_generated'::regclass "
-                + "AND attnum>0 AND NOT attisdropped;",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='sparse_generated'::regclass
+                AND attnum>0 AND NOT attisdropped;
+                """,
                 cancellationToken: CancellationToken.None));
     }
 

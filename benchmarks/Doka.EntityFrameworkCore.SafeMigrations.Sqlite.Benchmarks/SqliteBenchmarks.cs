@@ -211,17 +211,21 @@ public class SqliteModelManagedDataAnalysisBenchmarks : IDisposable
         for (var index = 1; index < tableCount; index++)
         {
             command.CommandText = includeRelationalObjects
-                ? $"CREATE TABLE benchmark_catalog_{index} ("
-                + "id INTEGER NOT NULL PRIMARY KEY, parent_id INTEGER NULL, "
-                + "FOREIGN KEY (parent_id) REFERENCES benchmark_model_data(id));"
+                ? $"""
+                CREATE TABLE benchmark_catalog_{index} (id INTEGER NOT
+                NULL PRIMARY KEY,
+                parent_id INTEGER NULL, FOREIGN KEY (parent_id) REFERENCES benchmark_model_data(id));
+                """
                 : $"CREATE TABLE benchmark_catalog_{index} (id INTEGER NOT NULL PRIMARY KEY);";
 
             _ = command.ExecuteNonQuery();
 
             if (includeRelationalObjects)
             {
-                command.CommandText = $"CREATE INDEX ix_benchmark_catalog_{index}_parent "
-                    + $"ON benchmark_catalog_{index}(parent_id);";
+                command.CommandText = $"""
+                    CREATE INDEX ix_benchmark_catalog_{index}_parent
+                    ON benchmark_catalog_{index}(parent_id);
+                    """;
 
                 _ = command.ExecuteNonQuery();
             }

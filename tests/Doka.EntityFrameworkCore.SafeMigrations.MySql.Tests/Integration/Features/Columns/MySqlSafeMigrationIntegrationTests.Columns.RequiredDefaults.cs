@@ -59,11 +59,13 @@ public sealed class MySqlColumnsRequiredDefaultsIntegrationTests : MySqlSafeMigr
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         var exactContract = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'required_default_items' AND COLUMN_NAME = 'value' "
-            + "AND IS_NULLABLE = 'NO' AND COLUMN_DEFAULT IS NULL AND LOWER(COLUMN_TYPE) = "
-            + AtomicRequiredAddLiteral(storeType)
-            + ";",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'required_default_items'
+            AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO'
+            AND COLUMN_DEFAULT IS NULL AND LOWER(COLUMN_TYPE) = {AtomicRequiredAddLiteral(storeType)};
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -125,9 +127,12 @@ public sealed class MySqlColumnsRequiredDefaultsIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `required_default_items` (`key` int NOT NULL PRIMARY KEY, `value` char(36) NULL) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `required_default_items` VALUES (1, '00000000-0000-0000-0000-000000000001');",
+            """
+            CREATE TABLE `required_default_items` (`key` int NOT NULL PRIMARY KEY,
+            `value` char(36) NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            INSERT INTO `required_default_items` VALUES (1,
+            '00000000-0000-0000-0000-000000000001');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -171,8 +176,12 @@ public sealed class MySqlColumnsRequiredDefaultsIntegrationTests : MySqlSafeMigr
 
         var required = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'required_default_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'required_default_items'
+            AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';
+            """,
             cancellationToken: CancellationToken.None);
 
         var preserved = await ScalarIntAsync(
@@ -251,12 +260,14 @@ public sealed class MySqlColumnsRequiredDefaultsIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `required_default_items` (`key` int NOT NULL PRIMARY KEY, `value` timestamp(6) NULL) "
-            + "ENGINE=InnoDB; INSERT INTO `required_default_items` VALUES (1, "
-            + (approvedDefault && !ensure
+            $"""
+            CREATE TABLE `required_default_items` (`key` int NOT NULL PRIMARY KEY,
+            `value` timestamp(6) NULL) ENGINE=InnoDB; INSERT INTO `required_default_items`
+            VALUES (1,
+            {(approvedDefault && !ensure
                 ? "NULL"
-                : "'2000-01-02 03:04:05'")
-            + ");",
+                : "'2000-01-02 03:04:05'")});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -288,8 +299,12 @@ public sealed class MySqlColumnsRequiredDefaultsIntegrationTests : MySqlSafeMigr
 
         var required = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'required_default_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'required_default_items'
+            AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';
+            """,
             cancellationToken: CancellationToken.None);
 
         var preserved = await ScalarIntAsync(
@@ -360,14 +375,15 @@ public sealed class MySqlColumnsRequiredDefaultsIntegrationTests : MySqlSafeMigr
         // semantics; creating it with OFF would already introduce a different contract.
         await AtomicRequiredAddSessionSqlAsync(
             context,
-            "SET SESSION explicit_defaults_for_timestamp = ON; "
-            + "CREATE TABLE `required_default_items` (`key` int NOT NULL PRIMARY KEY, `value` timestamp(6) NOT NULL"
-            + (approvedDefault
+            $"""
+            SET SESSION explicit_defaults_for_timestamp = ON; CREATE TABLE `required_default_items`
+            (`key` int NOT NULL PRIMARY KEY,
+            `value` timestamp(6) NOT NULL{(approvedDefault
                 ? " DEFAULT '2001-01-02 03:04:05'"
-                : "")
-            + ") ENGINE=InnoDB; "
-            + "INSERT INTO `required_default_items` VALUES (1, '2000-01-02 03:04:05'); "
-            + "SET SESSION explicit_defaults_for_timestamp = OFF;",
+                : "")}) ENGINE=InnoDB;
+            INSERT INTO `required_default_items` VALUES (1,
+            '2000-01-02 03:04:05'); SET SESSION explicit_defaults_for_timestamp = OFF;
+            """,
             cancellationToken: CancellationToken.None);
 
         var operation = RequiredDefaultsTimestampOperation(ensure, approvedDefault);
@@ -452,8 +468,12 @@ public sealed class MySqlColumnsRequiredDefaultsIntegrationTests : MySqlSafeMigr
 
         var required = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'required_default_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'required_default_items'
+            AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(

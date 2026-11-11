@@ -89,8 +89,11 @@ public sealed class MySqlColumnsStructuredDefaultsIntegrationTests : MySqlSafeMi
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'opaque_timestamp_defaults';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'opaque_timestamp_defaults';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 }

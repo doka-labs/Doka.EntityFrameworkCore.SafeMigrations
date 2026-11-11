@@ -91,7 +91,7 @@ public sealed class SqlServerPhysicalFilterGuardTests
         {
             var supportGate = selection.IndexOf("IF COALESCE(@doka_filter, 0) <> 1", StringComparison.Ordinal);
             var rowBinding = selection.IndexOf(
-                "IF @doka_prerequisite = 1 EXEC sys.sp_executesql",
+                "IF @doka_prerequisite = 1\nEXEC sys.sp_executesql",
                 StringComparison.Ordinal);
 
             Assert.True(supportGate >= 0);

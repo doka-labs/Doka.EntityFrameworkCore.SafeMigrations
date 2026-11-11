@@ -271,10 +271,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             "@doka_projected_filter_sql",
             out var declaration);
 
-        var sql = declaration
-            + $"IF {installedGuard} BEGIN TRY EXEC sys.sp_executesql {argument}; "
-            + "END TRY BEGIN CATCH IF ERROR_NUMBER() IN (241, 242, 245, 248, 529, 8114, 8115) "
-            + "SELECT 0; ELSE THROW; END CATCH ELSE SELECT 0;";
+        var sql = $"""
+            {declaration}IF {installedGuard} BEGIN TRY EXEC sys.sp_executesql
+            {argument}; END TRY BEGIN CATCH IF ERROR_NUMBER() IN (241,
+            242, 245, 248, 529, 8114, 8115) SELECT 0;
+            ELSE THROW; END CATCH ELSE SELECT 0;
+            """;
 
         return Encoding.UTF8.GetByteCount(sql) <= SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes
             ? sql

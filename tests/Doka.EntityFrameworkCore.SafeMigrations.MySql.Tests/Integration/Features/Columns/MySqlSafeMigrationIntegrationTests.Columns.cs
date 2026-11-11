@@ -16,8 +16,11 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `timestamp_repair` (`id` int NOT NULL, `occurred_at` timestamp(6) NULL); "
-            + "INSERT INTO `timestamp_repair` (`id`, `occurred_at`) VALUES (1, NULL);",
+            """
+            CREATE TABLE `timestamp_repair` (`id` int NOT NULL, `occurred_at` timestamp(6)
+            NULL); INSERT INTO `timestamp_repair` (`id`,
+            `occurred_at`) VALUES (1, NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -103,9 +106,13 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
             100,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'historical_alter' "
-                + "AND COLUMN_NAME = 'caption';",
+                """
+                SELECT CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'historical_alter'
+                AND COLUMN_NAME = 'caption';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -116,8 +123,11 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `timestamp_repair` (`id` int NOT NULL, `occurred_at` timestamp(6) NULL); "
-            + "INSERT INTO `timestamp_repair` (`id`, `occurred_at`) VALUES (1, NULL);",
+            """
+            CREATE TABLE `timestamp_repair` (`id` int NOT NULL, `occurred_at` timestamp(6)
+            NULL); INSERT INTO `timestamp_repair` (`id`,
+            `occurred_at`) VALUES (1, NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -167,9 +177,12 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
             "NO",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'timestamp_repair' "
-                + "AND COLUMN_NAME = 'occurred_at';",
+                """
+                SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'timestamp_repair'
+                AND COLUMN_NAME = 'occurred_at';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -181,8 +194,11 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `timestamp_null_backfill` (`id` int NOT NULL, `occurred_at` timestamp(6) NULL); "
-            + "INSERT INTO `timestamp_null_backfill` (`id`, `occurred_at`) VALUES (1, NULL);",
+            """
+            CREATE TABLE `timestamp_null_backfill` (`id` int NOT NULL, `occurred_at`
+            timestamp(6) NULL); INSERT INTO `timestamp_null_backfill` (`id`,
+            `occurred_at`) VALUES (1, NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -259,9 +275,12 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
             "YES",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'timestamp_null_backfill' "
-                + "AND COLUMN_NAME = 'occurred_at';",
+                """
+                SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'timestamp_null_backfill'
+                AND COLUMN_NAME = 'occurred_at';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -314,9 +333,12 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'qualified_collation' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'qualified_collation'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -326,10 +348,11 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `collation_defaults` ("
-            + "`inherited` varchar(40) NULL, "
-            + "`explicit` varchar(40) COLLATE utf8mb4_bin NULL) "
-            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;",
+            """
+            CREATE TABLE `collation_defaults` (`inherited` varchar(40) NULL, `explicit`
+            varchar(40) COLLATE utf8mb4_bin NULL) DEFAULT CHARACTER SET utf8mb4 COLLATE
+            utf8mb4_general_ci;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -378,9 +401,10 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `text_collation_diagnostic` ("
-            + "`value` varchar(40) COLLATE utf8mb4_bin NULL) "
-            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;",
+            """
+            CREATE TABLE `text_collation_diagnostic` (`value` varchar(40) COLLATE utf8mb4_bin
+            NULL) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -542,9 +566,11 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' "
-                + "AND COLUMN_NAME = 'sequence';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'sequence';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -583,9 +609,13 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'repair_guard' "
-                + "AND COLUMN_NAME = 'safe_value' AND COLUMN_COMMENT = 'approved repair';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'repair_guard'
+                AND COLUMN_NAME = 'safe_value'
+                AND COLUMN_COMMENT = 'approved repair';
+                """,
                 cancellationToken: CancellationToken.None));
 
         var driftedOld = new ExpectedColumnDefinition(
@@ -635,10 +665,14 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'repair_guard' "
-                + "AND COLUMN_NAME = 'drifted_value' AND CHARACTER_MAXIMUM_LENGTH = 30 "
-                + "AND COLUMN_COMMENT = '';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'repair_guard'
+                AND COLUMN_NAME = 'drifted_value'
+                AND CHARACTER_MAXIMUM_LENGTH = 30
+                AND COLUMN_COMMENT = '';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -648,9 +682,10 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `legacy_repair` ("
-            + "`value` varchar(40) NULL DEFAULT 'legacy' COMMENT 'legacy'); "
-            + "INSERT INTO `legacy_repair` (`value`) VALUES ('existing');",
+            """
+            CREATE TABLE `legacy_repair` (`value` varchar(40) NULL DEFAULT 'legacy'
+            COMMENT 'legacy'); INSERT INTO `legacy_repair` (`value`) VALUES ('existing');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -719,9 +754,13 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'legacy_repair' "
-                + "AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO' AND COLUMN_COMMENT = 'canonical';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'legacy_repair'
+                AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO'
+                AND COLUMN_COMMENT = 'canonical';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -738,8 +777,10 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `legacy_nulls` (`value` varchar(40) NULL COMMENT 'legacy'); "
-            + "INSERT INTO `legacy_nulls` (`value`) VALUES (NULL);",
+            """
+            CREATE TABLE `legacy_nulls` (`value` varchar(40) NULL COMMENT 'legacy');
+            INSERT INTO `legacy_nulls` (`value`) VALUES (NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -791,9 +832,13 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'legacy_nulls' "
-                + "AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'YES' AND COLUMN_COMMENT = 'legacy';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'legacy_nulls'
+                AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'YES'
+                AND COLUMN_COMMENT = 'legacy';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -841,10 +886,14 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'legacy_type_drift' "
-                + "AND COLUMN_NAME = 'value' AND DATA_TYPE = 'char' "
-                + "AND CHARACTER_MAXIMUM_LENGTH = 30 AND COLUMN_COMMENT = 'legacy';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'legacy_type_drift'
+                AND COLUMN_NAME = 'value' AND DATA_TYPE = 'char'
+                AND CHARACTER_MAXIMUM_LENGTH = 30
+                AND COLUMN_COMMENT = 'legacy';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -854,9 +903,10 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `legacy_on_update` ("
-            + "`value` timestamp(6) NULL DEFAULT CURRENT_TIMESTAMP(6) "
-            + "ON UPDATE CURRENT_TIMESTAMP(6) COMMENT 'legacy');",
+            """
+            CREATE TABLE `legacy_on_update` (`value` timestamp(6) NULL DEFAULT CURRENT_TIMESTAMP(6)
+            ON UPDATE CURRENT_TIMESTAMP(6) COMMENT 'legacy');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -894,9 +944,12 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
             "on update",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT LOWER(EXTRA) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'legacy_on_update' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT LOWER(EXTRA) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'legacy_on_update'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None),
             StringComparison.Ordinal);
 
@@ -904,9 +957,12 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
             "legacy",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT COLUMN_COMMENT FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'legacy_on_update' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT COLUMN_COMMENT FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'legacy_on_update'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -1141,9 +1197,12 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
                     0,
                     await ScalarIntAsync(
                         connectionString,
-                        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'default_values' "
-                        + $"AND COLUMN_NAME = '{definition.Name}';",
+                        $"""
+                        SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_SCHEMA = DATABASE()
+                        AND TABLE_NAME = 'default_values'
+                        AND COLUMN_NAME = '{definition.Name}';
+                        """,
                         cancellationToken: CancellationToken.None));
 
                 continue;
@@ -1200,11 +1259,13 @@ public sealed partial class MySqlColumnsIntegrationTests : MySqlSafeMigrationInt
         await using var connection = new MySqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COLUMN_TYPE, COLUMN_DEFAULT, IS_NULLABLE, EXTRA, "
-            + "HEX(COLUMN_DEFAULT) "
-            + "FROM INFORMATION_SCHEMA.COLUMNS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'default_values' "
-            + "AND COLUMN_NAME = @column;";
+        command.CommandText = """
+        SELECT COLUMN_TYPE, COLUMN_DEFAULT, IS_NULLABLE, EXTRA, HEX(COLUMN_DEFAULT)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'default_values'
+        AND COLUMN_NAME = @column;
+        """;
 
         command.Parameters.AddWithValue("column", column);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -1242,9 +1303,12 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         await using var connection = new MySqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT CHECK_CLAUSE, HEX(CHECK_CLAUSE) "
-            + "FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = @constraint;";
+        command.CommandText = """
+        SELECT CHECK_CLAUSE, HEX(CHECK_CLAUSE)
+        FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS
+        WHERE CONSTRAINT_SCHEMA = DATABASE()
+        AND CONSTRAINT_NAME = @constraint;
+        """;
 
         command.Parameters.AddWithValue("constraint", constraint);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -1293,9 +1357,12 @@ public sealed partial class MySqlColumnsIntegrationTests
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'unsupported_values' "
-                + "AND COLUMN_NAME = 'unmapped_value';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'unsupported_values'
+                AND COLUMN_NAME = 'unmapped_value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -1351,10 +1418,12 @@ public sealed partial class MySqlColumnsIntegrationTests
                 0,
                 await ScalarIntAsync(
                     connectionString,
-                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                    + "WHERE TABLE_SCHEMA = DATABASE() "
-                    + "AND TABLE_NAME = 'unsupported_binary_default' "
-                    + "AND COLUMN_NAME = 'binary_guid';",
+                    """
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME = 'unsupported_binary_default'
+                    AND COLUMN_NAME = 'binary_guid';
+                    """,
                     cancellationToken: CancellationToken.None));
 
             return;

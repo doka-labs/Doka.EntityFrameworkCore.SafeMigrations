@@ -15,12 +15,14 @@ public sealed class PostgreSqlModelManagedDataJsonIntegrationTests : PostgreSqlS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE json_model_rows ("
-            + "id integer NOT NULL PRIMARY KEY, json_payload json NULL, jsonb_payload jsonb NULL, "
-            + "json_null_payload json NULL, sql_null_payload jsonb NULL, json_like_text text NOT NULL);"
-            + "INSERT INTO json_model_rows VALUES ("
-            + "1, '{ \"b\": 2, \"a\": 1 }', '{ \"b\": 2, \"a\": 1 }', 'null', NULL, "
-            + "'{\"a\":1,\"b\":2}');",
+            """
+            CREATE TABLE json_model_rows (id integer NOT NULL PRIMARY KEY, json_payload
+            json NULL,
+            jsonb_payload jsonb NULL, json_null_payload json NULL, sql_null_payload
+            jsonb NULL,
+            json_like_text text NOT NULL);INSERT INTO json_model_rows VALUES (1, '{ "b": 2, "a": 1 }',
+            '{ "b": 2, "a": 1 }', 'null', NULL, '{"a":1,"b":2}');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -209,14 +211,15 @@ public sealed class PostgreSqlModelManagedDataJsonIntegrationTests : PostgreSqlS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE json_comparison_boundaries ("
-            + "id integer NOT NULL PRIMARY KEY, scalar_payload json NOT NULL, "
-            + "object_payload json NOT NULL, jsonb_object_payload jsonb NOT NULL, "
-            + "array_payload jsonb NOT NULL, duplicate_array_payload json NOT NULL, "
-            + "json_null_payload json NULL, sql_null_payload jsonb NULL, json_like_text text NOT NULL);"
-            + "INSERT INTO json_comparison_boundaries VALUES ("
-            + "1, '1', '{ \"b\": 2, \"a\": 1 }', '{ \"b\": 2, \"a\": 1 }', "
-            + "'[ 1, 2 ]', '[ 1, 1 ]', 'null', NULL, '{\"a\":1,\"b\":2}');",
+            """
+            CREATE TABLE json_comparison_boundaries (id integer NOT NULL PRIMARY KEY,
+            scalar_payload json NOT NULL, object_payload json NOT NULL, jsonb_object_payload jsonb NOT NULL,
+            array_payload jsonb NOT NULL, duplicate_array_payload json NOT NULL, json_null_payload json NULL,
+            sql_null_payload jsonb NULL, json_like_text text NOT NULL);INSERT INTO
+            json_comparison_boundaries VALUES (1,
+            '1', '{ "b": 2, "a": 1 }', '{ "b": 2, "a": 1 }', '[ 1, 2 ]', '[ 1, 1 ]',
+            'null', NULL, '{"a":1,"b":2}');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

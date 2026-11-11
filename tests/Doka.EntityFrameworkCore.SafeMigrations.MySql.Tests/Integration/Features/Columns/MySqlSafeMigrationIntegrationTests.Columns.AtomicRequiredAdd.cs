@@ -361,9 +361,10 @@ public sealed class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMig
         };
 
         var createSql = failure == "name-collision"
-            ? "CREATE TABLE `atomic_required_items` (`key` int NOT NULL PRIMARY KEY, CONSTRAINT "
-            + AtomicRequiredAddDelimited(actualGuardName)
-            + " CHECK (`key` > 0)) ENGINE=InnoDB;"
+            ? $"""
+            CREATE TABLE `atomic_required_items` (`key` int NOT NULL PRIMARY KEY,
+            CONSTRAINT {AtomicRequiredAddDelimited(actualGuardName)} CHECK (`key` > 0)) ENGINE=InnoDB;
+            """
             : AtomicRequiredAddStagedTableSql(
                 operation,
                 failure == "missing-guard"
@@ -545,10 +546,11 @@ public sealed class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMig
 
         var actualOwnerHex = await ScalarStringAsync(
             connectionString,
-            "SELECT HEX(TABLE_NAME) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = "
-            + AtomicRequiredAddLiteral(table)
-            + ";",
+            $"""
+            SELECT HEX(TABLE_NAME) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = {AtomicRequiredAddLiteral(table)};
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -653,12 +655,14 @@ public sealed class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMig
         var operation = AtomicRequiredAddOperation();
         await ExecuteSqlAsync(
             connectionString,
-            AtomicRequiredAddStagedTableSql(
+            $"""
+            {AtomicRequiredAddStagedTableSql(
                 operation,
                 AtomicRequiredAddGuardName(operation),
-                "`required_value` IS NOT NULL")
-            + " INSERT INTO `atomic_required_items` (`key`, `required_value`) VALUES "
-            + "(1, '00000000-0000-0000-0000-000000000001'), (2, '00000000-0000-0000-0000-000000000001');",
+                "`required_value` IS NOT NULL")} INSERT INTO `atomic_required_items` (`key`,
+            `required_value`) VALUES (1, '00000000-0000-0000-0000-000000000001'),
+            (2, '00000000-0000-0000-0000-000000000001');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -683,8 +687,13 @@ public sealed class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMig
 
         var originalKeys = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE CONSTRAINT_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'atomic_required_items' AND CONSTRAINT_NAME = 'PRIMARY' AND COLUMN_NAME = 'key';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'atomic_required_items'
+            AND CONSTRAINT_NAME = 'PRIMARY'
+            AND COLUMN_NAME = 'key';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -708,12 +717,14 @@ public sealed class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMig
         var operation = AtomicRequiredAddOperation();
         await ExecuteSqlAsync(
             connectionString,
-            AtomicRequiredAddStagedTableSql(
+            $"""
+            {AtomicRequiredAddStagedTableSql(
                 operation,
                 AtomicRequiredAddGuardName(operation),
-                "`required_value` IS NOT NULL")
-            + " INSERT INTO `atomic_required_items` (`key`, `required_value`) VALUES "
-            + "(1, '00000000-0000-0000-0000-000000000001'), (2, '00000000-0000-0000-0000-000000000002');",
+                "`required_value` IS NOT NULL")} INSERT INTO `atomic_required_items` (`key`,
+            `required_value`) VALUES (1, '00000000-0000-0000-0000-000000000001'),
+            (2, '00000000-0000-0000-0000-000000000002');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -739,9 +750,13 @@ public sealed class MySqlColumnsAtomicRequiredAddIntegrationTests : MySqlSafeMig
 
         var targetKeys = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE CONSTRAINT_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'atomic_required_items' AND CONSTRAINT_NAME = 'PRIMARY' "
-            + "AND COLUMN_NAME = 'required_value';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'atomic_required_items'
+            AND CONSTRAINT_NAME = 'PRIMARY'
+            AND COLUMN_NAME = 'required_value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var distinctValues = await ScalarIntAsync(
@@ -827,10 +842,10 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     /// <returns>The original fixture DDL.</returns>
     protected static string AtomicRequiredAddOriginalTableSql(
         string table = "atomic_required_items"
-    ) => "CREATE TABLE "
-        + AtomicRequiredAddDelimited(table)
-        + " (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB "
-        + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
+    ) => $"""
+        CREATE TABLE {AtomicRequiredAddDelimited(table)} (`key` int NOT NULL PRIMARY KEY)
+        ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        """;
 
     /// <summary>Creates a deliberately controlled durable intermediate state for ownership probes.</summary>
     /// <param name="operation">The pending target whose physical owner is reused.</param>
@@ -853,25 +868,20 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     {
         var intent = Assert.IsType<EnsureColumnIntent>(operation.Intent);
 
-        return "CREATE TABLE "
-            + AtomicRequiredAddDelimited(intent.Table)
-            + " (`key` int NOT NULL PRIMARY KEY, "
-            + AtomicRequiredAddDelimited(intent.Definition.Name)
-            + " "
-            + columnType
-            + (nullable
+        return $"""
+            CREATE TABLE {AtomicRequiredAddDelimited(intent.Table)} (`key` int NOT NULL PRIMARY KEY,
+            {AtomicRequiredAddDelimited(intent.Definition.Name)} {columnType}{(nullable
                 ? " NULL"
-                : " NOT NULL")
-            + columnSuffix
-            + (guardName is null
+                : " NOT NULL")}{columnSuffix}{(guardName is null
                 ? ""
                 : ", CONSTRAINT "
                 + AtomicRequiredAddDelimited(guardName)
                 + " CHECK ("
                 + expression
                 + ")"
-                + checkSuffix)
-            + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
+                + checkSuffix)})
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            """;
     }
 
     /// <summary>Reads durable column, guard and row-count state through fresh observer connections.</summary>
@@ -904,13 +914,13 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
         var guards = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = "
-            + AtomicRequiredAddLiteral(intent.Table)
-            + " AND CONSTRAINT_TYPE = 'CHECK' "
-            + "AND CONSTRAINT_NAME = "
-            + AtomicRequiredAddLiteral(actualGuardName ?? AtomicRequiredAddGuardName(operation))
-            + ";",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = {AtomicRequiredAddLiteral(intent.Table)}
+            AND CONSTRAINT_TYPE = 'CHECK'
+            AND CONSTRAINT_NAME = {AtomicRequiredAddLiteral(actualGuardName ?? AtomicRequiredAddGuardName(operation))};
+            """,
             cancellationToken: cancellationToken);
 
         var rows = await ScalarIntAsync(

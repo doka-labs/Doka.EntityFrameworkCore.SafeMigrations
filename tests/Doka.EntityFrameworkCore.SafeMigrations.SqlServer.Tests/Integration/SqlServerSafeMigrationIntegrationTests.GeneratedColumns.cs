@@ -189,10 +189,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.generated_nodes([L] bigint NOT NULL,["
-            + second
-            + "] bigint NOT NULL);"
-            + "INSERT dbo.generated_nodes VALUES(4,1);",
+            $"""
+            CREATE TABLE dbo.generated_nodes([L] bigint NOT NULL,[{second}]
+            bigint NOT NULL);INSERT dbo.generated_nodes VALUES(4,1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -259,11 +259,11 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
             cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        // WHY: Constant chunks keep the exact native boundary-value fixture without runtime concatenation.
         await ExecuteSqlAsync(
             connectionString,
-            "INSERT dbo.generated_nodes (Id,L,R) VALUES (1,1,4),"
-            + "(2,9223372036854775807,9223372036854775807),"
-            + "(3,-9223372036854775808,-9223372036854775807);",
+            """INSERT dbo.generated_nodes (Id,L,R) VALUES (1,1,4),(2,9223372036854775807,9223372036854775807),"""
+            + """(3,-9223372036854775808,-9223372036854775807);""",
             cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
@@ -281,8 +281,11 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         var storage = await ScalarIntAsync(
             connectionString,
-            "SELECT CONVERT(int,is_persisted) FROM sys.computed_columns "
-            + "WHERE object_id=OBJECT_ID(N'dbo.generated_nodes') AND name=N'HasChildren';",
+            """
+            SELECT CONVERT(int,is_persisted)
+            FROM sys.computed_columns WHERE object_id=OBJECT_ID(N'dbo.generated_nodes')
+            AND name=N'HasChildren';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -309,8 +312,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NULL,R bigint NULL); "
-            + "INSERT dbo.generated_nodes VALUES(1,NULL,7),(2,9223372036854775807,9223372036854775807),(3,1,4);",
+            """
+            CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NULL,R bigint
+            NULL); INSERT dbo.generated_nodes VALUES(1,NULL,7),(2,9223372036854775807,9223372036854775807),(3,1,4);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -366,9 +371,11 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL,"
-            + "HasChildren AS CONVERT(bit,CASE WHEN R>CASE WHEN L=9223372036854775807 "
-            + "THEN L ELSE L+1 END THEN 1 ELSE 0 END));",
+            """
+            CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint
+            NOT NULL,HasChildren AS CONVERT(bit,CASE WHEN R>CASE WHEN L=9223372036854775807
+            THEN L ELSE L+1 END THEN 1 ELSE 0 END));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -418,14 +425,13 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL,"
-            + "HasChildren AS "
-            + expression
-            + (drift == "storage"
+            $"""
+            CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint
+            NOT NULL,HasChildren AS {expression}{(drift == "storage"
                 ? " PERSISTED"
-                : string.Empty)
-            + "); "
-            + "INSERT dbo.generated_nodes(Id,L,R)VALUES(1,1,4);",
+                : string.Empty)});
+            INSERT dbo.generated_nodes(Id,L,R)VALUES(1,1,4);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -610,9 +616,11 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL,"
-            + "HasChildren AS CONVERT(bit,CASE WHEN R>CASE WHEN L=9223372036854775807 "
-            + "THEN L ELSE L+1 END THEN 1 ELSE 0 END));",
+            """
+            CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint
+            NOT NULL,HasChildren AS CONVERT(bit,CASE WHEN R>CASE WHEN L=9223372036854775807
+            THEN L ELSE L+1 END THEN 1 ELSE 0 END));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -653,9 +661,12 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
             .GetDbConnection()
             .CreateCommand();
 
-        options.CommandText = "SELECT CONVERT(int,SESSIONPROPERTY(N'NUMERIC_ROUNDABORT'))*100 "
-            + "+CONVERT(int,SESSIONPROPERTY(N'QUOTED_IDENTIFIER'))*10 "
-            + "+CONVERT(int,SESSIONPROPERTY(N'ARITHABORT'));";
+        // WHY: Constant chunks preserve exact projection bytes without adding a runtime string allocation.
+        options.CommandText = $"""
+        SELECT {"CONVERT(int,SESSIONPROPERTY(N'NUMERIC_ROUNDABORT'))*100 "
+            + "+CONVERT(int,SESSIONPROPERTY(N'QUOTED_IDENTIFIER'))*10"}
+        +CONVERT(int,SESSIONPROPERTY(N'ARITHABORT'));
+        """;
 
         var after = Convert.ToInt32(await options.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
 
@@ -716,10 +727,13 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         // dynamic literal, after CREATE/ADD but before catalog acquisition. It
         // uses the existing out-of-band marker because SqlClient can defer INFO
         // callbacks and enter a synchronous TDS drain under its cancellation lock.
-        var pause = "DECLARE @ready int; EXEC @ready=sys.sp_getapplock @Resource=N'"
-            + resource
-            + "',@LockMode=N'Exclusive',@LockOwner=N'Session',@LockTimeout=0; "
-            + "IF @ready<0 THROW 51006,N'computed readiness lock failed',1; WAITFOR DELAY '00:05:00'; ";
+        // The constant hole preserves the exact lock suffix while wrapping C# source.
+        var pause = $"""
+            DECLARE @ready int; EXEC @ready=sys.sp_getapplock @Resource=N'{resource}',{
+                "@LockMode=N'Exclusive',@LockOwner=N'Session',@LockTimeout=0;"}
+            IF @ready<0 THROW 51006,N'computed readiness lock failed',1; WAITFOR DELAY
+            '00:05:00';{"\u0020"}
+            """;
 
         var body = SqlServerGuardedSqlTestContract.DecodeScope(original);
         var blocked = SqlServerGuardedSqlTestContract.EncodeScope(
@@ -815,9 +829,12 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL,Payload int NULL,"
-            + "HasChildren AS CONVERT(bit,CASE WHEN R>CASE WHEN L=9223372036854775807 "
-            + "THEN L ELSE L+1 END THEN 1 ELSE 0 END));",
+            """
+            CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint
+            NOT NULL,Payload int NULL,HasChildren AS CONVERT(bit,CASE WHEN R>CASE WHEN
+            L=9223372036854775807
+            THEN L ELSE L+1 END THEN 1 ELSE 0 END));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -840,10 +857,11 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         var remaining = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.generated_nodes') "
-            + "AND name=N'"
-            + column
-            + "';",
+            $"""
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.generated_nodes')
+            AND name=N'{column}';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -884,8 +902,11 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.generated_nodes(L bigint NOT NULL,R bigint NOT NULL,Payload int NULL,"
-            + "HasChildren AS CONVERT(bit,CASE WHEN R>L THEN 1 ELSE 0 END));",
+            """
+            CREATE TABLE dbo.generated_nodes(L bigint NOT NULL,R bigint NOT NULL,Payload
+            int NULL,HasChildren AS CONVERT(bit,CASE WHEN R>L
+            THEN 1 ELSE 0 END));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -908,10 +929,11 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         var remaining = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.generated_nodes') "
-            + "AND name=N'"
-            + column
-            + "';",
+            $"""
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.generated_nodes')
+            AND name=N'{column}';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1172,8 +1194,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL,Retired int NULL); "
-            + "INSERT dbo.generated_nodes VALUES(1,1,4,NULL);",
+            """
+            CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint
+            NOT NULL,Retired int NULL); INSERT dbo.generated_nodes VALUES(1,1,4,NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1219,8 +1243,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL,Retired int NULL); "
-            + "INSERT dbo.generated_nodes VALUES(1,1,4,NULL);",
+            """
+            CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint
+            NOT NULL,Retired int NULL); INSERT dbo.generated_nodes VALUES(1,1,4,NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1286,8 +1312,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL,Retired int NULL); "
-            + "INSERT dbo.generated_nodes VALUES(1,1,4,NULL);",
+            """
+            CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint
+            NOT NULL,Retired int NULL); INSERT dbo.generated_nodes VALUES(1,1,4,NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1337,8 +1365,12 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         var independent = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.generated_nodes') "
-            + "AND name=N'IX_result' AND is_primary_key=0 AND is_unique_constraint=0;",
+            """
+            SELECT COUNT(*) FROM sys.indexes
+            WHERE object_id=OBJECT_ID(N'dbo.generated_nodes')
+            AND name=N'IX_result' AND is_primary_key=0
+            AND is_unique_constraint=0;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1380,8 +1412,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NULL,R bigint NOT NULL); "
-            + "INSERT dbo.generated_nodes VALUES(1,1,4);",
+            """
+            CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NULL,R bigint
+            NOT NULL); INSERT dbo.generated_nodes VALUES(1,1,4);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1807,8 +1841,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,Code nvarchar(80) "
-            + "COLLATE Latin1_General_100_BIN2 NULL); INSERT dbo.generated_nodes VALUES(1,N'A');",
+            """
+            CREATE TABLE dbo.generated_nodes(Id int NOT NULL,Code nvarchar(80) COLLATE
+            Latin1_General_100_BIN2 NULL); INSERT dbo.generated_nodes VALUES(1,N'A');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1839,12 +1875,13 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var collation = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.generated_nodes') "
-            + "AND name=N'Normalized' AND collation_name=N'"
-            + (explicitCollation
+            $"""
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.generated_nodes')
+            AND name=N'Normalized' AND collation_name=N'{(explicitCollation
                 ? "Latin1_General_100_CI_AS"
-                : "Latin1_General_100_BIN2")
-            + "';",
+                : "Latin1_General_100_BIN2")}';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1914,12 +1951,14 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         var collation = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.generated_nodes') "
-            + "AND name=N'Normalized' AND is_computed=1 AND max_length=160 AND collation_name=N'"
-            + (explicitCollation
+            $"""
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.generated_nodes')
+            AND name=N'Normalized' AND is_computed=1
+            AND max_length=160 AND collation_name=N'{(explicitCollation
                 ? "Latin1_General_100_CI_AS"
-                : "Latin1_General_100_BIN2")
-            + "';",
+                : "Latin1_General_100_BIN2")}';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert

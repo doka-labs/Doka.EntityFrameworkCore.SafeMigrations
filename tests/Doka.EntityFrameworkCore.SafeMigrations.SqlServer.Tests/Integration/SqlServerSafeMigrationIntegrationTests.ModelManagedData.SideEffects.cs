@@ -289,12 +289,15 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.side_effect_parents (id int NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE dbo.side_effect_children (id int NOT NULL PRIMARY KEY, "
-            + "parent_id int NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY (parent_id) "
-            + "REFERENCES dbo.side_effect_parents (id) ON DELETE CASCADE); "
-            + "INSERT INTO dbo.side_effect_parents (id) VALUES (1); "
-            + "INSERT INTO dbo.side_effect_children (id, parent_id) VALUES (11, 1), (12, 1);",
+            """
+            CREATE TABLE dbo.side_effect_parents (id int NOT NULL PRIMARY KEY); CREATE
+            TABLE dbo.side_effect_children (id int NOT NULL PRIMARY KEY,
+            parent_id int NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY (parent_id)
+            REFERENCES dbo.side_effect_parents (id) ON DELETE CASCADE); INSERT INTO
+            dbo.side_effect_parents (id) VALUES (1); INSERT INTO dbo.side_effect_children
+            (id,
+            parent_id) VALUES (11, 1), (12, 1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -351,23 +354,27 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.side_effect_parents (id int NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE dbo.side_effect_children (id int NOT NULL PRIMARY KEY, "
-            + "parent_id int NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY (parent_id) "
-            + "REFERENCES dbo.side_effect_parents (id) ON DELETE CASCADE); "
-            + "CREATE TABLE dbo.side_effect_writes (id int NOT NULL PRIMARY KEY, "
-            + "managed_value nvarchar(64) NOT NULL); "
-            + "INSERT INTO dbo.side_effect_parents (id) VALUES (1); "
-            + "INSERT INTO dbo.side_effect_children (id, parent_id) VALUES (11, 1);",
+            """
+            CREATE TABLE dbo.side_effect_parents (id int NOT NULL PRIMARY KEY); CREATE
+            TABLE dbo.side_effect_children (id int NOT NULL PRIMARY KEY,
+            parent_id int NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY (parent_id)
+            REFERENCES dbo.side_effect_parents (id) ON DELETE CASCADE); CREATE TABLE
+            dbo.side_effect_writes (id int NOT NULL PRIMARY KEY,
+            managed_value nvarchar(64) NOT NULL); INSERT INTO dbo.side_effect_parents
+            (id) VALUES (1); INSERT INTO dbo.side_effect_children (id,
+            parent_id) VALUES (11, 1);
+            """,
             cancellationToken: CancellationToken.None);
 
         const string writeKind = "INSERT";
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER dbo.side_effect_trigger ON dbo.side_effect_writes AFTER "
-            + writeKind
-            + " AS BEGIN SET NOCOUNT ON; INSERT INTO dbo.side_effect_children (id, parent_id) VALUES (99, 1); END;",
+            $"""
+            CREATE TRIGGER dbo.side_effect_trigger ON dbo.side_effect_writes AFTER {writeKind}
+            AS BEGIN SET NOCOUNT ON; INSERT INTO dbo.side_effect_children (id,
+            parent_id) VALUES (99, 1); END;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -455,23 +462,26 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.side_effect_rows (id int NOT NULL PRIMARY KEY, "
-            + "managed_value nvarchar(64) NOT NULL); "
-            + "CREATE TABLE dbo.side_effect_writes (id int NOT NULL PRIMARY KEY, "
-            + "managed_value nvarchar(64) NOT NULL); "
-            + "INSERT INTO dbo.side_effect_rows (id, managed_value) VALUES (1, 'expected');"
-            + (writeKind == "INSERT"
+            $"""
+            CREATE TABLE dbo.side_effect_rows (id int NOT NULL PRIMARY KEY, managed_value
+            nvarchar(64) NOT NULL); CREATE TABLE dbo.side_effect_writes (id int NOT
+            NULL PRIMARY KEY,
+            managed_value nvarchar(64) NOT NULL); INSERT INTO dbo.side_effect_rows (id,
+            managed_value) VALUES (1, 'expected');{(writeKind == "INSERT"
                 ? string.Empty
-                : "INSERT INTO dbo.side_effect_writes (id, managed_value) VALUES (1, 'source');"),
+                : "INSERT INTO dbo.side_effect_writes (id, managed_value) VALUES (1, 'source');")}
+            """,
             cancellationToken: cancellationToken);
 
         // WHY: SQL Server requires CREATE TRIGGER to start its own batch.
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER dbo.side_effect_trigger ON dbo.side_effect_writes AFTER "
-            + writeKind
-            + " AS BEGIN SET NOCOUNT ON; "
-            + "UPDATE dbo.side_effect_rows SET managed_value = 'trigger-change' WHERE id = 1; END;",
+            $"""
+            CREATE TRIGGER dbo.side_effect_trigger ON dbo.side_effect_writes AFTER {writeKind}
+            AS BEGIN SET NOCOUNT ON; UPDATE dbo.side_effect_rows SET managed_value =
+            'trigger-change'
+            WHERE id = 1; END;
+            """,
             cancellationToken: cancellationToken);
 
         return connectionString;

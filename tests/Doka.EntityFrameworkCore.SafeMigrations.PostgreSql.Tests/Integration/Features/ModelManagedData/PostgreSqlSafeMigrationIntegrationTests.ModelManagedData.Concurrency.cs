@@ -15,8 +15,11 @@ public sealed class PostgreSqlModelManagedDataConcurrencyIntegrationTests : Post
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE model_race_roles (id integer NOT NULL PRIMARY KEY, name varchar(64) NOT NULL);"
-            + "INSERT INTO model_race_roles (id, name) VALUES (1, 'source');",
+            """
+            CREATE TABLE model_race_roles (id integer NOT NULL PRIMARY KEY, name varchar(64) NOT
+            NULL);INSERT INTO model_race_roles (id,
+            name) VALUES (1, 'source');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -39,11 +42,12 @@ public sealed class PostgreSqlModelManagedDataConcurrencyIntegrationTests : Post
 
         await ExecuteSqlAsync(
             connectionString,
-            "UPDATE model_race_roles SET name = 'source' WHERE id = 1;"
-            + "CREATE FUNCTION model_race_roles_rewrite() RETURNS trigger LANGUAGE plpgsql AS $$ "
-            + "BEGIN NEW.name := 'triggered'; RETURN NEW; END $$;"
-            + "CREATE TRIGGER trg_model_race_roles_rewrite BEFORE UPDATE ON model_race_roles "
-            + "FOR EACH ROW EXECUTE FUNCTION model_race_roles_rewrite();",
+            """
+            UPDATE model_race_roles SET name = 'source'
+            WHERE id = 1;CREATE FUNCTION model_race_roles_rewrite() RETURNS trigger LANGUAGE plpgsql AS
+            $$ BEGIN NEW.name := 'triggered'; RETURN NEW; END $$;CREATE TRIGGER trg_model_race_roles_rewrite
+            BEFORE UPDATE ON model_race_roles FOR EACH ROW EXECUTE FUNCTION model_race_roles_rewrite();
+            """,
             cancellationToken: CancellationToken.None);
 
         _ = await Assert.ThrowsAsync<PostgresException>(() =>
@@ -75,11 +79,14 @@ public sealed class PostgreSqlModelManagedDataConcurrencyIntegrationTests : Post
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE model_dependency_roles (id integer NOT NULL PRIMARY KEY, name varchar(64) NOT NULL);"
-            + "CREATE TABLE model_dependency_users (id integer NOT NULL PRIMARY KEY, "
-            + "role_id integer NULL DEFAULT 2, CONSTRAINT fk_model_dependency_users_role FOREIGN KEY (role_id) "
-            + $"REFERENCES model_dependency_roles (id) ON DELETE {referentialAction});"
-            + "INSERT INTO model_dependency_roles (id, name) VALUES (1, 'source'), (2, 'default');",
+            $"""
+            CREATE TABLE model_dependency_roles (id integer NOT NULL PRIMARY KEY,
+            name varchar(64) NOT NULL);CREATE TABLE model_dependency_users (id integer NOT NULL PRIMARY KEY,
+            role_id integer NULL DEFAULT 2, CONSTRAINT fk_model_dependency_users_role FOREIGN KEY (role_id)
+            REFERENCES model_dependency_roles (id) ON DELETE {referentialAction});INSERT INTO
+            model_dependency_roles (id,
+            name) VALUES (1, 'source'), (2, 'default');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -126,12 +133,14 @@ public sealed class PostgreSqlModelManagedDataConcurrencyIntegrationTests : Post
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE model_cancel_roles (id integer NOT NULL PRIMARY KEY, name varchar(64) NOT NULL);"
-            + "INSERT INTO model_cancel_roles (id, name) VALUES (1, 'source');"
-            + "CREATE FUNCTION model_cancel_roles_wait() RETURNS trigger LANGUAGE plpgsql AS $$ "
-            + "BEGIN PERFORM pg_sleep(10); RETURN NEW; END $$;"
-            + "CREATE TRIGGER trg_model_cancel_roles_wait BEFORE UPDATE ON model_cancel_roles "
-            + "FOR EACH ROW EXECUTE FUNCTION model_cancel_roles_wait();",
+            """
+            CREATE TABLE model_cancel_roles (id integer NOT NULL PRIMARY KEY, name varchar(64) NOT
+            NULL);INSERT INTO model_cancel_roles (id,
+            name) VALUES (1, 'source');CREATE FUNCTION model_cancel_roles_wait() RETURNS trigger LANGUAGE
+            plpgsql AS $$ BEGIN PERFORM pg_sleep(10); RETURN NEW; END $$;CREATE TRIGGER
+            trg_model_cancel_roles_wait BEFORE UPDATE ON model_cancel_roles FOR EACH ROW EXECUTE FUNCTION
+            model_cancel_roles_wait();
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

@@ -12,8 +12,8 @@ public sealed class MySqlRuntimeAllocationTests(ITestOutputHelper output)
     /// <param name="isMariaDb">Whether generation uses the qualified MariaDB catalog contract.</param>
     /// <param name="expectedSqlHash">The fingerprint including intentional exact-comment matching.</param>
     [Theory]
-    [InlineData(false, "232327923256A361556E3AC57704C05FDA133FD959BFD5B6198E1A011DFBB2FB")]
-    [InlineData(true, "FD97289416687595DB3814B4BBCBA3EF29828FB22E8F8E46C2E6F92602A309F3")]
+    [InlineData(false, "A02E375AC2E3C39E92C450F4D0B7C4719364B787C68F1D245951BEB8185D37DE")]
+    [InlineData(true, "61BAEBBD09C6794649E77995C8F0ECF548A3AA920591027E810763AD7AA07A11")]
     public void PreparedRuntimeColumnGenerationRemainsBounded(
         bool isMariaDb,
         string expectedSqlHash
@@ -45,14 +45,19 @@ public sealed class MySqlRuntimeAllocationTests(ITestOutputHelper output)
         var hash = Convert.ToHexString(
             SHA256.HashData(Encoding.UTF8.GetBytes(canonicalSql)));
 
+        const string exactCommentComparison = "CAST(COALESCE(c.COLUMN_COMMENT, '') AS BINARY)";
+        // WHY: Exact reference chunks fold at compile time; source wrapping must not alter the golden SQL bytes.
+        const string exactNullDefaultComparison = "(c.COLUMN_DEFAULT IS NULL OR "
+            + "(CAST(c.COLUMN_DEFAULT AS BINARY) = 'NULL' "
+            + "AND LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(c.EXTRA, ''))) > 0))";
+
         var legacySql = canonicalSql
             .Replace(
-                "CAST(COALESCE(c.COLUMN_COMMENT, '') AS BINARY)",
+                exactCommentComparison,
                 "COALESCE(c.COLUMN_COMMENT, '')",
                 StringComparison.Ordinal)
             .Replace(
-                "(c.COLUMN_DEFAULT IS NULL OR (CAST(c.COLUMN_DEFAULT AS BINARY) = 'NULL' "
-                + "AND LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(c.EXTRA, ''))) > 0))",
+                exactNullDefaultComparison,
                 "(c.COLUMN_DEFAULT IS NULL OR UPPER(c.COLUMN_DEFAULT) = 'NULL')",
                 StringComparison.Ordinal);
 
@@ -60,6 +65,14 @@ public sealed class MySqlRuntimeAllocationTests(ITestOutputHelper output)
             SHA256.HashData(Encoding.UTF8.GetBytes(legacySql)));
 
         // Assert
+        Assert.Contains(exactCommentComparison, canonicalSql, StringComparison.Ordinal);
+        Assert.DoesNotContain(exactCommentComparison, legacySql, StringComparison.Ordinal);
+        if (!isMariaDb)
+        {
+            Assert.Contains(exactNullDefaultComparison, canonicalSql, StringComparison.Ordinal);
+            Assert.DoesNotContain(exactNullDefaultComparison, legacySql, StringComparison.Ordinal);
+        }
+
         output.WriteLine(
             $"Prepared {(isMariaDb ? "MariaDB" : "MySQL")} generation: {allocated} bytes, SQL SHA256 {hash}.");
 
@@ -73,12 +86,12 @@ public sealed class MySqlRuntimeAllocationTests(ITestOutputHelper output)
         {
             // WHY: Restoring only the previous comment equality and unsafe
             // NULL-text alternative still covers every other byte of the updated diagnostic contract.
-            Assert.Equal("EC63EE950B2CBD949E8CB77D4216C685760472E8F8F1DC3622F3C0E480ECD986", legacyHash);
+            Assert.Equal("21144DA3D20F2CBE6BF41153232CA384D0ED6FD1163103C06109F778B5A04AF0", legacyHash);
         }
 
         else
         {
-            Assert.Equal("692F5F7ABDFACE87C44F22765391C4CEE5D3BD71D021CCBE8CF122D74D04B974", legacyHash);
+            Assert.Equal("959D81224D91EACD7E9B4622997A5E0805E0AA67012CAD677FAA3CCFE2B4B656", legacyHash);
         }
 
         // WHY: Only platform newlines and positively decoded operation-owned

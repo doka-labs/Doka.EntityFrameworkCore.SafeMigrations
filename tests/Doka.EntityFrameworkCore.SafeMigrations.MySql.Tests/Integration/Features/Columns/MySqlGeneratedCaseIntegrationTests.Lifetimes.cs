@@ -11,8 +11,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
-            + "left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY,
+            left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await SeedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
@@ -79,8 +81,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
-            + "left_bound bigint NOT NULL, right_bound bigint NOT NULL);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY,
+            left_bound bigint NOT NULL, right_bound bigint NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         var all = CaseTable(stored: false);

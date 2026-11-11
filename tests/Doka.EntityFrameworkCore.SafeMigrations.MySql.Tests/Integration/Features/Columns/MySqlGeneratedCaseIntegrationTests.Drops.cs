@@ -107,11 +107,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE generated_drop_model (id int NOT NULL PRIMARY KEY, "
-            + "source int NULL, other int NULL"
-            + generated
-            + extra
-            + "); INSERT INTO generated_drop_model (id, source, other) VALUES (1, 7, 11);",
+            $"""
+            CREATE TABLE generated_drop_model (id int NOT NULL PRIMARY KEY, source int
+            NULL,
+            other int NULL{generated}{extra}); INSERT
+            INTO generated_drop_model (id,
+            source, other) VALUES (1, 7, 11);
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -316,13 +318,15 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE generated_drop_model (id int NOT NULL PRIMARY KEY, "
-            + "source int NULL, other int NULL, result int GENERATED ALWAYS AS (`source` + "
-            + (nativeDrift
+            $"""
+            CREATE TABLE generated_drop_model (id int NOT NULL PRIMARY KEY, source int
+            NULL,
+            other int NULL, result int GENERATED ALWAYS AS (`source` + {(nativeDrift
                 ? "2"
-                : "1")
-            + ") VIRTUAL); INSERT INTO generated_drop_model (id, source, other) "
-            + "VALUES (1, 7, 11);",
+                : "1")})
+            VIRTUAL); INSERT INTO generated_drop_model (id,
+            source, other) VALUES (1, 7, 11);
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -432,8 +436,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var source = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-            + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'left_bound';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}'
+            AND COLUMN_NAME = 'left_bound';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await CountExpectedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
@@ -571,8 +579,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var unrelated = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-            + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'unrelated';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}'
+            AND COLUMN_NAME = 'unrelated';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await CountExpectedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);

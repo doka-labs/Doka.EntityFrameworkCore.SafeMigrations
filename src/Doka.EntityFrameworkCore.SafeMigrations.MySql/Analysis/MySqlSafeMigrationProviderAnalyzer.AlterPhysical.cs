@@ -140,25 +140,34 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
                 var requested = string.Join(", ", names);
                 command.CommandText = slot % 2 == 0
-                    ? "SELECT c.TABLE_NAME, c.COLUMN_NAME, c.DATA_TYPE, c.IS_NULLABLE, "
-                    + "c.CHARACTER_MAXIMUM_LENGTH, c.CHARACTER_OCTET_LENGTH, "
-                    + "c.NUMERIC_PRECISION, c.NUMERIC_SCALE, c.DATETIME_PRECISION, "
-                    + "COALESCE(cs.MAXLEN, 1), c.COLLATION_NAME, c.CHARACTER_SET_NAME, "
-                    + "(fk.COLUMN_NAME IS NOT NULL) FROM INFORMATION_SCHEMA.COLUMNS c "
-                    + "LEFT JOIN INFORMATION_SCHEMA.CHARACTER_SETS cs "
-                    + "ON cs.CHARACTER_SET_NAME = c.CHARACTER_SET_NAME "
-                    + "LEFT JOIN (SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE "
-                    + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ({requested}) "
-                    + "AND REFERENCED_TABLE_NAME IS NOT NULL UNION "
-                    + "SELECT REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME "
-                    + "FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE "
-                    + $"WHERE REFERENCED_TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME IN ({requested})) fk "
-                    + "ON fk.TABLE_NAME = c.TABLE_NAME AND fk.COLUMN_NAME = c.COLUMN_NAME "
-                    + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME IN ({requested});"
-                    : "SELECT s.TABLE_NAME, s.INDEX_NAME, s.INDEX_TYPE, s.SEQ_IN_INDEX, "
-                    + "s.COLUMN_NAME, s.SUB_PART, s.NON_UNIQUE FROM INFORMATION_SCHEMA.STATISTICS s "
-                    + $"WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME IN ({requested}) "
-                    + "ORDER BY s.TABLE_NAME, s.INDEX_NAME, s.SEQ_IN_INDEX;";
+                    ? $"""
+                    SELECT c.TABLE_NAME, c.COLUMN_NAME, c.DATA_TYPE, c.IS_NULLABLE, c.CHARACTER_MAXIMUM_LENGTH,
+                    c.CHARACTER_OCTET_LENGTH, c.NUMERIC_PRECISION, c.NUMERIC_SCALE, c.DATETIME_PRECISION,
+                    COALESCE(cs.MAXLEN, 1), c.COLLATION_NAME, c.CHARACTER_SET_NAME, (fk.COLUMN_NAME
+                    IS NOT NULL)
+                    FROM INFORMATION_SCHEMA.COLUMNS c
+                    LEFT JOIN INFORMATION_SCHEMA.CHARACTER_SETS cs ON cs.CHARACTER_SET_NAME
+                    = c.CHARACTER_SET_NAME
+                    LEFT JOIN (SELECT TABLE_NAME, COLUMN_NAME
+                    FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+                    WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME IN ({requested})
+                    AND REFERENCED_TABLE_NAME IS NOT NULL UNION SELECT REFERENCED_TABLE_NAME,
+                    REFERENCED_COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+                    WHERE REFERENCED_TABLE_SCHEMA = DATABASE()
+                    AND REFERENCED_TABLE_NAME IN ({requested})) fk ON fk.TABLE_NAME
+                    = c.TABLE_NAME
+                    AND fk.COLUMN_NAME = c.COLUMN_NAME
+                    WHERE c.TABLE_SCHEMA = DATABASE()
+                    AND c.TABLE_NAME IN ({requested});
+                    """
+                    : $"""
+                    SELECT s.TABLE_NAME, s.INDEX_NAME, s.INDEX_TYPE, s.SEQ_IN_INDEX, s.COLUMN_NAME,
+                    s.SUB_PART, s.NON_UNIQUE FROM INFORMATION_SCHEMA.STATISTICS s
+                    WHERE s.TABLE_SCHEMA = DATABASE()
+                    AND s.TABLE_NAME IN ({requested}) ORDER BY s.TABLE_NAME,
+                    s.INDEX_NAME, s.SEQ_IN_INDEX;
+                    """;
 
                 return new SafeMigrationCatalogProbeStatement(1, valueBytes, slot);
             },

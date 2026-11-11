@@ -19,17 +19,17 @@ public sealed class MySqlProjectedMissingSqlDefaultColumnTests
         Assert.Contains("physical_owner.TABLE_NAME = source_owner.owner", sql, StringComparison.Ordinal);
         Assert.Contains("physical_owner.TABLE_NAME IN (@owner)", sql, StringComparison.Ordinal);
         Assert.Contains(
-            "CAST(physical_owner.TABLE_NAME AS BINARY) = CAST(source_owner.owner AS BINARY)",
+            "CAST(physical_owner.TABLE_NAME AS BINARY) = CAST(source_owner.owner\nAS BINARY)",
             sql,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CAST(LOWER(physical_owner.TABLE_NAME) AS BINARY) = CAST(LOWER(source_owner.owner) AS BINARY)",
+            "CAST(LOWER(physical_owner.TABLE_NAME) AS BINARY) = CAST(LOWER(source_owner.owner)\nAS BINARY)",
             sql,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CAST(physical_owner.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            "CAST(physical_owner.TABLE_SCHEMA AS BINARY) = CAST(DATABASE()\nAS BINARY)",
             sql,
             StringComparison.Ordinal);
 

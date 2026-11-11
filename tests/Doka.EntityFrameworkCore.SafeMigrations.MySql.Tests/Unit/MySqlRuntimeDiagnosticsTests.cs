@@ -434,6 +434,7 @@ public sealed class MySqlRuntimeDiagnosticsTests
     [InlineData("reordered")]
     [InlineData("wider")]
     [InlineData("extra_column")]
+    [InlineData("header")]
     public void OwnedAssertionShapeOracleRejectsChangedPositionalContract(
         string mutation
     )
@@ -451,16 +452,20 @@ public sealed class MySqlRuntimeDiagnosticsTests
         var mutated = mutation switch
         {
             "reordered" => sql.Replace(
-                "`different_code` VARCHAR(40) NOT NULL, `unsupported_code` VARCHAR(40) NOT NULL",
-                "`unsupported_code` VARCHAR(40) NOT NULL, `different_code` VARCHAR(40) NOT NULL",
+                "`different_code` VARCHAR(40) NOT NULL,\n`unsupported_code` VARCHAR(40) NOT NULL",
+                "`unsupported_code` VARCHAR(40) NOT NULL,\n`different_code` VARCHAR(40) NOT NULL",
                 StringComparison.Ordinal),
             "wider" => sql.Replace(
                 "`different_code` VARCHAR(40)",
                 "`different_code` VARCHAR(41)",
                 StringComparison.Ordinal),
-            _ => sql.Replace(
+            "extra_column" => sql.Replace(
                 "CONSTRAINT `doka_sm_different`",
                 "`extra` VARCHAR(40), CONSTRAINT `doka_sm_different`",
+                StringComparison.Ordinal),
+            _ => sql.Replace(
+                "CREATE TEMPORARY TABLE `__doka_sm_assert` (",
+                "CREATE TABLE `__doka_sm_assert` (",
                 StringComparison.Ordinal),
         };
 
@@ -478,11 +483,14 @@ public sealed class MySqlRuntimeDiagnosticsTests
     )
     {
         const string createPrefix = "CREATE TEMPORARY TABLE `__doka_sm_assert` (";
-        var start = sql.IndexOf(createPrefix, StringComparison.Ordinal) + createPrefix.Length;
+        var header = sql.IndexOf(createPrefix, StringComparison.Ordinal);
+        Assert.True(header >= 0, "The exact owned temporary-table header must be present.");
+        var start = header + createPrefix.Length;
         var constraints = sql.IndexOf("CONSTRAINT `doka_sm_different`", start, StringComparison.Ordinal);
+        Assert.True(constraints > start, "Owned columns must precede the first owned constraint.");
         var definitions = sql[start..constraints]
-            .TrimEnd(' ', ',')
-            .Split(", ");
+            .TrimEnd(' ', ',', '\n')
+            .Split(",\n");
 
         Assert.Equal(s_ownedAssertionColumns, definitions);
 

@@ -29,9 +29,12 @@ public sealed class MySqlConstraintsIntegrationTests : MySqlSafeMigrationIntegra
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'snapshots' "
-                + "AND CONSTRAINT_NAME = 'PRIMARY' AND CONSTRAINT_TYPE = 'PRIMARY KEY';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'snapshots' AND CONSTRAINT_NAME = 'PRIMARY'
+                AND CONSTRAINT_TYPE = 'PRIMARY KEY';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -41,9 +44,11 @@ public sealed class MySqlConstraintsIntegrationTests : MySqlSafeMigrationIntegra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
-            + "CREATE TABLE `children` ("
-            + "`id` int NOT NULL, `parent_id` int NULL, `code` varchar(30) NULL, `quantity` int NOT NULL); ",
+            $"""
+            CREATE TABLE `parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); CREATE TABLE
+            `children` (`id` int NOT NULL,
+            `parent_id` int NULL, `code` varchar(30) NULL, `quantity` int NOT NULL);{"\u0020"}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -83,8 +88,11 @@ public sealed class MySqlConstraintsIntegrationTests : MySqlSafeMigrationIntegra
             4,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'children';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'children';
+                """,
                 cancellationToken: CancellationToken.None));
 
         var drop = new MigrationBuilder(context.Database.ProviderName!);
@@ -102,8 +110,11 @@ public sealed class MySqlConstraintsIntegrationTests : MySqlSafeMigrationIntegra
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'children';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'children';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -113,16 +124,18 @@ public sealed class MySqlConstraintsIntegrationTests : MySqlSafeMigrationIntegra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `constraint_parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
-            + "CREATE TABLE `constraint_drift` ("
-            + "`id` int NOT NULL, `alternate_id` int NOT NULL, "
-            + "`code` varchar(20) NULL, `alternate_code` varchar(20) NULL, "
-            + "`quantity` int NOT NULL, `parent_id` int NULL, `alternate_parent_id` int NULL, "
-            + "PRIMARY KEY (`alternate_id`), "
-            + "CONSTRAINT `uq_constraint_code` UNIQUE (`alternate_code`), "
-            + "CONSTRAINT `ck_constraint_quantity` CHECK (`quantity` > 10), "
-            + "CONSTRAINT `fk_constraint_parent` FOREIGN KEY (`alternate_parent_id`) "
-            + "REFERENCES `constraint_parents` (`id`));",
+            """
+            CREATE TABLE `constraint_parents` (`id` int NOT NULL, PRIMARY KEY (`id`));
+            CREATE TABLE `constraint_drift` (`id` int NOT NULL,
+            `alternate_id` int NOT NULL, `code` varchar(20) NULL, `alternate_code` varchar(20)
+            NULL,
+            `quantity` int NOT NULL, `parent_id` int NULL, `alternate_parent_id` int
+            NULL,
+            PRIMARY KEY (`alternate_id`), CONSTRAINT `uq_constraint_code` UNIQUE (`alternate_code`),
+            CONSTRAINT `ck_constraint_quantity` CHECK (`quantity` > 10), CONSTRAINT
+            `fk_constraint_parent` FOREIGN KEY (`alternate_parent_id`) REFERENCES `constraint_parents`
+            (`id`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -180,13 +193,14 @@ public sealed class MySqlConstraintsIntegrationTests : MySqlSafeMigrationIntegra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `blocker_parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
-            + "CREATE TABLE `blocker_children` ("
-            + "`id` int NULL, `code` varchar(20) NOT NULL, `quantity` int NOT NULL, "
-            + "`parent_id` int NOT NULL); "
-            + "INSERT INTO `blocker_parents` VALUES (1); "
-            + "INSERT INTO `blocker_children` VALUES "
-            + "(1, 'duplicate', -1, 999), (1, 'duplicate', 1, 999);",
+            """
+            CREATE TABLE `blocker_parents` (`id` int NOT NULL, PRIMARY KEY (`id`));
+            CREATE TABLE `blocker_children` (`id` int NULL,
+            `code` varchar(20) NOT NULL, `quantity` int NOT NULL, `parent_id` int NOT
+            NULL); INSERT INTO `blocker_parents` VALUES (1); INSERT INTO `blocker_children`
+            VALUES (1,
+            'duplicate', -1, 999), (1, 'duplicate', 1, 999);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -239,17 +253,23 @@ public sealed class MySqlConstraintsIntegrationTests : MySqlSafeMigrationIntegra
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'blocker_children';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'blocker_children';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'blocker_children' "
-                + "AND INDEX_NAME = 'ux_blocker_children_code';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'blocker_children'
+                AND INDEX_NAME = 'ux_blocker_children_code';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 }

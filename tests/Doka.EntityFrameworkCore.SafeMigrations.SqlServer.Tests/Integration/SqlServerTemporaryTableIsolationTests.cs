@@ -150,12 +150,10 @@ public sealed class SqlServerTemporaryTableIsolationTests : SqlServerIntegration
 
         await ExecuteSessionSqlAsync(
             peer,
-            "CREATE TABLE ["
-            + ownedTable
-            + "] (Sentinel int NOT NULL); "
-            + "INSERT INTO ["
-            + ownedTable
-            + "] VALUES (91);",
+            $"""
+            CREATE TABLE [{ownedTable}] (Sentinel int NOT NULL); INSERT
+            INTO [{ownedTable}] VALUES (91);
+            """,
             cancellationToken: CancellationToken.None,
             peerTransaction);
 

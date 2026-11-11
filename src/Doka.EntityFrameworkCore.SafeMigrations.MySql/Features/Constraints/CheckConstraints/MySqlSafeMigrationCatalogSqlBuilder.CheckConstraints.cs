@@ -31,12 +31,21 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             $"tc.CONSTRAINT_NAME <> {Literal(definition.Name)}");
 
         return Plan(
-                $"CASE WHEN NOT {BaseTableExists(definition.Table)} THEN 'prerequisite_missing' "
-                + $"WHEN {exists} AND {matching} THEN 'matching' "
-                + $"WHEN {exists} THEN 'different' "
-                + $"WHEN {semanticAlias} THEN 'matching' "
-                + $"WHEN {nameCollision} THEN 'different' "
-                + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
+                $"""
+                CASE WHEN NOT {BaseTableExists(definition.Table)}
+                THEN 'prerequisite_missing'
+                WHEN {exists}
+                AND {matching}
+                THEN 'matching'
+                WHEN {exists}
+                THEN 'different'
+                WHEN {semanticAlias}
+                THEN 'matching'
+                WHEN {nameCollision}
+                THEN 'different'
+                WHEN {dataBlocked}
+                THEN 'data_blocked' ELSE 'missing' END
+                """,
                 satisfied) with
             {
                 MatchedObjectNameExpression = ResolveMatchingObjectName(
@@ -98,27 +107,21 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     definition.CapturedSql is not null))
             .DistinctBy(static candidate => candidate.Text, StringComparer.Ordinal);
 
-        return "SELECT tc.CONSTRAINT_NAME AS candidate_name FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
-            + "JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc "
-            + "ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA "
-            + "AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME "
-
-            // MariaDB 12.1 made user-visible constraint names table-scoped.
-            // MySQL's catalog omits TABLE_NAME because names remain schema-wide.
-            + (isMariaDb
-                ? "AND cc.TABLE_NAME = tc.TABLE_NAME "
-                : string.Empty)
-            + $"WHERE tc.CONSTRAINT_SCHEMA = DATABASE() AND tc.TABLE_NAME = {Literal(definition.Table)} "
-            + $"AND {namePredicate} "
-            + "AND tc.CONSTRAINT_TYPE = 'CHECK' "
-
-            // A disabled MySQL check has the same catalog expression but does
-            // not enforce the contract. MariaDB does not expose this facet.
-            + (isMariaDb
-                ? string.Empty
-                : "AND tc.ENFORCED = 'YES' ")
-            + "AND "
-            + MySqlExpressionCatalogComparison.Build("cc.CHECK_CLAUSE", candidates, Literal);
+        // MariaDB 12.1 made user-visible constraint names table-scoped.
+        // MySQL's catalog omits TABLE_NAME because names remain schema-wide.
+        // A disabled MySQL check has the same catalog expression but does
+        // not enforce the contract. MariaDB does not expose this facet.
+        return $"""
+            SELECT tc.CONSTRAINT_NAME AS candidate_name FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+            JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+            ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
+            AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+            {(isMariaDb ? "AND cc.TABLE_NAME = tc.TABLE_NAME " : string.Empty)}WHERE tc.CONSTRAINT_SCHEMA = DATABASE()
+            AND tc.TABLE_NAME = {Literal(definition.Table)} AND {namePredicate}
+            AND tc.CONSTRAINT_TYPE = 'CHECK'
+            {(isMariaDb ? string.Empty : "AND tc.ENFORCED = 'YES' ")}AND {
+                MySqlExpressionCatalogComparison.Build("cc.CHECK_CLAUSE", candidates, Literal)}
+            """;
     }
 
     private string CheckConstraintSatisfied(

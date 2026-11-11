@@ -29,23 +29,25 @@ public sealed class PostgreSqlModelManagedDataSideEffectsIntegrationTests : Post
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE side_effect_rows (id integer NOT NULL PRIMARY KEY, "
-            + "managed_value character varying(64) NOT NULL); "
-            + "CREATE TABLE side_effect_writes (id integer NOT NULL PRIMARY KEY, "
-            + "managed_value character varying(64) NOT NULL); "
-            + "INSERT INTO side_effect_rows (id, managed_value) VALUES (1, 'expected');"
-            + (writeKind == "INSERT"
+            $"""
+            CREATE TABLE side_effect_rows (id integer NOT NULL PRIMARY KEY, managed_value character
+            varying(64) NOT NULL); CREATE TABLE side_effect_writes (id integer NOT NULL PRIMARY KEY,
+            managed_value character varying(64) NOT NULL); INSERT INTO side_effect_rows (id,
+            managed_value) VALUES (1, 'expected');{(writeKind == "INSERT"
                 ? string.Empty
-                : "INSERT INTO side_effect_writes (id, managed_value) VALUES (1, 'source');"),
+                : "INSERT INTO side_effect_writes (id, managed_value) VALUES (1, 'source');")}
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE FUNCTION side_effect_trigger_function() RETURNS trigger LANGUAGE plpgsql AS $$ "
-            + "BEGIN UPDATE side_effect_rows SET managed_value = 'trigger-change' WHERE id = 1; RETURN NULL; END; $$; "
-            + "CREATE TRIGGER side_effect_trigger AFTER "
-            + writeKind
-            + " ON side_effect_writes FOR EACH ROW EXECUTE FUNCTION side_effect_trigger_function();",
+            $"""
+            CREATE FUNCTION side_effect_trigger_function() RETURNS trigger LANGUAGE
+            {"plpgsql AS $$ BEGIN UPDATE side_effect_rows SET managed_value = 'trigger-change' "
+                + "WHERE id = 1; RETURN NULL; END; $$;"}
+            CREATE TRIGGER side_effect_trigger AFTER {writeKind} ON side_effect_writes
+            FOR EACH ROW EXECUTE FUNCTION side_effect_trigger_function();
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -219,12 +221,14 @@ public sealed class PostgreSqlModelManagedDataSideEffectsIntegrationTests : Post
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE side_effect_parents (id integer NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE side_effect_children (id integer NOT NULL PRIMARY KEY, "
-            + "parent_id integer NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY (parent_id) "
-            + "REFERENCES side_effect_parents (id) ON DELETE CASCADE); "
-            + "INSERT INTO side_effect_parents (id) VALUES (1); "
-            + "INSERT INTO side_effect_children (id, parent_id) VALUES (11, 1), (12, 1);",
+            """
+            CREATE TABLE side_effect_parents (id integer NOT NULL PRIMARY KEY); CREATE TABLE
+            side_effect_children (id integer NOT NULL PRIMARY KEY,
+            parent_id integer NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY (parent_id) REFERENCES
+            side_effect_parents (id) ON DELETE CASCADE); INSERT INTO side_effect_parents (id) VALUES (1);
+            INSERT INTO side_effect_children (id,
+            parent_id) VALUES (11, 1), (12, 1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -281,25 +285,28 @@ public sealed class PostgreSqlModelManagedDataSideEffectsIntegrationTests : Post
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE side_effect_parents (id integer NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE side_effect_children (id integer NOT NULL PRIMARY KEY, "
-            + "parent_id integer NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY (parent_id) "
-            + "REFERENCES side_effect_parents (id) ON DELETE CASCADE); "
-            + "CREATE TABLE side_effect_writes (id integer NOT NULL PRIMARY KEY, "
-            + "managed_value character varying(64) NOT NULL); "
-            + "INSERT INTO side_effect_parents (id) VALUES (1); "
-            + "INSERT INTO side_effect_children (id, parent_id) VALUES (11, 1);",
+            """
+            CREATE TABLE side_effect_parents (id integer NOT NULL PRIMARY KEY); CREATE TABLE
+            side_effect_children (id integer NOT NULL PRIMARY KEY,
+            parent_id integer NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY (parent_id) REFERENCES
+            side_effect_parents (id) ON DELETE CASCADE); CREATE TABLE side_effect_writes (id integer NOT
+            NULL PRIMARY KEY,
+            managed_value character varying(64) NOT NULL); INSERT INTO side_effect_parents (id) VALUES (1);
+            INSERT INTO side_effect_children (id,
+            parent_id) VALUES (11, 1);
+            """,
             cancellationToken: CancellationToken.None);
 
         const string writeKind = "INSERT";
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE FUNCTION side_effect_trigger_function() RETURNS trigger LANGUAGE plpgsql AS $$ "
-            + "BEGIN INSERT INTO side_effect_children (id, parent_id) VALUES (99, 1); RETURN NULL; END; $$; "
-            + "CREATE TRIGGER side_effect_trigger AFTER "
-            + writeKind
-            + " ON side_effect_writes FOR EACH ROW EXECUTE FUNCTION side_effect_trigger_function();",
+            $"""
+            CREATE FUNCTION side_effect_trigger_function() RETURNS trigger LANGUAGE
+            plpgsql AS $$ BEGIN INSERT INTO side_effect_children (id, parent_id) VALUES (99, 1); RETURN NULL; END; $$;
+            CREATE TRIGGER side_effect_trigger AFTER {writeKind} ON side_effect_writes
+            FOR EACH ROW EXECUTE FUNCTION side_effect_trigger_function();
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

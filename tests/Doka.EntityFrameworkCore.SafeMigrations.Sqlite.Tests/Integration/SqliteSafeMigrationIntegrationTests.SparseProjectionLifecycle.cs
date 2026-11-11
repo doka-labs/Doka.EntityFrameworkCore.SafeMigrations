@@ -19,8 +19,11 @@ public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
         {
             await ExecuteSqlAsync(
                 connection,
-                "CREATE TABLE projection_index (Id INTEGER NOT NULL, Code TEXT NULL); "
-                + "INSERT INTO projection_index (Id, Code) VALUES (1, 'preserve');",
+                """
+                CREATE TABLE projection_index (Id INTEGER NOT NULL, Code TEXT NULL); INSERT
+                INTO projection_index (Id,
+                Code) VALUES (1, 'preserve');
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -91,9 +94,12 @@ public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE projection_index (Id INTEGER NOT NULL, Code TEXT NULL); "
-            + "CREATE INDEX ix_projection_code ON projection_index (Code); "
-            + "INSERT INTO projection_index (Id, Code) VALUES (1, 'preserve');",
+            """
+            CREATE TABLE projection_index (Id INTEGER NOT NULL, Code TEXT NULL); CREATE
+            INDEX ix_projection_code ON projection_index (Code); INSERT INTO projection_index
+            (Id,
+            Code) VALUES (1, 'preserve');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -136,9 +142,13 @@ public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_constraint_parents PRIMARY KEY (Id)); "
-            + "INSERT INTO constraint_parents (Id) VALUES (1);",
+            """
+            CREATE TABLE constraint_parents (
+                Id INTEGER NOT NULL,
+                CONSTRAINT pk_constraint_parents PRIMARY KEY (Id)
+            );
+            INSERT INTO constraint_parents (Id) VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -191,9 +201,13 @@ public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_constraint_parents PRIMARY KEY (Id)); "
-            + "INSERT INTO constraint_parents (Id) VALUES (1);",
+            """
+            CREATE TABLE constraint_parents (
+                Id INTEGER NOT NULL,
+                CONSTRAINT pk_constraint_parents PRIMARY KEY (Id)
+            );
+            INSERT INTO constraint_parents (Id) VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -253,8 +267,12 @@ public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE projection_rename (Id INTEGER NOT NULL, Source TEXT NULL, Target TEXT NULL); "
-            + "INSERT INTO projection_rename (Id, Source, Target) VALUES (1, 'source', 'target');",
+            """
+            CREATE TABLE projection_rename (Id INTEGER NOT NULL, Source TEXT NULL,
+            Target TEXT NULL); INSERT INTO projection_rename (Id, Source, Target) VALUES
+            (1,
+            'source', 'target');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -312,10 +330,13 @@ public sealed class SqliteSafeMigrationSparseProjectionLifecycleIntegrationTests
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE structural_posts (Id INTEGER NOT NULL, AuthorId INTEGER NULL, Title TEXT NOT NULL, "
-            + "Source TEXT NULL, Target TEXT NULL, CONSTRAINT pk_structural_posts PRIMARY KEY (Id)); "
-            + "INSERT INTO structural_posts (Id, AuthorId, Title, Source, Target) "
-            + "VALUES (1, NULL, 'preserve', 'source', 'target');",
+            """
+            CREATE TABLE structural_posts (Id INTEGER NOT NULL, AuthorId INTEGER NULL,
+            Title TEXT NOT NULL, Source TEXT NULL, Target TEXT NULL, CONSTRAINT pk_structural_posts
+            PRIMARY KEY (Id)); INSERT INTO structural_posts (Id,
+            AuthorId, Title, Source, Target) VALUES (1, NULL, 'preserve', 'source',
+            'target');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteStructuralSequenceTestContext(connection);

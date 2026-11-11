@@ -16,11 +16,15 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            $"CREATE TABLE parsed_items (Id INTEGER NOT NULL, {trivia} Code TEXT DEFAULT '--literal/*literal*/', "
-            + "Generated TEXT GENERATED ALWAYS AS (  Code || '/*literal*/'  ) VIRTUAL, "
-            + "CONSTRAINT pk_parsed_items PRIMARY KEY (  Id  ), "
-            + "CONSTRAINT uq_parsed_items UNIQUE (  Code, Id  )); "
-            + "CREATE INDEX ix_parsed_items ON parsed_items (  Code, Id DESC  ) WHERE   Code IS NOT NULL  ;",
+            $"""
+            CREATE TABLE parsed_items (Id INTEGER NOT NULL, {trivia}
+            Code TEXT DEFAULT '--literal/*literal*/',
+            Generated TEXT GENERATED ALWAYS AS (  Code || '/*literal*/'  ) VIRTUAL,
+            CONSTRAINT pk_parsed_items PRIMARY KEY (  Id  ), CONSTRAINT uq_parsed_items
+            UNIQUE (  Code,
+            Id  )); CREATE INDEX ix_parsed_items ON parsed_items (  Code, Id DESC  )
+            WHERE   Code IS NOT NULL  ;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Act
@@ -54,13 +58,15 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE catalog_shapes (Id INTEGER NOT NULL, Code TEXT NOT NULL, "
-            + "Generated INTEGER GENERATED ALWAYS AS (Id + 1) VIRTUAL, "
-            + "CONSTRAINT pk_catalog_shapes PRIMARY KEY (Id), "
-            + "CONSTRAINT uq_catalog_shapes_code UNIQUE (Code), "
-            + "CONSTRAINT ck_catalog_shapes_code CHECK (length(Code) > 0)); "
-            + "CREATE INDEX ix_catalog_shapes_search ON catalog_shapes "
-            + "(Code COLLATE NOCASE ASC, Id DESC) WHERE Code IS NOT NULL;",
+            """
+            CREATE TABLE catalog_shapes (Id INTEGER NOT NULL, Code TEXT NOT NULL,
+            Generated INTEGER GENERATED ALWAYS AS (Id + 1) VIRTUAL, CONSTRAINT pk_catalog_shapes
+            PRIMARY KEY (Id),
+            CONSTRAINT uq_catalog_shapes_code UNIQUE (Code), CONSTRAINT ck_catalog_shapes_code
+            CHECK (length(Code) > 0)); CREATE INDEX ix_catalog_shapes_search ON catalog_shapes
+            (Code COLLATE NOCASE ASC,
+            Id DESC) WHERE Code IS NOT NULL;
+            """,
             cancellationToken: CancellationToken.None);
 
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
@@ -84,12 +90,14 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE catalog_parser_shapes (Id INTEGER NOT NULL, "
-            + "Value TEXT DEFAULT 'CONSTRAINT phantom PRIMARY KEY AS (phantom)', "
-            + "Generated INTEGER GENERATED ALWAYS AS /* expression */ (Id + 1) VIRTUAL, "
-            + "CONSTRAINT pk_catalog_parser_shapes PRIMARY KEY (Id)); "
-            + "CREATE INDEX ix_catalog_parser_expression ON catalog_parser_shapes "
-            + "(replace(Value, 'where', 'replacement'));",
+            """
+            CREATE TABLE catalog_parser_shapes (Id INTEGER NOT NULL, Value TEXT DEFAULT
+            'CONSTRAINT phantom PRIMARY KEY AS (phantom)',
+            Generated INTEGER GENERATED ALWAYS AS /* expression */ (Id + 1) VIRTUAL,
+            CONSTRAINT pk_catalog_parser_shapes PRIMARY KEY (Id)); CREATE INDEX ix_catalog_parser_expression
+            ON catalog_parser_shapes (replace(Value,
+            'where', 'replacement'));
+            """,
             cancellationToken: CancellationToken.None);
 
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
@@ -108,9 +116,13 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE catalog_column_checks (Id INTEGER NOT NULL PRIMARY KEY, "
-            + "Status TEXT CONSTRAINT nn_status NOT NULL "
-            + "CONSTRAINT ck_status CHECK (Status <> '') CHECK (length(Status) <= 50));",
+            """
+            CREATE TABLE catalog_column_checks (
+                Id INTEGER NOT NULL PRIMARY KEY,
+                Status TEXT CONSTRAINT nn_status NOT NULL
+                    CONSTRAINT ck_status CHECK (Status <> '') CHECK (length(Status) <= 50)
+            );
+            """,
             cancellationToken: CancellationToken.None);
 
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
@@ -130,16 +142,17 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE inventory_parents (Id INTEGER NOT NULL, "
-            + "CONSTRAINT physical_parent_pk PRIMARY KEY (Id)); "
-            + "CREATE TABLE inventory_items (Id INTEGER NOT NULL, ParentId INTEGER NULL, "
-            + "Code TEXT NOT NULL, Legacy TEXT NULL, "
-            + "CONSTRAINT physical_item_pk PRIMARY KEY (Id), "
-            + "CONSTRAINT physical_item_uq UNIQUE (Code), "
-            + "CONSTRAINT physical_item_ck CHECK (length(Code) > 0), "
-            + "CONSTRAINT physical_item_fk FOREIGN KEY (ParentId) REFERENCES inventory_parents (Id)); "
-            + "CREATE INDEX physical_item_parent_idx ON inventory_items (ParentId); "
-            + "CREATE INDEX legacy_item_idx ON inventory_items (Legacy);",
+            """
+            CREATE TABLE inventory_parents (Id INTEGER NOT NULL, CONSTRAINT physical_parent_pk
+            PRIMARY KEY (Id)); CREATE TABLE inventory_items (Id INTEGER NOT NULL,
+            ParentId INTEGER NULL, Code TEXT NOT NULL, Legacy TEXT NULL, CONSTRAINT
+            physical_item_pk PRIMARY KEY (Id),
+            CONSTRAINT physical_item_uq UNIQUE (Code), CONSTRAINT physical_item_ck CHECK
+            (length(Code) > 0),
+            CONSTRAINT physical_item_fk FOREIGN KEY (ParentId) REFERENCES inventory_parents
+            (Id)); CREATE INDEX physical_item_parent_idx ON inventory_items (ParentId);
+            CREATE INDEX legacy_item_idx ON inventory_items (Legacy);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -267,8 +280,11 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE duplicate_index_values (id INTEGER NOT NULL, code TEXT NULL); "
-            + "INSERT INTO duplicate_index_values (id, code) VALUES (1, 'duplicate'), (2, 'duplicate');",
+            """
+            CREATE TABLE duplicate_index_values (id INTEGER NOT NULL, code TEXT NULL);
+            INSERT INTO duplicate_index_values (id,
+            code) VALUES (1, 'duplicate'), (2, 'duplicate');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -305,8 +321,11 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE duplicate_collation_values (id INTEGER NOT NULL, code TEXT NULL); "
-            + "INSERT INTO duplicate_collation_values (id, code) VALUES (1, 'Active'), (2, 'ACTIVE');",
+            """
+            CREATE TABLE duplicate_collation_values (id INTEGER NOT NULL, code TEXT
+            NULL); INSERT INTO duplicate_collation_values (id,
+            code) VALUES (1, 'Active'), (2, 'ACTIVE');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -349,8 +368,11 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE duplicate_expression_values (id INTEGER NOT NULL, code TEXT NULL); "
-            + "INSERT INTO duplicate_expression_values (id, code) VALUES (1, 'Active'), (2, 'ACTIVE');",
+            """
+            CREATE TABLE duplicate_expression_values (id INTEGER NOT NULL, code TEXT
+            NULL); INSERT INTO duplicate_expression_values (id,
+            code) VALUES (1, 'Active'), (2, 'ACTIVE');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -394,8 +416,11 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE distinct_expression_values (id INTEGER NOT NULL, code TEXT NULL); "
-            + "INSERT INTO distinct_expression_values (id, code) VALUES (1, 'Active'), (2, 'Inactive');",
+            """
+            CREATE TABLE distinct_expression_values (id INTEGER NOT NULL, code TEXT
+            NULL); INSERT INTO distinct_expression_values (id,
+            code) VALUES (1, 'Active'), (2, 'Inactive');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -497,9 +522,12 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
             1,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'index' "
-                + "AND name = 'ix_expression_items_normalized_v2' "
-                + "AND lower(sql) LIKE '%lower(%value%)%' AND lower(sql) LIKE '%where%value%is not null%';",
+                """
+                SELECT COUNT(*) FROM main.sqlite_schema
+                WHERE type = 'index' AND name = 'ix_expression_items_normalized_v2'
+                AND lower(sql) LIKE '%lower(%value%)%'
+                AND lower(sql) LIKE '%where%value%is not null%';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -517,14 +545,18 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_parents (id INTEGER NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE constraint_children ("
-            + "id INTEGER NOT NULL, code_a TEXT NULL, code_b TEXT NULL, "
-            + "parent_a INTEGER NULL, parent_b INTEGER NULL, "
-            + "CONSTRAINT uq_constraint_code_a UNIQUE (code_a), "
-            + "CONSTRAINT uq_constraint_code_b UNIQUE (code_b), "
-            + "CONSTRAINT fk_constraint_parent_a FOREIGN KEY (parent_a) REFERENCES constraint_parents (id), "
-            + "CONSTRAINT fk_constraint_parent_b FOREIGN KEY (parent_b) REFERENCES constraint_parents (id));",
+            """
+            CREATE TABLE constraint_parents (id INTEGER NOT NULL PRIMARY KEY); CREATE
+            TABLE constraint_children (id INTEGER NOT NULL,
+            code_a TEXT NULL, code_b TEXT NULL, parent_a INTEGER NULL, parent_b INTEGER
+            NULL,
+            CONSTRAINT uq_constraint_code_a UNIQUE (code_a), CONSTRAINT uq_constraint_code_b
+            UNIQUE (code_b),
+            CONSTRAINT fk_constraint_parent_a FOREIGN KEY (parent_a) REFERENCES constraint_parents
+            (id),
+            CONSTRAINT fk_constraint_parent_b FOREIGN KEY (parent_b) REFERENCES constraint_parents
+            (id));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -577,8 +609,13 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE guarded_items (id INTEGER NOT NULL, value TEXT NULL); "
-            + "CREATE TRIGGER tr_guarded_items AFTER INSERT ON guarded_items BEGIN SELECT 1; END;",
+            """
+            CREATE TABLE guarded_items (id INTEGER NOT NULL, value TEXT NULL);
+            CREATE TRIGGER tr_guarded_items AFTER INSERT ON guarded_items
+            BEGIN
+                SELECT 1;
+            END;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -609,9 +646,12 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE rebuild_entities (Id INTEGER NOT NULL, Code TEXT NOT NULL, "
-            + "CONSTRAINT pk_rebuild_entities PRIMARY KEY (Id)); "
-            + "INSERT INTO rebuild_entities (Id, Code) VALUES (1, 'existing');",
+            """
+            CREATE TABLE rebuild_entities (Id INTEGER NOT NULL, Code TEXT NOT NULL,
+            CONSTRAINT pk_rebuild_entities PRIMARY KEY (Id)); INSERT INTO rebuild_entities
+            (Id,
+            Code) VALUES (1, 'existing');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -676,8 +716,10 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE rebuild_entities (Id INTEGER NOT NULL, Code TEXT NOT NULL, Legacy TEXT NULL, "
-            + "CONSTRAINT pk_rebuild_entities PRIMARY KEY (Id));",
+            """
+            CREATE TABLE rebuild_entities (Id INTEGER NOT NULL, Code TEXT NOT NULL,
+            Legacy TEXT NULL, CONSTRAINT pk_rebuild_entities PRIMARY KEY (Id));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -713,9 +755,12 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE rebuild_entities (Id INTEGER NOT NULL, Code TEXT NOT NULL, "
-            + "CONSTRAINT pk_rebuild_entities PRIMARY KEY (Id)); "
-            + "INSERT INTO rebuild_entities (Id, Code) VALUES (1, '');",
+            """
+            CREATE TABLE rebuild_entities (Id INTEGER NOT NULL, Code TEXT NOT NULL,
+            CONSTRAINT pk_rebuild_entities PRIMARY KEY (Id)); INSERT INTO rebuild_entities
+            (Id,
+            Code) VALUES (1, '');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -817,10 +862,12 @@ public sealed class SqliteSafeMigrationIndexesAndCatalogIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE rebuild_entities (Id INTEGER NOT NULL, Code TEXT NOT NULL, "
-            + "CONSTRAINT pk_rebuild_entities PRIMARY KEY (Id), "
-            + "CONSTRAINT uq_rebuild_entities_code UNIQUE (Code)); "
-            + "CREATE VIEW rebuild_entities_view AS SELECT Id, Code FROM rebuild_entities;",
+            """
+            CREATE TABLE rebuild_entities (Id INTEGER NOT NULL, Code TEXT NOT NULL,
+            CONSTRAINT pk_rebuild_entities PRIMARY KEY (Id), CONSTRAINT uq_rebuild_entities_code
+            UNIQUE (Code)); CREATE VIEW rebuild_entities_view AS SELECT Id,
+            Code FROM rebuild_entities;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);

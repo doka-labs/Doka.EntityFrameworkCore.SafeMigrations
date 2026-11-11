@@ -47,9 +47,11 @@ public sealed class SqlServerSafeMigrationGeneratedHistoryIntegrationTests : Sql
 
         var checks = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.check_constraints "
-            + "WHERE parent_object_id=OBJECT_ID(N'dbo.generated_upgrade_nodes') "
-            + "AND is_disabled=0 AND is_not_trusted=0;",
+            """
+            SELECT COUNT(*) FROM sys.check_constraints
+            WHERE parent_object_id=OBJECT_ID(N'dbo.generated_upgrade_nodes')
+            AND is_disabled=0 AND is_not_trusted=0;
+            """,
             cancellationToken: CancellationToken.None);
 
         var history = await ScalarIntAsync(

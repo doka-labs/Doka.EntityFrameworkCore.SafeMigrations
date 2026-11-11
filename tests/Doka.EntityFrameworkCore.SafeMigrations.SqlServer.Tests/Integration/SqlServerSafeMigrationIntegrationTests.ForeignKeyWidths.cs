@@ -23,14 +23,12 @@ public sealed class SqlServerSafeMigrationForeignKeyWidthsIntegrationTests : Sql
         var storeType = "char(" + bytes.ToString(CultureInfo.InvariantCulture) + ")";
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.width_parent (Value "
-            + storeType
-            + " NOT NULL, "
-            + "CONSTRAINT UQ_width_parent UNIQUE NONCLUSTERED (Value)); "
-            + "CREATE TABLE dbo.width_child (Value "
-            + storeType
-            + " NULL); "
-            + "CREATE TABLE dbo.width_ddl_events (Id int NOT NULL);",
+            $"""
+            CREATE TABLE dbo.width_parent (Value {storeType} NOT NULL,
+            CONSTRAINT UQ_width_parent UNIQUE NONCLUSTERED (Value)); CREATE TABLE dbo.width_child
+            (Value {storeType} NULL); CREATE TABLE dbo.width_ddl_events
+            (Id int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await CreateForeignKeyWidthAuditAsync(connectionString, cancellationToken: CancellationToken.None);
@@ -145,14 +143,11 @@ public sealed class SqlServerSafeMigrationForeignKeyWidthsIntegrationTests : Sql
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.width_parent ("
-            + definitions
-            + key
-            + "); "
-            + "CREATE TABLE dbo.width_child ("
-            + definitions
-            + "); "
-            + "CREATE TABLE dbo.width_ddl_events (Id int NOT NULL);",
+            $"""
+            CREATE TABLE dbo.width_parent ({definitions}{key});
+            CREATE TABLE dbo.width_child ({definitions}); CREATE TABLE
+            dbo.width_ddl_events (Id int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await CreateForeignKeyWidthAuditAsync(connectionString, cancellationToken: CancellationToken.None);
@@ -244,11 +239,11 @@ public sealed class SqlServerSafeMigrationForeignKeyWidthsIntegrationTests : Sql
         var storeType = "char(" + bytes.ToString(CultureInfo.InvariantCulture) + ")";
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.width_parent (Value "
-            + storeType
-            + " NOT NULL, "
-            + "CONSTRAINT UQ_width_parent UNIQUE NONCLUSTERED (Value)); "
-            + "CREATE TABLE dbo.width_ddl_events (Id int NOT NULL);",
+            $"""
+            CREATE TABLE dbo.width_parent (Value {storeType} NOT NULL,
+            CONSTRAINT UQ_width_parent UNIQUE NONCLUSTERED (Value)); CREATE TABLE dbo.width_ddl_events
+            (Id int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await CreateForeignKeyWidthAuditAsync(connectionString, cancellationToken: CancellationToken.None);
@@ -346,7 +341,9 @@ public sealed class SqlServerSafeMigrationForeignKeyWidthsIntegrationTests : Sql
         CancellationToken cancellationToken
     ) => ExecuteSqlAsync(
         connectionString,
-        "CREATE TRIGGER doka_width_ddl_audit ON DATABASE "
-        + "FOR DDL_TABLE_EVENTS, DDL_INDEX_EVENTS AS INSERT dbo.width_ddl_events VALUES (1);",
+        """
+        CREATE TRIGGER doka_width_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS,
+        DDL_INDEX_EVENTS AS INSERT dbo.width_ddl_events VALUES (1);
+        """,
         cancellationToken: cancellationToken);
 }

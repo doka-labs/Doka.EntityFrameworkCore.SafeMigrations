@@ -3,6 +3,96 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 /// <summary>Protects exact guard SQL while eliminating operation-local rendering intermediates.</summary>
 public sealed class PostgreSqlGuardRenderingAllocationTests
 {
+    /// <summary>Idempotent transport escaping preserves the complete raw SQL body and native VALUE payload.</summary>
+    [Fact]
+    public void IdempotentGuardCarrierPreservesRawLinesAndNativeValues()
+    {
+        // Arrange
+        using var context = CreateOfflineContext();
+        const string payload = "quote' {braces} $doka_safe_migration$ \\ \\044 \u20ac\r\nvalue\nline";
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn("proof_rows",
+            new ExpectedColumnDefinition("value",
+                typeof(string),
+                true,
+                storeType: "text",
+                defaultValue: SafeMigrationDefaultValue.Literal(payload)),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        var mapping = context
+            .GetService<IRelationalTypeMappingSource>()
+            .FindMapping(typeof(string))!;
+
+        // Act
+        var ordinary = Assert
+            .Single(generator.Generate(builder.Operations, context.Model))
+            .CommandText
+            .TrimEnd();
+
+        var escaped = Assert
+            .Single(generator.Generate(builder.Operations,
+                context.Model,
+                MigrationsSqlGenerationOptions.Idempotent))
+            .CommandText
+            .TrimEnd();
+
+        var headerEnd = ordinary.IndexOf('\n');
+        var tag = ordinary[3..headerEnd];
+        var body = ordinary[headerEnd..ordinary.LastIndexOf(tag, StringComparison.Ordinal)];
+        var decoded = DecodeEscapedAnonymousBody(escaped);
+
+        // Assert
+        Assert.StartsWith("DO $doka_safe_migration", ordinary, StringComparison.Ordinal);
+        Assert.StartsWith("DO E'", escaped, StringComparison.Ordinal);
+        Assert.DoesNotContain('\n', escaped);
+        Assert.DoesNotContain('\r', escaped);
+        Assert.Equal(body, decoded);
+        Assert.Contains(mapping.GenerateSqlLiteral(payload), decoded, StringComparison.Ordinal);
+        Assert.Contains("\r\nvalue\nline", decoded, StringComparison.Ordinal);
+        Assert.True(Encoding.UTF8.GetByteCount(escaped) > Encoding.UTF8.GetByteCount(body));
+    }
+
+    /// <summary>Independently decodes the finite E-literal transport emitted by the real guard generator.</summary>
+    private static string DecodeEscapedAnonymousBody(
+        string command
+    )
+    {
+        Assert.StartsWith("DO E'", command, StringComparison.Ordinal);
+        Assert.EndsWith("';", command, StringComparison.Ordinal);
+        var body = new StringBuilder();
+        for (var offset = 5; offset < command.Length - 2; offset++)
+        {
+            var character = command[offset];
+            if (character == '\'')
+            {
+                Assert.Equal('\'', command[++offset]);
+                body.Append('\'');
+            }
+            else if (character == '\\')
+            {
+                var escape = command[++offset];
+                if (escape == '0')
+                {
+                    Assert.Equal("44", command.Substring(offset + 1, 2));
+                    offset += 2;
+                    body.Append('$');
+                }
+                else
+                {
+                    Assert.True(escape is 'n' or 'r' or '\\');
+                    body.Append(escape switch { 'n' => '\n', 'r' => '\r', _ => '\\' });
+                }
+            }
+            else
+            {
+                body.Append(character);
+            }
+        }
+
+        return body.ToString();
+    }
+
     /// <summary>Preserves legacy baseline bytes and chooses a tag absent from both action branches.</summary>
     /// <param name="scenario">The baseline termination, whitespace, or dollar-tag boundary.</param>
     [Theory]

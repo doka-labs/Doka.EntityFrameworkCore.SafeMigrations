@@ -213,8 +213,12 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
 
         var idColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'explicit_backfill_items' AND COLUMN_NAME = 'id';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'explicit_backfill_items'
+            AND COLUMN_NAME = 'id';
+            """,
             cancellationToken: CancellationToken.None);
 
         var preserved = await ScalarIntAsync(
@@ -277,9 +281,11 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         var expectedValues = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE "
-            + "(`value` = 1 AND `owner_id` = '00000000-0000-0000-0000-000000000002') OR "
-            + "(`value` = 2 AND `owner_id` = '00000000-0000-0000-0000-000000000001');",
+            """
+            SELECT COUNT(*) FROM `explicit_backfill_items`
+            WHERE (`value` = 1 AND `owner_id` = '00000000-0000-0000-0000-000000000002')
+            OR (`value` = 2 AND `owner_id` = '00000000-0000-0000-0000-000000000001');
+            """,
             cancellationToken: CancellationToken.None);
 
         var required = await ExplicitBackfillRequiredColumnCountAsync(
@@ -316,8 +322,10 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL PRIMARY KEY) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
+            """
+            CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL PRIMARY KEY)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -352,9 +360,13 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var idPrimaryKeys = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE CONSTRAINT_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'explicit_backfill_items' AND CONSTRAINT_NAME = 'PRIMARY' "
-            + "AND COLUMN_NAME = 'id' AND ORDINAL_POSITION = 1;",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'explicit_backfill_items'
+            AND CONSTRAINT_NAME = 'PRIMARY'
+            AND COLUMN_NAME = 'id' AND ORDINAL_POSITION = 1;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -375,8 +387,10 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL); "
-            + "INSERT INTO `explicit_backfill_items` (`value`) VALUES (7);",
+            """
+            CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL); INSERT INTO
+            `explicit_backfill_items` (`value`) VALUES (7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -396,8 +410,12 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
 
         var idColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'explicit_backfill_items' AND COLUMN_NAME = 'id';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'explicit_backfill_items'
+            AND COLUMN_NAME = 'id';
+            """,
             cancellationToken: CancellationToken.None);
 
         var preserved = await ScalarIntAsync(
@@ -430,8 +448,11 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL); "
-            + "INSERT INTO `explicit_backfill_items` (`value`) VALUES (1), (2);",
+            """
+            CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL); INSERT INTO
+            `explicit_backfill_items` (`value`) VALUES (1),
+            (2);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -458,9 +479,11 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
         // must use these explicit values instead of inventing a shared GUID.
         await ExecuteSqlAsync(
             connectionString,
-            "UPDATE `explicit_backfill_items` SET `owner_id` = CASE `value` "
-            + "WHEN 1 THEN '00000000-0000-0000-0000-000000000001' "
-            + "WHEN 2 THEN '00000000-0000-0000-0000-000000000002' END;",
+            """
+            UPDATE `explicit_backfill_items` SET `owner_id` = CASE `value`
+            WHEN 1 THEN '00000000-0000-0000-0000-000000000001'
+            WHEN 2 THEN '00000000-0000-0000-0000-000000000002' END;
+            """,
             cancellationToken: CancellationToken.None);
 
         var preflight = await runner.AnalyzeAsync(
@@ -479,9 +502,11 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
 
         var expectedValues = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE "
-            + "(`value` = 1 AND `owner_id` = '00000000-0000-0000-0000-000000000001') OR "
-            + "(`value` = 2 AND `owner_id` = '00000000-0000-0000-0000-000000000002');",
+            """
+            SELECT COUNT(*) FROM `explicit_backfill_items`
+            WHERE (`value` = 1 AND `owner_id` = '00000000-0000-0000-0000-000000000001')
+            OR (`value` = 2 AND `owner_id` = '00000000-0000-0000-0000-000000000002');
+            """,
             cancellationToken: CancellationToken.None);
 
         var required = await ExplicitBackfillRequiredColumnCountAsync(
@@ -904,12 +929,14 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            ExplicitBackfillGuidForeignKeyFixture(
+            $"""
+            {ExplicitBackfillGuidForeignKeyFixture(
                 ReferentialAction.SetNull,
                 ReferentialAction.NoAction,
-                secondDependency: true)
-            + " INSERT INTO `explicit_backfill_owners` (`id`) VALUES ('00000000-0000-0000-0000-000000000001');"
-            + " INSERT INTO `explicit_backfill_items` (`value`, `owner_id`) VALUES (2, NULL);",
+                secondDependency: true)} INSERT INTO `explicit_backfill_owners` (`id`)
+            VALUES ('00000000-0000-0000-0000-000000000001'); INSERT INTO `explicit_backfill_items`
+            (`value`, `owner_id`) VALUES (2, NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -945,9 +972,11 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var expectedValues = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE "
-            + "(`value` = 1 AND `owner_id` = '00000000-0000-0000-0000-000000000002') OR "
-            + "(`value` = 2 AND `owner_id` = '00000000-0000-0000-0000-000000000001');",
+            """
+            SELECT COUNT(*) FROM `explicit_backfill_items`
+            WHERE (`value` = 1 AND `owner_id` = '00000000-0000-0000-0000-000000000002')
+            OR (`value` = 2 AND `owner_id` = '00000000-0000-0000-0000-000000000001');
+            """,
             cancellationToken: CancellationToken.None);
 
         var required = await ExplicitBackfillRequiredColumnCountAsync(
@@ -1294,10 +1323,12 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL, `owner_id` char(36) NOT NULL PRIMARY KEY) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `explicit_backfill_items` (`value`, `owner_id`) "
-            + "VALUES (1, '00000000-0000-0000-0000-000000000002');",
+            """
+            CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL, `owner_id`
+            char(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            INSERT INTO `explicit_backfill_items` (`value`,
+            `owner_id`) VALUES (1, '00000000-0000-0000-0000-000000000002');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1332,8 +1363,12 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
 
         var primaryKeys = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'explicit_backfill_items' AND CONSTRAINT_TYPE = 'PRIMARY KEY';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'explicit_backfill_items'
+            AND CONSTRAINT_TYPE = 'PRIMARY KEY';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1556,13 +1591,14 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
     /// <returns>The isolated schema and deterministic row values.</returns>
     private static string ExplicitBackfillNullableGuidFixture(
         bool includeNull
-    ) => "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL, `owner_id` char(36) NULL) "
-        + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-        + "INSERT INTO `explicit_backfill_items` (`value`, `owner_id`) "
-        + "VALUES (1, '00000000-0000-0000-0000-000000000002');"
-        + (includeNull
+    ) => $"""
+        CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL, `owner_id`
+        char(36) NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO `explicit_backfill_items` (`value`,
+        `owner_id`) VALUES (1, '00000000-0000-0000-0000-000000000002');{(includeNull
             ? " INSERT INTO `explicit_backfill_items` (`value`, `owner_id`) VALUES (2, NULL);"
-            : "");
+            : "")}
+        """;
 
     /// <summary>Creates a populated NULL-free GUID fixture with explicit compatible FK storage.</summary>
     /// <param name="onDelete">The primary constraint's DELETE action.</param>
@@ -1573,22 +1609,27 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
         ReferentialAction onDelete,
         ReferentialAction onUpdate,
         bool secondDependency = false
-    ) => "CREATE TABLE `explicit_backfill_owners` (`id` char(36) NOT NULL PRIMARY KEY) "
-        + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-        + "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL, `owner_id` char(36) NULL, "
-        + "CONSTRAINT `fk_explicit_backfill_owner` FOREIGN KEY (`owner_id`) "
-        + "REFERENCES `explicit_backfill_owners` (`id`) ON DELETE "
-        + ExplicitBackfillReferentialActionSql(onDelete)
-        + " ON UPDATE "
-        + ExplicitBackfillReferentialActionSql(onUpdate)
-        + (secondDependency
-            ? ", CONSTRAINT `fk_explicit_backfill_owner_update` FOREIGN KEY (`owner_id`) "
-            + "REFERENCES `explicit_backfill_owners` (`id`) ON DELETE NO ACTION ON UPDATE SET NULL"
-            : "")
-        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-        + "INSERT INTO `explicit_backfill_owners` (`id`) VALUES ('00000000-0000-0000-0000-000000000002'); "
-        + "INSERT INTO `explicit_backfill_items` (`value`, `owner_id`) "
-        + "VALUES (1, '00000000-0000-0000-0000-000000000002');";
+    ) => $"""
+        {
+            "CREATE TABLE `explicit_backfill_owners` (`id` char(36) NOT NULL PRIMARY KEY) "
+            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
+            + "CREATE TABLE `explicit_backfill_items` (`value` int NOT NULL,"}
+        {
+            "`owner_id` char(36) NULL, CONSTRAINT `fk_explicit_backfill_owner` FOREIGN KEY (`owner_id`) "
+            + "REFERENCES `explicit_backfill_owners` (`id`) ON DELETE "}{
+            ExplicitBackfillReferentialActionSql(onDelete)} ON UPDATE {
+            ExplicitBackfillReferentialActionSql(onUpdate)}{(secondDependency
+            ? """
+            , CONSTRAINT `fk_explicit_backfill_owner_update` FOREIGN KEY (`owner_id`)
+            REFERENCES `explicit_backfill_owners` (`id`) ON DELETE NO ACTION ON UPDATE
+            SET NULL
+            """
+            : "")}{
+            ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
+            + "INSERT INTO `explicit_backfill_owners` (`id`) VALUES ('00000000-0000-0000-0000-000000000002'); "
+            + "INSERT INTO `explicit_backfill_items` (`value`,"}
+        `owner_id`) VALUES (1, '00000000-0000-0000-0000-000000000002');
+        """;
 
     /// <summary>Renders only referential actions declared by these anonymous fixtures.</summary>
     /// <param name="action">The fixture's bounded referential action.</param>
@@ -1612,8 +1653,10 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
         CancellationToken cancellationToken
     ) => ScalarIntAsync(
         connectionString,
-        "SELECT COUNT(*) FROM `explicit_backfill_items` WHERE `value` = 1 "
-        + "AND `owner_id` = '00000000-0000-0000-0000-000000000002';",
+        """
+        SELECT COUNT(*) FROM `explicit_backfill_items`
+        WHERE `value` = 1 AND `owner_id` = '00000000-0000-0000-0000-000000000002';
+        """,
         cancellationToken: cancellationToken);
 
     /// <summary>Counts actual outgoing FK owners remaining on the fixture table.</summary>
@@ -1625,8 +1668,11 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
         CancellationToken cancellationToken
     ) => ScalarIntAsync(
         connectionString,
-        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-        + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'explicit_backfill_items';",
+        """
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+        WHERE CONSTRAINT_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'explicit_backfill_items';
+        """,
         cancellationToken: cancellationToken);
 
     /// <summary>Reads only catalog nullability, without inspecting confidential row payloads.</summary>
@@ -1640,9 +1686,12 @@ public sealed class MySqlColumnsExplicitBackfillIntegrationTests : MySqlSafeMigr
         CancellationToken cancellationToken
     ) => ScalarIntAsync(
         connectionString,
-        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-        + "AND TABLE_NAME = 'explicit_backfill_items' AND COLUMN_NAME = '"
-        + column
-        + "' AND IS_NULLABLE = 'NO';",
+        $"""
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'explicit_backfill_items'
+        AND COLUMN_NAME = '{column}'
+        AND IS_NULLABLE = 'NO';
+        """,
         cancellationToken: cancellationToken);
 }

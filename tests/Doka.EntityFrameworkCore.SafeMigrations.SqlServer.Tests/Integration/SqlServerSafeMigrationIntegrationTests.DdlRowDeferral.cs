@@ -34,9 +34,10 @@ public sealed class SqlServerSafeMigrationDdlRowDeferralIntegrationTests : SqlSe
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.ddl_parent(Id int NOT NULL PRIMARY KEY); "
-            + "CREATE USER ddl_database_owner WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; "
-            + "ALTER ROLE db_owner ADD MEMBER ddl_database_owner;",
+            """
+            CREATE TABLE dbo.ddl_parent(Id int NOT NULL PRIMARY KEY); CREATE USER ddl_database_owner
+            WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; ALTER ROLE db_owner ADD MEMBER ddl_database_owner;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -237,8 +238,12 @@ public sealed class SqlServerSafeMigrationDdlRowDeferralIntegrationTests : SqlSe
 
         var foreignKeys = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.foreign_keys WHERE parent_object_id=OBJECT_ID(N'dbo.ddl_chain_child') "
-            + "AND name=N'FK_ddl_chain_parent' AND is_disabled=0 AND is_not_trusted=0;",
+            """
+            SELECT COUNT(*) FROM sys.foreign_keys
+            WHERE parent_object_id=OBJECT_ID(N'dbo.ddl_chain_child')
+            AND name=N'FK_ddl_chain_parent'
+            AND is_disabled=0 AND is_not_trusted=0;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -315,8 +320,12 @@ public sealed class SqlServerSafeMigrationDdlRowDeferralIntegrationTests : SqlSe
 
         var trusted = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID(N'dbo.safe_history_probe') "
-            + "AND name=N'CK_safe_history_probe_Id' AND is_disabled=0 AND is_not_trusted=0;",
+            """
+            SELECT COUNT(*) FROM sys.check_constraints
+            WHERE parent_object_id=OBJECT_ID(N'dbo.safe_history_probe')
+            AND name=N'CK_safe_history_probe_Id'
+            AND is_disabled=0 AND is_not_trusted=0;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -374,11 +383,13 @@ public sealed class SqlServerSafeMigrationDdlRowDeferralIntegrationTests : SqlSe
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.ddl_parent(Id int NOT NULL PRIMARY KEY); INSERT dbo.ddl_parent VALUES(1); "
-            + "CREATE TABLE dbo.ddl_existing_values(Id int NOT NULL, Value int NOT NULL, ParentId int NULL); "
-            + "INSERT dbo.ddl_existing_values VALUES(1,1,1); "
-            + "CREATE USER ddl_trigger_owner WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; "
-            + "ALTER ROLE db_owner ADD MEMBER ddl_trigger_owner;",
+            """
+            CREATE TABLE dbo.ddl_parent(Id int NOT NULL PRIMARY KEY); INSERT dbo.ddl_parent
+            VALUES(1); CREATE TABLE dbo.ddl_existing_values(Id int NOT NULL,
+            Value int NOT NULL, ParentId int NULL); INSERT dbo.ddl_existing_values VALUES(1,1,1);
+            CREATE USER ddl_trigger_owner WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; ALTER
+            ROLE db_owner ADD MEMBER ddl_trigger_owner;
+            """,
             cancellationToken: CancellationToken.None);
 
         var insertedValues = insertedId.ToString(CultureInfo.InvariantCulture)
@@ -389,13 +400,15 @@ public sealed class SqlServerSafeMigrationDdlRowDeferralIntegrationTests : SqlSe
 
         // WHY: CREATE TRIGGER owns its batch. The body mutates an unrelated existing
         // table, so neither a new-table emptiness proof nor the old row snapshot is valid.
+        // Constant chunks keep its exact EVENTDATA predicate when wrapping C# source.
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER inject_created_table_rows ON DATABASE FOR CREATE_TABLE AS BEGIN SET NOCOUNT ON; "
-            + "IF EVENTDATA().value('(/EVENT_INSTANCE/ObjectName)[1]','nvarchar(128)')=N'ddl_trigger_probe' "
-            + "INSERT dbo.ddl_existing_values VALUES("
-            + insertedValues
-            + "); END;",
+            $"""
+            CREATE TRIGGER inject_created_table_rows ON DATABASE FOR CREATE_TABLE AS
+            BEGIN SET NOCOUNT ON; IF {"EVENTDATA().value('(/EVENT_INSTANCE/ObjectName)[1]',"
+                + "'nvarchar(128)')=N'ddl_trigger_probe'"}
+            INSERT dbo.ddl_existing_values VALUES({insertedValues}); END;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -433,20 +446,23 @@ public sealed class SqlServerSafeMigrationDdlRowDeferralIntegrationTests : SqlSe
 
         var alteredRows = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM dbo.ddl_existing_values WHERE Id="
-            + insertedId.ToString(CultureInfo.InvariantCulture)
-            + " AND Value="
-            + insertedValue.ToString(CultureInfo.InvariantCulture)
-            + " AND ParentId="
-            + insertedParentId.ToString(CultureInfo.InvariantCulture)
-            + ";",
+            $"""
+            SELECT COUNT(*) FROM dbo.ddl_existing_values
+            WHERE Id={insertedId.ToString(CultureInfo.InvariantCulture)}
+            AND Value={insertedValue.ToString(CultureInfo.InvariantCulture)}
+            AND ParentId={insertedParentId.ToString(CultureInfo.InvariantCulture)};
+            """,
             cancellationToken: CancellationToken.None);
 
         var constraints = await ScalarIntAsync(
             connectionString,
-            "SELECT (SELECT COUNT(*) FROM sys.objects WHERE parent_object_id=OBJECT_ID(N'dbo.ddl_existing_values') "
-            + "AND type IN(N'C',N'UQ',N'PK',N'F')) + (SELECT COUNT(*) FROM sys.indexes "
-            + "WHERE object_id=OBJECT_ID(N'dbo.ddl_existing_values') AND name=N'IX_ddl_values');",
+            """
+            SELECT (SELECT COUNT(*) FROM sys.objects
+            WHERE parent_object_id=OBJECT_ID(N'dbo.ddl_existing_values')
+            AND type IN(N'C',N'UQ',N'PK',N'F')) + (SELECT COUNT(*)
+            FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ddl_existing_values')
+            AND name=N'IX_ddl_values');
+            """,
             cancellationToken: CancellationToken.None);
 
         var createdTables = await ScalarIntAsync(
@@ -480,13 +496,13 @@ public sealed class SqlServerSafeMigrationDdlRowDeferralIntegrationTests : SqlSe
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.ddl_denied_values(Value int NOT NULL); "
-            + "INSERT dbo.ddl_denied_values VALUES(1); "
-            + "CREATE USER ddl_writer WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; "
-            + "GRANT VIEW DEFINITION,CREATE TABLE TO ddl_writer; "
-            + "GRANT ALTER ON SCHEMA::dbo TO ddl_writer; "
-            + "GRANT SELECT ON OBJECT::sys.sql_expression_dependencies TO ddl_writer; "
-            + "DENY SELECT ON OBJECT::dbo.ddl_denied_values TO ddl_writer;",
+            """
+            CREATE TABLE dbo.ddl_denied_values(Value int NOT NULL); INSERT dbo.ddl_denied_values
+            VALUES(1); CREATE USER ddl_writer WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo;
+            GRANT VIEW DEFINITION,CREATE TABLE TO ddl_writer; GRANT ALTER ON SCHEMA::dbo
+            TO ddl_writer; GRANT SELECT ON OBJECT::sys.sql_expression_dependencies TO
+            ddl_writer; DENY SELECT ON OBJECT::dbo.ddl_denied_values TO ddl_writer;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -543,13 +559,14 @@ public sealed class SqlServerSafeMigrationDdlRowDeferralIntegrationTests : SqlSe
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.ddl_denied_after_key(Value int NOT NULL); "
-            + "INSERT dbo.ddl_denied_after_key VALUES(1); "
-            + "CREATE USER ddl_conditional_writer WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; "
-            + "GRANT VIEW DEFINITION,CREATE TABLE TO ddl_conditional_writer; "
-            + "GRANT ALTER ON SCHEMA::dbo TO ddl_conditional_writer; "
-            + "GRANT SELECT ON OBJECT::sys.sql_expression_dependencies TO ddl_conditional_writer; "
-            + "DENY SELECT ON OBJECT::dbo.ddl_denied_after_key TO ddl_conditional_writer;",
+            """
+            CREATE TABLE dbo.ddl_denied_after_key(Value int NOT NULL); INSERT dbo.ddl_denied_after_key
+            VALUES(1); CREATE USER ddl_conditional_writer WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo;
+            GRANT VIEW DEFINITION,CREATE TABLE TO ddl_conditional_writer; GRANT ALTER
+            ON SCHEMA::dbo TO ddl_conditional_writer; GRANT SELECT ON OBJECT::sys.sql_expression_dependencies
+            TO ddl_conditional_writer; DENY SELECT ON OBJECT::dbo.ddl_denied_after_key
+            TO ddl_conditional_writer;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -618,8 +635,10 @@ public sealed class SqlServerSafeMigrationDdlRowDeferralIntegrationTests : SqlSe
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE USER ddl_collision_owner WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; "
-            + "ALTER ROLE db_owner ADD MEMBER ddl_collision_owner;",
+            """
+            CREATE USER ddl_collision_owner WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; ALTER
+            ROLE db_owner ADD MEMBER ddl_collision_owner;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -636,8 +655,11 @@ public sealed class SqlServerSafeMigrationDdlRowDeferralIntegrationTests : SqlSe
             .GetDbConnection()
             .CreateCommand();
 
-        comparison.CommandText = "SELECT CASE WHEN N'ddl_collision_values' COLLATE CATALOG_DEFAULT "
-            + "=N'DDL_COLLISION_VALUES' COLLATE CATALOG_DEFAULT THEN 1 ELSE 0 END;";
+        comparison.CommandText = """
+        SELECT CASE WHEN N'ddl_collision_values' COLLATE CATALOG_DEFAULT =N'DDL_COLLISION_VALUES'
+        COLLATE CATALOG_DEFAULT
+        THEN 1 ELSE 0 END;
+        """;
 
         SafeMigrationRunReport report;
         int aliases;
@@ -687,9 +709,11 @@ public sealed class SqlServerSafeMigrationDdlRowDeferralIntegrationTests : SqlSe
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.ddl_occupied_parent(Id int NOT NULL CONSTRAINT PK_ddl_occupied_parent PRIMARY KEY); "
-            + "CREATE TABLE dbo.ddl_occupied_other(ParentId int NULL "
-            + "CONSTRAINT FK_ddl_occupied FOREIGN KEY REFERENCES dbo.ddl_occupied_parent(Id));",
+            """
+            CREATE TABLE dbo.ddl_occupied_parent(Id int NOT NULL CONSTRAINT PK_ddl_occupied_parent
+            PRIMARY KEY); CREATE TABLE dbo.ddl_occupied_other(ParentId int NULL CONSTRAINT
+            FK_ddl_occupied FOREIGN KEY REFERENCES dbo.ddl_occupied_parent(Id));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -716,8 +740,11 @@ public sealed class SqlServerSafeMigrationDdlRowDeferralIntegrationTests : SqlSe
 
         var existingForeignKeys = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.foreign_keys WHERE parent_object_id=OBJECT_ID(N'dbo.ddl_occupied_other') "
-            + "AND name=N'FK_ddl_occupied';",
+            """
+            SELECT COUNT(*) FROM sys.foreign_keys
+            WHERE parent_object_id=OBJECT_ID(N'dbo.ddl_occupied_other')
+            AND name=N'FK_ddl_occupied';
+            """,
             cancellationToken: CancellationToken.None);
 
         var createdTables = await ScalarIntAsync(
@@ -802,8 +829,10 @@ public sealed class SqlServerSafeMigrationDdlRowDeferralIntegrationTests : SqlSe
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.ddl_reserved_parent(Id int NOT NULL CONSTRAINT PK_ddl_reserved_parent PRIMARY KEY); "
-            + "CREATE TABLE dbo.ddl_reserved_other(Id int NOT NULL);",
+            """
+            CREATE TABLE dbo.ddl_reserved_parent(Id int NOT NULL CONSTRAINT PK_ddl_reserved_parent
+            PRIMARY KEY); CREATE TABLE dbo.ddl_reserved_other(Id int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -932,8 +961,11 @@ public sealed class SqlServerSafeMigrationDdlRowDeferralIntegrationTests : SqlSe
 
         var boundColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.rule_bound_values') "
-            + "AND name=N'Value' AND rule_object_id<>0;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.rule_bound_values')
+            AND name=N'Value' AND rule_object_id<>0;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert

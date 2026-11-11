@@ -279,7 +279,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // spelling differs from both the value and MariaDB's quoted display.
         // Keeping DEFAULT_GENERATED separate prevents a plain value containing
         // quotes from impersonating a serialized expression for another value.
-        var generated = "LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(c.EXTRA, ''))) > 0";
+        const string generated = "LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(c.EXTRA, ''))) > 0";
         var persistedConversion = Literal(MySqlSafeMigrationSqlExpressionRenderer.RenderStringDefault(value));
         var literalMatches = literalMatchExpression ?? $"CAST({catalogExpression} AS BINARY) = {Literal(value)}";
         var expressionMatches = $"CAST({catalogExpression} AS BINARY) = {persistedConversion}";
@@ -403,10 +403,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         var persistedConversion = Literal(MySqlSafeMigrationSqlExpressionRenderer.RenderStringDefault(value));
 
-        return $"(CAST({catalogExpression} AS BINARY) = {persistedConversion} "
-            + $"OR CAST({catalogExpression} AS BINARY) = CASE "
-            + "WHEN LOWER(c.DATA_TYPE) IN ('tinytext', 'text', 'mediumtext', 'longtext') "
-            + $"THEN {expressionDisplay} ELSE {ordinaryDisplay} END)";
+        return $"""
+            (CAST({catalogExpression} AS BINARY) = {persistedConversion}
+            OR CAST({catalogExpression} AS BINARY) = CASE
+            WHEN LOWER(c.DATA_TYPE) IN ('tinytext', 'text', 'mediumtext', 'longtext')
+            THEN {expressionDisplay} ELSE {ordinaryDisplay} END)
+            """;
     }
 
     /// <summary>Produces MariaDB's exact quoted character-default display without raw-value alternatives.</summary>
@@ -456,8 +458,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             // so even an exact catalog prefix can impersonate another value.
             // Expression defaults retain their complete SQL identity; only an
             // ordinary literal must additionally prove DEFAULT(column).
-            return "CASE WHEN LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(c.EXTRA, ''))) > 0 "
-                + $"THEN ({textualMatch}) ELSE {proof.Marker} END";
+            return $"""
+                CASE WHEN LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(c.EXTRA, ''))) > 0
+                THEN ({textualMatch})
+                ELSE {proof.Marker} END
+                """;
         }
 
         if (isMariaDb)
@@ -523,9 +528,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             expectedHex = expectedHex.PadRight(checked(fixedWidth * 2), '0');
         }
 
-        var query = "SELECT EXISTS (SELECT 1 FROM (SELECT 1) AS doka_sm_seed "
-            + $"LEFT JOIN {Delimited(table)} AS doka_sm_default ON FALSE "
-            + $"WHERE CAST(HEX(DEFAULT(doka_sm_default.{Delimited(definition.Name)})) AS BINARY) = '{expectedHex}')";
+        var query = $"""
+            SELECT EXISTS (SELECT 1 FROM (SELECT 1) AS doka_sm_seed
+            LEFT JOIN {Delimited(table)} AS doka_sm_default ON FALSE
+            WHERE CAST(HEX(DEFAULT(doka_sm_default.{Delimited(definition.Name)})) AS BINARY)
+            = '{expectedHex}')
+            """;
 
         _binaryDefaultProofs ??= [];
         foreach (var existing in _binaryDefaultProofs)
@@ -536,21 +544,24 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             }
         }
 
-        var eligibility = "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS binary_default_column "
-            + "INNER JOIN INFORMATION_SCHEMA.TABLES binary_default_table "
-            + "ON binary_default_table.TABLE_SCHEMA = binary_default_column.TABLE_SCHEMA "
-            + "AND binary_default_table.TABLE_NAME = binary_default_column.TABLE_NAME "
-            + "WHERE binary_default_column.TABLE_SCHEMA = DATABASE() "
-            + $"AND binary_default_column.TABLE_NAME = {Literal(table)} "
-            + $"AND binary_default_column.COLUMN_NAME = {Literal(definition.Name)} "
-            + $"AND {BuildRequiredColumnAddOwnerMatches("binary_default_column.TABLE_SCHEMA", "DATABASE()")} "
-            + $"AND {BuildRequiredColumnAddOwnerMatches("binary_default_column.TABLE_NAME", Literal(table))} "
-            + "AND binary_default_table.TABLE_TYPE = 'BASE TABLE' "
-            + "AND LOWER(binary_default_column.DATA_TYPE) IN "
-            + "('binary', 'varbinary', 'tinyblob', 'blob', 'mediumblob', 'longblob') "
-            + "AND binary_default_column.COLUMN_DEFAULT IS NOT NULL "
-            + "AND COALESCE(binary_default_column.GENERATION_EXPRESSION, '') = '' "
-            + "AND LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(binary_default_column.EXTRA, ''))) = 0)";
+        var eligibility = $"""
+            EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS binary_default_column
+            INNER JOIN INFORMATION_SCHEMA.TABLES binary_default_table ON binary_default_table.TABLE_SCHEMA
+            = binary_default_column.TABLE_SCHEMA
+            AND binary_default_table.TABLE_NAME = binary_default_column.TABLE_NAME
+            WHERE binary_default_column.TABLE_SCHEMA = DATABASE()
+            AND binary_default_column.TABLE_NAME = {Literal(table)}
+            AND binary_default_column.COLUMN_NAME = {Literal(definition.Name)}
+            AND {BuildRequiredColumnAddOwnerMatches("binary_default_column.TABLE_SCHEMA", "DATABASE()")}
+            AND {BuildRequiredColumnAddOwnerMatches("binary_default_column.TABLE_NAME", Literal(table))}
+            AND binary_default_table.TABLE_TYPE = 'BASE TABLE'
+            AND LOWER(binary_default_column.DATA_TYPE) IN ('binary', 'varbinary',
+            'tinyblob', 'blob', 'mediumblob', 'longblob')
+            AND binary_default_column.COLUMN_DEFAULT IS NOT NULL
+            AND COALESCE(binary_default_column.GENERATION_EXPRESSION, '') = ''
+            AND LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(binary_default_column.EXTRA,
+            ''))) = 0)
+            """;
 
         var marker = MySqlSafeMigrationBinaryDefaultProof.MarkerPrefix
             + _binaryDefaultProofs.Count.ToString(CultureInfo.InvariantCulture)

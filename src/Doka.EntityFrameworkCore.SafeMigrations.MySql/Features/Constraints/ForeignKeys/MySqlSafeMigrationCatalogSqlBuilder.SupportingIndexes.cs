@@ -173,17 +173,16 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             "unsafe_prefix.TABLE_NAME",
             "dependent_fk.TABLE_NAME");
 
-        var unsafeIndexes = "SELECT array_part.INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS array_part "
-            + "WHERE array_part.TABLE_SCHEMA = DATABASE() AND array_part.TABLE_NAME = "
-            + renderedTable
-            + " AND "
-            + arraySchemaOwner
-            + " AND "
-            + arrayTableOwner
-            + " AND array_part.INDEX_TYPE = 'BTREE' "
-            + "GROUP BY array_part.INDEX_NAME, CAST(array_part.INDEX_NAME AS BINARY) HAVING SUM(CASE WHEN "
-            + BuildNativeMultiValuedIndexPart("array_part")
-            + " THEN 1 ELSE 0 END) > 0";
+        var unsafeIndexes = $"""
+            SELECT array_part.INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS array_part
+            WHERE array_part.TABLE_SCHEMA = DATABASE()
+            AND array_part.TABLE_NAME = {renderedTable}
+            AND {arraySchemaOwner}
+            AND {arrayTableOwner}
+            AND array_part.INDEX_TYPE = 'BTREE' GROUP BY array_part.INDEX_NAME, CAST(array_part.INDEX_NAME
+            AS BINARY) HAVING SUM(CASE WHEN {BuildNativeMultiValuedIndexPart("array_part")}
+            THEN 1 ELSE 0 END) > 0
+            """;
 
         // WHY: Removing an index cannot prove that InnoDB safely rebinds an
         // already unsafe MVI-backed FK. Removing an ordinary covering sibling
@@ -197,53 +196,43 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // case-distinct physical table.
         // Derive MVI identities once per bound table; DISTINCT preserves one
         // physical FK alias when several compatible native MVIs are present.
-        return "SELECT DISTINCT dependent_fk.CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE dependent_fk "
-            + "JOIN ("
-            + unsafeIndexes
-            + ") unsafe_index ON TRUE "
-            + "LEFT JOIN INFORMATION_SCHEMA.STATISTICS bound_index ON "
-            + "bound_index.TABLE_SCHEMA = dependent_fk.TABLE_SCHEMA "
-            + "AND bound_index.TABLE_NAME = dependent_fk.TABLE_NAME AND "
-            + boundSchemaOwner
-            + " AND "
-            + boundTableOwner
-            + " "
-            + "AND bound_index.INDEX_NAME = "
-            + renderedIndex
-            + " AND "
-            + BuildNativeCaseInsensitiveIdentifierMatches("bound_index.INDEX_NAME", renderedIndex)
-            + " "
-            + "AND bound_index.INDEX_TYPE = 'BTREE' "
-            + "AND bound_index.SEQ_IN_INDEX = dependent_fk.ORDINAL_POSITION "
-            + "AND bound_index.COLUMN_NAME = dependent_fk.COLUMN_NAME AND "
-            + BuildNativeCaseInsensitiveIdentifierMatches("bound_index.COLUMN_NAME", "dependent_fk.COLUMN_NAME")
-            + " AND bound_index.SUB_PART IS NULL "
-            + "LEFT JOIN INFORMATION_SCHEMA.STATISTICS unsafe_prefix ON "
-            + "unsafe_prefix.TABLE_SCHEMA = dependent_fk.TABLE_SCHEMA "
-            + "AND unsafe_prefix.TABLE_NAME = dependent_fk.TABLE_NAME AND "
-            + unsafeSchemaOwner
-            + " AND "
-            + unsafeTableOwner
-            + " "
-            + "AND unsafe_prefix.INDEX_NAME = unsafe_index.INDEX_NAME AND "
-            + BuildNativeCaseInsensitiveIdentifierMatches("unsafe_prefix.INDEX_NAME", "unsafe_index.INDEX_NAME")
-            + " AND unsafe_prefix.INDEX_TYPE = 'BTREE' "
-            + "AND unsafe_prefix.SEQ_IN_INDEX = dependent_fk.ORDINAL_POSITION "
-            + "AND unsafe_prefix.COLUMN_NAME = dependent_fk.COLUMN_NAME AND "
-            + BuildNativeCaseInsensitiveIdentifierMatches("unsafe_prefix.COLUMN_NAME", "dependent_fk.COLUMN_NAME")
-            + " AND unsafe_prefix.SUB_PART IS NULL "
-            + "WHERE dependent_fk.TABLE_SCHEMA = DATABASE() AND dependent_fk.TABLE_NAME = "
-            + renderedTable
-            + " "
-            + "AND "
-            + constraintSchemaOwner
-            + " AND "
-            + constraintTableOwner
-            + " "
-            + "AND dependent_fk.REFERENCED_TABLE_NAME IS NOT NULL "
-            + "GROUP BY dependent_fk.CONSTRAINT_NAME, CAST(dependent_fk.CONSTRAINT_NAME AS BINARY), "
-            + "unsafe_index.INDEX_NAME, CAST(unsafe_index.INDEX_NAME AS BINARY) "
-            + "HAVING COUNT(*) = COUNT(bound_index.SEQ_IN_INDEX) AND COUNT(*) = COUNT(unsafe_prefix.SEQ_IN_INDEX)";
+        return $"""
+            SELECT DISTINCT dependent_fk.CONSTRAINT_NAME
+            FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE dependent_fk
+            JOIN ({unsafeIndexes}) unsafe_index ON TRUE
+            LEFT JOIN INFORMATION_SCHEMA.STATISTICS bound_index ON bound_index.TABLE_SCHEMA
+            = dependent_fk.TABLE_SCHEMA
+            AND bound_index.TABLE_NAME = dependent_fk.TABLE_NAME
+            AND {boundSchemaOwner}
+            AND {boundTableOwner}
+            AND bound_index.INDEX_NAME = {renderedIndex}
+            AND {BuildNativeCaseInsensitiveIdentifierMatches("bound_index.INDEX_NAME", renderedIndex)}
+            AND bound_index.INDEX_TYPE = 'BTREE'
+            AND bound_index.SEQ_IN_INDEX = dependent_fk.ORDINAL_POSITION
+            AND bound_index.COLUMN_NAME = dependent_fk.COLUMN_NAME
+            AND {BuildNativeCaseInsensitiveIdentifierMatches("bound_index.COLUMN_NAME", "dependent_fk.COLUMN_NAME")}
+            AND bound_index.SUB_PART IS NULL
+            LEFT JOIN INFORMATION_SCHEMA.STATISTICS unsafe_prefix ON unsafe_prefix.TABLE_SCHEMA
+            = dependent_fk.TABLE_SCHEMA
+            AND unsafe_prefix.TABLE_NAME = dependent_fk.TABLE_NAME
+            AND {unsafeSchemaOwner}
+            AND {unsafeTableOwner}
+            AND unsafe_prefix.INDEX_NAME = unsafe_index.INDEX_NAME
+            AND {BuildNativeCaseInsensitiveIdentifierMatches("unsafe_prefix.INDEX_NAME", "unsafe_index.INDEX_NAME")}
+            AND unsafe_prefix.INDEX_TYPE = 'BTREE'
+            AND unsafe_prefix.SEQ_IN_INDEX = dependent_fk.ORDINAL_POSITION
+            AND unsafe_prefix.COLUMN_NAME = dependent_fk.COLUMN_NAME
+            AND {BuildNativeCaseInsensitiveIdentifierMatches("unsafe_prefix.COLUMN_NAME", "dependent_fk.COLUMN_NAME")}
+            AND unsafe_prefix.SUB_PART IS NULL
+            WHERE dependent_fk.TABLE_SCHEMA = DATABASE()
+            AND dependent_fk.TABLE_NAME = {renderedTable}
+            AND {constraintSchemaOwner}
+            AND {constraintTableOwner}
+            AND dependent_fk.REFERENCED_TABLE_NAME IS NOT NULL GROUP BY dependent_fk.CONSTRAINT_NAME,
+            CAST(dependent_fk.CONSTRAINT_NAME AS BINARY), unsafe_index.INDEX_NAME,
+            CAST(unsafe_index.INDEX_NAME AS BINARY) HAVING COUNT(*) = COUNT(bound_index.SEQ_IN_INDEX)
+            AND COUNT(*) = COUNT(unsafe_prefix.SEQ_IN_INDEX)
+            """;
     }
 
     /// <summary>Recognizes only the canonical outer wrapper emitted for a native MySQL array-cast index part.</summary>
@@ -251,14 +240,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <returns>An exact native expression-wrapper predicate without interpreting quoted operand text.</returns>
     private static string BuildNativeMultiValuedIndexPart(
         string alias
-    ) => alias
-        + ".EXPRESSION IS NOT NULL "
-        + "AND CAST(LEFT("
-        + alias
-        + ".EXPRESSION, 5) AS BINARY) = CAST('cast(' AS BINARY) "
-        + "AND CAST(RIGHT("
-        + alias
-        + ".EXPRESSION, 7) AS BINARY) = CAST(' array)' AS BINARY)";
+    ) => $"""
+        {alias}.EXPRESSION IS NOT NULL
+        AND CAST(LEFT({alias}.EXPRESSION, 5) AS BINARY) = CAST('cast('
+        AS BINARY)
+        AND CAST(RIGHT({alias}.EXPRESSION, 7) AS BINARY) = CAST(' array)'
+        AS BINARY)
+        """;
 
     /// <summary>Matches native column/index identities without metadata accent or padding equivalence.</summary>
     /// <param name="catalogExpression">The trusted builder-owned native identifier expression.</param>
@@ -291,19 +279,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         ArgumentException.ThrowIfNullOrEmpty(renderedTable);
         ArgumentException.ThrowIfNullOrEmpty(renderedName);
 
-        return "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS automatic_index_name "
-            + "WHERE automatic_index_name.TABLE_SCHEMA = DATABASE() AND automatic_index_name.TABLE_NAME = "
-            + renderedTable
-            + " AND "
-            + BuildRequiredColumnAddOwnerMatches("automatic_index_name.TABLE_SCHEMA", "DATABASE()")
-            + " AND "
-            + BuildRequiredColumnAddOwnerMatches("automatic_index_name.TABLE_NAME", renderedTable)
-            + " "
-            + "AND automatic_index_name.INDEX_NAME = "
-            + renderedName
-            + " AND "
-            + BuildNativeCaseInsensitiveIdentifierMatches("automatic_index_name.INDEX_NAME", renderedName)
-            + ")";
+        return $"""
+            EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS automatic_index_name
+            WHERE automatic_index_name.TABLE_SCHEMA = DATABASE()
+            AND automatic_index_name.TABLE_NAME = {renderedTable}
+            AND {BuildRequiredColumnAddOwnerMatches("automatic_index_name.TABLE_SCHEMA", "DATABASE()")}
+            AND {BuildRequiredColumnAddOwnerMatches("automatic_index_name.TABLE_NAME", renderedTable)}
+            AND automatic_index_name.INDEX_NAME = {renderedName}
+            AND {BuildNativeCaseInsensitiveIdentifierMatches("automatic_index_name.INDEX_NAME", renderedName)})
+            """;
     }
 
     /// <summary>Finds complete, unprefixed ordered child-key prefixes without imposing parent-key uniqueness.</summary>
@@ -338,9 +322,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         }
 
         var result = new StringBuilder(
-            "SELECT supporting_index.INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS "
-            + "supporting_index WHERE supporting_index.TABLE_SCHEMA = DATABASE() "
-            + "AND supporting_index.TABLE_NAME = ");
+            $"""
+            SELECT supporting_index.INDEX_NAME
+            FROM INFORMATION_SCHEMA.STATISTICS supporting_index
+            WHERE supporting_index.TABLE_SCHEMA = DATABASE()
+            AND supporting_index.TABLE_NAME ={"\u0020"}
+            """);
 
         result
             .Append(renderedTable)
@@ -348,9 +335,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             .Append(BuildRequiredColumnAddOwnerMatches("supporting_index.TABLE_SCHEMA", "DATABASE()"))
             .Append(" AND ")
             .Append(BuildRequiredColumnAddOwnerMatches("supporting_index.TABLE_NAME", renderedTable))
-            .Append(" AND supporting_index.INDEX_TYPE = 'BTREE' GROUP BY supporting_index.INDEX_NAME, ")
-            .Append("CAST(supporting_index.INDEX_NAME AS BINARY) ")
-            .Append("HAVING COUNT(*) >= ")
+            .Append(" "
+                + """
+                AND supporting_index.INDEX_TYPE = 'BTREE' GROUP BY supporting_index.INDEX_NAME,
+                CAST(supporting_index.INDEX_NAME AS BINARY) HAVING COUNT(*) >=
+                """
+                + " ")
             .Append(renderedColumns.Count.ToString(CultureInfo.InvariantCulture));
 
         // WHY: Match declared key members to their one-based native catalog positions.

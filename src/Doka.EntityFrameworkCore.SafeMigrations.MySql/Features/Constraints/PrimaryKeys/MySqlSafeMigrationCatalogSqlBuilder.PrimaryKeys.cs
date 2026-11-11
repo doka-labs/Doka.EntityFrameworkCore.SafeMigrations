@@ -16,11 +16,20 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             definition.Columns);
 
         return Plan(
-                $"CASE WHEN NOT {BaseTableExists(definition.Table)} THEN 'prerequisite_missing' "
-                + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
-                + $"WHEN NOT {exists} AND NOT ({physicallyAchievable}) THEN 'unsupported' "
-                + $"WHEN NOT {exists} THEN 'missing' "
-                + $"WHEN {matching} THEN 'matching' ELSE 'different' END",
+                $"""
+                CASE WHEN NOT {BaseTableExists(definition.Table)}
+                THEN 'prerequisite_missing'
+                WHEN NOT {exists}
+                AND {dataBlocked}
+                THEN 'data_blocked'
+                WHEN NOT {exists}
+                AND NOT ({physicallyAchievable})
+                THEN 'unsupported'
+                WHEN NOT {exists}
+                THEN 'missing'
+                WHEN {matching}
+                THEN 'matching' ELSE 'different' END
+                """,
                 matching) with
             {
                 UnsupportedCode = definition.Columns.Count > MySqlProjectedIndexPhysicalShape.MaximumKeyParts
@@ -31,9 +40,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 // replacement. Capture that independent evidence before any DROP;
                 // matching keys and absent keys do not scan their rows again here.
                 ClassificationCodeExpression = requiresReplacementRows
-                    ? $"CASE WHEN {exists} AND NOT ({matching}) THEN "
-                    + $"CASE WHEN {dataBlocked} THEN 'primary_key_replacement_data_blocked' "
-                    + "ELSE 'key_replacement_data_safe' END ELSE NULL END"
+                    ? $"""
+                    CASE WHEN {exists}
+                    AND NOT ({matching})
+                    THEN CASE WHEN {dataBlocked}
+                    THEN 'primary_key_replacement_data_blocked'
+                    ELSE 'key_replacement_data_safe' END
+                    ELSE NULL END
+                    """
                     : null,
             };
     }
@@ -55,12 +69,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         var nulls = string.Join(" OR ", definition.Columns.Select(column => $"{Delimited(column)} IS NULL"));
 
-        return $"(EXISTS (SELECT 1 FROM {Delimited(definition.Table, definition.Schema)} "
-            + $"WHERE {nulls} LIMIT 1) OR {DuplicateDataExists(
+        return $"""
+            (EXISTS (SELECT 1 FROM {Delimited(definition.Table, definition.Schema)}
+            WHERE {nulls} LIMIT 1)
+            OR {DuplicateDataExists(
                 definition.Table,
                 definition.Schema,
                 definition.Columns.Select(Delimited),
-                "TRUE")})";
+                "TRUE")})
+            """;
     }
 
     private string PrimaryKeyExists(

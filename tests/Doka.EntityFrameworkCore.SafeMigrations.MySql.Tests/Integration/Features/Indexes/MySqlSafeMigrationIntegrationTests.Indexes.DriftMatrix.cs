@@ -15,9 +15,13 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `index_identity` (`code` int NOT NULL, `tenant_id` int NOT NULL, "
-            + "INDEX `ix_index_identity_legacy_a` (`code`, `tenant_id`), "
-            + "INDEX `ix_index_identity_legacy_b` (`code`, `tenant_id`));",
+            """
+            CREATE TABLE `index_identity` (`code` int NOT NULL, `tenant_id` int NOT
+            NULL,
+            INDEX `ix_index_identity_legacy_a` (`code`, `tenant_id`), INDEX `ix_index_identity_legacy_b`
+            (`code`,
+            `tenant_id`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -62,10 +66,14 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'index_identity' "
-                + "AND INDEX_NAME IN ('ix_index_identity_legacy_a', "
-                + "'ix_index_identity_legacy_b', 'ix_index_identity_expected');",
+                """
+                SELECT COUNT(DISTINCT INDEX_NAME)
+                FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'index_identity'
+                AND INDEX_NAME IN ('ix_index_identity_legacy_a', 'ix_index_identity_legacy_b',
+                'ix_index_identity_expected');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -75,8 +83,11 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `index_nonidentity` (`code` int NOT NULL, `alternate_code` int NOT NULL, "
-            + "INDEX `ix_index_nonidentity_legacy` (`code`));",
+            """
+            CREATE TABLE `index_nonidentity` (`code` int NOT NULL, `alternate_code`
+            int NOT NULL,
+            INDEX `ix_index_nonidentity_legacy` (`code`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -126,8 +137,10 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `index_visibility_drift` (`code` int NOT NULL);"
-            + $"CREATE INDEX `ix_index_visibility_drift` ON `index_visibility_drift` (`code`) {visibility};",
+            $"""
+            CREATE TABLE `index_visibility_drift` (`code` int NOT NULL);CREATE INDEX
+            `ix_index_visibility_drift` ON `index_visibility_drift` (`code`) {visibility};
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -168,8 +181,10 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `index_visibility_identity` (`code` int NOT NULL);"
-            + $"CREATE INDEX `ix_index_visibility_legacy` ON `index_visibility_identity` (`code`) {visibility};",
+            $"""
+            CREATE TABLE `index_visibility_identity` (`code` int NOT NULL);CREATE INDEX
+            `ix_index_visibility_legacy` ON `index_visibility_identity` (`code`) {visibility};
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -215,9 +230,11 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `overlong_index` ("
-            + "`id` int NOT NULL, `property` varchar(800) CHARACTER SET utf8mb4 NOT NULL, "
-            + "PRIMARY KEY (`id`)); INSERT INTO `overlong_index` VALUES (1, 'preserved');",
+            """
+            CREATE TABLE `overlong_index` (`id` int NOT NULL, `property` varchar(800)
+            CHARACTER SET utf8mb4 NOT NULL,
+            PRIMARY KEY (`id`)); INSERT INTO `overlong_index` VALUES (1, 'preserved');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -248,9 +265,12 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'overlong_index' "
-                + "AND INDEX_NAME = 'ix_overlong_property';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'overlong_index'
+                AND INDEX_NAME = 'ix_overlong_property';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -297,9 +317,12 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'one_over_index' "
-                + "AND INDEX_NAME = 'ix_one_over_value';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'one_over_index'
+                AND INDEX_NAME = 'ix_one_over_value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -309,10 +332,12 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `encoded_width_indexes` ("
-            + "`latin_value` varchar(800) CHARACTER SET latin1 NOT NULL, "
-            + "`left_value` varchar(500) CHARACTER SET utf8mb4 NOT NULL, "
-            + "`right_value` varchar(500) CHARACTER SET utf8mb4 NOT NULL);",
+            """
+            CREATE TABLE `encoded_width_indexes` (`latin_value` varchar(800) CHARACTER
+            SET latin1 NOT NULL,
+            `left_value` varchar(500) CHARACTER SET utf8mb4 NOT NULL, `right_value`
+            varchar(500) CHARACTER SET utf8mb4 NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -349,9 +374,12 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
             3,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'encoded_width_indexes' "
-                + "AND INDEX_NAME IN ('ix_encoded_latin_full', 'ix_encoded_composite_prefix');",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'encoded_width_indexes'
+                AND INDEX_NAME IN ('ix_encoded_latin_full', 'ix_encoded_composite_prefix');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -361,10 +389,12 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `invalid_index_shapes` ("
-            + "`left_value` varchar(500) CHARACTER SET utf8mb4 NOT NULL, "
-            + "`right_value` varchar(500) CHARACTER SET utf8mb4 NOT NULL, "
-            + "`numeric_value` int NOT NULL);",
+            """
+            CREATE TABLE `invalid_index_shapes` (`left_value` varchar(500) CHARACTER
+            SET utf8mb4 NOT NULL,
+            `right_value` varchar(500) CHARACTER SET utf8mb4 NOT NULL, `numeric_value`
+            int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -412,8 +442,11 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'invalid_index_shapes';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'invalid_index_shapes';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -423,11 +456,11 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `bounded_indexes` ("
-            + "`id` int NOT NULL, "
-            + "`exact_value` varchar(768) CHARACTER SET utf8mb4 NOT NULL, "
-            + "`wide_value` varchar(800) CHARACTER SET utf8mb4 NOT NULL, "
-            + "PRIMARY KEY (`id`));",
+            """
+            CREATE TABLE `bounded_indexes` (`id` int NOT NULL, `exact_value` varchar(768)
+            CHARACTER SET utf8mb4 NOT NULL,
+            `wide_value` varchar(800) CHARACTER SET utf8mb4 NOT NULL, PRIMARY KEY (`id`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -457,9 +490,12 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
             768,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT SUB_PART FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'bounded_indexes' "
-                + "AND INDEX_NAME = 'ix_bounded_prefix';",
+                """
+                SELECT SUB_PART FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'bounded_indexes'
+                AND INDEX_NAME = 'ix_bounded_prefix';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -525,9 +561,12 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
             191,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT SUB_PART FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'compact_index_limit' "
-                + "AND INDEX_NAME = 'ix_compact_prefix';",
+                """
+                SELECT SUB_PART FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'compact_index_limit'
+                AND INDEX_NAME = 'ix_compact_prefix';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -565,9 +604,12 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'invalid_prefix' "
-                + "AND INDEX_NAME = 'ix_invalid_prefix';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'invalid_prefix'
+                AND INDEX_NAME = 'ix_invalid_prefix';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -754,9 +796,12 @@ public sealed class MySqlIndexesDriftMatrixIntegrationTests : MySqlSafeMigration
                 0,
                 await ScalarIntAsync(
                     connectionString,
-                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                    + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'unsupported_index_facets' "
-                    + $"AND INDEX_NAME = '{definition.Name}';",
+                    $"""
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME = 'unsupported_index_facets'
+                    AND INDEX_NAME = '{definition.Name}';
+                    """,
                     cancellationToken: CancellationToken.None));
         }
     }

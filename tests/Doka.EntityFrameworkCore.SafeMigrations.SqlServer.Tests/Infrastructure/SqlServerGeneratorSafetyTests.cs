@@ -416,12 +416,11 @@ public sealed class SqlServerGeneratorSafetyTests
 
         // Assert
         Assert.Equal(2, commands.Count);
+        var batch = Assert.Single(baseline.Calls);
         Assert.Collection(
-            baseline.Calls,
-            batch => Assert.Collection(
-                batch,
-                operation => Assert.Same(table, operation),
-                operation => Assert.Same(column, operation)));
+            batch,
+            operation => Assert.Same(table, operation),
+            operation => Assert.Same(column, operation));
     }
 
     /// <summary>
@@ -523,7 +522,7 @@ public sealed class SqlServerGeneratorSafetyTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -582,7 +581,7 @@ public sealed class SqlServerGeneratorSafetyTests
     )
     {
         // Arrange
-        using var context = new SafeMigrationDbContext(ConnectionString);
+        await using var context = new SafeMigrationDbContext(ConnectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.Sql("SELECT 7;");
         var commands = context

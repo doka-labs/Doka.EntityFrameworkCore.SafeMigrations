@@ -19,12 +19,13 @@ public sealed class SqlServerSafeMigrationSchemaRegressionIntegrationTests : Sql
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "EXEC sys.sp_executesql N'CREATE SCHEMA application;'; "
-            + "EXEC sys.sp_executesql N'CREATE SCHEMA caller_default;'; "
-            + "CREATE USER schema_runner WITHOUT LOGIN WITH DEFAULT_SCHEMA = caller_default; "
-            + "GRANT CONTROL TO schema_runner; "
-            + "CREATE TABLE application.old_orders (Id int NOT NULL); "
-            + "INSERT INTO application.old_orders VALUES (19);",
+            """
+            EXEC sys.sp_executesql N'CREATE SCHEMA application;'; EXEC sys.sp_executesql
+            N'CREATE SCHEMA caller_default;'; CREATE USER schema_runner WITHOUT LOGIN
+            WITH DEFAULT_SCHEMA = caller_default; GRANT CONTROL TO schema_runner; CREATE
+            TABLE application.old_orders (Id int NOT NULL); INSERT INTO application.old_orders
+            VALUES (19);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -85,13 +86,13 @@ public sealed class SqlServerSafeMigrationSchemaRegressionIntegrationTests : Sql
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "EXEC sys.sp_executesql N'CREATE SCHEMA application;'; "
-            + "EXEC sys.sp_executesql N'CREATE SCHEMA destination;'; "
-            + "EXEC sys.sp_executesql N'CREATE SCHEMA caller_default;'; "
-            + "CREATE USER schema_runner WITHOUT LOGIN WITH DEFAULT_SCHEMA = caller_default; "
-            + "GRANT CONTROL TO schema_runner; "
-            + "CREATE TABLE application.orders (Id int NOT NULL); "
-            + "INSERT INTO application.orders VALUES (19);",
+            """
+            EXEC sys.sp_executesql N'CREATE SCHEMA application;'; EXEC sys.sp_executesql
+            N'CREATE SCHEMA destination;'; EXEC sys.sp_executesql N'CREATE SCHEMA caller_default;';
+            CREATE USER schema_runner WITHOUT LOGIN WITH DEFAULT_SCHEMA = caller_default;
+            GRANT CONTROL TO schema_runner; CREATE TABLE application.orders (Id int
+            NOT NULL); INSERT INTO application.orders VALUES (19);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -222,11 +223,12 @@ public sealed class SqlServerSafeMigrationSchemaRegressionIntegrationTests : Sql
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "EXEC sys.sp_executesql N'CREATE SCHEMA application;'; "
-            + "EXEC sys.sp_executesql N'CREATE SCHEMA caller_default;'; "
-            + "CREATE USER schema_runner WITHOUT LOGIN WITH DEFAULT_SCHEMA = caller_default; "
-            + "GRANT CONTROL TO schema_runner; "
-            + "CREATE TABLE dbo.parent_items (Id int NOT NULL PRIMARY KEY);",
+            """
+            EXEC sys.sp_executesql N'CREATE SCHEMA application;'; EXEC sys.sp_executesql
+            N'CREATE SCHEMA caller_default;'; CREATE USER schema_runner WITHOUT LOGIN
+            WITH DEFAULT_SCHEMA = caller_default; GRANT CONTROL TO schema_runner; CREATE
+            TABLE dbo.parent_items (Id int NOT NULL PRIMARY KEY);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

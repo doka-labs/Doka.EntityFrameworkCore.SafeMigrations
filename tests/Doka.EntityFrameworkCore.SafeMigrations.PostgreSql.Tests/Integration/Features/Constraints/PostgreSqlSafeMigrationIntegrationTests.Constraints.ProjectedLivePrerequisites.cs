@@ -24,9 +24,11 @@ public sealed class
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); "
-            + "INSERT INTO live_child VALUES (1), (2);",
+            """
+            CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); CREATE TABLE live_child (id integer NOT
+            NULL PRIMARY KEY); INSERT INTO live_child VALUES (1),
+            (2);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -111,9 +113,10 @@ public sealed class
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            parentSql
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); "
-            + "INSERT INTO live_child VALUES (1), (2);",
+            $"""
+            {parentSql}CREATE TABLE live_child (id integer NOT NULL PRIMARY
+            KEY); INSERT INTO live_child VALUES (1), (2);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -142,8 +145,10 @@ public sealed class
 
         var createdColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'live_child'::regclass "
-            + "AND attname = 'parent_id' AND NOT attisdropped;",
+            """
+            SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'live_child'::regclass
+            AND attname = 'parent_id' AND NOT attisdropped;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -161,9 +166,11 @@ public sealed class
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); "
-            + "INSERT INTO live_child VALUES (1), (2);",
+            """
+            CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); CREATE TABLE live_child (id integer NOT
+            NULL PRIMARY KEY); INSERT INTO live_child VALUES (1),
+            (2);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -237,8 +244,11 @@ public sealed class
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var indexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_index WHERE indrelid = 'mixed_columns'::regclass "
-            + "AND indexrelid = 'ix_mixed_columns'::regclass AND indisvalid;",
+            """
+            SELECT COUNT(*) FROM pg_catalog.pg_index WHERE indrelid = 'mixed_columns'::regclass
+            AND indexrelid = 'ix_mixed_columns'::regclass
+            AND indisvalid;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -255,9 +265,11 @@ public sealed class
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); "
-            + "INSERT INTO live_child VALUES (1), (2);",
+            """
+            CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); CREATE TABLE live_child (id integer NOT
+            NULL PRIMARY KEY); INSERT INTO live_child VALUES (1),
+            (2);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -296,8 +308,10 @@ public sealed class
 
         var foreignKeys = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conrelid = 'live_child'::regclass "
-            + "AND conname = 'fk_live_child_parent';",
+            """
+            SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conrelid = 'live_child'::regclass
+            AND conname = 'fk_live_child_parent';
+            """,
             cancellationToken: CancellationToken.None);
 
         var retainedRows = await ScalarIntAsync(
@@ -325,8 +339,10 @@ public sealed class
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);",
+            """
+            CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); CREATE TABLE live_child
+            (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -432,8 +448,10 @@ public sealed class
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var constraints = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conrelid = 'mixed_columns'::regclass "
-            + "AND conname IN ('pk_mixed', 'uq_mixed', 'ck_mixed');",
+            """
+            SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conrelid = 'mixed_columns'::regclass
+            AND conname IN ('pk_mixed', 'uq_mixed', 'ck_mixed');
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -499,11 +517,13 @@ public sealed class
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE live_parent (id uuid NOT NULL, CONSTRAINT pk_native PRIMARY KEY (id)); "
-            + (survivingAlias
+            $"""
+            CREATE TABLE live_parent (id uuid NOT NULL, CONSTRAINT pk_native PRIMARY
+            KEY (id)); {(survivingAlias
                 ? "CREATE UNIQUE INDEX ux_surviving ON live_parent (id); "
-                : "")
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);",
+                : "")}CREATE TABLE live_child (id integer
+            NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -566,8 +586,11 @@ public sealed class
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE live_parent (id text COLLATE \"C\" NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);",
+            """
+            CREATE TABLE live_parent (id text COLLATE "C" NOT NULL PRIMARY KEY); CREATE
+            TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child
+            VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -623,10 +646,13 @@ public sealed class
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY, old_parent_id uuid NULL, "
-            + "CONSTRAINT fk_live_child_parent FOREIGN KEY (old_parent_id) REFERENCES live_parent (id)); "
-            + "INSERT INTO live_child VALUES (1, NULL), (2, NULL);",
+            """
+            CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); CREATE TABLE live_child (id integer NOT
+            NULL PRIMARY KEY,
+            old_parent_id uuid NULL, CONSTRAINT fk_live_child_parent FOREIGN KEY (old_parent_id) REFERENCES
+            live_parent (id)); INSERT INTO live_child VALUES (1,
+            NULL), (2, NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -664,9 +690,12 @@ public sealed class
 
         var endpoint = await ScalarStringAsync(
             connectionString,
-            "SELECT a.attname FROM pg_catalog.pg_constraint co JOIN pg_catalog.pg_attribute a "
-            + "ON a.attrelid = co.conrelid AND a.attnum = co.conkey[1] "
-            + "WHERE co.conrelid = 'live_child'::regclass AND co.conname = 'fk_live_child_parent';",
+            """
+            SELECT a.attname FROM pg_catalog.pg_constraint co
+            JOIN pg_catalog.pg_attribute a ON a.attrelid = co.conrelid
+            AND a.attnum = co.conkey[1] WHERE co.conrelid = 'live_child'::regclass
+            AND co.conname = 'fk_live_child_parent';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -684,10 +713,12 @@ public sealed class
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE COLLATION nd_parent (provider = icu, locale = 'und-u-ks-level2', deterministic = false); "
-            + "CREATE COLLATION nd_child (provider = icu, locale = 'und-u-ks-level2', deterministic = false); "
-            + "CREATE TABLE live_parent (id text COLLATE nd_parent NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);",
+            """
+            CREATE COLLATION nd_parent (provider = icu, locale = 'und-u-ks-level2',
+            deterministic = false); CREATE COLLATION nd_child (provider = icu, locale = 'und-u-ks-level2',
+            deterministic = false); CREATE TABLE live_parent (id text COLLATE nd_parent NOT NULL PRIMARY
+            KEY); CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -751,18 +782,22 @@ public sealed class
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1); "
-            + "CREATE TABLE unrelated_owner (old_member integer NULL);",
+            """
+            CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); CREATE TABLE live_child
+            (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1); CREATE
+            TABLE unrelated_owner (old_member integer NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         if (callbacks)
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE FUNCTION fk_rename_callback() RETURNS event_trigger LANGUAGE plpgsql "
-                + "AS $$ BEGIN PERFORM 1; END $$; CREATE EVENT TRIGGER fk_rename_callback "
-                + "ON ddl_command_end EXECUTE FUNCTION fk_rename_callback();",
+                """
+                CREATE FUNCTION fk_rename_callback() RETURNS event_trigger LANGUAGE plpgsql
+                AS $$ BEGIN PERFORM 1; END $$; CREATE EVENT TRIGGER fk_rename_callback ON
+                ddl_command_end EXECUTE FUNCTION fk_rename_callback();
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -857,8 +892,11 @@ public sealed class
                 1,
                 await ScalarIntAsync(
                     connectionString,
-                    "SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conrelid='live_child'::regclass "
-                    + "AND conname='fk_live_child_parent' AND contype='f';",
+                    """
+                    SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conrelid='live_child'::regclass
+                    AND conname='fk_live_child_parent'
+                    AND contype='f';
+                    """,
                     cancellationToken: CancellationToken.None));
         }
     }
@@ -871,8 +909,11 @@ public sealed class
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE live_parent (id bigint NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);",
+            """
+            CREATE TABLE live_parent (id bigint NOT NULL PRIMARY KEY); CREATE TABLE
+            live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES
+            (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

@@ -53,13 +53,15 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         // only the actual first unquoted role, not text from literals or types.
         var identifiers = roots is null
             ? "TRUE"
-            : "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_get_keywords() k "
-            + "WHERE ("
-            + string.Join(
+            : $"""
+            NOT EXISTS (SELECT 1 FROM pg_catalog.pg_get_keywords() k
+            WHERE ({string.Join(
                 " OR ",
                 roots.Select(name =>
-                    "k.word OPERATOR(pg_catalog.=) " + Literal(name)))
-            + ") AND k.catcode OPERATOR(pg_catalog.<>) 'U' AND k.catcode OPERATOR(pg_catalog.<>) 'C')";
+                    "k.word OPERATOR(pg_catalog.=) " + Literal(name)))})
+            AND k.catcode OPERATOR(pg_catalog.<>) 'U'
+            AND k.catcode OPERATOR(pg_catalog.<>) 'C')
+            """;
 
         if (ownerProofs is not null)
         {
@@ -79,24 +81,20 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             : string.Join(
                 " AND ",
                 operators.Select(item =>
-                    "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_operator op WHERE op.oprname OPERATOR(pg_catalog.=) "
-                    + Literal(item.Name)
-                    + " AND op.oprleft OPERATOR(pg_catalog."
-                    + (item.Unary
+                    $"""
+                    NOT EXISTS (SELECT 1 FROM pg_catalog.pg_operator op
+                    WHERE op.oprname OPERATOR(pg_catalog.=) {Literal(item.Name)}
+                    AND op.oprleft OPERATOR(pg_catalog.{(item.Unary
                         ? "="
-                        : "<>")
-                    + ") 0 AND op.oprnamespace OPERATOR(pg_catalog.<>) "
-                    + "'pg_catalog'::pg_catalog.regnamespace AND pg_catalog.pg_operator_is_visible(op.oid))"));
+                        : "<>")}) 0
+                    AND op.oprnamespace OPERATOR(pg_catalog.<>) 'pg_catalog'::pg_catalog.regnamespace
+                    AND pg_catalog.pg_operator_is_visible(op.oid))
+                    """));
 
-        var binding = "COALESCE(("
-            + identifiers
-            + "), FALSE) AND COALESCE(("
-            + types
-            + "), FALSE) AND COALESCE(("
-            + functions
-            + "), FALSE) AND COALESCE(("
-            + operatorBindings
-            + "), FALSE)";
+        var binding = $"""
+            COALESCE(({identifiers}), FALSE) AND COALESCE(({types}), FALSE)
+            AND COALESCE(({functions}), FALSE) AND COALESCE(({operatorBindings}), FALSE)
+            """;
 
         var previousFailure = plan.StateEvaluationGuardFailureExpression ?? "'unsupported'";
         var previousCode = plan.StateEvaluationGuardFailureCodeExpression
@@ -113,17 +111,17 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + ") THEN 'unsupported' ELSE ("
             + previousFailure
             + ") END",
-            StateEvaluationGuardFailureCodeExpression = "CASE WHEN NOT COALESCE(("
-            + identifiers
-            + "), FALSE) THEN 'captured_sql_identifier' WHEN NOT COALESCE(("
-            + types
-            + "), FALSE) THEN 'captured_sql_type_binding' WHEN NOT COALESCE(("
-            + functions
-            + "), FALSE) THEN 'captured_sql_function_binding' WHEN NOT COALESCE(("
-            + operatorBindings
-            + "), FALSE) THEN 'captured_sql_operator_binding' ELSE ("
-            + previousCode
-            + ") END",
+            StateEvaluationGuardFailureCodeExpression = $"""
+            CASE WHEN NOT COALESCE(({identifiers}), FALSE)
+            THEN 'captured_sql_identifier'
+            WHEN NOT COALESCE(({types}), FALSE)
+            THEN 'captured_sql_type_binding'
+            WHEN NOT COALESCE(({functions}), FALSE)
+            THEN 'captured_sql_function_binding'
+            WHEN NOT COALESCE(({operatorBindings}), FALSE)
+            THEN 'captured_sql_operator_binding'
+            ELSE ({previousCode}) END
+            """,
         };
     }
 
@@ -261,14 +259,14 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         }
 
         var arity = arguments.Count.ToString(CultureInfo.InvariantCulture);
-        var family = "p.proname OPERATOR(pg_catalog.=) "
-            + Literal(function.Name.ToLowerInvariant())
-            + " AND pg_catalog.pg_function_is_visible(p.oid) AND (p.pronargs OPERATOR(pg_catalog.-) "
-            + "p.pronargdefaults) OPERATOR(pg_catalog.<=) "
-            + arity
-            + " AND (p.provariadic OPERATOR(pg_catalog.<>) 0 OR "
-            + arity
-            + " OPERATOR(pg_catalog.<=) p.pronargs)";
+        var family = $"""
+            p.proname OPERATOR(pg_catalog.=) {Literal(function.Name.ToLowerInvariant())}
+            AND pg_catalog.pg_function_is_visible(p.oid)
+            AND (p.pronargs OPERATOR(pg_catalog.-) p.pronargdefaults) OPERATOR(pg_catalog.<=)
+            {arity}
+            AND (p.provariadic OPERATOR(pg_catalog.<>) 0
+            OR {arity} OPERATOR(pg_catalog.<=) p.pronargs)
+            """;
 
         var eligible = new List<string>(arguments.Count);
         var exact = new List<string>(arguments.Count);
@@ -283,28 +281,26 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             var expected = "p.proargtypes[" + position + "]";
             exact.Add(actual + " OPERATOR(pg_catalog.=) " + expected);
             eligible.Add(
-                "EXISTS (SELECT 1 FROM pg_catalog.pg_type t WHERE t.oid OPERATOR(pg_catalog.=) "
-                + expected
-                + " AND t.typnamespace OPERATOR(pg_catalog.=) 'pg_catalog'::pg_catalog.regnamespace "
-                + "AND t.typtype OPERATOR(pg_catalog.=) 'b') AND ("
-                + actual
-                + " OPERATOR(pg_catalog.=) 705 OR "
-                + actual
-                + " OPERATOR(pg_catalog.=) "
-                + expected
-                + " OR EXISTS (SELECT 1 FROM pg_catalog.pg_cast cv WHERE cv.castsource OPERATOR(pg_catalog.=) "
-                + actual
-                + " AND cv.casttarget OPERATOR(pg_catalog.=) "
-                + expected
-                + " AND cv.castcontext OPERATOR(pg_catalog.=) 'i'))");
+                $"""
+                EXISTS (SELECT 1 FROM pg_catalog.pg_type t
+                WHERE t.oid OPERATOR(pg_catalog.=) {expected}
+                AND t.typnamespace OPERATOR(pg_catalog.=) 'pg_catalog'::pg_catalog.regnamespace
+                AND t.typtype OPERATOR(pg_catalog.=) 'b')
+                AND ({actual} OPERATOR(pg_catalog.=) 705
+                OR {actual} OPERATOR(pg_catalog.=) {expected}
+                OR EXISTS (SELECT 1 FROM pg_catalog.pg_cast cv
+                WHERE cv.castsource OPERATOR(pg_catalog.=) {actual}
+                AND cv.casttarget OPERATOR(pg_catalog.=) {expected}
+                AND cv.castcontext OPERATOR(pg_catalog.=) 'i'))
+                """);
         }
 
-        var builtin = " FROM pg_catalog.pg_proc p WHERE "
-            + family
-            + " AND p.pronamespace OPERATOR(pg_catalog.=) 'pg_catalog'::pg_catalog.regnamespace "
-            + "AND p.provariadic OPERATOR(pg_catalog.=) 0 AND p.prokind OPERATOR(pg_catalog.=) 'f' "
-            + "AND p.pronargs OPERATOR(pg_catalog.=) "
-            + arity;
+        var builtin = $"""
+             FROM pg_catalog.pg_proc p WHERE {family}
+            AND p.pronamespace OPERATOR(pg_catalog.=) 'pg_catalog'::pg_catalog.regnamespace
+            AND p.provariadic OPERATOR(pg_catalog.=) 0 AND p.prokind OPERATOR(pg_catalog.=) 'f'
+            AND p.pronargs OPERATOR(pg_catalog.=) {arity}
+            """;
 
         var exactSignature = exact.Count == 0
             ? "TRUE"
@@ -320,25 +316,19 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         // A visible application overload could win native resolution even
         // when a builtin is also coercible. Unknown or competing bindings remain
         // unsupported; proving a signature must never execute an application function.
-        return "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_proc p WHERE "
-            + family
-            + " AND p.pronamespace OPERATOR(pg_catalog.<>) 'pg_catalog'::pg_catalog.regnamespace) "
-            + "AND (CASE WHEN EXISTS (SELECT 1"
-            + builtin
-            + " AND "
-            + exactSignature
-            + ") THEN (SELECT COUNT(*)"
-            + builtin
-            + " AND "
-            + exactSignature
-            + immutable
-            + ") ELSE (SELECT COUNT(*)"
-            + builtin
-            + immutable
-            + (eligible.Count == 0
+        return $"""
+            NOT EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
+            WHERE {family}
+            AND p.pronamespace OPERATOR(pg_catalog.<>) 'pg_catalog'::pg_catalog.regnamespace)
+            AND (CASE WHEN EXISTS (SELECT 1{builtin}
+            AND {exactSignature})
+            THEN (SELECT COUNT(*){builtin}
+            AND {exactSignature}{immutable})
+            ELSE (SELECT COUNT(*){builtin}{immutable}{(eligible.Count == 0
                 ? string.Empty
-                : " AND " + string.Join(" AND ", eligible))
-            + ") END) OPERATOR(pg_catalog.=) 1";
+                : " AND " + string.Join(" AND ", eligible))})
+            END) OPERATOR(pg_catalog.=) 1
+            """;
     }
 
     /// <summary>Reuses native OID inference with declared leaf identities for a missing owner.</summary>
@@ -520,11 +510,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             nativeBase = string.Concat(type.AsSpan(0, open), type.AsSpan(close + 1));
         }
 
-        return "pg_catalog.to_regtype("
-            + Literal(nativeBase)
-            + ") OPERATOR(pg_catalog.=) pg_catalog.to_regtype("
-            + Literal("pg_catalog." + builtin)
-            + ")";
+        return $"""
+            pg_catalog.to_regtype({Literal(nativeBase)})
+            OPERATOR(pg_catalog.=) pg_catalog.to_regtype({Literal("pg_catalog." + builtin)})
+            """;
     }
 
     /// <summary>Certifies only builtin modifiers shared by every supported PostgreSQL version.</summary>

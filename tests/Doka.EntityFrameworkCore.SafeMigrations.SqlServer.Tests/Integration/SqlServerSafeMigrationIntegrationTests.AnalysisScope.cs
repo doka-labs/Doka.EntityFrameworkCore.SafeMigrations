@@ -145,10 +145,11 @@ public sealed class SqlServerSafeMigrationAnalysisScopeIntegrationTests : SqlSer
         await using var competingConnection = new SqlConnection(connectionString);
         await competingConnection.OpenAsync();
         await using var competingCommand = competingConnection.CreateCommand();
-        competingCommand.CommandText = "DECLARE @result int; "
-            + "EXEC @result = sys.sp_getapplock "
-            + "@Resource = N'doka-sm-catalog-analysis', @LockMode = N'Exclusive', "
-            + "@LockOwner = N'Session', @LockTimeout = 0; SELECT @result;";
+        competingCommand.CommandText = """
+        DECLARE @result int; EXEC @result = sys.sp_getapplock @Resource = N'doka-sm-catalog-analysis',
+        @LockMode = N'Exclusive', @LockOwner = N'Session', @LockTimeout = 0; SELECT
+        @result;
+        """;
 
         // Act
         var scope = await analyzer.AcquireAnalysisScopeAsync(context, cancellationToken: CancellationToken.None);
@@ -156,9 +157,10 @@ public sealed class SqlServerSafeMigrationAnalysisScopeIntegrationTests : SqlSer
         await scope.DisposeAsync();
         var acquiredResult = Convert.ToInt32(await competingCommand.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
         await using var releaseCommand = competingConnection.CreateCommand();
-        releaseCommand.CommandText = "DECLARE @result int; "
-            + "EXEC @result = sys.sp_releaseapplock "
-            + "@Resource = N'doka-sm-catalog-analysis', @LockOwner = N'Session'; SELECT @result;";
+        releaseCommand.CommandText = """
+        DECLARE @result int; EXEC @result = sys.sp_releaseapplock @Resource = N'doka-sm-catalog-analysis',
+        @LockOwner = N'Session'; SELECT @result;
+        """;
 
         var releasedResult = Convert.ToInt32(await releaseCommand.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
 

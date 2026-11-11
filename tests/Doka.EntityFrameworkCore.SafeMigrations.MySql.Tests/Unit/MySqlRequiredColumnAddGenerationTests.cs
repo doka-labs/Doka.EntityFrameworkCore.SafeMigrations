@@ -884,14 +884,18 @@ public sealed class MySqlRequiredColumnAddGenerationTests
         var missingGuard = Assert.Single(
             payloads,
             static sql => sql.EndsWith(
-                " ELSE NULL END INTO @doka_sm_state",
+                "\nELSE NULL END INTO @doka_sm_state",
                 StringComparison.Ordinal));
 
         // WHY: Native mode qualification wraps the missing-only refusal but
         // must retain both matching precedence and its unconditional fallback.
         Assert.Contains(
-            "THEN 'matching' WHEN NOT (FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) > 0) "
-            + "THEN 'unsupported' ELSE ('unsupported') END) ELSE NULL END INTO @doka_sm_state",
+            """
+            THEN 'matching'
+            WHEN NOT (FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) > 0)
+            THEN 'unsupported' ELSE ('unsupported') END)
+            ELSE NULL END INTO @doka_sm_state
+            """,
             missingGuard,
             StringComparison.Ordinal);
 

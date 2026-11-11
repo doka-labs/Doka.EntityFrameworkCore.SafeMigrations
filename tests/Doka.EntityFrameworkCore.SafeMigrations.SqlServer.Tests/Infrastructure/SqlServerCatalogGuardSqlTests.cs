@@ -31,7 +31,7 @@ public sealed class SqlServerCatalogGuardSqlTests
         // Act
         var sql = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan);
         var dynamicStart = sql.IndexOf(dynamicPrefix + "DECLARE @proof", StringComparison.Ordinal);
-        var fallbackStart = sql.IndexOf("', N'@doka_ordinal int'", dynamicStart, StringComparison.Ordinal);
+        var fallbackStart = sql.IndexOf("',\nN'@doka_ordinal int'", dynamicStart, StringComparison.Ordinal);
 
         // Assert
         Assert.True(dynamicStart >= 0);

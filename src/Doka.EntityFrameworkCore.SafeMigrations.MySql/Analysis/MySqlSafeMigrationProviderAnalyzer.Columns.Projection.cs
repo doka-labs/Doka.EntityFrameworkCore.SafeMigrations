@@ -604,11 +604,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         var isMariaDb = MySqlServerVersion.AutoDetect(connection, MySqlServerVersionCompatibilityMode.AllowUnsupported)
             .IsMariaDb;
 
-        command.CommandText = "SELECT @@default_storage_engine, @@SESSION.sql_mode, "
-            + "@@SESSION.explicit_defaults_for_timestamp, "
-            + (isMariaDb
+        command.CommandText = $"""
+            SELECT @@default_storage_engine, @@SESSION.sql_mode, @@SESSION.explicit_defaults_for_timestamp,
+            {(isMariaDb
                 ? "@@SESSION.check_constraint_checks;"
-                : "1;");
+                : "1;")}
+            """;
 
         bool defaultEngineIsInnoDb;
         bool strict;
@@ -791,12 +792,18 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
         // WHY: Native folding can change catalog spelling. Return the fixed
         // request ordinal, not a physical name used as an authored cache key.
-        return "SELECT source_owner.ordinal, EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES physical_owner "
-            + "WHERE physical_owner.TABLE_SCHEMA = DATABASE() AND physical_owner.TABLE_TYPE = 'BASE TABLE' "
-            + "AND UPPER(physical_owner.ENGINE) = 'INNODB' "
-            + $"AND physical_owner.TABLE_NAME IN ({ownerParameters}) "
-            + "AND physical_owner.TABLE_NAME = source_owner.owner "
-            + $"AND {tableMatches} AND {schemaMatches}) FROM ({authoredOwners}) source_owner ORDER BY 1;";
+        return $"""
+            SELECT source_owner.ordinal, EXISTS (SELECT 1
+            FROM INFORMATION_SCHEMA.TABLES physical_owner
+            WHERE physical_owner.TABLE_SCHEMA = DATABASE()
+            AND physical_owner.TABLE_TYPE = 'BASE TABLE'
+            AND UPPER(physical_owner.ENGINE) = 'INNODB'
+            AND physical_owner.TABLE_NAME IN ({ownerParameters})
+            AND physical_owner.TABLE_NAME = source_owner.owner
+            AND {tableMatches}
+            AND {schemaMatches})
+            FROM ({authoredOwners}) source_owner ORDER BY 1;
+            """;
     }
 
     /// <summary>Binds captured session/storage facts to final analysis identities, never inferred aliases.</summary>

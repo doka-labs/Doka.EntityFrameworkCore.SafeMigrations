@@ -131,9 +131,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var unchanged = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.TableName}' AND COLUMN_NAME = 'result' "
-            + $"AND COLUMN_COMMENT = '{comment}' AND COLLATION_NAME = '{collation}';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.TableName}'
+            AND COLUMN_NAME = 'result' AND COLUMN_COMMENT = '{comment}'
+            AND COLLATION_NAME = '{collation}';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -231,9 +235,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var unchanged = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.TableName}' AND COLUMN_NAME = 'result' "
-            + "AND COLUMN_COMMENT = 'candidate-marker' AND COLLATION_NAME = 'utf8mb4_bin';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.TableName}'
+            AND COLUMN_NAME = 'result' AND COLUMN_COMMENT = 'candidate-marker'
+            AND COLLATION_NAME = 'utf8mb4_bin';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -286,14 +294,14 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         CancellationToken cancellationToken
     ) => ExecuteSqlAsync(
         connectionString,
-        $"CREATE TABLE `{GeneratedFacetPendingDropDbContext.TableName}` (id int NOT NULL PRIMARY KEY, "
-        + "unrelated int NULL, result varchar(20) CHARACTER SET utf8mb4 COLLATE "
-        + collation
-        + " GENERATED ALWAYS AS ('fixed') VIRTUAL COMMENT '"
-        + comment
-        + "') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-        + $"INSERT INTO `{GeneratedFacetPendingDropDbContext.TableName}` (id, unrelated) "
-        + "VALUES (1, 7), (2, NULL);",
+        $"""
+        CREATE TABLE `{GeneratedFacetPendingDropDbContext.TableName}` (id int NOT NULL PRIMARY KEY,
+        unrelated int NULL, result varchar(20) CHARACTER SET utf8mb4 COLLATE {collation}
+        GENERATED ALWAYS AS ('fixed') VIRTUAL COMMENT '{comment}')
+        ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT
+        INTO `{GeneratedFacetPendingDropDbContext.TableName}` (id,
+        unrelated) VALUES (1, 7), (2, NULL);
+        """,
         cancellationToken: cancellationToken);
 
     /// <summary>Reads the actual migration fixture without constructing replacement operations.</summary>
@@ -321,8 +329,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var exists = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.HistoryTable}';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.HistoryTable}';
+            """,
             cancellationToken: cancellationToken);
 
         return exists == 0
@@ -341,8 +352,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         CancellationToken cancellationToken
     ) => ScalarIntAsync(
         connectionString,
-        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-        + $"AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.TableName}' AND COLUMN_NAME = 'unrelated';",
+        $"""
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.TableName}'
+        AND COLUMN_NAME = 'unrelated';
+        """,
         cancellationToken: cancellationToken);
 
     /// <summary>Checks row preservation, including unrelated values when the DROP is refused.</summary>

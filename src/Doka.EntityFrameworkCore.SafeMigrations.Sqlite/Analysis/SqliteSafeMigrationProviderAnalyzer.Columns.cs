@@ -127,12 +127,8 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         DropColumnIntent intent
     )
     {
-        if (!snapshot.Tables.TryGetValue(intent.Table, out var table))
-        {
-            return Missing(postconditionSatisfied: true);
-        }
-
-        if (!table.Columns.ContainsKey(intent.Name))
+        if (!snapshot.Tables.TryGetValue(intent.Table, out var table)
+            || !table.Columns.ContainsKey(intent.Name))
         {
             return Missing(postconditionSatisfied: true);
         }

@@ -1018,18 +1018,21 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         int ordinal,
         LiveColumnIdentity identity,
         PostgreSqlCatalogQueryParameters parameters
-    ) => $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
-        + $"COALESCE(({LiveOrdinaryOwner("c")}) AND a.attnum IS NOT NULL, FALSE), "
-        + "a.atttypid::bigint, a.attcollation::bigint, NULL::text, NULL::text, NULL::text, NULL::text, "
-        + "a.attcollation = 0 OR (SELECT coll.collisdeterministic FROM pg_catalog.pg_collation coll "
-        + "WHERE coll.oid = a.attcollation) "
-        + "FROM (SELECT 1) seed LEFT JOIN pg_catalog.pg_namespace n "
-        + $"ON n.nspname = {LiveSchemaExpression(identity.Schema, parameters)} "
-        + "LEFT JOIN pg_catalog.pg_class c "
-        + $"ON c.relnamespace = n.oid AND c.relname = {parameters.AddString(identity.Table)} "
-        + "LEFT JOIN pg_catalog.pg_attribute a "
-        + $"ON a.attrelid = c.oid AND a.attname = {parameters.AddString(identity.Column)} "
-        + "AND a.attnum > 0 AND NOT a.attisdropped";
+    ) => $"""
+        SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, COALESCE(({LiveOrdinaryOwner("c")})
+        AND a.attnum IS NOT NULL, FALSE), a.atttypid::bigint, a.attcollation::bigint,
+        NULL::text, NULL::text, NULL::text, NULL::text, a.attcollation = 0
+        OR (SELECT coll.collisdeterministic
+        FROM pg_catalog.pg_collation coll
+        WHERE coll.oid = a.attcollation)
+        FROM (SELECT 1) seed LEFT JOIN pg_catalog.pg_namespace n
+        ON n.nspname = {LiveSchemaExpression(identity.Schema, parameters)}
+        LEFT JOIN pg_catalog.pg_class c ON c.relnamespace = n.oid
+        AND c.relname = {parameters.AddString(identity.Table)}
+        LEFT JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
+        AND a.attname = {parameters.AddString(identity.Column)}
+        AND a.attnum > 0 AND NOT a.attisdropped
+        """;
 
     /// <summary>Resolves effective type-default or explicit visible collation with native catalog OIDs.</summary>
     private static string LiveColumnTypeSelection(
@@ -1040,21 +1043,24 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     {
         var collation = identity.Collation is null
             ? "t.typcollation"
-            : "(SELECT coll.oid FROM pg_catalog.pg_collation coll "
-            + "JOIN pg_catalog.pg_namespace cn ON cn.oid = coll.collnamespace "
-            + $"WHERE coll.collname = {parameters.AddString(identity.Collation)} "
-            + (identity.CollationSchema is null
+            : $"""
+            (SELECT coll.oid FROM pg_catalog.pg_collation coll
+            JOIN pg_catalog.pg_namespace cn ON cn.oid = coll.collnamespace
+            WHERE coll.collname = {parameters.AddString(identity.Collation)} {(identity.CollationSchema is null
                 ? "AND pg_catalog.pg_collation_is_visible(coll.oid))"
-                : $"AND cn.nspname = {parameters.AddString(identity.CollationSchema)})");
+                : $"AND cn.nspname = {parameters.AddString(identity.CollationSchema)})")}
+            """;
 
-        return $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
-            + "t.oid IS NOT NULL AND expected.collation IS NOT NULL, t.oid::bigint, expected.collation::bigint, "
-            + "NULL::text, NULL::text, NULL::text, NULL::text, "
-            + "expected.collation = 0 OR coll.collisdeterministic FROM (SELECT 1) seed "
-            + "LEFT JOIN pg_catalog.pg_type t "
-            + $"ON t.oid = pg_catalog.to_regtype({parameters.AddString(identity.StoreType)}) "
-            + $"LEFT JOIN LATERAL (SELECT ({collation}) AS collation) expected ON TRUE "
-            + "LEFT JOIN pg_catalog.pg_collation coll ON coll.oid = expected.collation";
+        return $"""
+            SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, t.oid IS NOT NULL
+            AND expected.collation IS NOT NULL, t.oid::bigint, expected.collation::bigint,
+            NULL::text, NULL::text, NULL::text, NULL::text, expected.collation = 0
+            OR coll.collisdeterministic FROM (SELECT 1) seed
+            LEFT JOIN pg_catalog.pg_type t
+            ON t.oid = pg_catalog.to_regtype({parameters.AddString(identity.StoreType)})
+            LEFT JOIN LATERAL (SELECT ({collation}) AS collation) expected ON TRUE
+            LEFT JOIN pg_catalog.pg_collation coll ON coll.oid = expected.collation
+            """;
     }
 
     /// <summary>Streams actual ordered keys without conflating constraint and backing-index identities.</summary>
@@ -1072,49 +1078,60 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         // expression index is a native reference key. Native owner/type/collation
         // and immediate validated keys remain independent from the NULL-row gate.
         var owners = $"(d.oid IS NULL OR ({LiveOrdinaryOwner("d")})) AND ({LiveOrdinaryOwner("p")})";
-        var collision = "(SELECT collision.contype::text FROM pg_catalog.pg_constraint collision "
-            + $"WHERE collision.conrelid = d.oid AND collision.conname = {parameters.AddString(definition.Name)}), "
-            + "NULL::boolean";
+        var collision = $"""
+            (SELECT collision.contype::text
+            FROM pg_catalog.pg_constraint collision
+            WHERE collision.conrelid = d.oid
+            AND collision.conname = {parameters.AddString(definition.Name)}), NULL::boolean
+            """;
 
-        return $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, COALESCE(({owners}), FALSE), "
-            + "d.oid::bigint, p.oid::bigint, keys.kind, keys.name, keys.backing, "
-            + collision
-            + " "
-            + "FROM (SELECT 1) seed LEFT JOIN pg_catalog.pg_namespace dn "
-            + $"ON dn.nspname = {LiveSchemaExpression(definition.Schema, parameters)} "
-            + "LEFT JOIN pg_catalog.pg_class d ON d.relnamespace = dn.oid "
-            + $"AND d.relname = {parameters.AddString(definition.Table)} "
-            + "LEFT JOIN pg_catalog.pg_namespace pn "
-            + $"ON pn.nspname = {LiveSchemaExpression(definition.PrincipalSchema, parameters)} "
-            + "LEFT JOIN pg_catalog.pg_class p ON p.relnamespace = pn.oid "
-            + $"AND p.relname = {parameters.AddString(definition.PrincipalTable)} "
-            + "LEFT JOIN LATERAL (SELECT COALESCE(co.contype::text, 'i') AS kind, "
-            + "COALESCE(co.conname, ic.relname)::text AS name, "
-            + "CASE WHEN co.oid IS NULL THEN NULL::text ELSE ic.relname::text END AS backing "
-            + "FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid "
-            + "JOIN pg_catalog.pg_am am ON am.oid = ic.relam "
-            + "LEFT JOIN pg_catalog.pg_constraint co ON co.conindid = i.indexrelid "
-            + "AND co.conrelid = p.oid AND co.contype IN ('p', 'u') "
-            + $"WHERE ({owners}) AND i.indrelid = p.oid AND i.indisunique AND i.indisvalid "
-            + "AND i.indisready AND i.indislive AND i.indimmediate AND i.indpred IS NULL "
-            + "AND i.indexprs IS NULL AND am.amname = 'btree' AND NOT ic.relispartition "
-            + $"AND i.indnkeyatts = {definition.PrincipalColumns.Count.ToString(CultureInfo.InvariantCulture)} "
-            + "AND (co.oid IS NULL OR (co.conislocal AND co.coninhcount = 0 AND co.conparentid = 0 "
-            + "AND co.convalidated AND NOT co.condeferrable AND NOT co.condeferred "
-            + "AND NOT COALESCE((to_jsonb(co) ->> 'conperiod')::boolean, FALSE))) "
-            + "AND ARRAY(SELECT a.attname FROM unnest(i.indkey) WITH ORDINALITY key(attnum, ord) "
-            + "JOIN pg_catalog.pg_attribute a ON a.attrelid = p.oid AND a.attnum = key.attnum "
-            + "WHERE key.ord <= i.indnkeyatts AND NOT a.attisdropped ORDER BY key.ord) = "
-            + principalColumns
-            + " AND NOT EXISTS (SELECT 1 FROM unnest(i.indkey) WITH ORDINALITY key(attnum, ord) "
-            + "JOIN pg_catalog.pg_attribute a ON a.attrelid = p.oid AND a.attnum = key.attnum "
-            + "JOIN pg_catalog.pg_opclass opc ON opc.oid = i.indclass[key.ord::integer - 1] "
-            + "WHERE key.ord <= i.indnkeyatts AND ((i.indcollation[key.ord::integer - 1] <> a.attcollation "
-            + "AND NOT ((SELECT coll.collisdeterministic FROM pg_catalog.pg_collation coll "
-            + "WHERE coll.oid = i.indcollation[key.ord::integer - 1]) "
-            + "AND (SELECT coll.collisdeterministic FROM pg_catalog.pg_collation coll "
-            + "WHERE coll.oid = a.attcollation))) "
-            + "OR NOT opc.opcdefault))) keys ON TRUE";
+        return $"""
+            SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, COALESCE(({owners}),
+            FALSE), d.oid::bigint, p.oid::bigint, keys.kind, keys.name, keys.backing,
+            {collision} FROM (SELECT 1) seed
+            LEFT JOIN pg_catalog.pg_namespace dn ON dn.nspname = {LiveSchemaExpression(definition.Schema, parameters)}
+            LEFT JOIN pg_catalog.pg_class d ON d.relnamespace = dn.oid
+            AND d.relname = {parameters.AddString(definition.Table)}
+            LEFT JOIN pg_catalog.pg_namespace pn
+            ON pn.nspname = {LiveSchemaExpression(definition.PrincipalSchema, parameters)}
+            LEFT JOIN pg_catalog.pg_class p ON p.relnamespace = pn.oid
+            AND p.relname = {parameters.AddString(definition.PrincipalTable)}
+            LEFT JOIN LATERAL (SELECT COALESCE(co.contype::text, 'i') AS kind, COALESCE(co.conname,
+            ic.relname)::text AS name, CASE WHEN co.oid IS NULL
+            THEN NULL::text ELSE ic.relname::text END AS backing
+            FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
+            JOIN pg_catalog.pg_am am ON am.oid = ic.relam
+            LEFT JOIN pg_catalog.pg_constraint co ON co.conindid = i.indexrelid
+            AND co.conrelid = p.oid AND co.contype IN ('p', 'u')
+            WHERE ({owners})
+            AND i.indrelid = p.oid AND i.indisunique
+            AND i.indisvalid AND i.indisready
+            AND i.indislive AND i.indimmediate
+            AND i.indpred IS NULL AND i.indexprs IS NULL
+            AND am.amname = 'btree' AND NOT ic.relispartition
+            AND i.indnkeyatts = {definition.PrincipalColumns.Count.ToString(CultureInfo.InvariantCulture)}
+            AND (co.oid IS NULL OR (co.conislocal
+            AND co.coninhcount = 0 AND co.conparentid = 0
+            AND co.convalidated AND NOT co.condeferrable
+            AND NOT co.condeferred AND NOT COALESCE((to_jsonb(co) ->> 'conperiod')::boolean,
+            FALSE))) AND ARRAY(SELECT a.attname
+            FROM unnest(i.indkey) WITH ORDINALITY key(attnum, ord)
+            JOIN pg_catalog.pg_attribute a ON a.attrelid = p.oid
+            AND a.attnum = key.attnum WHERE key.ord <= i.indnkeyatts
+            AND NOT a.attisdropped ORDER BY key.ord) = {principalColumns}
+            AND NOT EXISTS (SELECT 1 FROM unnest(i.indkey) WITH ORDINALITY key(attnum,
+            ord) JOIN pg_catalog.pg_attribute a ON a.attrelid = p.oid
+            AND a.attnum = key.attnum JOIN pg_catalog.pg_opclass opc ON opc.oid = i.indclass[key.ord::integer - 1]
+            WHERE key.ord <= i.indnkeyatts
+            AND ((i.indcollation[key.ord::integer - 1] <> a.attcollation
+            AND NOT ((SELECT coll.collisdeterministic
+            FROM pg_catalog.pg_collation coll
+            WHERE coll.oid = i.indcollation[key.ord::integer - 1])
+            AND (SELECT coll.collisdeterministic
+            FROM pg_catalog.pg_collation coll
+            WHERE coll.oid = a.attcollation)))
+            OR NOT opc.opcdefault))) keys ON TRUE
+            """;
     }
 
     /// <summary>Resolves only the active creation schema, never another visible search-path owner.</summary>
@@ -1128,9 +1145,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     /// <summary>Excludes views, partitions and inheritance which need a separate native ownership contract.</summary>
     private static string LiveOrdinaryOwner(
         string alias
-    ) => $"{alias}.relkind = 'r' AND NOT {alias}.relispartition AND NOT EXISTS "
-        + $"(SELECT 1 FROM pg_catalog.pg_inherits inheritance WHERE inheritance.inhrelid = {alias}.oid "
-        + $"OR inheritance.inhparent = {alias}.oid)";
+    ) => $"""
+        {alias}.relkind = 'r'
+        AND NOT {alias}.relispartition
+        AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_inherits inheritance
+        WHERE inheritance.inhrelid = {alias}.oid
+        OR inheritance.inhparent = {alias}.oid)
+        """;
 
     /// <summary>Reports malformed metadata without emitting user identifiers or native SQL.</summary>
     private static InvalidOperationException InvalidLivePrerequisiteEvidence()

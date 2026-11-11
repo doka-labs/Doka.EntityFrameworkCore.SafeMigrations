@@ -19,7 +19,7 @@ public sealed class MySqlIdentifierReferenceProofTests
 
         // Assert
         Assert.Contains("DECLARE EXIT HANDLER FOR 1064", block, StringComparison.Ordinal);
-        Assert.Contains("PREPARE " + proof.InnerStatementName + " FROM ", block, StringComparison.Ordinal);
+        Assert.Contains("PREPARE\n" + proof.InnerStatementName + "\nFROM ", block, StringComparison.Ordinal);
         Assert.Contains("DEALLOCATE PREPARE " + proof.InnerStatementName, block, StringComparison.Ordinal);
         Assert.DoesNotContain(";EXECUTE " + proof.InnerStatementName, block, StringComparison.Ordinal);
         Assert.DoesNotContain("SQLEXCEPTION", block, StringComparison.Ordinal);
@@ -164,7 +164,7 @@ public sealed class MySqlIdentifierReferenceProofTests
         Assert.Contains("DECLARE CONTINUE HANDLER FOR 1243", block, StringComparison.Ordinal);
         Assert.DoesNotContain("SQLEXCEPTION", block, StringComparison.Ordinal);
         Assert.DoesNotContain("1064", block, StringComparison.Ordinal);
-        Assert.Contains("DEALLOCATE PREPARE " + proof.InnerStatementName, block, StringComparison.Ordinal);
+        Assert.Contains("DEALLOCATE\nPREPARE " + proof.InnerStatementName, block, StringComparison.Ordinal);
         Assert.Contains("DEALLOCATE PREPARE " + proof.OuterStatementName, block, StringComparison.Ordinal);
         Assert.Contains(proof.ResultVariable + " = NULL", block, StringComparison.Ordinal);
     }

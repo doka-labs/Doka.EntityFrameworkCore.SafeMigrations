@@ -397,16 +397,10 @@ public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafe
                 : "canonical")
             + "';");
 
-        return "CREATE TABLE "
-            + PostgreSqlIdentifier(table)
-            + " ("
-            + string.Join(",", definitions)
-            + ");"
-            + string.Join(string.Empty, comments)
-            + "INSERT INTO "
-            + PostgreSqlIdentifier(table)
-            + " VALUES ("
-            + string.Join(",", columns.Select(_ => "'preserved'"))
-            + ");";
+        return $"""
+            CREATE TABLE {PostgreSqlIdentifier(table)} ({string.Join(",", definitions)});{string.Join(
+                string.Empty, comments)}INSERT
+            INTO {PostgreSqlIdentifier(table)} VALUES ({string.Join(",", columns.Select(_ => "'preserved'"))});
+            """;
     }
 }

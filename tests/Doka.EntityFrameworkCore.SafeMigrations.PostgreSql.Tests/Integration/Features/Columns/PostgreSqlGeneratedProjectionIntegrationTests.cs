@@ -77,8 +77,10 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
                 : 1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'source_lifetime'::regclass "
-                + "AND attname = 'result' AND NOT attisdropped;",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'source_lifetime'::regclass
+                AND attname = 'result' AND NOT attisdropped;
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -468,10 +470,12 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA custom; "
-            + "CREATE TABLE custom.a (source integer NOT NULL, derived integer GENERATED ALWAYS AS "
-            + "(CASE WHEN source > 0 THEN source ELSE 0 END) STORED); CREATE TABLE custom.b (id integer); "
-            + "INSERT INTO custom.a (source) VALUES (2);",
+            """
+            CREATE SCHEMA custom; CREATE TABLE custom.a (source integer NOT NULL,
+            derived integer GENERATED ALWAYS AS (CASE WHEN source > 0
+            THEN source ELSE 0 END) STORED); CREATE TABLE custom.b (id integer); INSERT INTO custom.a
+            (source) VALUES (2);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -525,8 +529,10 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'custom.b'::regclass "
-                + "AND attname = 'extra' AND NOT attisdropped;",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'custom.b'::regclass
+                AND attname = 'extra' AND NOT attisdropped;
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -538,10 +544,11 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE check_lineage (leftbound integer NOT NULL, payload integer NOT NULL DEFAULT 1, "
-            + "CONSTRAINT ck_check_lineage CHECK (leftbound >= 0)); "
-            + "COMMENT ON COLUMN check_lineage.payload IS 'retained payload'; "
-            + "INSERT INTO check_lineage(leftbound) VALUES(2);",
+            """
+            CREATE TABLE check_lineage (leftbound integer NOT NULL, payload integer NOT NULL DEFAULT 1,
+            CONSTRAINT ck_check_lineage CHECK (leftbound >= 0)); COMMENT ON COLUMN check_lineage.payload IS
+            'retained payload'; INSERT INTO check_lineage(leftbound) VALUES(2);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -590,8 +597,11 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
             "2:1:retained payload",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT score::text || ':' || payload::text || ':' || pg_catalog.col_description("
-                + "'check_lineage'::regclass, 2) FROM check_lineage;",
+                $"""
+                {"SELECT score::text || ':' || payload::text || ':' || "
+                    + "pg_catalog.col_description('check_lineage'::regclass,"}
+                2) FROM check_lineage;
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -603,10 +613,12 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE check_callback (source integer NOT NULL, CONSTRAINT ck_check_callback CHECK(source>=0)); "
-            + "CREATE FUNCTION check_callback_effect() RETURNS event_trigger LANGUAGE plpgsql "
-            + "AS $$ BEGIN PERFORM 1; END; $$; CREATE EVENT TRIGGER check_callback_effect ON ddl_command_end "
-            + "EXECUTE FUNCTION check_callback_effect();",
+            """
+            CREATE TABLE check_callback (source integer NOT NULL, CONSTRAINT ck_check_callback
+            CHECK(source>=0)); CREATE FUNCTION check_callback_effect() RETURNS event_trigger
+            LANGUAGE plpgsql AS $$ BEGIN PERFORM 1; END; $$; CREATE EVENT TRIGGER check_callback_effect
+            ON ddl_command_end EXECUTE FUNCTION check_callback_effect();
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -644,8 +656,10 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='check_callback'::regclass "
-                + "AND attname='source' AND NOT attisdropped;",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='check_callback'::regclass
+                AND attname='source' AND NOT attisdropped;
+                """,
                 cancellationToken: CancellationToken.None));
     }
 }

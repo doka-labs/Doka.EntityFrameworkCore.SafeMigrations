@@ -111,7 +111,7 @@ public sealed class PostgreSqlTableDefinitionCatalogSqlTests
         var state = BuildStateExpression(context, ColumnCount(3), UniqueConstraints(2));
 
         // Assert
-        Assert.Contains("AS required(conname, columns) WHERE NOT COALESCE(", state, StringComparison.Ordinal);
+        Assert.Contains("AS required(conname,\ncolumns) WHERE NOT COALESCE(", state, StringComparison.Ordinal);
     }
 
     /// <summary>A required unique constraint is still accepted under a differing catalog name.</summary>
@@ -202,7 +202,7 @@ public sealed class PostgreSqlTableDefinitionCatalogSqlTests
         var state = BuildStateExpression(context, ColumnCount(3), [], CheckConstraints(2));
 
         // Assert
-        Assert.Contains("AS required(ordinal, conname) WHERE NOT COALESCE(", state, StringComparison.Ordinal);
+        Assert.Contains("AS required(ordinal,\nconname) WHERE NOT COALESCE(", state, StringComparison.Ordinal);
     }
 
     /// <summary>A required check constraint is still accepted under a differing catalog name.</summary>
@@ -248,7 +248,7 @@ public sealed class PostgreSqlTableDefinitionCatalogSqlTests
 
         // Assert
         Assert.Contains(
-            "confupdtype, confdeltype) WHERE NOT COALESCE(",
+            "confupdtype, confdeltype)\nWHERE NOT COALESCE(",
             state,
             StringComparison.Ordinal);
     }

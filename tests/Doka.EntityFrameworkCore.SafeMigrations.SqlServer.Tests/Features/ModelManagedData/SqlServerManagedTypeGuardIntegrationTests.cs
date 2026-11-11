@@ -109,8 +109,10 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
         await ExecuteSqlAsync(connectionString, "CREATE SCHEMA audit;", cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.type_principals (Id int NOT NULL PRIMARY KEY, Code bigint NOT NULL); "
-            + "CREATE TABLE dbo.type_dependents (ReferenceId int NULL);",
+            """
+            CREATE TABLE dbo.type_principals (Id int NOT NULL PRIMARY KEY, Code bigint
+            NOT NULL); CREATE TABLE dbo.type_dependents (ReferenceId int NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         if (mode != "missing_table")
@@ -223,8 +225,10 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.identity_types (Id int IDENTITY(1,1) NOT NULL PRIMARY KEY); "
-            + "INSERT INTO dbo.identity_types DEFAULT VALUES;",
+            """
+            CREATE TABLE dbo.identity_types (Id int IDENTITY(1,1) NOT NULL PRIMARY KEY);
+            INSERT INTO dbo.identity_types DEFAULT VALUES;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

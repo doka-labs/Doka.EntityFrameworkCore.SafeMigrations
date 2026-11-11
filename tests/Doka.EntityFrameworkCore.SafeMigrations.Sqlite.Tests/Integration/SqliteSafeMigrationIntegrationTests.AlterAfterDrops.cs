@@ -19,15 +19,16 @@ public sealed class SqliteSafeMigrationAlterAfterDropsIntegrationTests : SqliteS
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE rebuild_entities (Id INTEGER NOT NULL, Code TEXT NULL, Legacy TEXT NULL, "
-            + "Temporary TEXT NULL, CONSTRAINT pk_rebuild_entities PRIMARY KEY (Id), "
-            + "CONSTRAINT uq_rebuild_entities_code UNIQUE (Code), "
-            + "CONSTRAINT ck_rebuild_entities_code CHECK (length(\"Code\") > 0)); "
-            + "INSERT INTO rebuild_entities (Id, Code) VALUES (1, "
-            + (control == "null-rows"
+            $"""
+            CREATE TABLE rebuild_entities (Id INTEGER NOT NULL, Code TEXT NULL, Legacy
+            TEXT NULL,
+            Temporary TEXT NULL, CONSTRAINT pk_rebuild_entities PRIMARY KEY (Id),
+            CONSTRAINT uq_rebuild_entities_code UNIQUE (Code), CONSTRAINT ck_rebuild_entities_code
+            CHECK (length("Code") > 0)); INSERT INTO rebuild_entities (Id,
+            Code) VALUES (1, {(control == "null-rows"
                 ? "NULL"
-                : "'kept'")
-            + ");",
+                : "'kept'")});
+            """,
             cancellationToken: CancellationToken.None);
 
         if (control == "unmanaged-trigger")

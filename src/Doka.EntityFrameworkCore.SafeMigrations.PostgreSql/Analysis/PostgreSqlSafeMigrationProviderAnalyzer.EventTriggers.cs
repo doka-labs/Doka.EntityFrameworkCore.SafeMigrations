@@ -257,18 +257,23 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     {
         await using var visibility = connection.CreateCommand();
         ApplyCommandTimeout(visibility, commandTimeout);
-        visibility.CommandText = "SELECT ((CASE WHEN "
-            + "COALESCE(pg_catalog.current_setting('event_triggers', true), 'on') OPERATOR(pg_catalog.=) 'off' "
-            + "THEN 0 WHEN pg_catalog.has_table_privilege('pg_catalog.pg_event_trigger', 'SELECT') THEN 1 ELSE 2 END) "
-            + "OPERATOR(pg_catalog.+) CASE WHEN pg_catalog.has_table_privilege('pg_catalog.pg_trigger', 'SELECT') "
-            + "THEN 4 ELSE 8 END) OPERATOR(pg_catalog.+) "
-            + "CASE WHEN pg_catalog.has_table_privilege('pg_catalog.pg_depend', 'SELECT') "
-            + "AND pg_catalog.has_table_privilege('pg_catalog.pg_attrdef', 'SELECT') "
-            + "AND pg_catalog.has_table_privilege('pg_catalog.pg_inherits', 'SELECT') THEN 16 ELSE 0 END "
-            + "OPERATOR(pg_catalog.+) CASE WHEN pg_catalog.has_table_privilege('pg_catalog.pg_am', 'SELECT') "
-            + "AND pg_catalog.has_table_privilege('pg_catalog.pg_opclass', 'SELECT') THEN 32 ELSE 0 END "
-            + "OPERATOR(pg_catalog.+) CASE WHEN pg_catalog.has_table_privilege('pg_catalog.pg_constraint', 'SELECT') "
-            + "THEN 64 ELSE 0 END;";
+        visibility.CommandText = """
+        SELECT ((CASE WHEN COALESCE(pg_catalog.current_setting('event_triggers',
+        true), 'on') OPERATOR(pg_catalog.=) 'off'
+        THEN 0
+        WHEN pg_catalog.has_table_privilege('pg_catalog.pg_event_trigger', 'SELECT')
+        THEN 1 ELSE 2 END) OPERATOR(pg_catalog.+) CASE WHEN pg_catalog.has_table_privilege('pg_catalog.pg_trigger',
+        'SELECT') THEN 4 ELSE 8 END) OPERATOR(pg_catalog.+)
+        CASE WHEN pg_catalog.has_table_privilege('pg_catalog.pg_depend',
+        'SELECT') AND pg_catalog.has_table_privilege('pg_catalog.pg_attrdef',
+        'SELECT') AND pg_catalog.has_table_privilege('pg_catalog.pg_inherits',
+        'SELECT') THEN 16 ELSE 0 END OPERATOR(pg_catalog.+)
+        CASE WHEN pg_catalog.has_table_privilege('pg_catalog.pg_am',
+        'SELECT') AND pg_catalog.has_table_privilege('pg_catalog.pg_opclass',
+        'SELECT') THEN 32 ELSE 0 END OPERATOR(pg_catalog.+)
+        CASE WHEN pg_catalog.has_table_privilege('pg_catalog.pg_constraint',
+        'SELECT') THEN 64 ELSE 0 END;
+        """;
 
         // WHY: Keep callback visibility in the low four bits, generated
         // dependencies in 0x10, optional index-role capture in 0x20 and
@@ -313,36 +318,46 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         // are pinned too: an application overload on the active search path
         // must not execute while establishing the absence of callback risk.
         var activeEventTrigger = eventAccess == 1
-            ? "EXISTS (SELECT 1 FROM pg_catalog.pg_event_trigger e "
-            + "WHERE (e.evtevent OPERATOR(pg_catalog.=) 'ddl_command_start' "
-            + "OR e.evtevent OPERATOR(pg_catalog.=) 'ddl_command_end' "
-            + "OR e.evtevent OPERATOR(pg_catalog.=) 'sql_drop' "
-            + "OR e.evtevent OPERATOR(pg_catalog.=) 'table_rewrite') "
-            + "AND (e.evtenabled OPERATOR(pg_catalog.=) 'A' OR e.evtenabled OPERATOR(pg_catalog.=) 'R' "
-            + "AND pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'replica' "
-            + "OR e.evtenabled OPERATOR(pg_catalog.=) 'O' "
-            + "AND (pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'origin' "
-            + "OR pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'local')))"
+            ? """
+            EXISTS (SELECT 1 FROM pg_catalog.pg_event_trigger e
+            WHERE (e.evtevent OPERATOR(pg_catalog.=) 'ddl_command_start'
+            OR e.evtevent OPERATOR(pg_catalog.=) 'ddl_command_end'
+            OR e.evtevent OPERATOR(pg_catalog.=) 'sql_drop'
+            OR e.evtevent OPERATOR(pg_catalog.=) 'table_rewrite')
+            AND (e.evtenabled OPERATOR(pg_catalog.=) 'A'
+            OR e.evtenabled OPERATOR(pg_catalog.=) 'R'
+            AND pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=)
+            'replica'
+            OR e.evtenabled OPERATOR(pg_catalog.=) 'O'
+            AND (pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=)
+            'origin'
+            OR pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=)
+            'local')))
+            """
             : "FALSE";
 
         var activeDmlTrigger = canReadDmlTriggers
-            ? "EXISTS (SELECT 1 FROM pg_catalog.pg_trigger t WHERE NOT t.tgisinternal "
-            + "AND (t.tgenabled OPERATOR(pg_catalog.=) 'A' OR t.tgenabled OPERATOR(pg_catalog.=) 'R' "
-            + "AND pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'replica' "
-            + "OR t.tgenabled OPERATOR(pg_catalog.=) 'O' "
-            + "AND (pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'origin' "
-            + "OR pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'local')))"
+            ? """
+            EXISTS (SELECT 1 FROM pg_catalog.pg_trigger t
+            WHERE NOT t.tgisinternal AND (t.tgenabled OPERATOR(pg_catalog.=) 'A'
+            OR t.tgenabled OPERATOR(pg_catalog.=) 'R'
+            AND pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=)
+            'replica'
+            OR t.tgenabled OPERATOR(pg_catalog.=) 'O'
+            AND (pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=)
+            'origin'
+            OR pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=)
+            'local')))
+            """
             : "FALSE";
 
         // WHY: Qualified OPERATOR syntax has generic precedence, not the
         // builtin symbol's arithmetic precedence. Keep the independent DML
         // bit grouped so its absence cannot erase an active event-trigger bit.
-        active.CommandText = "SELECT ("
-            + activeEventTrigger
-            + ")::integer OPERATOR(pg_catalog.+) "
-            + "(2 OPERATOR(pg_catalog.*) ("
-            + activeDmlTrigger
-            + ")::integer);";
+        active.CommandText = $"""
+            SELECT ({activeEventTrigger})::integer OPERATOR(pg_catalog.+)
+            (2 OPERATOR(pg_catalog.*) ({activeDmlTrigger})::integer);
+            """;
 
         if (await active.ExecuteScalarAsync(cancellationToken) is not int activation
             || activation is < 0 or > 3)

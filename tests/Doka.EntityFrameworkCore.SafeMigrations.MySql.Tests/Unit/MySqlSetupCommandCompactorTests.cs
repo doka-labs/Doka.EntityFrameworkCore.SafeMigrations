@@ -8,6 +8,7 @@ public sealed class MySqlSetupCommandCompactorTests
     [Theory]
     [InlineData("DO 2")]
     [InlineData("DO 2; -- trailing comment")]
+    [InlineData("DO 2;\n-- trailing comment")]
     [InlineData("")]
     [InlineData(" \r\n")]
     public void UnterminatedOwnedFragmentsRemainIndependent(
@@ -78,6 +79,30 @@ public sealed class MySqlSetupCommandCompactorTests
         // Assert
         Assert.Equal(string.Concat(setup), Assert.Single(compacted));
         Assert.Equal(string.Concat(setup), string.Concat(compacted));
+    }
+
+    /// <summary>Raw SQL retains LF, literal format braces, and interpolated UTF-8 payloads when grouped.</summary>
+    [Fact]
+    public void MultilineRawFragmentsKeepLiteralBracesAndUtf8Payloads()
+    {
+        // Arrange
+        const string value = "\u20ac";
+        var statement = $$"""
+            SET @a = '{0}';
+            SET @b = '{{value}}';
+            """;
+
+        string[] setup = [statement, "DO 0;"];
+        const string expected = "SET @a = '{0}';\nSET @b = '\u20ac';DO 0;";
+        var body = new string(' ', 100) + "DO 0;";
+
+        // Act
+        var compacted = Compact(setup, body);
+
+        // Assert
+        var actual = Assert.Single(compacted);
+        Assert.Equal(expected, actual);
+        Assert.True(Encoding.UTF8.GetByteCount(actual) <= Encoding.UTF8.GetByteCount(body));
     }
 
     /// <summary>No emitted command exceeds the largest original setup/body UTF-8 payload.</summary>

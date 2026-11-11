@@ -77,8 +77,12 @@ public sealed class MySqlCapturedDefaultIdentityIntegrationTests : MySqlSafeMigr
         });
 
         var columns = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() "
-            + "AND TABLE_NAME='captured_defaults' AND COLUMN_NAME='value';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA=DATABASE()
+            AND TABLE_NAME='captured_defaults'
+            AND COLUMN_NAME='value';
+            """,
             CancellationToken.None);
 
         var values = quoted

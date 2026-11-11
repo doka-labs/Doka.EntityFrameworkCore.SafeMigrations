@@ -36,14 +36,14 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `fk_enum_principal` (`id` "
-            + principalType
-            + " NOT NULL, "
-            + "UNIQUE KEY `uq_enum_principal_id` (`id`)) ENGINE=InnoDB "
-            + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin; "
-            + "CREATE TABLE `fk_enum_dependent` (`key` int NOT NULL PRIMARY KEY, `owner_id` "
-            + dependentType
-            + " NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;",
+            $"""
+            CREATE TABLE `fk_enum_principal` (`id` {principalType} NOT NULL,
+            UNIQUE KEY `uq_enum_principal_id` (`id`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            COLLATE=utf8mb4_bin; CREATE TABLE `fk_enum_dependent` (`key` int NOT NULL
+            PRIMARY KEY,
+            `owner_id` {dependentType} NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            COLLATE=utf8mb4_bin;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -461,8 +461,12 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
 
         var requiredColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'proof_child' AND COLUMN_NAME = 'owner_id' AND IS_NULLABLE = 'NO';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'proof_child'
+            AND COLUMN_NAME = 'owner_id' AND IS_NULLABLE = 'NO';
+            """,
             cancellationToken: CancellationToken.None);
 
         var foreignKeys = await ReplacementForeignKeyCountAsync(
@@ -813,13 +817,15 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `empty_proof_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-            + "CREATE TABLE `empty_proof_child` (`id` int NOT NULL PRIMARY KEY, "
-            + "`owner_id` int NULL, `alternate_owner_id` int NULL, "
-            + "CONSTRAINT `fk_empty_proof` FOREIGN KEY (`owner_id`) REFERENCES `empty_proof_parent` (`id`) "
-            + "ON DELETE CASCADE) ENGINE=InnoDB; "
-            + "INSERT INTO `empty_proof_parent` VALUES (7); "
-            + "INSERT INTO `empty_proof_child` VALUES (1, 7, 999);",
+            """
+            CREATE TABLE `empty_proof_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+            CREATE TABLE `empty_proof_child` (`id` int NOT NULL PRIMARY KEY,
+            `owner_id` int NULL, `alternate_owner_id` int NULL, CONSTRAINT `fk_empty_proof`
+            FOREIGN KEY (`owner_id`) REFERENCES `empty_proof_parent` (`id`) ON DELETE
+            CASCADE) ENGINE=InnoDB; INSERT INTO `empty_proof_parent` VALUES (7); INSERT
+            INTO `empty_proof_child` VALUES (1,
+            7, 999);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -889,12 +895,15 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `length_proof_parent` (`id` varchar(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB "
-            + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "CREATE TABLE `length_proof_child` (`id` int NOT NULL PRIMARY KEY, `owner_id` varchar(64) NULL) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `length_proof_parent` VALUES ('owned'); "
-            + "INSERT INTO `length_proof_child` VALUES (1, 'owned');",
+            """
+            CREATE TABLE `length_proof_parent` (`id` varchar(36) NOT NULL PRIMARY KEY)
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; CREATE
+            TABLE `length_proof_child` (`id` int NOT NULL PRIMARY KEY,
+            `owner_id` varchar(64) NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            INSERT INTO `length_proof_parent` VALUES ('owned'); INSERT INTO `length_proof_child`
+            VALUES (1,
+            'owned');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -938,10 +947,12 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            ForeignKeyNullabilityFixture(alreadyNullable: true)
-            + " CREATE TABLE `other_proof_child` (`id` int NOT NULL PRIMARY KEY, `owner_id` char(36) NULL, "
-            + "CONSTRAINT `fk_colliding_target` FOREIGN KEY (`owner_id`) REFERENCES `proof_parent` (`id`)) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
+            $"""
+            {ForeignKeyNullabilityFixture(alreadyNullable: true)} CREATE TABLE `other_proof_child` (`id` int NOT
+            NULL PRIMARY KEY, `owner_id` char(36) NULL, CONSTRAINT `fk_colliding_target`
+            FOREIGN KEY (`owner_id`) REFERENCES `proof_parent` (`id`)) ENGINE=InnoDB
+            DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -980,9 +991,12 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
 
         var otherForeignKeys = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'other_proof_child' "
-            + "AND CONSTRAINT_NAME = 'fk_colliding_target';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'other_proof_child'
+            AND CONSTRAINT_NAME = 'fk_colliding_target';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1073,9 +1087,12 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
 
         var remainingAlias = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child' "
-            + $"AND CONSTRAINT_NAME = '{expectedPhysicalAlias}';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'proof_child'
+            AND CONSTRAINT_NAME = '{expectedPhysicalAlias}';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1255,9 +1272,12 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
 
         var removedAliases = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child' "
-            + "AND CONSTRAINT_NAME IN ('fk_semantic_proof_1', 'fk_semantic_proof_2');",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'proof_child'
+            AND CONSTRAINT_NAME IN ('fk_semantic_proof_1', 'fk_semantic_proof_2');
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1298,9 +1318,11 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
         // Runtime must recheck rows even though preflight saw safe semantic aliases.
         await ExecuteSqlAsync(
             connectionString,
-            "ALTER TABLE `proof_child` DROP FOREIGN KEY `fk_proof_child_parent`; "
-            + "ALTER TABLE `proof_child` DROP FOREIGN KEY `fk_semantic_proof_1`; "
-            + "UPDATE `proof_child` SET `owner_id` = '00000000-0000-0000-0000-000000000999';",
+            """
+            ALTER TABLE `proof_child` DROP FOREIGN KEY `fk_proof_child_parent`; ALTER
+            TABLE `proof_child` DROP FOREIGN KEY `fk_semantic_proof_1`; UPDATE `proof_child`
+            SET `owner_id` = '00000000-0000-0000-0000-000000000999';
+            """,
             cancellationToken: CancellationToken.None);
 
         var exception = await AssertOwnedGuardFailureAsync(
@@ -1360,8 +1382,11 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
 
         var foreignKeys = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'proof_child';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1419,16 +1444,22 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
 
         var requestedForeignKeys = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child' "
-            + "AND CONSTRAINT_NAME = 'fk_requested_proof';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'proof_child'
+            AND CONSTRAINT_NAME = 'fk_requested_proof';
+            """,
             cancellationToken: CancellationToken.None);
 
         var removedSources = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child' "
-            + "AND CONSTRAINT_NAME = 'fk_semantic_proof_1';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'proof_child'
+            AND CONSTRAINT_NAME = 'fk_semantic_proof_1';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1450,10 +1481,13 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `missing_proof_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-            + "CREATE TABLE `missing_proof_child` (`id` int NOT NULL PRIMARY KEY, `owner_id` int NULL) ENGINE=InnoDB; "
-            + "INSERT INTO `missing_proof_parent` VALUES (7); "
-            + "INSERT INTO `missing_proof_child` VALUES (1, 7);",
+            """
+            CREATE TABLE `missing_proof_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+            CREATE TABLE `missing_proof_child` (`id` int NOT NULL PRIMARY KEY,
+            `owner_id` int NULL) ENGINE=InnoDB; INSERT INTO `missing_proof_parent` VALUES
+            (7); INSERT INTO `missing_proof_child` VALUES (1,
+            7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1488,9 +1522,12 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
 
         var foreignKeys = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'missing_proof_child' "
-            + "AND CONSTRAINT_NAME = 'fk_missing_proof';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'missing_proof_child'
+            AND CONSTRAINT_NAME = 'fk_missing_proof';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1553,16 +1590,22 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
 
         var recreatedAliases = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child' "
-            + "AND CONSTRAINT_NAME = 'fk_recreated_alias';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'proof_child'
+            AND CONSTRAINT_NAME = 'fk_recreated_alias';
+            """,
             cancellationToken: CancellationToken.None);
 
         var originalAliases = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child' "
-            + "AND CONSTRAINT_NAME IN ('fk_semantic_proof_1', 'fk_semantic_proof_2');",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'proof_child'
+            AND CONSTRAINT_NAME IN ('fk_semantic_proof_1', 'fk_semantic_proof_2');
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1620,9 +1663,13 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
 
         var recreatedAliases = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child' "
-            + "AND CONSTRAINT_NAME = 'fk_recreated_alias' AND DELETE_RULE = 'CASCADE';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'proof_child'
+            AND CONSTRAINT_NAME = 'fk_recreated_alias'
+            AND DELETE_RULE = 'CASCADE';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1639,16 +1686,19 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
     /// <returns>The isolated initial schema and deterministic sentinel values.</returns>
     private static string ForeignKeyAlternateColumnFixture(
         bool orphan
-    ) => ForeignKeyNullabilityFixture(alreadyNullable: true)
-        + " ALTER TABLE `proof_child` ADD `alternate_owner_id` char(36) NULL; "
-
+    )
+    {
         // WHY: These tests isolate orphan-row authorization, not the
         // retained symbol's incompatible automatic-index namespace.
-        + "CREATE INDEX `ix_alternate_owner` ON `proof_child` (`alternate_owner_id`); "
-        + "UPDATE `proof_child` SET `alternate_owner_id` = "
-        + (orphan
-            ? "'00000000-0000-0000-0000-000000000999';"
-            : "'00000000-0000-0000-0000-000000000001';");
+        return $"""
+            {ForeignKeyNullabilityFixture(alreadyNullable: true)} ALTER TABLE `proof_child`
+            ADD `alternate_owner_id` char(36) NULL;
+            CREATE INDEX `ix_alternate_owner` ON `proof_child` (`alternate_owner_id`);
+            UPDATE `proof_child` SET `alternate_owner_id` = {(orphan
+                ? "'00000000-0000-0000-0000-000000000999';"
+                : "'00000000-0000-0000-0000-000000000001';")}
+            """;
+    }
 
     /// <summary>Declares an exact physical removal followed by a distinct requested column mapping.</summary>
     /// <param name="context">The active provider context used to identify the migration dialect.</param>
@@ -1672,15 +1722,18 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
 
     /// <summary>Creates composite data with one matching row and two independently nullable key members.</summary>
     /// <returns>The isolated schema with valid original FK enforcement left enabled.</returns>
-    private static string CompositeForeignKeyReplacementFixture()
-        => "CREATE TABLE `composite_parent` (`first_id` int NOT NULL, `second_id` int NOT NULL, "
-            + "PRIMARY KEY (`first_id`, `second_id`)) ENGINE=InnoDB; "
-            + "CREATE TABLE `composite_child` (`id` int NOT NULL PRIMARY KEY, "
-            + "`first_id` int NULL, `second_id` int NULL, "
-            + "CONSTRAINT `fk_composite_proof` FOREIGN KEY (`first_id`, `second_id`) "
-            + "REFERENCES `composite_parent` (`first_id`, `second_id`) ON DELETE CASCADE) ENGINE=InnoDB; "
-            + "INSERT INTO `composite_parent` VALUES (7, 11); "
-            + "INSERT INTO `composite_child` VALUES (1, 7, 11), (2, NULL, 999), (3, 777, NULL);";
+    private static string CompositeForeignKeyReplacementFixture() => """
+        CREATE TABLE `composite_parent` (`first_id` int NOT NULL, `second_id` int
+        NOT NULL,
+        PRIMARY KEY (`first_id`, `second_id`)) ENGINE=InnoDB; CREATE TABLE `composite_child`
+        (`id` int NOT NULL PRIMARY KEY,
+        `first_id` int NULL, `second_id` int NULL, CONSTRAINT `fk_composite_proof`
+        FOREIGN KEY (`first_id`,
+        `second_id`) REFERENCES `composite_parent` (`first_id`, `second_id`) ON
+        DELETE CASCADE) ENGINE=InnoDB; INSERT INTO `composite_parent` VALUES (7,
+        11); INSERT INTO `composite_child` VALUES (1, 7, 11), (2, NULL, 999),
+        (3, 777, NULL);
+        """;
 
     /// <summary>Requests the composite replacement with independently chosen principal key order.</summary>
     /// <param name="context">The active provider context.</param>
@@ -1711,13 +1764,15 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
     /// <returns>The populated schema with all original FK checks enforced.</returns>
     private static string ForeignKeySemanticAliasFixture(
         bool includeSecondAlias
-    ) => ForeignKeyNullabilityFixture(alreadyNullable: true)
-        + " ALTER TABLE `proof_child` ADD CONSTRAINT `fk_semantic_proof_1` FOREIGN KEY (`owner_id`) "
-        + "REFERENCES `proof_parent` (`id`) ON DELETE SET NULL;"
-        + (includeSecondAlias
+    ) => $"""
+        {ForeignKeyNullabilityFixture(
+            alreadyNullable: true)} ALTER TABLE `proof_child` ADD CONSTRAINT `fk_semantic_proof_1`
+        FOREIGN KEY (`owner_id`) REFERENCES `proof_parent` (`id`) ON DELETE SET
+        NULL;{(includeSecondAlias
             ? " ALTER TABLE `proof_child` ADD CONSTRAINT `fk_semantic_proof_2` FOREIGN KEY (`owner_id`) "
             + "REFERENCES `proof_parent` (`id`) ON DELETE SET NULL;"
-            : string.Empty);
+            : string.Empty)}
+        """;
 
     /// <summary>
     /// Removes the exact source and each requested physical alias before recreating the owned target.
@@ -1842,8 +1897,11 @@ public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSaf
         CancellationToken cancellationToken
     ) => ScalarIntAsync(
         connectionString,
-        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-        + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child' "
-        + "AND CONSTRAINT_NAME = 'fk_proof_child_parent';",
+        """
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+        WHERE CONSTRAINT_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'proof_child'
+        AND CONSTRAINT_NAME = 'fk_proof_child_parent';
+        """,
         cancellationToken: cancellationToken);
 }

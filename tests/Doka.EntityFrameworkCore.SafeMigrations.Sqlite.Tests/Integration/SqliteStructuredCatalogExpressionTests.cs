@@ -30,10 +30,10 @@ public sealed class SqliteStructuredCatalogExpressionTests : SqliteIntegrationTe
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE expression_nodes (Id INTEGER NOT NULL, Code TEXT NOT NULL, "
-            + "CONSTRAINT ck_expression_nodes CHECK ("
-            + actualSql
-            + "));",
+            $"""
+            CREATE TABLE expression_nodes (Id INTEGER NOT NULL, Code TEXT NOT NULL,
+            CONSTRAINT ck_expression_nodes CHECK ({actualSql}));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);

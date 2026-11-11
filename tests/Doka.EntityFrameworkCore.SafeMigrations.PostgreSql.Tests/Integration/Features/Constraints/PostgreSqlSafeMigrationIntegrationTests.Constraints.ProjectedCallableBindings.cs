@@ -27,10 +27,12 @@ public sealed class
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE mixed_columns (id varchar(32) NOT NULL, added integer NOT NULL, "
-            + "CONSTRAINT ck_lower_binding CHECK (LOWER(id) >= '' AND added >= 0)); "
-            + $"CREATE FUNCTION public.lower({signature}) RETURNS text LANGUAGE sql IMMUTABLE "
-            + "AS 'SELECT upper($1::text)';",
+            $"""
+            CREATE TABLE mixed_columns (id varchar(32) NOT NULL, added integer NOT NULL,
+            CONSTRAINT ck_lower_binding CHECK (LOWER(id) >= ''
+            AND added >= 0)); CREATE FUNCTION public.lower({signature}) RETURNS text LANGUAGE sql
+            IMMUTABLE AS 'SELECT upper($1::text)';
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -103,11 +105,13 @@ public sealed class
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE mixed_columns (id {type} NOT NULL); CREATE TABLE callback_audit (id integer); "
-            + $"CREATE FUNCTION metadata_ambiguous({firstSignature}) RETURNS boolean LANGUAGE plpgsql AS "
-            + "'BEGIN INSERT INTO callback_audit VALUES (1); RETURN TRUE; END'; "
-            + $"CREATE FUNCTION metadata_ambiguous({secondSignature}) RETURNS boolean LANGUAGE plpgsql AS "
-            + "'BEGIN INSERT INTO callback_audit VALUES (2); RETURN TRUE; END';",
+            $"""
+            CREATE TABLE mixed_columns (id {type} NOT NULL); CREATE
+            TABLE callback_audit (id integer); CREATE FUNCTION metadata_ambiguous({firstSignature})
+            RETURNS boolean LANGUAGE plpgsql AS 'BEGIN INSERT INTO callback_audit VALUES (1); RETURN TRUE; END';
+            CREATE FUNCTION metadata_ambiguous({secondSignature}) RETURNS boolean
+            LANGUAGE plpgsql AS 'BEGIN INSERT INTO callback_audit VALUES (2); RETURN TRUE; END';
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

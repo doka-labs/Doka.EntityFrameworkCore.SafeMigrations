@@ -28,7 +28,10 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             {
                 await ExecuteSqlAsync(
                     connection,
-                    $"CREATE INDEX ix_counted_{table}_{index} ON counted_{table}(Code);",
+                    $"""
+                    CREATE INDEX ix_counted_{table}_{index}
+                    ON counted_{table}(Code);
+                    """,
                     cancellationToken: CancellationToken.None);
             }
         }
@@ -60,7 +63,10 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            $"PRAGMA foreign_keys = {foreignKeys}; PRAGMA legacy_alter_table = {legacyAlterTable};",
+            $"""
+            PRAGMA foreign_keys = {foreignKeys};
+            PRAGMA legacy_alter_table = {legacyAlterTable};
+            """,
             cancellationToken: CancellationToken.None);
 
         using var versionCommand = connection.CreateCommand();
@@ -86,25 +92,31 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
         const string child = "child\u00f6";
         await ExecuteSqlAsync(
             connection,
-            $"CREATE TABLE {QuoteCatalogIdentifier(parent)} (A TEXT COLLATE NOCASE NOT NULL, B INTEGER NOT NULL, "
-            + "Payload TEXT DEFAULT '/*literal*/', CONSTRAINT \"pk parent\" PRIMARY KEY(A DESC, B), "
-            + "CONSTRAINT uq_parent UNIQUE(B, A), CONSTRAINT ck_parent CHECK(length(A) > 0)) "
-            + "/* table option */ WITHOUT ROWID, STRICT; "
-            + $"CREATE TABLE {QuoteCatalogIdentifier(child)} (Id INTEGER CONSTRAINT \"pk child\" "
-            + "PRIMARY KEY AUTOINCREMENT, Code TEXT COLLATE RTRIM NOT NULL DEFAULT '--literal', "
-            + "ParentA TEXT, ParentB INTEGER, Generated TEXT GENERATED ALWAYS AS (Code || '/*literal*/') VIRTUAL, "
-            + "Stored INTEGER GENERATED ALWAYS AS (length(Code)) STORED, "
-            + "CONSTRAINT uq_child UNIQUE(Code) ON CONFLICT IGNORE, "
-            + "CONSTRAINT \"fk implicit\" FOREIGN KEY(ParentA, ParentB) "
-            + $"REFERENCES {QuoteCatalogIdentifier(parent)} ON UPDATE CASCADE ON DELETE SET NULL, "
-            + "CONSTRAINT \"fk explicit\" FOREIGN KEY(ParentB, ParentA) "
-            + $"REFERENCES {QuoteCatalogIdentifier(parent)}(B, A) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED); "
-            + $"CREATE INDEX \"ix expression\" ON {QuoteCatalogIdentifier(child)} "
-            + "(lower(Code) /* key trivia */ COLLATE NOCASE DESC, ParentB ASC) "
-            + "WHERE ParentB IS NOT NULL /* filter trivia */; "
-            + $"CREATE INDEX \"ix inherited\" ON {QuoteCatalogIdentifier(child)} (Code); "
-            + $"CREATE VIEW \"v quoted\" AS SELECT Code FROM {QuoteCatalogIdentifier(child)}; "
-            + $"CREATE TRIGGER \"tr quoted\" AFTER INSERT ON {QuoteCatalogIdentifier(child)} BEGIN SELECT 1; END;",
+            $"""
+            CREATE TABLE {QuoteCatalogIdentifier(parent)} (A TEXT COLLATE NOCASE NOT NULL,
+            B INTEGER NOT NULL, Payload TEXT DEFAULT '/*literal*/', CONSTRAINT "pk parent"
+            PRIMARY KEY(A DESC,
+            B), CONSTRAINT uq_parent UNIQUE(B, A), CONSTRAINT ck_parent CHECK(length(A)
+            > 0)) /* table option */ WITHOUT ROWID,
+            STRICT; CREATE TABLE {QuoteCatalogIdentifier(child)} (Id INTEGER CONSTRAINT "pk child"
+            PRIMARY KEY AUTOINCREMENT,
+            Code TEXT COLLATE RTRIM NOT NULL DEFAULT '--literal', ParentA TEXT, ParentB
+            INTEGER,
+            Generated TEXT GENERATED ALWAYS AS (Code || '/*literal*/') VIRTUAL, Stored
+            INTEGER GENERATED ALWAYS AS (length(Code)) STORED,
+            CONSTRAINT uq_child UNIQUE(Code) ON CONFLICT IGNORE, CONSTRAINT "fk implicit"
+            FOREIGN KEY(ParentA,
+            ParentB) REFERENCES {QuoteCatalogIdentifier(parent)} ON UPDATE CASCADE ON DELETE
+            SET NULL,
+            CONSTRAINT "fk explicit" FOREIGN KEY(ParentB, ParentA) REFERENCES {QuoteCatalogIdentifier(parent)}(B,
+            A) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED); CREATE INDEX "ix expression"
+            ON {QuoteCatalogIdentifier(child)} (lower(Code) /* key trivia */ COLLATE NOCASE DESC,
+            ParentB ASC) WHERE ParentB IS NOT NULL /* filter trivia */; CREATE INDEX "ix inherited"
+            ON {QuoteCatalogIdentifier(child)} (Code); CREATE VIEW "v quoted" AS SELECT
+            Code
+            FROM {QuoteCatalogIdentifier(child)}; CREATE TRIGGER "tr quoted" AFTER INSERT
+            ON {QuoteCatalogIdentifier(child)} BEGIN SELECT 1; END;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Act
@@ -248,15 +260,15 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "ATTACH DATABASE ':memory:' AS other; "
-            + "CREATE TABLE main.isolated (MainColumn TEXT COLLATE NOCASE); "
-            + "CREATE INDEX main.shared_index ON isolated(MainColumn); "
-            + "CREATE TEMP TABLE isolated (TempColumn INTEGER REFERENCES missing(Id)); "
-            + "CREATE INDEX temp.shared_index ON isolated(TempColumn); "
-            + "CREATE TABLE other.isolated (AttachedColumn INTEGER); "
-            + "CREATE INDEX other.shared_index ON isolated(AttachedColumn); "
-            + "CREATE TABLE other.attached_only (Id INTEGER); "
-            + "CREATE TEMP TABLE temporary_only (Id INTEGER);",
+            """
+            ATTACH DATABASE ':memory:' AS other; CREATE TABLE main.isolated (MainColumn
+            TEXT COLLATE NOCASE); CREATE INDEX main.shared_index ON isolated(MainColumn);
+            CREATE TEMP TABLE isolated (TempColumn INTEGER REFERENCES missing(Id));
+            CREATE INDEX temp.shared_index ON isolated(TempColumn); CREATE TABLE other.isolated
+            (AttachedColumn INTEGER); CREATE INDEX other.shared_index ON isolated(AttachedColumn);
+            CREATE TABLE other.attached_only (Id INTEGER); CREATE TEMP TABLE temporary_only
+            (Id INTEGER);
+            """,
             cancellationToken: CancellationToken.None);
 
         // Act
@@ -384,10 +396,12 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE owner_parent (Id INTEGER PRIMARY KEY); "
-            + "CREATE TABLE owner_child (Id INTEGER, "
-            + "CONSTRAINT fk_owner_child FOREIGN KEY(Id) REFERENCES owner_parent(Id)); "
-            + "CREATE INDEX ix_owner_child ON owner_child(Id);",
+            """
+            CREATE TABLE owner_parent (Id INTEGER PRIMARY KEY); CREATE TABLE owner_child
+            (Id INTEGER,
+            CONSTRAINT fk_owner_child FOREIGN KEY(Id) REFERENCES owner_parent(Id));
+            CREATE INDEX ix_owner_child ON owner_child(Id);
+            """,
             cancellationToken: CancellationToken.None);
 
         using var counter = new SnapshotCountingConnection(connection, segment, fault);
@@ -502,13 +516,15 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE all_parent (Id INTEGER PRIMARY KEY); "
-            + "CREATE TABLE all_child (Id INTEGER PRIMARY KEY, "
-            + "Anonymous INTEGER REFERENCES all_parent ON DELETE CASCADE, "
-            + "Named INTEGER CONSTRAINT fk_inline REFERENCES all_parent(Id) ON UPDATE RESTRICT, "
-            + "Repeated INTEGER CONSTRAINT fk_first REFERENCES all_parent(Id) "
-            + "CONSTRAINT fk_second REFERENCES all_parent(Id), "
-            + "TableReference INTEGER, FOREIGN KEY(TableReference) REFERENCES all_parent(Id));",
+            """
+            CREATE TABLE all_parent (Id INTEGER PRIMARY KEY); CREATE TABLE all_child
+            (Id INTEGER PRIMARY KEY,
+            Anonymous INTEGER REFERENCES all_parent ON DELETE CASCADE, Named INTEGER
+            CONSTRAINT fk_inline REFERENCES all_parent(Id) ON UPDATE RESTRICT,
+            Repeated INTEGER CONSTRAINT fk_first REFERENCES all_parent(Id) CONSTRAINT
+            fk_second REFERENCES all_parent(Id),
+            TableReference INTEGER, FOREIGN KEY(TableReference) REFERENCES all_parent(Id));
+            """,
             cancellationToken: CancellationToken.None);
 
         using var counter = new SnapshotCountingConnection(connection);
@@ -564,8 +580,10 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            $"CREATE TABLE {QuoteCatalogIdentifier(parent)} (Id INTEGER CONSTRAINT pk_parent PRIMARY KEY); "
-            + $"CREATE TABLE quoted_child ({declaration});",
+            $"""
+            CREATE TABLE {QuoteCatalogIdentifier(parent)} (Id INTEGER CONSTRAINT pk_parent PRIMARY KEY);
+            CREATE TABLE quoted_child ({declaration});
+            """,
             cancellationToken: CancellationToken.None);
 
         using var counter = new SnapshotCountingConnection(connection);
@@ -597,10 +615,11 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE quoted_name_parent (Id INTEGER PRIMARY KEY); "
-            + "CREATE TABLE quoted_name_child (ParentId INTEGER "
-            + $"CONSTRAINT {quotedName} REFERENCES quoted_name_parent(Id), "
-            + "Literal TEXT DEFAULT 'CONSTRAINT phantom REFERENCES missing(Id)');",
+            $"""
+            CREATE TABLE quoted_name_parent (Id INTEGER PRIMARY KEY); CREATE TABLE quoted_name_child
+            (ParentId INTEGER CONSTRAINT {quotedName} REFERENCES quoted_name_parent(Id),
+            Literal TEXT DEFAULT 'CONSTRAINT phantom REFERENCES missing(Id)');
+            """,
             cancellationToken: CancellationToken.None);
 
         using var counter = new SnapshotCountingConnection(connection);

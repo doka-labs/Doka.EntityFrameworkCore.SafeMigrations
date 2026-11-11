@@ -30,8 +30,12 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
         var initialHistory = (await context.Database.GetAppliedMigrationsAsync(CancellationToken.None)).ToArray();
         var initialType = await ScalarStringAsync(
             connectionString,
-            "SELECT data_type FROM information_schema.columns WHERE table_schema = 'public' "
-            + "AND table_name = 'pending_integer_rows' AND column_name = 'coordinate';",
+            """
+            SELECT data_type FROM information_schema.columns
+            WHERE table_schema = 'public'
+            AND table_name = 'pending_integer_rows'
+            AND column_name = 'coordinate';
+            """,
             cancellationToken: CancellationToken.None);
 
         report.ThrowIfBlocked();
@@ -52,8 +56,12 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
             "bigint",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT data_type FROM information_schema.columns WHERE table_schema = 'public' "
-                + "AND table_name = 'pending_integer_rows' AND column_name = 'coordinate';",
+                """
+                SELECT data_type FROM information_schema.columns
+                WHERE table_schema = 'public'
+                AND table_name = 'pending_integer_rows'
+                AND column_name = 'coordinate';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -104,25 +112,30 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
 
         var dependentSql = caseId switch
         {
-            "foreign-key" => "CREATE TABLE referenced_rows (id integer PRIMARY KEY); "
-                + "INSERT INTO referenced_rows VALUES (7); ALTER TABLE boundary_rows "
-                + "ADD FOREIGN KEY (value) REFERENCES referenced_rows(id);",
+            "foreign-key" => """
+                CREATE TABLE referenced_rows (id integer PRIMARY KEY); INSERT INTO referenced_rows
+                VALUES (7); ALTER TABLE boundary_rows ADD FOREIGN KEY (value) REFERENCES
+                referenced_rows(id);
+                """,
             "generated-dependent" => "ALTER TABLE boundary_rows ADD generated_value integer "
                 + "GENERATED ALWAYS AS (value + 1) STORED;",
             "check-dependent" => "ALTER TABLE boundary_rows ADD CHECK (value > 0);",
             "view-dependent" => "CREATE VIEW boundary_view AS SELECT value FROM boundary_rows;",
-            "event-trigger" => "CREATE FUNCTION boundary_event() RETURNS event_trigger LANGUAGE plpgsql "
-                + "AS $$ BEGIN RETURN; END $$; CREATE EVENT TRIGGER boundary_callback ON ddl_command_end "
-                + "EXECUTE FUNCTION boundary_event();",
+            "event-trigger" => """
+                CREATE FUNCTION boundary_event() RETURNS event_trigger LANGUAGE plpgsql
+                AS $$ BEGIN RETURN; END $$; CREATE EVENT TRIGGER boundary_callback ON ddl_command_end
+                EXECUTE FUNCTION boundary_event();
+                """,
             _ => string.Empty,
         };
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE boundary_rows (value {sourceType} NOT NULL{defaultClause}, payload text NOT NULL); "
-            + "INSERT INTO boundary_rows VALUES (7, 'retained'); "
-            + indexSql
-            + dependentSql,
+            $"""
+            CREATE TABLE boundary_rows (value {sourceType} NOT NULL{defaultClause},
+            payload text NOT NULL); INSERT INTO boundary_rows VALUES (7, 'retained');
+            {indexSql}{dependentSql}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -181,8 +194,10 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE stale_runtime_rows (value integer NOT NULL); INSERT INTO stale_runtime_rows VALUES (7); "
-            + "CREATE INDEX ix_stale_runtime ON stale_runtime_rows (value);",
+            """
+            CREATE TABLE stale_runtime_rows (value integer NOT NULL); INSERT INTO stale_runtime_rows
+            VALUES (7); CREATE INDEX ix_stale_runtime ON stale_runtime_rows (value);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -220,8 +235,12 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
             "integer",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT data_type FROM information_schema.columns WHERE table_schema = 'public' "
-                + "AND table_name = 'stale_runtime_rows' AND column_name = 'value';",
+                """
+                SELECT data_type FROM information_schema.columns
+                WHERE table_schema = 'public'
+                AND table_name = 'stale_runtime_rows'
+                AND column_name = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -245,13 +264,15 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE trigger_integer_rows (value integer NOT NULL, payload text NOT NULL); "
-            + "INSERT INTO trigger_integer_rows VALUES (7, 'retained'); "
-            + "CREATE INDEX ix_trigger_integer ON trigger_integer_rows (value); "
-            + "CREATE FUNCTION integer_dml_callback() RETURNS trigger LANGUAGE plpgsql AS $$ "
-            + "BEGIN RAISE EXCEPTION USING ERRCODE = 'P1991', MESSAGE = 'unexpected_integer_backfill'; END $$; "
-            + "CREATE TRIGGER integer_dml_callback AFTER UPDATE ON trigger_integer_rows "
-            + "FOR EACH STATEMENT EXECUTE FUNCTION integer_dml_callback();",
+            """
+            CREATE TABLE trigger_integer_rows (value integer NOT NULL, payload text NOT NULL); INSERT INTO
+            trigger_integer_rows VALUES (7,
+            'retained'); CREATE INDEX ix_trigger_integer ON trigger_integer_rows (value); CREATE FUNCTION
+            integer_dml_callback() RETURNS trigger LANGUAGE plpgsql AS
+            $$ BEGIN RAISE EXCEPTION USING ERRCODE = 'P1991', MESSAGE = 'unexpected_integer_backfill'; END $$;
+            CREATE TRIGGER integer_dml_callback AFTER UPDATE ON trigger_integer_rows
+            FOR EACH STATEMENT EXECUTE FUNCTION integer_dml_callback();
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -348,20 +369,20 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
             "inherited-parent" => "CREATE TABLE inherited_leaf () INHERITS (dependency_integer_rows);",
             "expression-index" => "CREATE INDEX ix_dependency ON dependency_integer_rows ((value + 1));",
             "partial-index" => "CREATE INDEX ix_dependency ON dependency_integer_rows (value) WHERE value > 0;",
-            "foreign-key-inbound" => "CREATE TABLE inbound_integer_rows (value integer NOT NULL "
-                + "REFERENCES dependency_integer_rows(value)); INSERT INTO inbound_integer_rows VALUES (7);",
+            "foreign-key-inbound" => """
+                CREATE TABLE inbound_integer_rows (value integer NOT NULL REFERENCES dependency_integer_rows(value));
+                INSERT INTO inbound_integer_rows VALUES (7);
+                """,
             _ => string.Empty,
         };
 
         await ExecuteSqlAsync(
             connectionString,
-            before
-            + "CREATE TABLE dependency_integer_rows ("
-            + columns
-            + ")"
-            + inheritance
-            + "; INSERT INTO dependency_integer_rows(value,payload) VALUES (7, 'retained'); "
-            + dependent,
+            $"""
+            {before}CREATE TABLE dependency_integer_rows ({columns}){inheritance};
+            INSERT INTO dependency_integer_rows(value,payload) VALUES (7, 'retained');
+            {dependent}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -460,8 +481,12 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
             targetType,
             await ScalarStringAsync(
                 connectionString,
-                "SELECT data_type FROM information_schema.columns WHERE table_schema = 'public' "
-                + "AND table_name = 'smaller_integer_rows' AND column_name = 'value';",
+                """
+                SELECT data_type FROM information_schema.columns
+                WHERE table_schema = 'public'
+                AND table_name = 'smaller_integer_rows'
+                AND column_name = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -473,10 +498,12 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE replacement_integer_rows (value integer NOT NULL, payload text NOT NULL); "
-            + "INSERT INTO replacement_integer_rows VALUES (7, 'retained'); "
-            + "CREATE INDEX ix_old_integer ON replacement_integer_rows (value); "
-            + "CREATE INDEX ix_new_integer ON replacement_integer_rows (payload);",
+            """
+            CREATE TABLE replacement_integer_rows (value integer NOT NULL, payload text NOT NULL); INSERT
+            INTO replacement_integer_rows VALUES (7,
+            'retained'); CREATE INDEX ix_old_integer ON replacement_integer_rows (value); CREATE INDEX
+            ix_new_integer ON replacement_integer_rows (payload);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -554,13 +581,13 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
 
         await ExecuteSqlAsync(
             connectionString,
-            (explicitSchema
+            $"""
+            {(explicitSchema
                 ? "CREATE SCHEMA widening; "
-                : string.Empty)
-            + $"CREATE TABLE {owner} (left_value integer NOT NULL, right_value integer NOT NULL, "
-            + "position_value integer NOT NULL, payload text NOT NULL); "
-            + $"INSERT INTO {owner} VALUES (-2147483648, 2147483647, 42, 'retained'); "
-            + (indexAlreadyRemoved
+                : string.Empty)}CREATE TABLE {owner} (left_value
+            integer NOT NULL, right_value integer NOT NULL, position_value integer NOT
+            NULL, payload text NOT NULL); INSERT INTO {owner} VALUES
+            (-2147483648, 2147483647, 42, 'retained'); {(indexAlreadyRemoved
                 ? string.Empty
                 : $"CREATE INDEX ix_upgrade_rows ON {owner} (left_value"
                 + (threeDrops
@@ -570,7 +597,8 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
                 + (threeDrops
                     ? $"CREATE INDEX ix_upgrade_rows_right ON {owner} (right_value); "
                     + $"CREATE INDEX ix_upgrade_rows_position ON {owner} (position_value);"
-                    : string.Empty)),
+                    : string.Empty))}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -615,22 +643,29 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
 
         var before = await ScalarStringAsync(
             connectionString,
-            $"SELECT left_value::text || ':' || right_value::text || ':' || position_value::text || ':' || payload "
-            + $"FROM {owner};",
+            $"""
+            SELECT left_value::text || ':' || right_value::text || ':' || position_value::text
+            || ':' || payload
+            FROM {owner};
+            """,
             cancellationToken: CancellationToken.None);
 
         var beforeType = await ScalarStringAsync(
             connectionString,
-            "SELECT data_type FROM information_schema.columns WHERE table_schema = '"
-            + (schema ?? "public")
-            + "' AND table_name = 'upgrade_rows' AND column_name = 'left_value';",
+            $"""
+            SELECT data_type FROM information_schema.columns
+            WHERE table_schema = '{schema ?? "public"}'
+            AND table_name = 'upgrade_rows'
+            AND column_name = 'left_value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var beforeIndex = await ScalarIntAsync(
             connectionString,
-            "SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = '"
-            + (schema ?? "public")
-            + "' AND indexname = 'ix_upgrade_rows';",
+            $"""
+            SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = '{schema ?? "public"}'
+            AND indexname = 'ix_upgrade_rows';
+            """,
             cancellationToken: CancellationToken.None);
 
         report.ThrowIfBlocked();
@@ -657,17 +692,22 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
             before,
             await ScalarStringAsync(
                 connectionString,
-                $"SELECT left_value::text || ':' || right_value::text || ':' || position_value::text || ':' || payload "
-                + $"FROM {owner};",
+                $"""
+                SELECT left_value::text || ':' || right_value::text || ':' || position_value::text
+                || ':' || payload FROM {owner};
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             names.Length,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT count(*) FROM information_schema.columns WHERE table_schema = '"
-                + (schema ?? "public")
-                + "' AND table_name = 'upgrade_rows' AND data_type = 'bigint' AND is_nullable = 'NO';",
+                $"""
+                SELECT count(*) FROM information_schema.columns
+                WHERE table_schema = '{schema ?? "public"}'
+                AND table_name = 'upgrade_rows'
+                AND data_type = 'bigint' AND is_nullable = 'NO';
+                """,
                 cancellationToken: CancellationToken.None));
 
         if (dropIndex)
@@ -676,30 +716,35 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
                 0,
                 await ScalarIntAsync(
                     connectionString,
-                    "SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = '"
-                    + (schema ?? "public")
-                    + "' AND indexname IN ('ix_upgrade_rows', 'ix_upgrade_rows_right', 'ix_upgrade_rows_position');",
+                    $"""
+                    SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = '{schema ?? "public"}'
+                    AND indexname IN ('ix_upgrade_rows', 'ix_upgrade_rows_right', 'ix_upgrade_rows_position');
+                    """,
                     cancellationToken: CancellationToken.None));
 
             Assert.Equal(
                 2,
                 await ScalarIntAsync(
                     connectionString,
-                    "SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = '"
-                    + (schema ?? "public")
-                    + "' AND tablename = 'upgrade_rows' AND indexname IN ('ix_upgrade_left', 'ix_upgrade_right');",
+                    $"""
+                    SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = '{schema ?? "public"}'
+                    AND tablename = 'upgrade_rows'
+                    AND indexname IN ('ix_upgrade_left', 'ix_upgrade_right');
+                    """,
                     cancellationToken: CancellationToken.None));
 
             Assert.Equal(
                 4,
                 await ScalarIntAsync(
                     connectionString,
-                    "SELECT count(*) FROM pg_catalog.pg_constraint co "
-                    + "JOIN pg_catalog.pg_class tbl ON tbl.oid = co.conrelid "
-                    + "JOIN pg_catalog.pg_namespace ns ON ns.oid = tbl.relnamespace "
-                    + "WHERE ns.nspname = '"
-                    + (schema ?? "public")
-                    + "' AND tbl.relname = 'upgrade_rows' AND co.contype = 'c';",
+                    $"""
+                    SELECT count(*) FROM pg_catalog.pg_constraint co
+                    JOIN pg_catalog.pg_class tbl ON tbl.oid = co.conrelid
+                    JOIN pg_catalog.pg_namespace ns ON ns.oid = tbl.relnamespace
+                    WHERE ns.nspname = '{schema ?? "public"}'
+                    AND tbl.relname = 'upgrade_rows'
+                    AND co.contype = 'c';
+                    """,
                     cancellationToken: CancellationToken.None));
         }
 
@@ -770,9 +815,12 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
         protected override void Up(
             MigrationBuilder migrationBuilder
         ) => migrationBuilder.Sql(
-            "CREATE TABLE pending_integer_rows (coordinate integer NOT NULL, "
-            + "payload text NOT NULL); CREATE INDEX ix_pending_integer ON pending_integer_rows (coordinate); "
-            + "INSERT INTO pending_integer_rows VALUES (2147483647, 'retained');");
+            """
+            CREATE TABLE pending_integer_rows (coordinate integer NOT NULL, payload text NOT NULL); CREATE
+            INDEX ix_pending_integer ON pending_integer_rows (coordinate); INSERT INTO pending_integer_rows
+            VALUES (2147483647,
+            'retained');
+            """);
 
         /// <inheritdoc />
         protected override void Down(

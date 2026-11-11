@@ -30,10 +30,11 @@ public sealed class SqlServerModelManagedDataLiteralContracts : SqlServerIntegra
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.bounded_payloads (Id int NOT NULL CONSTRAINT PK_bounded_payloads PRIMARY KEY, "
-            + "Payload "
-            + storeType
-            + " NOT NULL);",
+            $"""
+            CREATE TABLE dbo.bounded_payloads (Id int NOT NULL CONSTRAINT PK_bounded_payloads
+            PRIMARY KEY,
+            Payload {storeType} NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -163,10 +164,11 @@ public sealed class SqlServerModelManagedDataLiteralContracts : SqlServerIntegra
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.ansi_payloads (Id int NOT NULL CONSTRAINT PK_ansi_payloads PRIMARY KEY, "
-            + "Payload varchar("
-            + maximumBytes.ToString(CultureInfo.InvariantCulture)
-            + ") NOT NULL);",
+            $"""
+            CREATE TABLE dbo.ansi_payloads (Id int NOT NULL CONSTRAINT PK_ansi_payloads
+            PRIMARY KEY,
+            Payload varchar({maximumBytes.ToString(CultureInfo.InvariantCulture)}) NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -241,8 +243,11 @@ public sealed class SqlServerModelManagedDataLiteralContracts : SqlServerIntegra
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.precision_payloads (Id int NOT NULL CONSTRAINT PK_precision_payloads PRIMARY KEY, "
-            + "Amount decimal(5,2) NOT NULL, RecordedAt datetime2(3) NOT NULL);",
+            """
+            CREATE TABLE dbo.precision_payloads (Id int NOT NULL CONSTRAINT PK_precision_payloads
+            PRIMARY KEY,
+            Amount decimal(5,2) NOT NULL, RecordedAt datetime2(3) NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

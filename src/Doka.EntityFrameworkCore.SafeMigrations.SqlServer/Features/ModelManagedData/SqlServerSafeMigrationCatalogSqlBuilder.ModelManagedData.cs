@@ -27,21 +27,33 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + " OR "
             + ExpectedSelfCollision(intent, intent.UniqueKeys, relation, "t", intent.Values);
 
-        var state = "(SELECT CASE "
-            + $"WHEN MAX(CASE WHEN {found} AND NOT ({targetMatch}) THEN 1 ELSE 0 END) = 1 THEN N'different' "
-            + $"WHEN {collision} THEN N'data_blocked' "
-            + $"WHEN MAX(CASE WHEN NOT ({found}) THEN 1 ELSE 0 END) = 1 THEN N'missing' "
-            + "ELSE N'matching' END "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch})";
+        var state = $"""
+            (SELECT CASE WHEN MAX(CASE WHEN {found}
+            AND NOT ({targetMatch})
+            THEN 1 ELSE 0 END) = 1 THEN N'different'
+            WHEN {collision}
+            THEN N'data_blocked'
+            WHEN MAX(CASE WHEN NOT ({found})
+            THEN 1 ELSE 0 END) = 1 THEN N'missing'
+            ELSE N'matching' END FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
-        var postcondition = $"NOT EXISTS (SELECT 1 FROM {relation} "
-            + $"LEFT JOIN {table} AS doka_actual ON {keyMatch} "
-            + $"WHERE NOT ({found}) OR NOT ({targetMatch}))";
+        var postcondition = $"""
+            NOT EXISTS (SELECT 1 FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch}
+            WHERE NOT ({found})
+            OR NOT ({targetMatch}))
+            """;
 
-        var evidence = $"(SELECT STRING_AGG(CONVERT(varchar(max), CASE WHEN NOT ({found}) THEN '0' "
-            + $"WHEN ({targetMatch}) THEN '2' ELSE '3' END), '') "
-            + $"WITHIN GROUP (ORDER BY doka_expected.{Delimited("r")}) "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch})";
+        var evidence = $"""
+            (SELECT STRING_AGG(CONVERT(varchar(max), CASE WHEN NOT ({found})
+            THEN '0'
+            WHEN ({targetMatch})
+            THEN '2' ELSE '3' END), '') WITHIN GROUP (ORDER BY doka_expected.{Delimited("r")})
+            FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
         var commonGuard = BuildModelManagedDataCommonGuard(intent);
 
@@ -74,23 +86,37 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + " OR "
             + ExpectedSelfCollision(intent, intent.UniqueKeys, relation, "n", intent.NewValues);
 
-        var state = "(SELECT CASE "
-            + $"WHEN MAX(CASE WHEN NOT ({found}) THEN 1 ELSE 0 END) = 1 THEN N'prerequisite_missing' "
-            + $"WHEN MAX(CASE WHEN NOT ({sourceMatch}) AND NOT ({targetMatch}) THEN 1 ELSE 0 END) = 1 "
-            + "THEN N'different' "
-            + $"WHEN {collision} THEN N'data_blocked' "
-            + $"WHEN MAX(CASE WHEN NOT ({targetMatch}) THEN 1 ELSE 0 END) = 0 THEN N'matching' "
-            + "ELSE N'transition_ready' END "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch})";
+        var state = $"""
+            (SELECT CASE WHEN MAX(CASE WHEN NOT ({found})
+            THEN 1 ELSE 0 END) = 1 THEN N'prerequisite_missing'
+            WHEN MAX(CASE WHEN NOT ({sourceMatch})
+            AND NOT ({targetMatch})
+            THEN 1 ELSE 0 END) = 1 THEN N'different'
+            WHEN {collision}
+            THEN N'data_blocked'
+            WHEN MAX(CASE WHEN NOT ({targetMatch})
+            THEN 1 ELSE 0 END) = 0 THEN N'matching'
+            ELSE N'transition_ready' END FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
-        var postcondition = $"NOT EXISTS (SELECT 1 FROM {relation} "
-            + $"LEFT JOIN {table} AS doka_actual ON {keyMatch} "
-            + $"WHERE NOT ({found}) OR NOT ({targetMatch}))";
+        var postcondition = $"""
+            NOT EXISTS (SELECT 1 FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch}
+            WHERE NOT ({found})
+            OR NOT ({targetMatch}))
+            """;
 
-        var evidence = $"(SELECT STRING_AGG(CONVERT(varchar(max), CASE WHEN NOT ({found}) THEN '0' "
-            + $"WHEN ({targetMatch}) THEN '2' WHEN ({sourceMatch}) THEN '1' ELSE '3' END), '') "
-            + $"WITHIN GROUP (ORDER BY doka_expected.{Delimited("r")}) "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch})";
+        var evidence = $"""
+            (SELECT STRING_AGG(CONVERT(varchar(max), CASE WHEN NOT ({found})
+            THEN '0'
+            WHEN ({targetMatch})
+            THEN '2'
+            WHEN ({sourceMatch})
+            THEN '1' ELSE '3' END), '') WITHIN GROUP (ORDER BY doka_expected.{Delimited("r")})
+            FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
         var commonGuard = BuildModelManagedDataCommonGuard(intent);
 
@@ -116,21 +142,33 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var dependent = DependencyExists(intent, relation);
         var unmodeled = UnmodeledIncomingForeignKey(intent);
-        var state = "(SELECT CASE "
-            + $"WHEN {unmodeled} THEN N'unsupported' "
-            + $"WHEN MAX(CASE WHEN {found} AND NOT ({sourceMatch}) THEN 1 ELSE 0 END) = 1 "
-            + "THEN N'different' "
-            + $"WHEN {dependent} THEN N'data_blocked' "
-            + $"WHEN MAX(CASE WHEN {found} THEN 1 ELSE 0 END) = 0 THEN N'missing' "
-            + "ELSE N'transition_ready' END "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch})";
+        var state = $"""
+            (SELECT CASE WHEN {unmodeled}
+            THEN N'unsupported'
+            WHEN MAX(CASE WHEN {found}
+            AND NOT ({sourceMatch})
+            THEN 1 ELSE 0 END) = 1 THEN N'different'
+            WHEN {dependent}
+            THEN N'data_blocked'
+            WHEN MAX(CASE WHEN {found}
+            THEN 1 ELSE 0 END) = 0 THEN N'missing'
+            ELSE N'transition_ready' END FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
-        var postcondition = $"NOT EXISTS (SELECT 1 FROM {relation} " + $"JOIN {table} AS doka_actual ON {keyMatch})";
+        var postcondition = $"""
+            NOT EXISTS (SELECT 1 FROM {relation}
+            JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
-        var evidence = $"(SELECT STRING_AGG(CONVERT(varchar(max), CASE WHEN NOT ({found}) THEN '0' "
-            + $"WHEN ({sourceMatch}) THEN '1' ELSE '3' END), '') "
-            + $"WITHIN GROUP (ORDER BY doka_expected.{Delimited("r")}) "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch})";
+        var evidence = $"""
+            (SELECT STRING_AGG(CONVERT(varchar(max), CASE WHEN NOT ({found})
+            THEN '0'
+            WHEN ({sourceMatch})
+            THEN '1' ELSE '3' END), '') WITHIN GROUP (ORDER BY doka_expected.{Delimited("r")})
+            FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
         var commonGuard = BuildModelManagedDataCommonGuard(intent);
 
@@ -184,13 +222,20 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 .Range(0, intent.Columns.Count)
                 .Select(index => $"doka_expected.{Delimited($"t{index}")}"));
 
-        var mutation = $"INSERT INTO {table} ({columns}) SELECT {values} FROM {relation} "
-            + $"WHERE NOT EXISTS (SELECT 1 FROM {table} AS doka_actual WHERE {keyMatch})";
+        var mutation = $"""
+            INSERT INTO {table} ({columns}) SELECT
+            {values}
+            FROM {relation}
+            WHERE NOT EXISTS (SELECT 1 FROM {table} AS doka_actual
+            WHERE {keyMatch})
+            """;
 
         var includedColumns = string.Join(", ", intent.Columns.Select(Literal));
-        var hasExplicitIdentity = "EXISTS (SELECT 1 FROM sys.identity_columns ic "
-            + $"WHERE ic.object_id = {TableId(intent.Table, intent.Schema)} "
-            + $"AND ic.name IN ({includedColumns}))";
+        var hasExplicitIdentity = $"""
+            EXISTS (SELECT 1 FROM sys.identity_columns ic
+            WHERE ic.object_id = {TableId(intent.Table, intent.Schema)}
+            AND ic.name IN ({includedColumns}))
+            """;
 
         // WHY: EF HasData includes explicit identity keys. IDENTITY_INSERT is
         // session-scoped. TRY/CATCH restores ordinary SQL errors; client
@@ -199,18 +244,17 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var clearOwnership = $"EXEC sys.sp_set_session_context "
             + $"@key = N'{SqlServerSafeMigrationIdentityInsertScope.ContextKey}', @value = NULL;";
 
-        return $"DECLARE @doka_identity_insert bit = CASE WHEN {hasExplicitIdentity} THEN 1 ELSE 0 END; "
-            + SqlServerSafeMigrationIdentityInsertScope.BuildAcquisitionSql(
+        return $"""
+            DECLARE @doka_identity_insert bit = CASE WHEN {hasExplicitIdentity}
+            THEN 1 ELSE 0 END; {SqlServerSafeMigrationIdentityInsertScope.BuildAcquisitionSql(
                 table,
                 scriptIdentityScope,
-                scopeInUseMessage)
-            + $"BEGIN TRY {mutation}; END TRY "
-            + $"BEGIN CATCH IF @doka_identity_insert = 1 BEGIN SET IDENTITY_INSERT {table} OFF; "
-            + clearOwnership
-            + " END; THROW; END CATCH; "
-            + $"IF @doka_identity_insert = 1 BEGIN SET IDENTITY_INSERT {table} OFF; "
-            + clearOwnership
-            + " END";
+                scopeInUseMessage)}BEGIN TRY {mutation};
+            END TRY BEGIN CATCH IF @doka_identity_insert = 1 BEGIN SET IDENTITY_INSERT
+            {table} OFF; {clearOwnership} END; THROW; END
+            CATCH; IF @doka_identity_insert = 1 BEGIN SET IDENTITY_INSERT {table}
+            OFF; {clearOwnership} END
+            """;
     }
 
     private string BuildUpdateMutation(
@@ -230,8 +274,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             ", ",
             intent.Columns.Select((column, index) => $"{Delimited(column)} = doka_expected.{Delimited($"n{index}")}"));
 
-        return $"UPDATE doka_actual SET {assignments} FROM {table} AS doka_actual "
-            + $"JOIN {relation} ON {keyMatch} WHERE ({sourceMatch}) AND NOT ({targetMatch})";
+        return $"""
+            UPDATE doka_actual SET {assignments}
+            FROM {table} AS doka_actual
+            JOIN {relation} ON {keyMatch}
+            WHERE ({sourceMatch})
+            AND NOT ({targetMatch})
+            """;
     }
 
     private string BuildDeleteMutation(
@@ -244,8 +293,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var sourceMatch = ColumnMatch(intent.Columns, "doka_actual", "doka_expected", "o");
         var dependent = DependencyExists(intent, relation);
 
-        return $"DELETE doka_actual FROM {table} AS doka_actual "
-            + $"JOIN {relation} ON {keyMatch} WHERE ({sourceMatch}) AND NOT ({dependent})";
+        return $"""
+            DELETE doka_actual FROM {table} AS doka_actual
+            JOIN {relation} ON {keyMatch}
+            WHERE ({sourceMatch})
+            AND NOT ({dependent})
+            """;
     }
 
     private string BuildModelManagedDataPrerequisite(
@@ -363,11 +416,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // WHY: Rendering all row values twice doubles transient allocation.
         // Reuse the exact proof for both acceptance and failure classification,
         // without caching row data beyond this immutable operation's plan.
-        return $"COALESCE({SqlServerCompatibilityLevel()}, 0) >= 110 "
-            + $"AND ({BuildSourceCollisionCollationGuard(intent)}) "
-            + $"AND ({BuildModelManagedValueGuard(intent)}) "
-            + $"AND ({BuildModelManagedDataTriggerGuard(intent)}) "
-            + $"AND ({BuildModelManagedDataWritableColumnGuard(intent)})";
+        return $"""
+            COALESCE({SqlServerCompatibilityLevel()}, 0) >= 110
+            AND ({BuildSourceCollisionCollationGuard(intent)})
+            AND ({BuildModelManagedValueGuard(intent)})
+            AND ({BuildModelManagedDataTriggerGuard(intent)})
+            AND ({BuildModelManagedDataWritableColumnGuard(intent)})
+            """;
     }
 
     private static string SqlServerCompatibilityLevel()
@@ -408,10 +463,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             ? " OR c.is_identity = 1"
             : string.Empty;
 
-        return "NOT EXISTS (SELECT 1 FROM sys.columns c "
-            + $"WHERE c.object_id = {TableId(intent.Table, intent.Schema)} "
-            + $"AND c.name IN ({columns}) "
-            + $"AND (c.is_computed = 1 OR c.generated_always_type <> 0{identity}))";
+        return $"""
+            NOT EXISTS (SELECT 1 FROM sys.columns c
+            WHERE c.object_id = {TableId(intent.Table, intent.Schema)}
+            AND c.name IN ({columns})
+            AND (c.is_computed = 1 OR c.generated_always_type <> 0{identity}))
+            """;
     }
 
     private string BuildSourceCollisionCollationGuard(
@@ -467,11 +524,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // WHY: An unqualified expected-vs-expected comparison uses database
         // collation. A different physical key collation could hide a collision.
 
-        return "NOT EXISTS (SELECT 1 FROM sys.columns c "
-            + $"WHERE c.object_id = {TableId(intent.Table, intent.Schema)} "
-            + $"AND c.name IN ({expected}) "
-            + "AND (c.collation_name IS NULL OR c.collation_name <> "
-            + "CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(), 'Collation'))))";
+        return $"""
+            NOT EXISTS (SELECT 1 FROM sys.columns c
+            WHERE c.object_id = {TableId(intent.Table, intent.Schema)}
+            AND c.name IN ({expected})
+            AND (c.collation_name IS NULL
+            OR c.collation_name <> CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(),
+            'Collation'))))
+            """;
     }
 
     private static bool IsCharacterManagedStoreType(
@@ -634,10 +694,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     // WHY: The expected row relation uses database-default
                     // literals; a different physical code page cannot borrow it.
                     predicates.Add(
-                        "EXISTS (SELECT 1 FROM sys.columns c "
-                        + $"WHERE c.object_id = {TableId(intent.Table, intent.Schema)} "
-                        + $"AND c.name = {Literal(columns[column])} "
-                        + "AND c.collation_name = CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(), 'Collation')))");
+                        $"""
+                        EXISTS (SELECT 1 FROM sys.columns c
+                        WHERE c.object_id = {TableId(intent.Table, intent.Schema)}
+                        AND c.name = {Literal(columns[column])}
+                        AND c.collation_name = CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(),
+                        'Collation')))
+                        """);
                 }
             }
         }
@@ -927,10 +990,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     {
         // WHY: Database collations may ignore case, accents, or trailing spaces.
         // Comparing canonical typed bytes preserves model-managed row evidence.
-        return $"({actual} IS NULL AND {expected} IS NULL OR "
-            + $"{actual} IS NOT NULL AND {expected} IS NOT NULL "
-            + $"AND DATALENGTH({actual}) = DATALENGTH({expected}) "
-            + $"AND CONVERT(varbinary(max), {actual}) = CONVERT(varbinary(max), {expected}))";
+        return $"""
+            ({actual} IS NULL AND {expected} IS NULL OR
+            {actual} IS NOT NULL AND {expected} IS NOT NULL
+            AND DATALENGTH({actual}) = DATALENGTH({expected})
+            AND CONVERT(varbinary(max), {actual}) = CONVERT(varbinary(max), {expected}))
+            """;
     }
 
     private string UniqueCollision(
@@ -963,9 +1028,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
             var key = KeyMatch(intent, "doka_conflict", "doka_expected");
 
-            return $"EXISTS (SELECT 1 FROM {relation} "
-                + $"JOIN {QualifiedTable(intent.Table, intent.Schema)} AS doka_conflict "
-                + $"ON {columns} WHERE NOT ({key}))";
+            return $"""
+                EXISTS (SELECT 1 FROM {relation}
+                JOIN {QualifiedTable(intent.Table, intent.Schema)} AS doka_conflict ON {columns}
+                WHERE NOT ({key}))
+                """;
         });
 
         return $"({string.Join(" OR ", checks)})";
@@ -1017,9 +1084,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // WHY: CLR equality cannot model the live database collation. Two
         // distinct expected strings may collide under a case-insensitive key.
 
-        return $"EXISTS (SELECT 1 FROM {relation} CROSS JOIN {other} "
-            + $"WHERE doka_expected.{Delimited("r")} < doka_other.{Delimited("r")} "
-            + $"AND ({string.Join(" OR ", collisionKeys.Select(static key => $"({key})"))}))";
+        return $"""
+            EXISTS (SELECT 1 FROM {relation} CROSS
+            JOIN {other}
+            WHERE doka_expected.{Delimited("r")} < doka_other.{Delimited("r")}
+            AND ({string.Join(" OR ", collisionKeys.Select(static key => $"({key})"))}))
+            """;
     }
 
     private string DependencyExists(
@@ -1044,8 +1114,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     return $"doka_dependent.{Delimited(column)} = " + $"doka_expected.{Delimited($"o{ordinal}")}";
                 }));
 
-            return $"EXISTS (SELECT 1 FROM {relation} "
-                + $"JOIN {QualifiedTable(foreignKey.Table, foreignKey.Schema)} AS doka_dependent ON {match})";
+            return $"""
+                EXISTS (SELECT 1 FROM {relation}
+                JOIN {QualifiedTable(foreignKey.Table, foreignKey.Schema)} AS doka_dependent ON {match})
+                """;
         });
 
         return $"({string.Join(" OR ", checks)})";
@@ -1072,8 +1144,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     return $"doka_dependent.{Delimited(column)} = " + $"doka_expected.{Delimited($"o{ordinal}")}";
                 }));
 
-            return $"CONVERT(varchar(20), (SELECT COUNT_BIG(*) FROM {relation} "
-                + $"JOIN {QualifiedTable(foreignKey.Table, foreignKey.Schema)} AS doka_dependent ON {match}))";
+            return $"""
+                CONVERT(varchar(20), (SELECT COUNT_BIG(*)
+                FROM {relation}
+                JOIN {QualifiedTable(foreignKey.Table, foreignKey.Schema)} AS doka_dependent ON {match}))
+                """;
         });
 
         // WHY: COUNT_BIG is never NULL. Concatenation covers a single dependency
@@ -1099,18 +1174,20 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 foreignKey.Columns.Select((column,
                         index) => $"({index + 1}, {Literal(column)}, {Literal(foreignKey.PrincipalColumns[index])})"));
 
-            return $"(fk.parent_object_id = {TableId(foreignKey.Table, foreignKey.Schema)} "
-                + $"AND (SELECT COUNT(*) FROM sys.foreign_key_columns fkc "
-                + $"WHERE fkc.constraint_object_id = fk.object_id) = {foreignKey.Columns.Count} "
-                + $"AND NOT EXISTS (SELECT 1 FROM (VALUES {expected}) expected(ordinal, dependent, principal) "
-                + "WHERE NOT EXISTS (SELECT 1 FROM sys.foreign_key_columns fkc "
-                + "JOIN sys.columns dc ON dc.object_id = fkc.parent_object_id "
-                + "AND dc.column_id = fkc.parent_column_id "
-                + "JOIN sys.columns pc ON pc.object_id = fkc.referenced_object_id "
-                + "AND pc.column_id = fkc.referenced_column_id "
-                + "WHERE fkc.constraint_object_id = fk.object_id "
-                + "AND fkc.constraint_column_id = expected.ordinal "
-                + "AND dc.name = expected.dependent AND pc.name = expected.principal)))";
+            return $"""
+                (fk.parent_object_id = {TableId(foreignKey.Table, foreignKey.Schema)}
+                AND (SELECT COUNT(*) FROM sys.foreign_key_columns fkc
+                WHERE fkc.constraint_object_id = fk.object_id) = {foreignKey.Columns.Count}
+                AND NOT EXISTS (SELECT 1 FROM (VALUES {expected}) expected(ordinal, dependent, principal)
+                WHERE NOT EXISTS (SELECT 1 FROM sys.foreign_key_columns fkc
+                JOIN sys.columns dc ON dc.object_id = fkc.parent_object_id
+                AND dc.column_id = fkc.parent_column_id
+                JOIN sys.columns pc ON pc.object_id = fkc.referenced_object_id
+                AND pc.column_id = fkc.referenced_column_id
+                WHERE fkc.constraint_object_id = fk.object_id
+                AND fkc.constraint_column_id = expected.ordinal
+                AND dc.name = expected.dependent AND pc.name = expected.principal)))
+                """;
         });
 
         var known = intent.ForeignKeys.Count == 0
@@ -1120,9 +1197,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // WHY: An unmodeled incoming FK can cascade or rewrite dependent rows.
         // Source-frozen FK metadata is the only evidence that the delete is safe.
 
-        return "EXISTS (SELECT 1 FROM sys.foreign_keys fk "
-            + $"WHERE fk.referenced_object_id = {TableId(intent.Table, intent.Schema)} "
-            + $"AND NOT ({known}))";
+        return $"""
+            EXISTS (SELECT 1 FROM sys.foreign_keys fk
+            WHERE fk.referenced_object_id = {TableId(intent.Table, intent.Schema)}
+            AND NOT ({known}))
+            """;
     }
 
     private string QualifiedTable(

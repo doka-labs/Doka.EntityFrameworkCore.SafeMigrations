@@ -9,9 +9,12 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE raw_drop_parent (Id INTEGER NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE raw_drop_child (Id INTEGER NOT NULL PRIMARY KEY, ParentId INTEGER NULL, "
-            + "FOREIGN KEY (ParentId) REFERENCES raw_drop_parent (Id));",
+            """
+            CREATE TABLE raw_drop_parent (Id INTEGER NOT NULL PRIMARY KEY); CREATE TABLE
+            raw_drop_child (Id INTEGER NOT NULL PRIMARY KEY,
+            ParentId INTEGER NULL, FOREIGN KEY (ParentId) REFERENCES raw_drop_parent
+            (Id));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -45,9 +48,12 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE renamed_drop_parent (Id INTEGER NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE renamed_drop_child (Id INTEGER NOT NULL PRIMARY KEY, ParentId INTEGER NULL, "
-            + "FOREIGN KEY (ParentId) REFERENCES renamed_drop_parent (Id));",
+            """
+            CREATE TABLE renamed_drop_parent (Id INTEGER NOT NULL PRIMARY KEY); CREATE
+            TABLE renamed_drop_child (Id INTEGER NOT NULL PRIMARY KEY,
+            ParentId INTEGER NULL, FOREIGN KEY (ParentId) REFERENCES renamed_drop_parent
+            (Id));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -67,8 +73,11 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
 
         var remainingTables = await ScalarIntAsync(
             connection,
-            "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' "
-            + "AND name IN ('renamed_drop_parent', 'renamed_drop_target', 'renamed_drop_child');",
+            """
+            SELECT COUNT(*) FROM sqlite_schema
+            WHERE type = 'table' AND name IN ('renamed_drop_parent', 'renamed_drop_target',
+            'renamed_drop_child');
+            """,
             cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
@@ -276,11 +285,14 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
 
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE drop_parent (Id INTEGER NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE drop_child (Id INTEGER NOT NULL PRIMARY KEY, ParentId INTEGER NULL, "
-            + $"CONSTRAINT fk_drop_child_parent FOREIGN KEY (ParentId) REFERENCES drop_parent (Id) ON DELETE {deleteAction}); "
-            + "INSERT INTO drop_parent (Id) VALUES (1); "
-            + "INSERT INTO drop_child (Id, ParentId) VALUES (11, 1);",
+            $"""
+            CREATE TABLE drop_parent (Id INTEGER NOT NULL PRIMARY KEY); CREATE TABLE
+            drop_child (Id INTEGER NOT NULL PRIMARY KEY,
+            ParentId INTEGER NULL, CONSTRAINT fk_drop_child_parent FOREIGN KEY (ParentId)
+            REFERENCES drop_parent (Id) ON DELETE {deleteAction}); INSERT
+            INTO drop_parent (Id) VALUES (1); INSERT INTO drop_child (Id,
+            ParentId) VALUES (11, 1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -319,12 +331,15 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE ordered_drop_parent (Id INTEGER NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE ordered_drop_child (Id INTEGER NOT NULL PRIMARY KEY, ParentId INTEGER NULL, "
-            + "CONSTRAINT fk_ordered_drop_child_parent FOREIGN KEY (ParentId) "
-            + "REFERENCES ordered_drop_parent (Id) ON DELETE CASCADE); "
-            + "INSERT INTO ordered_drop_parent (Id) VALUES (1); "
-            + "INSERT INTO ordered_drop_child (Id, ParentId) VALUES (11, 1);",
+            """
+            CREATE TABLE ordered_drop_parent (Id INTEGER NOT NULL PRIMARY KEY); CREATE
+            TABLE ordered_drop_child (Id INTEGER NOT NULL PRIMARY KEY,
+            ParentId INTEGER NULL, CONSTRAINT fk_ordered_drop_child_parent FOREIGN KEY
+            (ParentId) REFERENCES ordered_drop_parent (Id) ON DELETE CASCADE); INSERT
+            INTO ordered_drop_parent (Id) VALUES (1); INSERT INTO ordered_drop_child
+            (Id,
+            ParentId) VALUES (11, 1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -412,12 +427,14 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE collation_parents (Id INTEGER NOT NULL, Code TEXT COLLATE NOCASE NOT NULL, "
-            + "CONSTRAINT pk_collation_parents PRIMARY KEY (Id), "
-            + "CONSTRAINT uq_collation_parents_code UNIQUE (Code)); "
-            + "CREATE TABLE collation_children (Id INTEGER NOT NULL, ParentCode TEXT NOT NULL, "
-            + "CONSTRAINT pk_collation_children PRIMARY KEY (Id)); "
-            + "CREATE INDEX ix_collation_children_parent_code ON collation_children (ParentCode);",
+            """
+            CREATE TABLE collation_parents (Id INTEGER NOT NULL, Code TEXT COLLATE NOCASE NOT
+            NULL,
+            CONSTRAINT pk_collation_parents PRIMARY KEY (Id), CONSTRAINT uq_collation_parents_code
+            UNIQUE (Code)); CREATE TABLE collation_children (Id INTEGER NOT NULL,
+            ParentCode TEXT NOT NULL, CONSTRAINT pk_collation_children PRIMARY KEY (Id));
+            CREATE INDEX ix_collation_children_parent_code ON collation_children (ParentCode);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteForeignKeyCollationTestContext(connection);
@@ -511,10 +528,13 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE self_drop_tree (Id INTEGER NOT NULL PRIMARY KEY, ParentId INTEGER NULL, "
-            + "CONSTRAINT fk_self_drop_tree_parent FOREIGN KEY (ParentId) "
-            + "REFERENCES self_drop_tree (Id) ON DELETE CASCADE); "
-            + "INSERT INTO self_drop_tree (Id, ParentId) VALUES (1, NULL), (2, 1);",
+            """
+            CREATE TABLE self_drop_tree (Id INTEGER NOT NULL PRIMARY KEY, ParentId INTEGER
+            NULL,
+            CONSTRAINT fk_self_drop_tree_parent FOREIGN KEY (ParentId) REFERENCES self_drop_tree
+            (Id) ON DELETE CASCADE); INSERT INTO self_drop_tree (Id,
+            ParentId) VALUES (1, NULL), (2, 1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -548,9 +568,11 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE legacy_rename_source (Id INTEGER NOT NULL PRIMARY KEY); "
-            + "CREATE VIEW legacy_rename_view AS SELECT Id FROM legacy_rename_source; "
-            + "PRAGMA legacy_alter_table = ON;",
+            """
+            CREATE TABLE legacy_rename_source (Id INTEGER NOT NULL PRIMARY KEY); CREATE
+            VIEW legacy_rename_view AS SELECT Id
+            FROM legacy_rename_source; PRAGMA legacy_alter_table = ON;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -580,9 +602,11 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
             1,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM main.sqlite_schema "
-                + "WHERE type = 'view' AND name = 'legacy_rename_view' "
-                + "AND sql LIKE '%legacy_rename_source%';",
+                """
+                SELECT COUNT(*) FROM main.sqlite_schema
+                WHERE type = 'view' AND name = 'legacy_rename_view'
+                AND sql LIKE '%legacy_rename_source%';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -592,13 +616,17 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE structural_blogs (Id INTEGER NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE structural_posts (Id INTEGER NOT NULL, Title TEXT NOT NULL, BlogId INTEGER NULL, "
-            + "CONSTRAINT pk_structural_posts PRIMARY KEY (Id), "
-            + "CONSTRAINT fk_structural_posts_blog FOREIGN KEY (BlogId) REFERENCES structural_blogs (Id)); "
-            + "CREATE TABLE structural_post_source (Id INTEGER NOT NULL PRIMARY KEY); "
-            + "CREATE TRIGGER SqliteAudit_StructuralPosts AFTER INSERT ON structural_post_source "
-            + "BEGIN INSERT INTO structural_posts (Id, Title, BlogId) VALUES (NEW.Id, 'trigger', NULL); END;",
+            """
+            CREATE TABLE structural_blogs (Id INTEGER NOT NULL PRIMARY KEY); CREATE
+            TABLE structural_posts (Id INTEGER NOT NULL,
+            Title TEXT NOT NULL, BlogId INTEGER NULL, CONSTRAINT pk_structural_posts
+            PRIMARY KEY (Id),
+            CONSTRAINT fk_structural_posts_blog FOREIGN KEY (BlogId) REFERENCES structural_blogs
+            (Id)); CREATE TABLE structural_post_source (Id INTEGER NOT NULL PRIMARY
+            KEY); CREATE TRIGGER SqliteAudit_StructuralPosts AFTER INSERT ON structural_post_source
+            BEGIN INSERT INTO structural_posts (Id,
+            Title, BlogId) VALUES (NEW.Id, 'trigger', NULL); END;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteStructuralSequenceTestContext(connection);
@@ -632,8 +660,10 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            $"CREATE TABLE \"{uppercase}\" (Id INTEGER NOT NULL); "
-            + $"CREATE TABLE \"{lowercase}\" (Id INTEGER NOT NULL);",
+            $"""
+            CREATE TABLE "{uppercase}" (Id INTEGER NOT NULL);
+            CREATE TABLE "{lowercase}" (Id INTEGER NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -743,8 +773,12 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            $"CREATE TABLE {table} (Id INTEGER NOT NULL, CONSTRAINT pk_high_byte_identifier PRIMARY KEY (Id)); "
-            + $"CREATE VIEW high_byte_identifier_view AS SELECT Id FROM {table};",
+            $"""
+            CREATE TABLE {table} (Id INTEGER NOT NULL, CONSTRAINT
+            pk_high_byte_identifier PRIMARY KEY (Id)); CREATE VIEW high_byte_identifier_view
+            AS SELECT Id
+            FROM {table};
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteHighByteIdentifierRebuildTestContext(connection);
@@ -770,8 +804,10 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE inherited_collation (Id INTEGER NOT NULL PRIMARY KEY, Code TEXT COLLATE NOCASE NOT NULL); "
-            + "CREATE INDEX ix_inherited_collation_code ON inherited_collation (Code);",
+            """
+            CREATE TABLE inherited_collation (Id INTEGER NOT NULL PRIMARY KEY, Code TEXT COLLATE NOCASE NOT NULL);
+            CREATE INDEX ix_inherited_collation_code ON inherited_collation (Code);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -787,8 +823,10 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
 
         await ExecuteSqlAsync(
             connection,
-            "DROP INDEX ix_inherited_collation_code; "
-            + "CREATE INDEX ix_inherited_collation_code ON inherited_collation (Code COLLATE RTRIM);",
+            """
+            DROP INDEX ix_inherited_collation_code;
+            CREATE INDEX ix_inherited_collation_code ON inherited_collation (Code COLLATE RTRIM);
+            """,
             cancellationToken: CancellationToken.None);
 
         var different = await runner.AnalyzeAsync(
@@ -817,9 +855,13 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE backfill_default_entities (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_backfill_default_entities PRIMARY KEY (Id)); "
-            + "INSERT INTO backfill_default_entities (Id) VALUES (1);",
+            """
+            CREATE TABLE backfill_default_entities (
+                Id INTEGER NOT NULL,
+                CONSTRAINT pk_backfill_default_entities PRIMARY KEY (Id)
+            );
+            INSERT INTO backfill_default_entities (Id) VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteBackfillDefaultRebuildTestContext(connection);
@@ -887,9 +929,13 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE converted_backfill_entities (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_converted_backfill_entities PRIMARY KEY (Id)); "
-            + "INSERT INTO converted_backfill_entities (Id) VALUES (1);",
+            """
+            CREATE TABLE converted_backfill_entities (
+                Id INTEGER NOT NULL,
+                CONSTRAINT pk_converted_backfill_entities PRIMARY KEY (Id)
+            );
+            INSERT INTO converted_backfill_entities (Id) VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteConvertedBackfillDefaultRebuildTestContext(connection);
@@ -947,18 +993,20 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "PRAGMA foreign_keys = OFF; "
-            + "CREATE TABLE missing_principal_children (Id INTEGER NOT NULL, ParentId INTEGER NULL, "
-            + "CONSTRAINT pk_missing_principal_children PRIMARY KEY (Id), "
-            + "CONSTRAINT fk_missing_principal_children_parent FOREIGN KEY (ParentId) "
-            + "REFERENCES missing_principals (Id)); "
-            + "CREATE INDEX ix_missing_principal_children_parent_id "
-            + "ON missing_principal_children (ParentId); "
-            + "INSERT INTO missing_principal_children (Id, ParentId) VALUES (1, "
-            + (parentId.HasValue
+            $"""
+            PRAGMA foreign_keys = OFF; CREATE TABLE missing_principal_children (Id INTEGER
+            NOT NULL,
+            ParentId INTEGER NULL, CONSTRAINT pk_missing_principal_children PRIMARY
+            KEY (Id),
+            CONSTRAINT fk_missing_principal_children_parent FOREIGN KEY (ParentId) REFERENCES
+            missing_principals (Id)); CREATE INDEX ix_missing_principal_children_parent_id
+            ON missing_principal_children (ParentId); INSERT INTO missing_principal_children
+            (Id,
+            ParentId) VALUES (1, {(parentId.HasValue
                 ? parentId.Value.ToString(CultureInfo.InvariantCulture)
-                : "NULL")
-            + "); PRAGMA foreign_keys = ON;",
+                : "NULL")}); PRAGMA foreign_keys =
+            ON;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteMissingPrincipalForeignKeyTestContext(connection);
@@ -1010,10 +1058,12 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE check_literal_entities (Id INTEGER NOT NULL, "
-            + "Note TEXT NULL DEFAULT 'mycheck(', "
-            + "CONSTRAINT pk_check_literal_entities PRIMARY KEY (Id)); "
-            + "INSERT INTO check_literal_entities (Id) VALUES (1);",
+            """
+            CREATE TABLE check_literal_entities (Id INTEGER NOT NULL, Note TEXT NULL
+            DEFAULT 'mycheck(',
+            CONSTRAINT pk_check_literal_entities PRIMARY KEY (Id)); INSERT INTO check_literal_entities
+            (Id) VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteCheckLiteralRebuildTestContext(connection);
@@ -1049,14 +1099,18 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE collation_parents (Id INTEGER NOT NULL, Code TEXT COLLATE NOCASE NOT NULL, "
-            + "CONSTRAINT pk_collation_parents PRIMARY KEY (Id), "
-            + "CONSTRAINT uq_collation_parents_code UNIQUE (Code)); "
-            + "CREATE TABLE collation_children (Id INTEGER NOT NULL, ParentCode TEXT NOT NULL, "
-            + "CONSTRAINT pk_collation_children PRIMARY KEY (Id)); "
-            + "CREATE INDEX ix_collation_children_parent_code ON collation_children (ParentCode); "
-            + "INSERT INTO collation_parents (Id, Code) VALUES (1, 'parent'); "
-            + "INSERT INTO collation_children (Id, ParentCode) VALUES (11, 'PARENT');",
+            """
+            CREATE TABLE collation_parents (Id INTEGER NOT NULL, Code TEXT COLLATE NOCASE NOT
+            NULL,
+            CONSTRAINT pk_collation_parents PRIMARY KEY (Id), CONSTRAINT uq_collation_parents_code
+            UNIQUE (Code)); CREATE TABLE collation_children (Id INTEGER NOT NULL,
+            ParentCode TEXT NOT NULL, CONSTRAINT pk_collation_children PRIMARY KEY (Id));
+            CREATE INDEX ix_collation_children_parent_code ON collation_children (ParentCode);
+            INSERT INTO collation_parents (Id,
+            Code) VALUES (1, 'parent'); INSERT INTO collation_children (Id, ParentCode)
+            VALUES (11,
+            'PARENT');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteForeignKeyCollationTestContext(connection);
@@ -1093,17 +1147,19 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "PRAGMA foreign_keys = OFF; "
-            + "CREATE TABLE collation_parents (Id INTEGER NOT NULL, Code TEXT COLLATE NOCASE NOT NULL, "
-            + "CONSTRAINT pk_collation_parents PRIMARY KEY (Id), "
-            + "CONSTRAINT uq_collation_parents_code UNIQUE (Code)); "
-            + "CREATE TABLE collation_children (Id INTEGER NOT NULL, ParentCode TEXT NOT NULL, "
-            + "CONSTRAINT pk_collation_children PRIMARY KEY (Id), "
-            + "CONSTRAINT fk_collation_children_parent FOREIGN KEY (ParentCode) "
-            + "REFERENCES collation_parents (Code)); "
-            + "CREATE INDEX ix_collation_children_parent_code ON collation_children (ParentCode); "
-            + "INSERT INTO collation_children (Id, ParentCode) VALUES (11, 'missing'); "
-            + "PRAGMA foreign_keys = ON;",
+            """
+            PRAGMA foreign_keys = OFF; CREATE TABLE collation_parents (Id INTEGER NOT
+            NULL,
+            Code TEXT COLLATE NOCASE NOT NULL, CONSTRAINT pk_collation_parents PRIMARY
+            KEY (Id),
+            CONSTRAINT uq_collation_parents_code UNIQUE (Code)); CREATE TABLE collation_children
+            (Id INTEGER NOT NULL,
+            ParentCode TEXT NOT NULL, CONSTRAINT pk_collation_children PRIMARY KEY (Id),
+            CONSTRAINT fk_collation_children_parent FOREIGN KEY (ParentCode) REFERENCES
+            collation_parents (Code)); CREATE INDEX ix_collation_children_parent_code
+            ON collation_children (ParentCode); INSERT INTO collation_children (Id,
+            ParentCode) VALUES (11, 'missing'); PRAGMA foreign_keys = ON;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteForeignKeyCollationTestContext(connection);
@@ -1135,12 +1191,16 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE structural_blogs (Id INTEGER NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE structural_posts (Id INTEGER NOT NULL, Title TEXT NOT NULL, BlogId INTEGER NULL, "
-            + "CONSTRAINT pk_structural_posts PRIMARY KEY (Id), "
-            + "CONSTRAINT fk_structural_posts_blog FOREIGN KEY (BlogId) REFERENCES structural_blogs (Id)); "
-            + "INSERT INTO structural_blogs (Id) VALUES (1); "
-            + "INSERT INTO structural_posts (Id, Title, BlogId) VALUES (11, 'preserve', 1);",
+            """
+            CREATE TABLE structural_blogs (Id INTEGER NOT NULL PRIMARY KEY); CREATE
+            TABLE structural_posts (Id INTEGER NOT NULL,
+            Title TEXT NOT NULL, BlogId INTEGER NULL, CONSTRAINT pk_structural_posts
+            PRIMARY KEY (Id),
+            CONSTRAINT fk_structural_posts_blog FOREIGN KEY (BlogId) REFERENCES structural_blogs
+            (Id)); INSERT INTO structural_blogs (Id) VALUES (1); INSERT INTO structural_posts
+            (Id,
+            Title, BlogId) VALUES (11, 'preserve', 1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteStructuralSequenceTestContext(connection);
@@ -1192,10 +1252,14 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE structural_blogs (Id INTEGER NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE structural_posts (Id INTEGER NOT NULL, Title TEXT NOT NULL, BlogId INTEGER NULL, "
-            + "CONSTRAINT pk_structural_posts PRIMARY KEY (Id), "
-            + "CONSTRAINT fk_structural_posts_blog FOREIGN KEY (BlogId) REFERENCES structural_blogs (Id));",
+            """
+            CREATE TABLE structural_blogs (Id INTEGER NOT NULL PRIMARY KEY); CREATE
+            TABLE structural_posts (Id INTEGER NOT NULL,
+            Title TEXT NOT NULL, BlogId INTEGER NULL, CONSTRAINT pk_structural_posts
+            PRIMARY KEY (Id),
+            CONSTRAINT fk_structural_posts_blog FOREIGN KEY (BlogId) REFERENCES structural_blogs
+            (Id));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteStructuralSequenceTestContext(connection);
@@ -1255,10 +1319,14 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
 
         await ExecuteSqlAsync(
             connection,
-            $"CREATE TABLE rebuild_shape_entities (Id INTEGER NOT NULL, Code {codeStoreType} NOT NULL, "
-            + "CONSTRAINT pk_rebuild_shape_entities PRIMARY KEY (Id)); "
-            + $"CREATE {indexKind}INDEX ix_rebuild_shape_entities_code ON rebuild_shape_entities (Code); "
-            + "INSERT INTO rebuild_shape_entities (Id, Code) VALUES (1, 'preserve');",
+            $"""
+            CREATE TABLE rebuild_shape_entities (Id INTEGER NOT NULL, Code {codeStoreType}
+            NOT NULL,
+            CONSTRAINT pk_rebuild_shape_entities PRIMARY KEY (Id)); CREATE {indexKind}INDEX
+            ix_rebuild_shape_entities_code ON rebuild_shape_entities (Code); INSERT
+            INTO rebuild_shape_entities (Id,
+            Code) VALUES (1, 'preserve');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteRebuildShapeTestContext(connection);
@@ -1293,10 +1361,12 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE rebuild_entities (Id INTEGER NOT NULL, Code TEXT NOT NULL, "
-            + "CONSTRAINT pk_rebuild_entities PRIMARY KEY (Id) ON CONFLICT REPLACE, "
-            + "CONSTRAINT uq_rebuild_entities_code UNIQUE (Code)); "
-            + "INSERT INTO rebuild_entities (Id, Code) VALUES (1, 'existing');",
+            """
+            CREATE TABLE rebuild_entities (Id INTEGER NOT NULL, Code TEXT NOT NULL,
+            CONSTRAINT pk_rebuild_entities PRIMARY KEY (Id) ON CONFLICT REPLACE, CONSTRAINT
+            uq_rebuild_entities_code UNIQUE (Code)); INSERT INTO rebuild_entities (Id,
+            Code) VALUES (1, 'existing');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -1332,9 +1402,13 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE add_column_check_entities (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_add_column_check_entities PRIMARY KEY (Id)); "
-            + "INSERT INTO add_column_check_entities (Id) VALUES (1);",
+            """
+            CREATE TABLE add_column_check_entities (
+                Id INTEGER NOT NULL,
+                CONSTRAINT pk_add_column_check_entities PRIMARY KEY (Id)
+            );
+            INSERT INTO add_column_check_entities (Id) VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteAddColumnCheckTestContext(connection);
@@ -1376,9 +1450,11 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE add_column_referenced_check_entities (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_add_column_referenced_check_entities PRIMARY KEY (Id)); "
-            + "INSERT INTO add_column_referenced_check_entities (Id) VALUES (1);",
+            """
+            CREATE TABLE add_column_referenced_check_entities (Id INTEGER NOT NULL,
+            CONSTRAINT pk_add_column_referenced_check_entities PRIMARY KEY (Id)); INSERT
+            INTO add_column_referenced_check_entities (Id) VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteAddColumnReferencedCheckTestContext(connection);
@@ -1425,9 +1501,13 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE primary_key_drop_entities (Id INTEGER NOT NULL, Value TEXT NOT NULL, "
-            + "CONSTRAINT actual_primary_key PRIMARY KEY (Id)); "
-            + "INSERT INTO primary_key_drop_entities (Id, Value) VALUES (1, 'preserve');",
+            """
+            CREATE TABLE primary_key_drop_entities (Id INTEGER NOT NULL, Value TEXT
+            NOT NULL,
+            CONSTRAINT actual_primary_key PRIMARY KEY (Id)); INSERT INTO primary_key_drop_entities
+            (Id,
+            Value) VALUES (1, 'preserve');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqlitePrimaryKeyDropTestContext(connection);
@@ -1459,8 +1539,12 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE primary_key_drop_entities (Id INTEGER NOT NULL PRIMARY KEY, Value TEXT NOT NULL); "
-            + "INSERT INTO primary_key_drop_entities (Id, Value) VALUES (1, 'preserve');",
+            """
+            CREATE TABLE primary_key_drop_entities (Id INTEGER NOT NULL PRIMARY KEY,
+            Value TEXT NOT NULL); INSERT INTO primary_key_drop_entities (Id, Value)
+            VALUES (1,
+            'preserve');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqlitePrimaryKeyDropTestContext(connection);
@@ -1492,9 +1576,11 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE \"order\"\"items\" (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_order_items PRIMARY KEY (Id)); "
-            + "CREATE VIEW order_item_view AS SELECT Id FROM main.\"order\"\"items\";",
+            """
+            CREATE TABLE "order""items" (Id INTEGER NOT NULL, CONSTRAINT pk_order_items
+            PRIMARY KEY (Id)); CREATE VIEW order_item_view AS SELECT Id
+            FROM main."order""items";
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteEscapedIdentifierRebuildTestContext(connection);
@@ -1520,8 +1606,10 @@ public sealed class SqliteSafeMigrationReviewRegressionsIntegrationTests : Sqlit
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE case_identity_entities (Id INTEGER NOT NULL, Code TEXT NULL); "
-            + "CREATE INDEX IX_Case_Identity_Code ON case_identity_entities (Code);",
+            """
+            CREATE TABLE case_identity_entities (Id INTEGER NOT NULL, Code TEXT NULL);
+            CREATE INDEX IX_Case_Identity_Code ON case_identity_entities (Code);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);

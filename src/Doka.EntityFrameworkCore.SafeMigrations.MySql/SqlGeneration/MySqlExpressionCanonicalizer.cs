@@ -130,7 +130,7 @@ internal static class MySqlExpressionCanonicalizer
 
         if (tokens.Any(static token => token.IsTopLevelBooleanOperator))
         {
-            var hasTopLevelAnd = tokens.Any(static token => token.IsTopLevelBooleanOperator && token.Text == "and");
+            var hasTopLevelAnd = tokens.Any(static token => token is { IsTopLevelBooleanOperator: true, Text: "and" });
             var termHasOr = false;
             var unwrapped = new StringBuilder();
             var builder = new StringBuilder("((");
@@ -314,7 +314,7 @@ internal static class MySqlExpressionCanonicalizer
     }
 
     /// <summary>Shares quote boundaries with native comparisons without reinterpreting token contents.</summary>
-    internal static int FindQuotedEnd(
+    private static int FindQuotedEnd(
         string expression,
         int index,
         char quote
@@ -374,7 +374,7 @@ internal static class MySqlExpressionCanonicalizer
         // so one server-rendered expression is compared under one encoding rule.
         var inner = token[1..^1]
             .Replace(new string(quote, 2), quote.ToString(), StringComparison.Ordinal)
-            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\\", @"\\", StringComparison.Ordinal)
 
             // WHY: MySQL's catalog display escapes the literal's own quote
             // before escaping its surrounding serialized string. A value

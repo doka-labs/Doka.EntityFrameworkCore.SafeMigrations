@@ -99,14 +99,14 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE model_edge_roles ("
-            + "id integer NOT NULL PRIMARY KEY, code varchar(64) NOT NULL UNIQUE, name varchar(64) NULL);"
-            + "CREATE TABLE model_edge_audit (id integer NOT NULL PRIMARY KEY, role_id integer NOT NULL, "
-            + "CONSTRAINT fk_model_edge_audit_role FOREIGN KEY (role_id) "
-            + "REFERENCES model_edge_roles (id) ON DELETE CASCADE);"
-            + "INSERT INTO model_edge_roles (id, code, name) VALUES "
-            + "(1, 'administrator', NULL), (2, 'member', 'Member');"
-            + "INSERT INTO model_edge_audit (id, role_id) VALUES (11, 1);",
+            """
+            CREATE TABLE model_edge_roles (id integer NOT NULL PRIMARY KEY, code varchar(64) NOT NULL UNIQUE,
+            name varchar(64) NULL);CREATE TABLE model_edge_audit (id integer NOT NULL PRIMARY KEY,
+            role_id integer NOT NULL, CONSTRAINT fk_model_edge_audit_role FOREIGN KEY (role_id) REFERENCES
+            model_edge_roles (id) ON DELETE CASCADE);INSERT INTO model_edge_roles (id,
+            code, name) VALUES (1, 'administrator', NULL), (2, 'member', 'Member');INSERT INTO model_edge_audit (id,
+            role_id) VALUES (11, 1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -196,8 +196,11 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE model_null_roles (id integer NOT NULL PRIMARY KEY, name varchar(64) NULL);"
-            + "INSERT INTO model_null_roles (id, name) VALUES (1, NULL), (2, 'Owner');",
+            """
+            CREATE TABLE model_null_roles (id integer NOT NULL PRIMARY KEY, name varchar(64) NULL);INSERT
+            INTO model_null_roles (id,
+            name) VALUES (1, NULL), (2, 'Owner');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -241,12 +244,14 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE model_roles (id integer NOT NULL PRIMARY KEY, name varchar(64) NOT NULL);"
-            + "CREATE TABLE model_user_roles (id integer NOT NULL PRIMARY KEY, role_id integer NOT NULL, "
-            + "CONSTRAINT fk_model_user_roles_role FOREIGN KEY (role_id) "
-            + "REFERENCES model_roles (id) ON DELETE CASCADE);"
-            + "INSERT INTO model_roles (id, name) VALUES (1, 'administrator'), (2, 'member');"
-            + "INSERT INTO model_user_roles (id, role_id) VALUES (11, 1), (21, 2), (22, 2);",
+            """
+            CREATE TABLE model_roles (id integer NOT NULL PRIMARY KEY, name varchar(64) NOT NULL);CREATE
+            TABLE model_user_roles (id integer NOT NULL PRIMARY KEY,
+            role_id integer NOT NULL, CONSTRAINT fk_model_user_roles_role FOREIGN KEY (role_id) REFERENCES
+            model_roles (id) ON DELETE CASCADE);INSERT INTO model_roles (id,
+            name) VALUES (1, 'administrator'), (2, 'member');INSERT INTO model_user_roles (id,
+            role_id) VALUES (11, 1), (21, 2), (22, 2);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -308,10 +313,12 @@ public sealed class PostgreSqlModelManagedDataIntegrationTests : PostgreSqlSafeM
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE model_roles ("
-            + "id integer NOT NULL PRIMARY KEY, code varchar(64) NOT NULL UNIQUE, name varchar(64) NULL);"
-            + "INSERT INTO model_roles (id, code, name) VALUES "
-            + "(1, 'administrator', 'Administrator'), (3, 'drift', 'Live value');",
+            """
+            CREATE TABLE model_roles (id integer NOT NULL PRIMARY KEY, code varchar(64)
+            NOT NULL UNIQUE,
+            name varchar(64) NULL);INSERT INTO model_roles (id, code, name) VALUES (1,
+            'administrator', 'Administrator'), (3, 'drift', 'Live value');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

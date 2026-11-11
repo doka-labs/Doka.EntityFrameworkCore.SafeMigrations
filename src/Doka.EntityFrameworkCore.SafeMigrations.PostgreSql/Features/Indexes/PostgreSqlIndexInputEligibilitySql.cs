@@ -29,11 +29,13 @@ internal static class PostgreSqlIndexInputEligibilitySql
         var baseBinary = BinaryCoercionPredicate("base_type.oid", "base_type", "target.oid");
         var supported = input.OperatorClassName is not null
             ? "COUNT(*) FILTER (WHERE compatible) = 1"
-            : "COUNT(*) FILTER (WHERE exact) = 1 OR "
-            + "(COUNT(*) FILTER (WHERE exact) = 0 AND "
-            + "(COUNT(*) FILTER (WHERE preferred AND compatible) = 1 OR "
-            + "(COUNT(*) FILTER (WHERE preferred AND compatible) = 0 "
-            + "AND COUNT(*) FILTER (WHERE compatible) = 1)))";
+            : """
+            COUNT(*) FILTER (WHERE exact) = 1
+            OR (COUNT(*) FILTER (WHERE exact) = 0
+            AND (COUNT(*) FILTER (WHERE preferred
+            AND compatible) = 1 OR (COUNT(*) FILTER (WHERE preferred
+            AND compatible) = 0 AND COUNT(*) FILTER (WHERE compatible) = 1)))
+            """;
 
         var binding = input.OperatorClassName is null
             ? baseBinary
@@ -49,57 +51,41 @@ internal static class PostgreSqlIndexInputEligibilitySql
 
         const string elementProjection = "e.oid, e.typtype, e.typbasetype, e.typrelid";
 
-        return "(WITH RECURSIVE domain_types AS ("
-            + "SELECT "
-            + domainProjection
-            + " FROM pg_catalog.pg_type t WHERE t.oid = ("
-            + input.NativeType
-            + ") "
-            + "UNION SELECT "
-            + domainProjection
-            + " FROM domain_types d "
-            + "JOIN pg_catalog.pg_type t ON t.oid = d.typbasetype "
-            + "WHERE d.typtype = 'd'), base_types AS ("
-            + "SELECT * FROM domain_types WHERE typtype <> 'd'), element_types AS ("
-            + "SELECT "
-            + elementProjection
-            + " FROM base_types b "
-            + "JOIN pg_catalog.pg_type e ON e.oid = b.typelem "
-            + "UNION SELECT "
-            + elementProjection
-            + " FROM element_types d "
-            + "JOIN pg_catalog.pg_type e ON e.oid = d.typbasetype "
-            + "WHERE d.typtype = 'd'), method AS ("
-            + "SELECT am.oid, am.amhandler FROM pg_catalog.pg_am am WHERE am.amname = "
-            + input.Method
-            + " AND am.amtype = 'i'), candidates AS ("
-            + "SELECT opc.oid, opc.opcintype = base_type.oid AS exact, "
-            + "target.typispreferred AND target.typcategory = base_type.typcategory AS preferred, "
-            + binding
-            + " AS compatible FROM method am "
-            + "JOIN pg_catalog.pg_opclass opc ON opc.opcmethod = am.oid "
-            + "JOIN pg_catalog.pg_type target ON target.oid = opc.opcintype "
-            + "CROSS JOIN base_types base_type "
-            + "JOIN pg_catalog.pg_type original ON original.oid = ("
-            + input.NativeType
-            + ") "
-            + "WHERE "
-            + classFilter
-            + "), resolved AS (SELECT ("
-            + supported
-            + ") AS supported FROM candidates) "
-            + "SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM method) THEN FALSE "
-            + "WHEN (SELECT "
-            + methodFlags
-            + " FROM method am) IS FALSE THEN FALSE "
-            + "WHEN (SELECT "
-            + methodFlags
-            + " FROM method am) IS NULL THEN NULL::boolean "
-            + "WHEN ("
-            + input.NativeType
-            + ") = 0 THEN TRUE "
-            + "WHEN (SELECT COUNT(*) FROM base_types) <> 1 THEN NULL::boolean "
-            + "ELSE (SELECT supported FROM resolved) END)";
+        return $"""
+            (WITH RECURSIVE domain_types AS (SELECT {domainProjection}
+            FROM pg_catalog.pg_type t WHERE t.oid = ({input.NativeType}) UNION
+            SELECT {domainProjection}
+            FROM domain_types d JOIN pg_catalog.pg_type t ON t.oid = d.typbasetype
+            WHERE d.typtype = 'd'), base_types AS (SELECT *
+            FROM domain_types WHERE typtype <> 'd'), element_types AS (SELECT {elementProjection}
+            FROM base_types b JOIN pg_catalog.pg_type e ON e.oid = b.typelem UNION SELECT
+            {elementProjection}
+            FROM element_types d JOIN pg_catalog.pg_type e ON e.oid = d.typbasetype
+            WHERE d.typtype = 'd'), method AS (SELECT am.oid, am.amhandler
+            FROM pg_catalog.pg_am am WHERE am.amname = {input.Method}
+            AND am.amtype = 'i'), candidates AS (SELECT opc.oid, opc.opcintype = base_type.oid
+            AS exact,
+            target.typispreferred AND target.typcategory = base_type.typcategory AS
+            preferred,
+            {binding} AS compatible
+            FROM method am JOIN pg_catalog.pg_opclass opc ON opc.opcmethod = am.oid
+            JOIN pg_catalog.pg_type target ON target.oid = opc.opcintype CROSS
+            JOIN base_types base_type JOIN pg_catalog.pg_type original ON original.oid
+            = ({input.NativeType})
+            WHERE {classFilter}), resolved AS (SELECT ({supported})
+            AS supported
+            FROM candidates) SELECT CASE WHEN NOT EXISTS (SELECT 1
+            FROM method) THEN FALSE
+            WHEN (SELECT {methodFlags}
+            FROM method am) IS FALSE THEN FALSE
+            WHEN (SELECT {methodFlags}
+            FROM method am) IS NULL THEN NULL::boolean
+            WHEN ({input.NativeType}) = 0
+            THEN TRUE
+            WHEN (SELECT COUNT(*) FROM base_types) <> 1
+            THEN NULL::boolean ELSE (SELECT supported
+            FROM resolved) END)
+            """;
     }
 
     /// <summary>Maps source-pinned handler identities, including legitimate aliases of those handlers.</summary>
@@ -123,8 +109,15 @@ internal static class PostgreSqlIndexInputEligibilitySql
         }
 
         var nativeMask = mask.ToString(CultureInfo.InvariantCulture);
-        var profile = "CASE am.amhandler WHEN 330 THEN 15 WHEN 331 THEN 0 WHEN 332 THEN 12 "
-            + "WHEN 333 THEN 4 WHEN 334 THEN 8 WHEN 335 THEN 4 ELSE NULL::integer END";
+        var profile = """
+            CASE am.amhandler
+            WHEN 330 THEN 15
+            WHEN 331 THEN 0
+            WHEN 332 THEN 12
+            WHEN 333 THEN 4
+            WHEN 334 THEN 8
+            WHEN 335 THEN 4 ELSE NULL::integer END
+            """;
 
         return "((("
             + profile
@@ -150,59 +143,18 @@ internal static class PostgreSqlIndexInputEligibilitySql
         // WHY: These are the source-pinned IsBinaryCoercible polymorphic
         // cases. All remaining conversions require one direct implicit binary
         // pg_cast edge; cast functions, assignment and I/O are not proofs.
-        return "("
-            + original
-            + " = "
-            + target
-            + " OR "
-            + baseAlias
-            + ".oid = "
-            + target
-            + " OR "
-            + target
-            + " IN (2276, 2283, 5077) "
-            + "OR (("
-            + array
-            + ") AND "
-            + target
-            + " IN (2277, 5078)) "
-            + "OR (NOT ("
-            + array
-            + ") AND "
-            + target
-            + " IN (2776, 5079)) "
-            + "OR ("
-            + baseAlias
-            + ".typtype = 'e' AND "
-            + target
-            + " = 3500) "
-            + "OR ("
-            + baseAlias
-            + ".typtype = 'r' AND "
-            + target
-            + " IN (3831, 5080)) "
-            + "OR ("
-            + baseAlias
-            + ".typtype = 'm' AND "
-            + target
-            + " IN (4537, 4538)) "
-            + "OR ("
-            + baseAlias
-            + ".typrelid <> 0 AND "
-            + target
-            + " = 2249) "
-            + "OR (("
-            + array
-            + ") AND "
-            + target
-            + " = 2287 AND EXISTS "
-            + "(SELECT 1 FROM element_types e WHERE e.typtype <> 'd' AND e.typrelid <> 0)) "
-            + "OR EXISTS (SELECT 1 FROM pg_catalog.pg_cast cv WHERE cv.castsource = "
-            + baseAlias
-            + ".oid "
-            + "AND cv.casttarget = "
-            + target
-            + " AND cv.castmethod = 'b' AND cv.castcontext = 'i'))";
+        return $"""
+            ({original} = {target} OR {baseAlias}.oid = {target} OR {target} IN (2276, 2283, 5077)
+            OR (({array}) AND {target} IN (2277, 5078)) OR (NOT ({array}) AND {target} IN (2776, 5079))
+            OR ({baseAlias}.typtype = 'e' AND {target} = 3500)
+            OR ({baseAlias}.typtype = 'r' AND {target} IN (3831, 5080))
+            OR ({baseAlias}.typtype = 'm' AND {target} IN (4537, 4538))
+            OR ({baseAlias}.typrelid <> 0 AND {target} = 2249)
+            OR (({array}) AND {target} = 2287 AND EXISTS
+            (SELECT 1 FROM element_types e WHERE e.typtype <> 'd' AND e.typrelid <> 0))
+            OR EXISTS (SELECT 1 FROM pg_catalog.pg_cast cv WHERE cv.castsource = {baseAlias}.oid
+            AND cv.casttarget = {target} AND cv.castmethod = 'b' AND cv.castcontext = 'i'))
+            """;
     }
 }
 

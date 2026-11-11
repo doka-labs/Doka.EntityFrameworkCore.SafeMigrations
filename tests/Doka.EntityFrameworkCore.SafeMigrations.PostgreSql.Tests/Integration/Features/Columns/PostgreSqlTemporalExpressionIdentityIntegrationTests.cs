@@ -11,7 +11,64 @@ public sealed class PostgreSqlTemporalExpressionIdentityIntegrationTests : Postg
 
     /// <summary>Enumerates valid typed and inferred native temporal literal mappings.</summary>
     /// <returns>The native family, explicit typing and owning expression consumer.</returns>
-    public static IEnumerable<object[]> Cases()
+    public static TheoryData<string, bool, string> Cases()
+    {
+        var cases = new TheoryData<string, bool, string>();
+        foreach (var (kind, typed, consumer) in NativeCases())
+        {
+            cases.Add(kind, typed, consumer);
+        }
+
+        return cases;
+    }
+
+    /// <summary>Adds both exact and changed-value catalog contracts for every admitted expression consumer.</summary>
+    /// <returns>The case plus whether its authored value matches the independently created native object.</returns>
+    public static TheoryData<string, bool, string, bool> MatchingCases()
+    {
+        var cases = new TheoryData<string, bool, string, bool>();
+        foreach (var (kind, typed, consumer) in NativeCases())
+        {
+            cases.Add(kind, typed, consumer, false);
+            cases.Add(kind, typed, consumer, true);
+        }
+
+        return cases;
+    }
+
+    /// <summary>Enumerates unsupported scalar-to-native mappings independently from SQL CAST expressions.</summary>
+    /// <returns>The source/target pair and each affected mutation consumer.</returns>
+    public static TheoryData<string, string> UnsupportedMappingCases()
+    {
+        var cases = new TheoryData<string, string>();
+        foreach (var kind in new[]
+            {
+                "span_date",
+                "date_interval",
+                "scalar_array",
+                "date_array",
+                "clock_array",
+            })
+        {
+            foreach (var consumer in new[]
+                {
+                    "literal_default",
+                    "expression_default",
+                    "generated",
+                    "check",
+                    "index",
+                    "seed",
+                })
+            {
+                cases.Add(kind, consumer);
+            }
+        }
+
+        return cases;
+    }
+
+    /// <summary>Shares typed native inputs without reinterpreting xUnit's object-array output.</summary>
+    private static IEnumerable<(string Kind, bool Typed, string Consumer)> NativeCases()
     {
         foreach (var kind in new[]
             {
@@ -43,47 +100,8 @@ public sealed class PostgreSqlTemporalExpressionIdentityIntegrationTests : Postg
 
                 foreach (var consumer in new[] { "generated", "check", "index" })
                 {
-                    yield return [kind, typed, consumer];
+                    yield return (kind, typed, consumer);
                 }
-            }
-        }
-    }
-
-    /// <summary>Adds both exact and changed-value catalog contracts for every admitted expression consumer.</summary>
-    /// <returns>The case plus whether its authored value matches the independently created native object.</returns>
-    public static IEnumerable<object[]> MatchingCases()
-    {
-        foreach (var row in Cases())
-        {
-            yield return [row[0], row[1], row[2], false];
-            yield return [row[0], row[1], row[2], true];
-        }
-    }
-
-    /// <summary>Enumerates unsupported scalar-to-native mappings independently from SQL CAST expressions.</summary>
-    /// <returns>The source/target pair and each affected mutation consumer.</returns>
-    public static IEnumerable<object[]> UnsupportedMappingCases()
-    {
-        foreach (var kind in new[]
-            {
-                "span_date",
-                "date_interval",
-                "scalar_array",
-                "date_array",
-                "clock_array",
-            })
-        {
-            foreach (var consumer in new[]
-                {
-                    "literal_default",
-                    "expression_default",
-                    "generated",
-                    "check",
-                    "index",
-                    "seed",
-                })
-            {
-                yield return [kind, consumer];
             }
         }
     }
@@ -165,8 +183,11 @@ public sealed class PostgreSqlTemporalExpressionIdentityIntegrationTests : Postg
         var scenario = Scenario(kind);
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            $"CREATE TABLE temporal_expression(id integer, source {scenario.StoreType}); "
-            + $"INSERT INTO temporal_expression VALUES(42, {scenario.Native});",
+            $"""
+            CREATE TABLE temporal_expression(id integer, source {scenario.StoreType}); INSERT INTO
+            temporal_expression VALUES(42,
+            {scenario.Native});
+            """,
             CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -206,10 +227,12 @@ public sealed class PostgreSqlTemporalExpressionIdentityIntegrationTests : Postg
         var scenario = Scenario(kind);
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            $"CREATE TABLE temporal_expression(id integer, source {scenario.StoreType}); "
-            + $"INSERT INTO temporal_expression VALUES(42, {scenario.Native}); "
-            + $"ALTER TABLE temporal_expression ADD CONSTRAINT ck_temporal CHECK(source=({scenario.Native})"
-            + $"::{scenario.StoreType});",
+            $"""
+            CREATE TABLE temporal_expression(id integer, source {scenario.StoreType}); INSERT INTO
+            temporal_expression VALUES(42,
+            {scenario.Native}); ALTER TABLE temporal_expression ADD CONSTRAINT ck_temporal
+            CHECK(source=({scenario.Native})::{scenario.StoreType});
+            """,
             CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -255,8 +278,11 @@ public sealed class PostgreSqlTemporalExpressionIdentityIntegrationTests : Postg
 
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE temporal_expression(id integer PRIMARY KEY, source timestamp(6) with time zone); "
-            + "INSERT INTO temporal_expression VALUES(42, TIMESTAMPTZ '2026-11-10 12:00:00+00');",
+            """
+            CREATE TABLE temporal_expression(id integer PRIMARY KEY, source timestamp(6) with time zone);
+            INSERT INTO temporal_expression VALUES(42,
+            TIMESTAMPTZ '2026-11-10 12:00:00+00');
+            """,
             CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -347,8 +373,10 @@ public sealed class PostgreSqlTemporalExpressionIdentityIntegrationTests : Postg
 
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            $"CREATE TABLE temporal_expression(id integer PRIMARY KEY, source {storeType}); "
-            + "INSERT INTO temporal_expression(id) VALUES(42);",
+            $"""
+            CREATE TABLE temporal_expression(id integer PRIMARY KEY, source {storeType});
+            INSERT INTO temporal_expression(id) VALUES(42);
+            """,
             CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -457,18 +485,17 @@ public sealed class PostgreSqlTemporalExpressionIdentityIntegrationTests : Postg
     private static string CreateNative(
         TemporalScenario scenario,
         string consumer
-    ) => "CREATE TABLE temporal_expression(id integer, source "
-        + scenario.StoreType
-        + (consumer == "generated"
+    ) => $"""
+        CREATE TABLE temporal_expression(id integer, source {scenario.StoreType}{(consumer == "generated"
             ? $", v {scenario.StoreType} GENERATED ALWAYS AS ({scenario.Native}) STORED"
-            : "")
-        + "); "
-        + $"INSERT INTO temporal_expression(id,source) VALUES(42, {scenario.Native}); "
-        + (consumer == "check"
+            : "")});
+        INSERT INTO temporal_expression(id,source) VALUES(42,
+        {scenario.Native}); {(consumer == "check"
             ? $"ALTER TABLE temporal_expression ADD CONSTRAINT ck_temporal CHECK(source={scenario.Native});"
             : consumer == "index"
                 ? $"CREATE INDEX ix_temporal ON temporal_expression (({scenario.Native}));"
-                : "");
+                : "")}
+        """;
 
     /// <summary>Uses the public application preflight runner.</summary>
     private static Task<SafeMigrationRunReport> Analyze(

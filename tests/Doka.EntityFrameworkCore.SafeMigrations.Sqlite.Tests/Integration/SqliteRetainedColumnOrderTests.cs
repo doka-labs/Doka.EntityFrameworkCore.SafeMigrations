@@ -35,10 +35,13 @@ public sealed class SqliteRetainedColumnOrderTests : SqliteIntegrationTestBase,
             : ", CONSTRAINT host_unique UNIQUE (GraphId, Source, Target)";
 
         await ExecuteSqlAsync(connection,
-            "CREATE TABLE host (Id INTEGER NOT NULL CONSTRAINT host_pk PRIMARY KEY, GraphId INTEGER NOT NULL, "
-            + "Source INTEGER NOT NULL, Target INTEGER NOT NULL, Payload TEXT NOT NULL DEFAULT 'retained'"
-            + constraint
-            + "); INSERT INTO host VALUES (1, 2, 3, 4, 'payload');",
+            $"""
+            CREATE TABLE host (Id INTEGER NOT NULL CONSTRAINT host_pk PRIMARY KEY,
+            GraphId INTEGER NOT NULL, Source INTEGER NOT NULL, Target INTEGER NOT NULL,
+            Payload TEXT NOT NULL DEFAULT 'retained'{constraint}); INSERT
+            INTO host VALUES (1,
+            2, 3, 4, 'payload');
+            """,
             CancellationToken.None);
 
         await using HostContext context = add
@@ -106,10 +109,13 @@ public sealed class SqliteRetainedColumnOrderTests : SqliteIntegrationTestBase,
         // Arrange
         await using var connection = await OpenConnectionAsync(CancellationToken.None);
         await ExecuteSqlAsync(connection,
-            "CREATE TABLE host (Id INTEGER NOT NULL CONSTRAINT host_pk PRIMARY KEY, GraphId INTEGER NOT NULL, "
-            + "Source INTEGER NOT NULL, Target INTEGER NOT NULL, Payload TEXT NOT NULL DEFAULT 'retained', "
-            + "CONSTRAINT host_unique UNIQUE (GraphId, Source, Target)); "
-            + "INSERT INTO host VALUES (1, 2, 3, 4, 'payload');",
+            """
+            CREATE TABLE host (Id INTEGER NOT NULL CONSTRAINT host_pk PRIMARY KEY,
+            GraphId INTEGER NOT NULL, Source INTEGER NOT NULL, Target INTEGER NOT NULL,
+            Payload TEXT NOT NULL DEFAULT 'retained', CONSTRAINT host_unique UNIQUE
+            (GraphId,
+            Source, Target)); INSERT INTO host VALUES (1, 2, 3, 4, 'payload');
+            """,
             CancellationToken.None);
 
         await using HostContext context = mainSchema
@@ -142,11 +148,14 @@ public sealed class SqliteRetainedColumnOrderTests : SqliteIntegrationTestBase,
         // Arrange
         await using var connection = await OpenConnectionAsync(CancellationToken.None);
         await ExecuteSqlAsync(connection,
-            "CREATE TABLE host (Id INTEGER NOT NULL CONSTRAINT host_pk PRIMARY KEY, GraphId INTEGER NOT NULL, "
-            + "Source INTEGER NOT NULL, Target INTEGER NOT NULL, Payload TEXT NOT NULL DEFAULT 'retained', "
-            + "CONSTRAINT host_unique UNIQUE (GraphId, Source, Target)); "
-            + "INSERT INTO host VALUES (1, 2, 3, 4, 'payload'); "
-            + "CREATE TABLE other (id INTEGER); CREATE INDEX duplicate_index ON other(id);",
+            """
+            CREATE TABLE host (Id INTEGER NOT NULL CONSTRAINT host_pk PRIMARY KEY,
+            GraphId INTEGER NOT NULL, Source INTEGER NOT NULL, Target INTEGER NOT NULL,
+            Payload TEXT NOT NULL DEFAULT 'retained', CONSTRAINT host_unique UNIQUE
+            (GraphId,
+            Source, Target)); INSERT INTO host VALUES (1, 2, 3, 4, 'payload'); CREATE
+            TABLE other (id INTEGER); CREATE INDEX duplicate_index ON other(id);
+            """,
             CancellationToken.None);
 
         await using var context = new WithoutUniqueContext(connection, _internalServices);
@@ -185,8 +194,10 @@ public sealed class SqliteRetainedColumnOrderTests : SqliteIntegrationTestBase,
     )
     {
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT cid || ':' || name || ':' || type || ':' || \"notnull\" || ':' "
-            + "|| COALESCE(dflt_value, '<none>') || ':' || pk FROM pragma_table_xinfo('host') ORDER BY cid;";
+        command.CommandText = """
+        SELECT cid || ':' || name || ':' || type || ':' || "notnull" || ':' || COALESCE(dflt_value,
+        '<none>') || ':' || pk FROM pragma_table_xinfo('host') ORDER BY cid;
+        """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var columns = new List<string>();

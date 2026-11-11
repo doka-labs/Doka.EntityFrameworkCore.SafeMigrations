@@ -37,9 +37,11 @@ public sealed class MySqlTemporalDefaultIdentityIntegrationTests : MySqlSafeMigr
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var sql = $"CREATE TABLE `duration_defaults` (`id` int NOT NULL PRIMARY KEY, "
-            + $"`value` time({precision}) NOT NULL DEFAULT '{actual}') ENGINE=InnoDB; "
-            + "INSERT INTO `duration_defaults` (`id`) VALUES (42);";
+        var sql = $"""
+            CREATE TABLE `duration_defaults` (`id` int NOT NULL PRIMARY KEY, `value`
+            time({precision}) NOT NULL DEFAULT '{actual}')
+            ENGINE=InnoDB; INSERT INTO `duration_defaults` (`id`) VALUES (42);
+            """;
 
         await ExecuteSqlAsync(connectionString, sql, CancellationToken.None);
         await using var context = CreateContext(connectionString);
@@ -118,9 +120,11 @@ public sealed class MySqlTemporalDefaultIdentityIntegrationTests : MySqlSafeMigr
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var sql = "CREATE TABLE `clock_defaults` (`id` int NOT NULL PRIMARY KEY, "
-            + $"`value` time({precision}) NOT NULL DEFAULT (TIME '{actual}')) ENGINE=InnoDB; "
-            + "INSERT INTO `clock_defaults` (`id`) VALUES (42);";
+        var sql = $"""
+            CREATE TABLE `clock_defaults` (`id` int NOT NULL PRIMARY KEY, `value` time({precision})
+            NOT NULL DEFAULT (TIME '{actual}')) ENGINE=InnoDB; INSERT
+            INTO `clock_defaults` (`id`) VALUES (42);
+            """;
 
         await ExecuteSqlAsync(connectionString, sql, CancellationToken.None);
         await using var context = CreateContext(connectionString);
@@ -138,8 +142,12 @@ public sealed class MySqlTemporalDefaultIdentityIntegrationTests : MySqlSafeMigr
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var nativeDefault = await ScalarStringAsync(connectionString,
-            "SELECT HEX(COLUMN_DEFAULT) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() "
-            + "AND TABLE_NAME='clock_defaults' AND COLUMN_NAME='value';",
+            """
+            SELECT HEX(COLUMN_DEFAULT) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA=DATABASE()
+            AND TABLE_NAME='clock_defaults'
+            AND COLUMN_NAME='value';
+            """,
             CancellationToken.None);
 
         // Act
@@ -249,10 +257,10 @@ public sealed class MySqlTemporalDefaultIdentityIntegrationTests : MySqlSafeMigr
             : string.Empty;
 
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE `datetime_defaults` (`id` int NOT NULL PRIMARY KEY"
-            + columnSql
-            + ") ENGINE=InnoDB; "
-            + "INSERT INTO `datetime_defaults` (`id`) VALUES (42);",
+            $"""
+            CREATE TABLE `datetime_defaults` (`id` int NOT NULL PRIMARY KEY{columnSql})
+            ENGINE=InnoDB; INSERT INTO `datetime_defaults` (`id`) VALUES (42);
+            """,
             CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -343,9 +351,11 @@ public sealed class MySqlTemporalDefaultIdentityIntegrationTests : MySqlSafeMigr
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE `duration_defaults` (`id` int NOT NULL PRIMARY KEY, "
-            + "`value` time(6) NOT NULL DEFAULT '01:02:03.123456') ENGINE=InnoDB; "
-            + "INSERT INTO `duration_defaults` (`id`) VALUES (42);",
+            """
+            CREATE TABLE `duration_defaults` (`id` int NOT NULL PRIMARY KEY, `value`
+            time(6) NOT NULL DEFAULT '01:02:03.123456') ENGINE=InnoDB; INSERT INTO `duration_defaults`
+            (`id`) VALUES (42);
+            """,
             CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -470,7 +480,11 @@ public sealed class MySqlTemporalDefaultIdentityIntegrationTests : MySqlSafeMigr
         string connectionString,
         CancellationToken cancellationToken
     ) => ScalarStringAsync(connectionString,
-        "SELECT COLUMN_DEFAULT FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() "
-        + "AND TABLE_NAME='duration_defaults' AND COLUMN_NAME='value';",
+        """
+        SELECT COLUMN_DEFAULT FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA=DATABASE()
+        AND TABLE_NAME='duration_defaults'
+        AND COLUMN_NAME='value';
+        """,
         cancellationToken);
 }

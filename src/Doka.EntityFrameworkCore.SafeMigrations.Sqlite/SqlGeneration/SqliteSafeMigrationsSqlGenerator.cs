@@ -300,23 +300,22 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
             ? string.Empty
             : " COLLATE " + _dependencies.SqlGenerationHelper.DelimitIdentifier(definition.Collation.Name);
 
-        return "ALTER TABLE "
-            + _dependencies.SqlGenerationHelper.DelimitIdentifier(intent.Table)
-            + " ADD "
-            + _dependencies.SqlGenerationHelper.DelimitIdentifier(definition.Name)
-            + " "
-            + storeType
-            + collation
-            + (definition.IsNullable
-                ? string.Empty
-                : " NOT NULL")
-            + " GENERATED ALWAYS AS ("
-            + expression
-            + ") "
-            + (definition.IsStored == true
-                ? "STORED"
-                : "VIRTUAL")
-            + ";";
+        var nullability = definition.IsNullable
+            ? string.Empty
+            : " NOT NULL";
+
+        var storage = definition.IsStored == true
+            ? "STORED"
+            : "VIRTUAL";
+
+        var tableSql = _dependencies.SqlGenerationHelper.DelimitIdentifier(intent.Table);
+        var columnSql = _dependencies.SqlGenerationHelper.DelimitIdentifier(definition.Name);
+
+        return $"""
+            ALTER TABLE {tableSql}
+            ADD {columnSql} {storeType}{collation}{nullability}
+            GENERATED ALWAYS AS ({expression}) {storage};
+            """;
     }
 
     private string RenderExpressionIndex(
@@ -348,21 +347,20 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
             ? definition.Filter
             : _expressionRenderer.Render(definition.StructuredFilter);
 
-        return "CREATE "
-            + (definition.Unique
-                ? "UNIQUE "
-                : string.Empty)
-            + "INDEX "
-            + _dependencies.SqlGenerationHelper.DelimitIdentifier(definition.Name)
-            + " ON "
-            + _dependencies.SqlGenerationHelper.DelimitIdentifier(definition.Table)
-            + " ("
-            + string.Join(", ", keys)
-            + ")"
-            + (filter is null
-                ? string.Empty
-                : " WHERE " + filter)
-            + ";";
+        var uniqueness = definition.Unique
+            ? "UNIQUE "
+            : string.Empty;
+
+        var filterSql = filter is null
+            ? string.Empty
+            : " WHERE " + filter;
+
+        return $"""
+            CREATE {uniqueness}INDEX {_dependencies.SqlGenerationHelper.DelimitIdentifier(definition.Name)}
+            ON {_dependencies.SqlGenerationHelper.DelimitIdentifier(definition.Table)} (
+                {string.Join(", ", keys)}
+            ){filterSql};
+            """;
     }
 
     private static bool RequiresCustomIndexSql(

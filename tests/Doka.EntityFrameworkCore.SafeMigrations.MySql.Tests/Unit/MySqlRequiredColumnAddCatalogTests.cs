@@ -292,7 +292,7 @@ public sealed class MySqlRequiredColumnAddCatalogTests
 
         // Assert
         Assert.Contains(
-            "CASE WHEN FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) > 0 THEN "
+            "CASE WHEN FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) > 0\nTHEN "
             + "(CAST(c.COLUMN_TYPE AS BINARY) = CAST(",
             terminal,
             StringComparison.Ordinal);
@@ -708,7 +708,7 @@ public sealed class MySqlRequiredColumnAddCatalogTests
             status,
             StringComparison.Ordinal);
 
-        Assert.StartsWith("CASE WHEN (@atomic_status) <> 'fresh' THEN 'unsupported'", guard, StringComparison.Ordinal);
+        Assert.StartsWith("CASE WHEN (@atomic_status) <> 'fresh'\nTHEN 'unsupported'", guard, StringComparison.Ordinal);
         Assert.DoesNotContain("INFORMATION_SCHEMA.TABLE_CONSTRAINTS", guard, StringComparison.Ordinal);
         Assert.True(
             guard.IndexOf("THEN 'unsupported'", StringComparison.Ordinal)
@@ -759,14 +759,14 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         Assert.Contains("CAST(tc.CONSTRAINT_NAME AS BINARY) = CAST(", resume, StringComparison.Ordinal);
         Assert.Contains("CAST(tc.TABLE_NAME AS BINARY) = CAST(", resume, StringComparison.Ordinal);
         Assert.Contains(
-            "CAST(tc.CONSTRAINT_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            "CAST(tc.CONSTRAINT_SCHEMA AS BINARY) = CAST(DATABASE()\nAS BINARY)",
             resume,
             StringComparison.Ordinal);
 
         Assert.Contains("CAST(c.TABLE_NAME AS BINARY) = CAST(", resume, StringComparison.Ordinal);
         Assert.Contains("CAST(c.COLUMN_NAME AS BINARY) = CAST(", resume, StringComparison.Ordinal);
         Assert.Contains(
-            "CAST(c.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            "CAST(c.TABLE_SCHEMA AS BINARY) = CAST(DATABASE()\nAS BINARY)",
             resume,
             StringComparison.Ordinal);
 
@@ -778,7 +778,7 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         Assert.DoesNotContain("UPPER(tc.CONSTRAINT_NAME)", resume, StringComparison.Ordinal);
         Assert.DoesNotContain("LOWER(tc.CONSTRAINT_NAME)", resume, StringComparison.Ordinal);
         Assert.Contains(
-            "nullable_fk.DELETE_RULE = 'SET NULL' OR nullable_fk.UPDATE_RULE = 'SET NULL'",
+            "nullable_fk.DELETE_RULE = 'SET NULL'\nOR nullable_fk.UPDATE_RULE = 'SET NULL'",
             resume,
             StringComparison.Ordinal);
 
@@ -922,32 +922,52 @@ public sealed class MySqlRequiredColumnAddCatalogTests
 
         // Assert
         Assert.Contains(
-            "CASE WHEN @@lower_case_table_names = 0 THEN "
-            + "CAST(tc.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY) "
-            + "WHEN @@lower_case_table_names IN (1, 2) THEN "
-            + "CAST(LOWER(tc.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems') AS BINARY) ELSE FALSE END",
+            """
+            CASE WHEN @@lower_case_table_names = 0
+            THEN CAST(tc.TABLE_NAME AS BINARY) = CAST('MixedItems'
+            AS BINARY)
+            WHEN @@lower_case_table_names IN (1, 2)
+            THEN CAST(LOWER(tc.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems')
+            AS BINARY)
+            ELSE FALSE END
+            """,
             status,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CASE WHEN @@lower_case_table_names = 0 THEN "
-            + "CAST(c.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY) "
-            + "WHEN @@lower_case_table_names IN (1, 2) THEN "
-            + "CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems') AS BINARY) ELSE FALSE END",
+            """
+            CASE WHEN @@lower_case_table_names = 0
+            THEN CAST(c.TABLE_NAME AS BINARY) = CAST('MixedItems'
+            AS BINARY)
+            WHEN @@lower_case_table_names IN (1, 2)
+            THEN CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems')
+            AS BINARY)
+            ELSE FALSE END
+            """,
             status,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CAST(tc.CONSTRAINT_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY) "
-            + "WHEN @@lower_case_table_names IN (1, 2) THEN "
-            + "CAST(LOWER(tc.CONSTRAINT_SCHEMA) AS BINARY) = CAST(LOWER(DATABASE()) AS BINARY) ELSE FALSE END",
+            """
+            CAST(tc.CONSTRAINT_SCHEMA AS BINARY) = CAST(DATABASE()
+            AS BINARY)
+            WHEN @@lower_case_table_names IN (1, 2)
+            THEN CAST(LOWER(tc.CONSTRAINT_SCHEMA) AS BINARY) = CAST(LOWER(DATABASE())
+            AS BINARY)
+            ELSE FALSE END
+            """,
             status,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CAST(c.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY) "
-            + "WHEN @@lower_case_table_names IN (1, 2) THEN "
-            + "CAST(LOWER(c.TABLE_SCHEMA) AS BINARY) = CAST(LOWER(DATABASE()) AS BINARY) ELSE FALSE END",
+            """
+            CAST(c.TABLE_SCHEMA AS BINARY) = CAST(DATABASE()
+            AS BINARY)
+            WHEN @@lower_case_table_names IN (1, 2)
+            THEN CAST(LOWER(c.TABLE_SCHEMA) AS BINARY) = CAST(LOWER(DATABASE())
+            AS BINARY)
+            ELSE FALSE END
+            """,
             status,
             StringComparison.Ordinal);
 
@@ -962,12 +982,12 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         Assert.DoesNotContain("LOWER(c.COLUMN_NAME)", status, StringComparison.Ordinal);
         Assert.DoesNotContain("LOWER(cc.CHECK_CLAUSE)", status, StringComparison.Ordinal);
         Assert.Contains(
-            "CAST(c.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)",
+            "CAST(c.TABLE_NAME AS BINARY) = CAST('MixedItems'\nAS BINARY)",
             terminal,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems') AS BINARY)",
+            "CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems')\nAS BINARY)",
             terminal,
             StringComparison.Ordinal);
 
@@ -1012,17 +1032,17 @@ public sealed class MySqlRequiredColumnAddCatalogTests
             expression =>
             {
                 Assert.Contains(
-                    "CAST(c.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)",
+                    "CAST(c.TABLE_NAME AS BINARY) = CAST('MixedItems'\nAS BINARY)",
                     expression,
                     StringComparison.Ordinal);
 
                 Assert.Contains(
-                    "CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems') AS BINARY)",
+                    "CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems')\nAS BINARY)",
                     expression,
                     StringComparison.Ordinal);
 
                 Assert.Contains(
-                    "CAST(c.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+                    "CAST(c.TABLE_SCHEMA AS BINARY) = CAST(DATABASE()\nAS BINARY)",
                     expression,
                     StringComparison.Ordinal);
 
@@ -1030,25 +1050,32 @@ public sealed class MySqlRequiredColumnAddCatalogTests
                 Assert.DoesNotContain("CAST(c.COLUMN_NAME AS BINARY)", expression, StringComparison.Ordinal);
             });
 
-        Assert.Contains("CAST(t.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)", state, StringComparison.Ordinal);
-        Assert.Contains("CAST(t.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)", state, StringComparison.Ordinal);
         Assert.Contains(
-            "CAST(t.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)",
+            "CAST(t.TABLE_NAME AS BINARY) = CAST('MixedItems'\nAS BINARY)",
+            state,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "CAST(t.TABLE_SCHEMA AS BINARY) = CAST(DATABASE()\nAS BINARY)",
+            state,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "CAST(t.TABLE_NAME AS BINARY) = CAST('MixedItems'\nAS BINARY)",
             prerequisite,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CAST(t.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            "CAST(t.TABLE_SCHEMA AS BINARY) = CAST(DATABASE()\nAS BINARY)",
             prerequisite,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CAST(atomic_table.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)",
+            "CAST(atomic_table.TABLE_NAME AS BINARY) = CAST('MixedItems'\nAS BINARY)",
             status,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CAST(atomic_table.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            "CAST(atomic_table.TABLE_SCHEMA AS BINARY) = CAST(DATABASE()\nAS BINARY)",
             status,
             StringComparison.Ordinal);
 
@@ -1096,12 +1123,12 @@ public sealed class MySqlRequiredColumnAddCatalogTests
             expression =>
             {
                 Assert.Contains(
-                    "CAST(c.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)",
+                    "CAST(c.TABLE_NAME AS BINARY) = CAST('MixedItems'\nAS BINARY)",
                     expression,
                     StringComparison.Ordinal);
 
                 Assert.Contains(
-                    "CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems') AS BINARY)",
+                    "CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems')\nAS BINARY)",
                     expression,
                     StringComparison.Ordinal);
 
@@ -1109,7 +1136,7 @@ public sealed class MySqlRequiredColumnAddCatalogTests
             });
 
         Assert.Contains(
-            "CAST(t.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)",
+            "CAST(t.TABLE_NAME AS BINARY) = CAST('MixedItems'\nAS BINARY)",
             prerequisite,
             StringComparison.Ordinal);
 

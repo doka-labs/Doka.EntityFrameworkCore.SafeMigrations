@@ -19,8 +19,11 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.parents (Id int NOT NULL CONSTRAINT PK_parents PRIMARY KEY); "
-            + "CREATE TABLE dbo.children (Id int NOT NULL, ParentId int NOT NULL);",
+            """
+            CREATE TABLE dbo.parents (Id int NOT NULL CONSTRAINT PK_parents PRIMARY
+            KEY); CREATE TABLE dbo.children (Id int NOT NULL,
+            ParentId int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -63,8 +66,10 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.index_orders (Id int NOT NULL, Caption nvarchar(80) NULL); "
-            + "CREATE INDEX IX_index_orders_Caption ON dbo.index_orders (Caption);",
+            """
+            CREATE TABLE dbo.index_orders (Id int NOT NULL, Caption nvarchar(80) NULL);
+            CREATE INDEX IX_index_orders_Caption ON dbo.index_orders (Caption);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -85,8 +90,11 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
 
         var indexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.index_orders', N'U') "
-            + "AND name = N'IX_index_orders_Caption';",
+            """
+            SELECT COUNT(*) FROM sys.indexes
+            WHERE object_id = OBJECT_ID(N'dbo.index_orders', N'U')
+            AND name = N'IX_index_orders_Caption';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -105,11 +113,13 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.fk_parents (Id int NOT NULL CONSTRAINT PK_fk_parents PRIMARY KEY); "
-            + "CREATE TABLE dbo.fk_children (Id int NOT NULL, ParentId int NOT NULL); "
-            + "ALTER TABLE dbo.fk_children ADD CONSTRAINT FK_fk_children_parents "
-            + "FOREIGN KEY (ParentId) REFERENCES dbo.fk_parents (Id); "
-            + "ALTER TABLE dbo.fk_children NOCHECK CONSTRAINT FK_fk_children_parents;",
+            """
+            CREATE TABLE dbo.fk_parents (Id int NOT NULL CONSTRAINT PK_fk_parents PRIMARY
+            KEY); CREATE TABLE dbo.fk_children (Id int NOT NULL,
+            ParentId int NOT NULL); ALTER TABLE dbo.fk_children ADD CONSTRAINT FK_fk_children_parents
+            FOREIGN KEY (ParentId) REFERENCES dbo.fk_parents (Id); ALTER TABLE dbo.fk_children
+            NOCHECK CONSTRAINT FK_fk_children_parents;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -147,9 +157,11 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.filtered_orders (Id int NOT NULL, Caption nvarchar(80) NULL); "
-            + "CREATE INDEX IX_filtered_orders_Caption ON dbo.filtered_orders (Caption) "
-            + "WHERE Caption IS NOT NULL;",
+            """
+            CREATE TABLE dbo.filtered_orders (Id int NOT NULL, Caption nvarchar(80)
+            NULL); CREATE INDEX IX_filtered_orders_Caption ON dbo.filtered_orders (Caption)
+            WHERE Caption IS NOT NULL;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -182,8 +194,11 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.add_parents (Id int NOT NULL); "
-            + "CREATE TABLE dbo.add_children (Id int NOT NULL, ParentId int NOT NULL, Amount int NOT NULL);",
+            """
+            CREATE TABLE dbo.add_parents (Id int NOT NULL); CREATE TABLE dbo.add_children
+            (Id int NOT NULL,
+            ParentId int NOT NULL, Amount int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -204,12 +219,15 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
 
         var constraintCount = await ScalarIntAsync(
             connectionString,
-            "SELECT (SELECT COUNT(*) FROM sys.key_constraints WHERE name = N'PK_add_parents') "
-            + "+ (SELECT COUNT(*) FROM sys.key_constraints WHERE name = N'UQ_add_children_Id') "
-            + "+ (SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_add_children_Amount' "
-            + "AND is_disabled = 0 AND is_not_trusted = 0) "
-            + "+ (SELECT COUNT(*) FROM sys.foreign_keys WHERE name = N'FK_add_children_parents' "
-            + "AND is_disabled = 0 AND is_not_trusted = 0);",
+            """
+            SELECT (SELECT COUNT(*) FROM sys.key_constraints
+            WHERE name = N'PK_add_parents') + (SELECT COUNT(*)
+            FROM sys.key_constraints WHERE name = N'UQ_add_children_Id') + (SELECT COUNT(*)
+            FROM sys.check_constraints WHERE name = N'CK_add_children_Amount'
+            AND is_disabled = 0 AND is_not_trusted = 0) + (SELECT COUNT(*)
+            FROM sys.foreign_keys WHERE name = N'FK_add_children_parents'
+            AND is_disabled = 0 AND is_not_trusted = 0);
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -226,13 +244,15 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.drop_pk (Id int NOT NULL CONSTRAINT PK_drop_pk PRIMARY KEY); "
-            + "CREATE TABLE dbo.drop_uq (Id int NOT NULL CONSTRAINT UQ_drop_uq UNIQUE); "
-            + "CREATE TABLE dbo.drop_ck (Amount int NOT NULL CONSTRAINT CK_drop_ck CHECK (Amount >= 0)); "
-            + "CREATE TABLE dbo.drop_fk_parent (Id int NOT NULL CONSTRAINT PK_drop_fk_parent PRIMARY KEY); "
-            + "CREATE TABLE dbo.drop_fk_child (ParentId int NOT NULL); "
-            + "ALTER TABLE dbo.drop_fk_child ADD CONSTRAINT FK_drop_fk_child_parent "
-            + "FOREIGN KEY (ParentId) REFERENCES dbo.drop_fk_parent (Id);",
+            """
+            CREATE TABLE dbo.drop_pk (Id int NOT NULL CONSTRAINT PK_drop_pk PRIMARY
+            KEY); CREATE TABLE dbo.drop_uq (Id int NOT NULL CONSTRAINT UQ_drop_uq UNIQUE);
+            CREATE TABLE dbo.drop_ck (Amount int NOT NULL CONSTRAINT CK_drop_ck CHECK
+            (Amount >= 0)); CREATE TABLE dbo.drop_fk_parent (Id int NOT NULL CONSTRAINT
+            PK_drop_fk_parent PRIMARY KEY); CREATE TABLE dbo.drop_fk_child (ParentId
+            int NOT NULL); ALTER TABLE dbo.drop_fk_child ADD CONSTRAINT FK_drop_fk_child_parent
+            FOREIGN KEY (ParentId) REFERENCES dbo.drop_fk_parent (Id);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -248,9 +268,12 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
 
         var remainingCount = await ScalarIntAsync(
             connectionString,
-            "SELECT (SELECT COUNT(*) FROM sys.key_constraints WHERE name IN (N'PK_drop_pk', N'UQ_drop_uq')) "
-            + "+ (SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_drop_ck') "
-            + "+ (SELECT COUNT(*) FROM sys.foreign_keys WHERE name = N'FK_drop_fk_child_parent');",
+            """
+            SELECT (SELECT COUNT(*) FROM sys.key_constraints
+            WHERE name IN (N'PK_drop_pk', N'UQ_drop_uq')) + (SELECT COUNT(*)
+            FROM sys.check_constraints WHERE name = N'CK_drop_ck') + (SELECT COUNT(*)
+            FROM sys.foreign_keys WHERE name = N'FK_drop_fk_child_parent');
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert

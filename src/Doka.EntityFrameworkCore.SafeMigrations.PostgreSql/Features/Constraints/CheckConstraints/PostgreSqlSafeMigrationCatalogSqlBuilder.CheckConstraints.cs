@@ -68,12 +68,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     private static string CheckFacets(
         string expressionMatch,
         bool requireLocalIdentity = true
-    ) => (requireLocalIdentity
+    ) => $"""
+        {(requireLocalIdentity
             ? LocalConstraintIdentity()
-            : string.Empty)
-        + " AND co.convalidated AND NOT co.connoinherit"
-        + " AND COALESCE((to_jsonb(co) ->> 'conenforced')::boolean, TRUE)"
-        + $" AND {expressionMatch}";
+            : string.Empty)} AND co.convalidated AND NOT co.connoinherit
+        AND COALESCE((to_jsonb(co) ->> 'conenforced')::boolean, TRUE)
+        AND {expressionMatch}
+        """;
 
     /// <summary>Builds the catalog comparison for one expected check expression.</summary>
     /// <param name="definition">The expected check constraint.</param>
@@ -126,8 +127,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var exists = $"EXISTS ({rowSource} AND co.conname = required.conname)";
         var alias = $"EXISTS ({rowSource} AND co.conname <> required.conname{semantics})";
 
-        return $"NOT EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) "
-            + "AS required(ordinal, conname) WHERE NOT COALESCE("
-            + $"({exact}) OR (NOT ({exists}) AND ({alias})), FALSE))";
+        return $"""
+            NOT EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) AS required(ordinal,
+            conname) WHERE NOT COALESCE(({exact})
+            OR (NOT ({exists})
+            AND ({alias})), FALSE))
+            """;
     }
 }

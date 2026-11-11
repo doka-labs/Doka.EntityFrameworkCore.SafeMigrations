@@ -46,8 +46,10 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
             // merely because its variadic array could be empty when explicit.
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE FUNCTION public.lower(varchar, VARIADIC integer[]) RETURNS text "
-                + "LANGUAGE sql IMMUTABLE AS 'SELECT upper($1::text)';",
+                """
+                CREATE FUNCTION public.lower(varchar, VARIADIC integer[]) RETURNS text LANGUAGE
+                sql IMMUTABLE AS 'SELECT upper($1::text)';
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -171,8 +173,11 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE live_parent (id integer NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);",
+            """
+            CREATE TABLE live_parent (id integer NOT NULL PRIMARY KEY); CREATE TABLE
+            live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES
+            (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -238,9 +243,12 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE live_parent (id integer NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY, old_parent_id integer NULL, "
-            + "CONSTRAINT fk_live_child_parent FOREIGN KEY (old_parent_id) REFERENCES live_parent (id));",
+            """
+            CREATE TABLE live_parent (id integer NOT NULL PRIMARY KEY); CREATE TABLE live_child (id integer
+            NOT NULL PRIMARY KEY,
+            old_parent_id integer NULL, CONSTRAINT fk_live_child_parent FOREIGN KEY (old_parent_id)
+            REFERENCES live_parent (id));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -462,10 +470,11 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE mixed_columns (id text NOT NULL, added integer NOT NULL, "
-            + "CONSTRAINT ck_mixed CHECK (("
-            + current
-            + ") AND (added >= 0)));",
+            $"""
+            CREATE TABLE mixed_columns (id text NOT NULL, added integer NOT NULL,
+            CONSTRAINT ck_mixed CHECK (({current})
+            AND (added >= 0)));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -551,9 +560,11 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
             "domain" => "CREATE DOMAIN owned_integer AS integer; CREATE TABLE mixed_columns (id owned_integer);",
             "polymorphic" or "polymorphic-cast" => "CREATE TABLE mixed_columns (id integer[]);",
             "variadic" => "CREATE TABLE mixed_columns (id integer);",
-            "opaque" => "CREATE TABLE mixed_columns (id integer); CREATE TABLE callback_audit (id integer); "
-                + "CREATE FUNCTION metadata_callback(integer) RETURNS boolean LANGUAGE plpgsql AS $$ "
-                + "BEGIN INSERT INTO callback_audit VALUES (1); RETURN true; END $$;",
+            "opaque" => """
+                CREATE TABLE mixed_columns (id integer); CREATE TABLE callback_audit (id
+                integer); CREATE FUNCTION metadata_callback(integer) RETURNS boolean LANGUAGE
+                plpgsql AS $$ BEGIN INSERT INTO callback_audit VALUES (1); RETURN true; END $$;
+                """,
             _ => throw new ArgumentOutOfRangeException(nameof(shape)),
         };
 
@@ -642,9 +653,11 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE mixed_columns (id integer); CREATE TABLE callback_audit (id integer); "
-            + "CREATE FUNCTION metadata_callback(integer) RETURNS boolean LANGUAGE plpgsql AS $$ "
-            + "BEGIN INSERT INTO callback_audit VALUES (1); RETURN true; END $$;",
+            """
+            CREATE TABLE mixed_columns (id integer); CREATE TABLE callback_audit (id
+            integer); CREATE FUNCTION metadata_callback(integer) RETURNS boolean LANGUAGE
+            plpgsql AS $$ BEGIN INSERT INTO callback_audit VALUES (1); RETURN true; END $$;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -750,10 +763,12 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE live_child (id integer NOT NULL, CONSTRAINT fk_live_child_parent "
-            + constraint
-            + "); INSERT INTO live_child VALUES (1);",
+            $"""
+            CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); CREATE TABLE live_child
+            (id integer NOT NULL,
+            CONSTRAINT fk_live_child_parent {constraint}); INSERT INTO
+            live_child VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

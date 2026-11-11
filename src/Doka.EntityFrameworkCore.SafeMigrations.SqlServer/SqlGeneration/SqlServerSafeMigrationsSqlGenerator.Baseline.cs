@@ -196,15 +196,12 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
         // WHY: sp_rename accepts constants or variables, not EF's CONCAT
         // newline literal. These locals stay in the existing nested DDL scope;
         // the surrounding guard still proves ownership, occupancy and outcome.
-        sql = "DECLARE @doka_rename_source nvarchar(max) = "
-            + SqlServerSqlStringLiteral.Render(source)
-            + ", @doka_rename_target nvarchar(max) = "
-            + SqlServerSqlStringLiteral.Render(target)
-            + "; "
-            + "EXEC sys.sp_rename @objname=@doka_rename_source, @newname=@doka_rename_target, @objtype=N'"
-            + kind
-            + "'; "
-            + transfer;
+        sql = $"""
+            DECLARE @doka_rename_source nvarchar(max) = {SqlServerSqlStringLiteral.Render(source)},
+            @doka_rename_target nvarchar(max) = {SqlServerSqlStringLiteral.Render(target)}; EXEC sys.sp_rename
+            @objname=@doka_rename_source,
+            @newname=@doka_rename_target, @objtype=N'{kind}'; {transfer}
+            """;
 
         return true;
     }

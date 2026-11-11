@@ -138,12 +138,14 @@ internal sealed class MySqlSafeMigrationRuntimeDiagnostic
 
         if (HasRequiredAddStatus)
         {
-            builder
-                .Append("WHEN @doka_sm_add_status = 'conflict' THEN 3 ")
-                .Append("WHEN @doka_sm_add_status = 'unavailable' THEN 4 ")
-                .Append("WHEN @doka_sm_add_status = 'set_null' THEN 5 ")
-                .Append("WHEN @doka_sm_add_status = 'staged' AND @doka_sm_state = 'data_blocked' THEN 6 ")
-                .Append("WHEN @doka_sm_add_status = 'fresh' AND @doka_sm_state = 'data_blocked' THEN 7 ");
+            builder.Append("""
+                WHEN @doka_sm_add_status = 'conflict' THEN 3
+                WHEN @doka_sm_add_status = 'unavailable' THEN 4
+                WHEN @doka_sm_add_status = 'set_null' THEN 5
+                WHEN @doka_sm_add_status = 'staged' AND @doka_sm_state = 'data_blocked' THEN 6
+                WHEN @doka_sm_add_status = 'fresh' AND @doka_sm_state = 'data_blocked' THEN 7
+                """
+                + " ");
         }
 
         if (HasNullabilityProof)

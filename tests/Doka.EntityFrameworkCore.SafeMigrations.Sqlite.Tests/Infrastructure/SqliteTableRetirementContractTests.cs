@@ -315,7 +315,12 @@ public sealed class SqliteTableRetirementContractTests
         string owner,
         string principal
     ) => new(owner,
-        $"CREATE TABLE {owner} (id INTEGER PRIMARY KEY, principal_id INTEGER REFERENCES {principal}(id))",
+        $"""
+        CREATE TABLE {owner} (
+            id INTEGER PRIMARY KEY,
+            principal_id INTEGER REFERENCES {principal}(id)
+        )
+        """,
         new Dictionary<string, SqliteColumnSnapshot>(SqliteIdentifierComparer.Instance)
         {
             ["id"] = new(0,

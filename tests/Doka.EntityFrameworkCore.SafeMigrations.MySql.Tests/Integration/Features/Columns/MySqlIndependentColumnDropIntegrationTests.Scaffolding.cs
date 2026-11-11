@@ -193,8 +193,12 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
 
         var identifierColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND COLUMN_NAME = 'id';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'replacement_items'
+            AND COLUMN_NAME = 'id';
+            """,
             cancellationToken: CancellationToken.None);
 
         var identifiers = Fixture.IsMariaDb
@@ -330,14 +334,22 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
 
         var primaryCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND CONSTRAINT_TYPE = 'PRIMARY KEY';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'replacement_items'
+            AND CONSTRAINT_TYPE = 'PRIMARY KEY';
+            """,
             cancellationToken: CancellationToken.None);
 
         var legacyColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND COLUMN_NAME = 'legacy_value';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'replacement_items'
+            AND COLUMN_NAME = 'legacy_value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var retained = await ScalarIntAsync(
@@ -383,9 +395,13 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests
         CancellationToken cancellationToken
     ) => ScalarStringAsync(
         connectionString,
-        "SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY ORDINAL_POSITION) "
-        + "FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() "
-        + "AND TABLE_NAME = 'replacement_items' AND CONSTRAINT_NAME = 'PRIMARY';",
+        """
+        SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY ORDINAL_POSITION)
+        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'replacement_items'
+        AND CONSTRAINT_NAME = 'PRIMARY';
+        """,
         cancellationToken: cancellationToken);
 
     /// <summary>

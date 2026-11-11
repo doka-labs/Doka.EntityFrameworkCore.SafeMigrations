@@ -9,9 +9,11 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
     // each independent INT-to-BIGINT analysis fits, but the second ordered
     // widening would reach 768 unless accepted sibling widths are included.
     private const string CompactKeyBudgetSql =
-        "ALTER TABLE `integer_upgrade` ROW_FORMAT=COMPACT, ADD COLUMN `padding` varchar(187) NOT NULL DEFAULT ''; "
-        + "ALTER TABLE `integer_upgrade` ADD INDEX `ix_live_budget` "
-        + "(`padding`,`left_value`,`right_value`,`position`);";
+        """
+        ALTER TABLE `integer_upgrade` ROW_FORMAT=COMPACT, ADD COLUMN `padding` varchar(187)
+        NOT NULL DEFAULT ''; ALTER TABLE `integer_upgrade` ADD INDEX `ix_live_budget`
+        (`padding`,`left_value`,`right_value`,`position`);
+        """;
 
     /// <summary>Shares the native engine while retaining an isolated database for each case.</summary>
     /// <param name="fixture">The assembly-owned configured native engine.</param>
@@ -79,16 +81,26 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
         await ExecuteOperationsAsync(context, operations, CancellationToken.None);
         var rows = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM `integer_upgrade` WHERE (`id`=1 AND `left_value`=-2147483648 "
-            + "AND `right_value`=2147483647 AND `position`=0 AND `payload`='first') "
-            + "OR (`id`=2 AND `left_value`=0 AND `right_value`=1 AND `position`=2 AND `payload`='second');",
+            """
+            SELECT COUNT(*) FROM `integer_upgrade`
+            WHERE (`id`=1 AND `left_value`=-2147483648
+            AND `right_value`=2147483647 AND `position`=0
+            AND `payload`='first') OR (`id`=2
+            AND `left_value`=0 AND `right_value`=1
+            AND `position`=2 AND `payload`='second');
+            """,
             cancellationToken: CancellationToken.None);
 
         var widened = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() "
-            + "AND TABLE_NAME='integer_upgrade' AND COLUMN_NAME IN ('left_value','right_value','position') "
-            + "AND DATA_TYPE='bigint' AND IS_NULLABLE='NO' AND COLUMN_DEFAULT IS NULL;",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA=DATABASE()
+            AND TABLE_NAME='integer_upgrade'
+            AND COLUMN_NAME IN ('left_value','right_value','position')
+            AND DATA_TYPE='bigint' AND IS_NULLABLE='NO'
+            AND COLUMN_DEFAULT IS NULL;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -108,8 +120,10 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
         await ExecuteSqlAsync(
             connectionString,
             FixtureSql(alreadyDropped: false)
-            + "ALTER TABLE `integer_upgrade` ADD INDEX `ix_upgrade_right` (`right_value`), "
-            + "ADD INDEX `ix_upgrade_position` (`position`);",
+            + """
+            ALTER TABLE `integer_upgrade` ADD INDEX `ix_upgrade_right` (`right_value`),
+            ADD INDEX `ix_upgrade_position` (`position`);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -285,8 +299,13 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         var columnDefault = await ScalarStringAsync(
             connectionString,
-            "SELECT COALESCE(COLUMN_DEFAULT, '<none>') FROM INFORMATION_SCHEMA.COLUMNS "
-            + "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='integer_upgrade' AND COLUMN_NAME='left_value';",
+            """
+            SELECT COALESCE(COLUMN_DEFAULT, '<none>')
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA=DATABASE()
+            AND TABLE_NAME='integer_upgrade'
+            AND COLUMN_NAME='left_value';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -321,16 +340,20 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
 
         var drift = failure switch
         {
-            "unsigned" => "UPDATE `integer_upgrade` SET `left_value`=0; "
-                + "ALTER TABLE `integer_upgrade` MODIFY COLUMN `left_value` int unsigned NOT NULL;",
+            "unsigned" => """
+                UPDATE `integer_upgrade` SET `left_value`=0; ALTER TABLE `integer_upgrade`
+                MODIFY COLUMN `left_value` int unsigned NOT NULL;
+                """,
             "comment" => "ALTER TABLE `integer_upgrade` MODIFY COLUMN `left_value` int NOT NULL COMMENT 'drift';",
             "default" => "ALTER TABLE `integer_upgrade` MODIFY COLUMN `left_value` int NOT NULL DEFAULT 7;",
             "wrong_source" => "ALTER TABLE `integer_upgrade` MODIFY COLUMN `left_value` bigint NOT NULL;",
             "nullable" => "ALTER TABLE `integer_upgrade` MODIFY COLUMN `left_value` int NULL;",
-            "foreign_key" => "CREATE TABLE `integer_parent` (`value` int NOT NULL PRIMARY KEY); "
-                + "INSERT INTO `integer_parent` VALUES (-2147483648),(0); "
-                + "ALTER TABLE `integer_upgrade` ADD CONSTRAINT `fk_integer_parent` "
-                + "FOREIGN KEY (`left_value`) REFERENCES `integer_parent` (`value`);",
+            "foreign_key" => """
+                CREATE TABLE `integer_parent` (`value` int NOT NULL PRIMARY KEY); INSERT
+                INTO `integer_parent` VALUES (-2147483648),(0); ALTER TABLE `integer_upgrade`
+                ADD CONSTRAINT `fk_integer_parent` FOREIGN KEY (`left_value`) REFERENCES
+                `integer_parent` (`value`);
+                """,
             _ => throw new ArgumentOutOfRangeException(nameof(failure)),
         };
 
@@ -409,8 +432,12 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
 
         var remaining = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() "
-            + "AND TABLE_NAME='integer_upgrade' AND DATA_TYPE='int';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA=DATABASE()
+            AND TABLE_NAME='integer_upgrade'
+            AND DATA_TYPE='int';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -546,8 +573,12 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
 
         var remaining = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() "
-            + "AND TABLE_NAME='integer_upgrade' AND DATA_TYPE='int';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA=DATABASE()
+            AND TABLE_NAME='integer_upgrade'
+            AND DATA_TYPE='int';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -630,8 +661,12 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
 
         var widened = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() "
-            + "AND TABLE_NAME='integer_upgrade' AND DATA_TYPE='bigint';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA=DATABASE()
+            AND TABLE_NAME='integer_upgrade'
+            AND DATA_TYPE='bigint';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -691,23 +726,23 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `integer_upgrade` (`id` int NOT NULL PRIMARY KEY, `left_value` {sourceType} NOT NULL, "
-            + "UNIQUE INDEX `uq_parent_value` (`left_value`)) ENGINE=InnoDB "
-            + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `integer_upgrade` VALUES "
-            + seedRows
-            + ";",
+            $"""
+            CREATE TABLE `integer_upgrade` (`id` int NOT NULL PRIMARY KEY, `left_value`
+            {sourceType} NOT NULL,
+            UNIQUE INDEX `uq_parent_value` (`left_value`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            COLLATE=utf8mb4_unicode_ci; INSERT INTO `integer_upgrade` VALUES {seedRows};
+            """,
             cancellationToken: CancellationToken.None);
 
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await ExecuteSqlAsync(
             childConnection,
-            $"CREATE TABLE `integer_child` (`value` {sourceType} NOT NULL, CONSTRAINT `fk_other_database_parent` "
-            + $"FOREIGN KEY (`value`) REFERENCES `{database}`.`integer_upgrade` (`left_value`)) ENGINE=InnoDB "
-            + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `integer_child` VALUES ("
-            + referencedValue
-            + ");",
+            $"""
+            CREATE TABLE `integer_child` (`value` {sourceType} NOT NULL,
+            CONSTRAINT `fk_other_database_parent` FOREIGN KEY (`value`) REFERENCES `{database}`.`integer_upgrade`
+            (`left_value`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            INSERT INTO `integer_child` VALUES ({referencedValue});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -819,13 +854,17 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
 
     private static string FixtureSql(
         bool alreadyDropped
-    ) => "CREATE TABLE `integer_upgrade` (`id` int NOT NULL PRIMARY KEY, `left_value` int NOT NULL, "
-        + "`right_value` int NOT NULL, `position` int NOT NULL, `payload` varchar(32) NOT NULL"
-        + (alreadyDropped
+    ) => $"""
+        CREATE TABLE `integer_upgrade` (`id` int NOT NULL PRIMARY KEY, `left_value`
+        int NOT NULL,
+        `right_value` int NOT NULL, `position` int NOT NULL, `payload` varchar(32)
+        NOT NULL{(alreadyDropped
             ? ""
-            : ", INDEX `ix_upgrade_coordinates` (`left_value`,`right_value`,`position`)")
-        + ") ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-        + "INSERT INTO `integer_upgrade` VALUES (1,-2147483648,2147483647,0,'first'),(2,0,1,2,'second');";
+            : ", INDEX `ix_upgrade_coordinates` (`left_value`,`right_value`,`position`)"
+        )}) ENGINE=InnoDB DEFAULT CHARACTER SET
+        utf8mb4 COLLATE utf8mb4_unicode_ci; INSERT INTO `integer_upgrade` VALUES
+        (1,-2147483648,2147483647,0,'first'),(2,0,1,2,'second');
+        """;
 
     internal static List<MigrationOperation> UpgradeOperations(
         bool dropIndex,

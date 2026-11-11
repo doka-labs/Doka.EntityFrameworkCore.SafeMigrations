@@ -293,7 +293,7 @@ public sealed class SqlServerIdentifierCollisionAllocationTests
         Assert.Equal(expectedInserts, actualInserts);
         Assert.Equal(2, actualInserts.Length);
         Assert.Contains("DROP TABLE " + temporaryTable + ";", lastCommand, StringComparison.Ordinal);
-        Assert.Contains("GROUP BY scope, schema_name, table_name, name", lastCommand, StringComparison.Ordinal);
+        Assert.Contains("GROUP BY scope, schema_name,\ntable_name, name", lastCommand, StringComparison.Ordinal);
         Assert.Equal(snapshot, references);
     }
 

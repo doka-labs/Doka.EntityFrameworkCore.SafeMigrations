@@ -20,8 +20,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY); "
-            + $"INSERT INTO `{Table}` VALUES (1);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY);
+            INSERT INTO `{Table}` VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         var initial = new MigrationBuilder(context.Database.ProviderName!);
@@ -113,9 +115,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         // WHY: Unicode result fidelity is this table's contract, not the selected server's database default.
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY) "
-            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + $"INSERT INTO `{Table}` VALUES (1);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY)
+            DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; INSERT INTO `{Table}`
+            VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         var initial = new MigrationBuilder(context.Database.ProviderName!);
@@ -183,9 +187,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` "
-            + "(`id` int NOT NULL PRIMARY KEY, `left_bound` bigint NOT NULL, `right_bound` bigint NOT NULL); "
-            + $"INSERT INTO `{Table}` VALUES (1, 2, 3);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY,
+            `left_bound` bigint NOT NULL, `right_bound` bigint NOT NULL); INSERT INTO
+            `{Table}` VALUES (1,
+            2, 3);
+            """,
             cancellationToken: CancellationToken.None);
 
         var definition = SafeMigrationExpectedDefinitionFactory.From(
@@ -345,8 +352,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` "
-            + "(`id` int NOT NULL PRIMARY KEY, `left_bound` bigint NOT NULL, `right_bound` bigint NOT NULL);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY,
+            `left_bound` bigint NOT NULL, `right_bound` bigint NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await SeedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
@@ -543,10 +552,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         CancellationToken cancellationToken
     ) => ExecuteSqlAsync(
         connectionString,
-        $"INSERT INTO `{Table}` (`id`, `left_bound`, `right_bound`) VALUES "
-        + "(1, 1, 2), (2, 1, 3), (3, 9223372036854775807, 9223372036854775807), "
-        + "(4, -9223372036854775808, -9223372036854775807), "
-        + "(5, -9223372036854775808, -9223372036854775806);",
+        $"""
+        INSERT INTO `{Table}` (`id`, `left_bound`, `right_bound`)
+        VALUES (1,
+        1, 2), (2, 1, 3), (3, 9223372036854775807, 9223372036854775807), (4, -9223372036854775808,
+        -9223372036854775807), (5, -9223372036854775808, -9223372036854775806);
+        """,
         cancellationToken: cancellationToken);
 
     /// <summary>Checks generated outputs while also retaining every original key and bound.</summary>
@@ -557,15 +568,22 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         CancellationToken cancellationToken
     ) => ScalarIntAsync(
         connectionString,
-        $"SELECT COUNT(*) FROM `{Table}` WHERE "
-        + "(id = 1 AND left_bound = 1 AND right_bound = 2 AND has_descendants = 0) OR "
-        + "(id = 2 AND left_bound = 1 AND right_bound = 3 AND has_descendants = 1) OR "
-        + "(id = 3 AND left_bound = 9223372036854775807 AND right_bound = 9223372036854775807 "
-        + "AND has_descendants = 0) OR "
-        + "(id = 4 AND left_bound = -9223372036854775808 AND right_bound = -9223372036854775807 "
-        + "AND has_descendants = 0) OR "
-        + "(id = 5 AND left_bound = -9223372036854775808 AND right_bound = -9223372036854775806 "
-        + "AND has_descendants = 1);",
+        $"""
+        SELECT COUNT(*) FROM `{Table}`
+        WHERE (id = 1 AND left_bound = 1
+        AND right_bound = 2 AND has_descendants = 0)
+        OR (id = 2 AND left_bound = 1
+        AND right_bound = 3 AND has_descendants = 1)
+        OR (id = 3 AND left_bound = 9223372036854775807
+        AND right_bound = 9223372036854775807
+        AND has_descendants = 0) OR (id = 4
+        AND left_bound = -9223372036854775808
+        AND right_bound = -9223372036854775807
+        AND has_descendants = 0) OR (id = 5
+        AND left_bound = -9223372036854775808
+        AND right_bound = -9223372036854775806
+        AND has_descendants = 1);
+        """,
         cancellationToken: cancellationToken);
 
     /// <summary>Retains bounded catalog differences when a native postcondition fails before replay.</summary>
@@ -589,8 +607,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         CancellationToken cancellationToken
     ) => ScalarStringAsync(
         connectionString,
-        "SELECT CONCAT(COLUMN_TYPE, '|', IS_NULLABLE, '|', "
-        + "COALESCE(COLUMN_DEFAULT, '<null>'), '|', GENERATION_EXPRESSION) FROM INFORMATION_SCHEMA.COLUMNS "
-        + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND COLUMN_NAME = '{column}';",
+        $"""
+        SELECT CONCAT(COLUMN_TYPE, '|', IS_NULLABLE, '|', COALESCE(COLUMN_DEFAULT,
+        '<null>'), '|', GENERATION_EXPRESSION)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = '{Table}'
+        AND COLUMN_NAME = '{column}';
+        """,
         cancellationToken: cancellationToken);
 }

@@ -96,21 +96,33 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var uniqueCollision = UniqueCollision(intent, intent.UniqueKeys, relation, "t");
-        var state = "(SELECT CASE "
-            + $"WHEN COALESCE(BOOL_OR(({found}) AND NOT ({targetMatch})), FALSE) THEN 'different' "
-            + $"WHEN {uniqueCollision} THEN 'data_blocked' "
-            + $"WHEN COALESCE(BOOL_OR(NOT ({found})), FALSE) THEN 'missing' "
-            + "ELSE 'matching' END "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch})";
+        var state = $"""
+            (SELECT CASE WHEN COALESCE(BOOL_OR(({found})
+            AND NOT ({targetMatch})), FALSE)
+            THEN 'different'
+            WHEN {uniqueCollision}
+            THEN 'data_blocked'
+            WHEN COALESCE(BOOL_OR(NOT ({found})), FALSE)
+            THEN 'missing' ELSE 'matching' END
+            FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
-        var postcondition = "NOT EXISTS (SELECT 1 "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch} "
-            + $"WHERE NOT ({found}) OR NOT ({targetMatch}))";
+        var postcondition = $"""
+            NOT EXISTS (SELECT 1 FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch}
+            WHERE NOT ({found})
+            OR NOT ({targetMatch}))
+            """;
 
-        var rowEvidence = $"(SELECT STRING_AGG(CASE WHEN NOT ({found}) THEN '0' "
-            + $"WHEN ({targetMatch}) THEN '2' ELSE '3' END, '' "
-            + $"ORDER BY doka_expected.{Delimited("r")}) "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch})";
+        var rowEvidence = $"""
+            (SELECT STRING_AGG(CASE WHEN NOT ({found})
+            THEN '0'
+            WHEN ({targetMatch})
+            THEN '2' ELSE '3' END, '' ORDER BY doka_expected.{Delimited("r")})
+            FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
         return Plan(state, postcondition) with
         {
@@ -147,22 +159,37 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var uniqueCollision = UniqueCollision(intent, intent.UniqueKeys, relation, "n");
-        var state = "(SELECT CASE "
-            + $"WHEN COALESCE(BOOL_OR(NOT ({found})), FALSE) THEN 'prerequisite_missing' "
-            + $"WHEN COALESCE(BOOL_OR(NOT ({sourceMatch}) AND NOT ({targetMatch})), FALSE) THEN 'different' "
-            + $"WHEN {uniqueCollision} THEN 'data_blocked' "
-            + $"WHEN NOT COALESCE(BOOL_OR(NOT ({targetMatch})), FALSE) THEN 'matching' "
-            + "ELSE 'transition_ready' END "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch})";
+        var state = $"""
+            (SELECT CASE WHEN COALESCE(BOOL_OR(NOT ({found})),
+            FALSE) THEN 'prerequisite_missing'
+            WHEN COALESCE(BOOL_OR(NOT ({sourceMatch})
+            AND NOT ({targetMatch})), FALSE)
+            THEN 'different'
+            WHEN {uniqueCollision}
+            THEN 'data_blocked'
+            WHEN NOT COALESCE(BOOL_OR(NOT ({targetMatch})), FALSE)
+            THEN 'matching' ELSE 'transition_ready' END
+            FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
-        var postcondition = "NOT EXISTS (SELECT 1 "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch} "
-            + $"WHERE NOT ({found}) OR NOT ({targetMatch}))";
+        var postcondition = $"""
+            NOT EXISTS (SELECT 1 FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch}
+            WHERE NOT ({found})
+            OR NOT ({targetMatch}))
+            """;
 
-        var rowEvidence = $"(SELECT STRING_AGG(CASE WHEN NOT ({found}) THEN '0' "
-            + $"WHEN ({targetMatch}) THEN '2' WHEN ({sourceMatch}) THEN '1' ELSE '3' END, '' "
-            + $"ORDER BY doka_expected.{Delimited("r")}) "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch})";
+        var rowEvidence = $"""
+            (SELECT STRING_AGG(CASE WHEN NOT ({found})
+            THEN '0'
+            WHEN ({targetMatch})
+            THEN '2'
+            WHEN ({sourceMatch})
+            THEN '1' ELSE '3' END, '' ORDER BY doka_expected.{Delimited("r")})
+            FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
         return Plan(state, postcondition) with
         {
@@ -190,21 +217,34 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var dependencyExists = DependencyExists(intent, relation);
         var unmodeledDependency = UnmodeledIncomingForeignKey(intent);
         var unsafeEnforcement = UnsafeIncomingForeignKeyEnforcement(intent);
-        var state = "(SELECT CASE "
-            + $"WHEN ({unmodeledDependency}) OR ({unsafeEnforcement}) THEN 'unsupported' "
-            + $"WHEN COALESCE(BOOL_OR(({found}) AND NOT ({sourceMatch})), FALSE) THEN 'different' "
-            + $"WHEN {dependencyExists} THEN 'data_blocked' "
-            + $"WHEN NOT COALESCE(BOOL_OR({found}), FALSE) THEN 'missing' "
-            + "ELSE 'transition_ready' END "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch})";
+        var state = $"""
+            (SELECT CASE WHEN ({unmodeledDependency})
+            OR ({unsafeEnforcement})
+            THEN 'unsupported'
+            WHEN COALESCE(BOOL_OR(({found})
+            AND NOT ({sourceMatch})), FALSE)
+            THEN 'different'
+            WHEN {dependencyExists}
+            THEN 'data_blocked'
+            WHEN NOT COALESCE(BOOL_OR({found}), FALSE)
+            THEN 'missing' ELSE 'transition_ready' END
+            FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
-        var postcondition = "NOT EXISTS (SELECT 1 "
-            + $"FROM {relation} JOIN {table} AS doka_actual ON {keyMatch})";
+        var postcondition = $"""
+            NOT EXISTS (SELECT 1 FROM {relation}
+            JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
-        var rowEvidence = $"(SELECT STRING_AGG(CASE WHEN NOT ({found}) THEN '0' "
-            + $"WHEN ({sourceMatch}) THEN '1' ELSE '3' END, '' "
-            + $"ORDER BY doka_expected.{Delimited("r")}) "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch})";
+        var rowEvidence = $"""
+            (SELECT STRING_AGG(CASE WHEN NOT ({found})
+            THEN '0'
+            WHEN ({sourceMatch})
+            THEN '1' ELSE '3' END, '' ORDER BY doka_expected.{Delimited("r")})
+            FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
         return Plan(state, postcondition) with
         {
@@ -242,9 +282,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var insertColumns = string.Join(", ", intent.Columns.Select(Delimited));
         var insertValues = string.Join(", ", ColumnAliases(intent.Columns.Count, "doka_expected", "t"));
 
-        return $"INSERT INTO {table} ({insertColumns}) "
-            + $"SELECT {insertValues} FROM {relation} "
-            + $"WHERE NOT EXISTS (SELECT 1 FROM {table} AS doka_actual WHERE {keyMatch})";
+        return $"""
+            INSERT INTO {table} ({insertColumns}) SELECT
+            {insertValues}
+            FROM {relation}
+            WHERE NOT EXISTS (SELECT 1 FROM {table} AS doka_actual
+            WHERE {keyMatch})
+            """;
     }
 
     private string BuildUpdateMutation(
@@ -277,8 +321,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             intent.Columns.Select((column, ordinal) =>
                 $"{Delimited(column)} = doka_expected.{Delimited($"n{ordinal}")}"));
 
-        return $"UPDATE {table} AS doka_actual SET {assignments} FROM {relation} "
-            + $"WHERE {keyMatch} AND ({sourceMatch}) AND NOT ({targetMatch})";
+        return $"""
+            UPDATE {table} AS doka_actual SET {assignments}
+            FROM {relation}
+            WHERE {keyMatch}
+            AND ({sourceMatch})
+            AND NOT ({targetMatch})
+            """;
     }
 
     private string BuildDeleteMutation(
@@ -297,8 +346,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         var dependencyExists = DependencyExists(intent, relation);
 
-        return $"DELETE FROM {table} AS doka_actual USING {relation} "
-            + $"WHERE {keyMatch} AND ({sourceMatch}) AND NOT ({dependencyExists})";
+        return $"""
+            DELETE FROM {table} AS doka_actual USING {relation}
+            WHERE {keyMatch}
+            AND ({sourceMatch})
+            AND NOT ({dependencyExists})
+            """;
     }
 
     private string BuildModelManagedDataPrerequisite(
@@ -411,8 +464,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     ) => string.Join(
         " AND ",
         intent.KeyColumns.Select((column, ordinal) =>
-            $"{actualAlias}.{Delimited(column)} IS NOT DISTINCT FROM "
-            + $"{expectedAlias}.{Delimited($"k{ordinal}")}"));
+            $"""
+            {actualAlias}.{Delimited(column)} IS NOT DISTINCT
+            FROM {expectedAlias}.{Delimited($"k{ordinal}")}
+            """));
 
     private string ColumnMatch(
         IReadOnlyList<string> columns,
@@ -489,8 +544,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
             var sameKey = KeyMatch(intent, "doka_conflict", "doka_expected");
 
-            return $"EXISTS (SELECT 1 FROM {relation} JOIN {Qualified(intent.Table, intent.Schema)} "
-                + $"AS doka_conflict ON {uniqueMatch} WHERE ({nonNullTarget}) AND NOT ({sameKey}))";
+            return $"""
+                EXISTS (SELECT 1 FROM {relation}
+                JOIN {Qualified(intent.Table, intent.Schema)} AS doka_conflict ON {uniqueMatch}
+                WHERE ({nonNullTarget})
+                AND NOT ({sameKey}))
+                """;
         });
 
         return $"({string.Join(" OR ", collisions)})";
@@ -518,8 +577,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                         + $"doka_expected.{Delimited($"o{principalOrdinal}")}";
                 }));
 
-            return $"EXISTS (SELECT 1 FROM {relation} JOIN {Qualified(foreignKey.Table, foreignKey.Schema)} "
-                + $"AS doka_dependent ON {match})";
+            return $"""
+                EXISTS (SELECT 1 FROM {relation}
+                JOIN {Qualified(foreignKey.Table, foreignKey.Schema)} AS doka_dependent ON {match})
+                """;
         });
 
         return $"({string.Join(" OR ", dependencies)})";
@@ -547,8 +608,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                         + $"doka_expected.{Delimited($"o{principalOrdinal}")}";
                 }));
 
-            return $"(SELECT COUNT(*) FROM {relation} "
-                + $"JOIN {Qualified(foreignKey.Table, foreignKey.Schema)} AS doka_dependent ON {match})::text";
+            return $"""
+                (SELECT COUNT(*) FROM {relation}
+                JOIN {Qualified(foreignKey.Table, foreignKey.Schema)} AS doka_dependent ON {match})::text
+                """;
         });
 
         return $"CONCAT_WS(',', {string.Join(", ", counts)})";
@@ -567,14 +630,15 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         // PostgreSQL can expose incoming constraints that are absent from the
         // source model. Without frozen dependent columns no static CAS delete
         // can exclude their side effects, so that catalog shape is unsupported.
-        return "EXISTS (SELECT 1 FROM pg_catalog.pg_constraint constraint_row "
-            + "JOIN pg_catalog.pg_class dependent_table "
-            + "ON dependent_table.oid = constraint_row.conrelid "
-            + "JOIN pg_catalog.pg_namespace dependent_namespace "
-            + "ON dependent_namespace.oid = dependent_table.relnamespace "
-            + "WHERE constraint_row.contype = 'f'::\"char\" "
-            + $"AND constraint_row.confrelid = {QualifiedRegclass(intent.Table, intent.Schema)} "
-            + $"AND NOT ({modeled}))";
+        return $"""
+            EXISTS (SELECT 1 FROM pg_catalog.pg_constraint constraint_row
+            JOIN pg_catalog.pg_class dependent_table ON dependent_table.oid = constraint_row.conrelid
+            JOIN pg_catalog.pg_namespace dependent_namespace ON dependent_namespace.oid
+            = dependent_table.relnamespace
+            WHERE constraint_row.contype = 'f'::"char"
+            AND constraint_row.confrelid = {QualifiedRegclass(intent.Table, intent.Schema)}
+            AND NOT ({modeled}))
+            """;
     }
 
     /// <summary>Rejects incoming native relationships whose enforcement cannot support the delete fence.</summary>
@@ -589,14 +653,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             : string.Join(
                 " OR ",
                 intent.ForeignKeys.Select(foreignKey =>
-                    "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint constraint_row "
-                    + "JOIN pg_catalog.pg_class dependent_table ON dependent_table.oid = constraint_row.conrelid "
-                    + "JOIN pg_catalog.pg_namespace dependent_namespace "
-                    + "ON dependent_namespace.oid = dependent_table.relnamespace "
-                    + "WHERE constraint_row.contype = 'f'::\"char\" "
-                    + $"AND constraint_row.confrelid = {QualifiedRegclass(intent.Table, intent.Schema)} "
-                    + $"AND ({ModelManagedForeignKeyShape(foreignKey)}) "
-                    + $"AND ({ModelManagedForeignKeyEnforcementContract()}))"));
+                    $"""
+                    NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint constraint_row
+                    JOIN pg_catalog.pg_class dependent_table ON dependent_table.oid = constraint_row.conrelid
+                    JOIN pg_catalog.pg_namespace dependent_namespace
+                    ON dependent_namespace.oid = dependent_table.relnamespace
+                    WHERE constraint_row.contype = 'f'::"char"
+                    AND constraint_row.confrelid = {QualifiedRegclass(intent.Table, intent.Schema)}
+                    AND ({ModelManagedForeignKeyShape(foreignKey)})
+                    AND ({ModelManagedForeignKeyEnforcementContract()}))
+                    """));
 
         // WHY: Native FK checks supply the parent-lock fence. A missing,
         // disabled, or NOT ENFORCED counterpart cannot certify an empty child.
@@ -605,19 +671,22 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         // reconfiguration after qualification is outside the ordinary-writer
         // fence and must remain an independently coordinated enforcement change.
 
-        return "(EXISTS (SELECT 1 FROM pg_catalog.pg_constraint constraint_row "
-            + "WHERE constraint_row.contype = 'f'::\"char\" "
-            + $"AND constraint_row.confrelid = {QualifiedRegclass(intent.Table, intent.Schema)} "
-            + $"AND (NOT ({ModelManagedForeignKeyEnforcementContract()}) "
-            + "OR pg_catalog.current_setting('session_replication_role') = 'replica' "
-            + "OR EXISTS (SELECT 1 FROM pg_catalog.pg_trigger native_trigger "
-            + "WHERE native_trigger.tgconstraint = constraint_row.oid AND native_trigger.tgisinternal "
-            + "AND native_trigger.tgenabled NOT IN ('O'::\"char\", 'A'::\"char\") "
-            + "AND ((native_trigger.tgrelid = constraint_row.conrelid "
-            + "AND (native_trigger.tgtype & 20) <> 0) "
-            + "OR (native_trigger.tgrelid = constraint_row.confrelid "
-            + "AND (native_trigger.tgtype & 8) <> 0)))))) "
-            + $"OR ({missingModeled})";
+        return $"""
+            (EXISTS (SELECT 1 FROM pg_catalog.pg_constraint constraint_row
+            WHERE constraint_row.contype = 'f'::"char"
+            AND constraint_row.confrelid = {QualifiedRegclass(intent.Table, intent.Schema)}
+            AND (NOT ({ModelManagedForeignKeyEnforcementContract()})
+            OR pg_catalog.current_setting('session_replication_role') = 'replica'
+            OR EXISTS (SELECT 1 FROM pg_catalog.pg_trigger native_trigger
+            WHERE native_trigger.tgconstraint = constraint_row.oid
+            AND native_trigger.tgisinternal
+            AND native_trigger.tgenabled NOT IN ('O'::"char", 'A'::"char")
+            AND ((native_trigger.tgrelid = constraint_row.conrelid
+            AND (native_trigger.tgtype & 20) <> 0)
+            OR (native_trigger.tgrelid = constraint_row.confrelid
+            AND (native_trigger.tgtype & 8) <> 0))))))
+            OR ({missingModeled})
+            """;
     }
 
     /// <summary>Compares a captured incoming relationship with the native FK column ordinals.</summary>
@@ -625,18 +694,18 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <returns>The shared native shape predicate used by topology and enforcement qualification.</returns>
     private string ModelManagedForeignKeyShape(
         ExpectedModelManagedDataForeignKeyDefinition foreignKey
-    ) => $"(dependent_namespace.nspname = {SchemaExpression(foreignKey.Schema)} "
-        + $"AND dependent_table.relname = {Literal(foreignKey.Table)} "
-        + "AND ARRAY(SELECT attribute.attname "
-        + "FROM unnest(constraint_row.conkey) WITH ORDINALITY AS key(attnum, ord) "
-        + "JOIN pg_catalog.pg_attribute attribute "
-        + "ON attribute.attrelid = constraint_row.conrelid AND attribute.attnum = key.attnum "
-        + $"ORDER BY key.ord) = {NameArray(foreignKey.Columns)} "
-        + "AND ARRAY(SELECT attribute.attname "
-        + "FROM unnest(constraint_row.confkey) WITH ORDINALITY AS key(attnum, ord) "
-        + "JOIN pg_catalog.pg_attribute attribute "
-        + "ON attribute.attrelid = constraint_row.confrelid AND attribute.attnum = key.attnum "
-        + $"ORDER BY key.ord) = {NameArray(foreignKey.PrincipalColumns)})";
+    ) => $"""
+        (dependent_namespace.nspname = {SchemaExpression(foreignKey.Schema)}
+        AND dependent_table.relname = {Literal(foreignKey.Table)} AND ARRAY(SELECT attribute.attname
+        FROM unnest(constraint_row.conkey) WITH ORDINALITY AS key(attnum, ord)
+        JOIN pg_catalog.pg_attribute attribute
+        ON attribute.attrelid = constraint_row.conrelid AND attribute.attnum = key.attnum
+        ORDER BY key.ord) = {NameArray(foreignKey.Columns)} AND ARRAY(SELECT attribute.attname
+        FROM unnest(constraint_row.confkey) WITH ORDINALITY AS key(attnum, ord)
+        JOIN pg_catalog.pg_attribute attribute
+        ON attribute.attrelid = constraint_row.confrelid AND attribute.attnum = key.attnum
+        ORDER BY key.ord) = {NameArray(foreignKey.PrincipalColumns)})
+        """;
 
     /// <summary>Checks native enforcement without referring to a field absent before PostgreSQL 18.</summary>
     /// <returns>The version-qualified enforcement proof for the current native constraint alias.</returns>

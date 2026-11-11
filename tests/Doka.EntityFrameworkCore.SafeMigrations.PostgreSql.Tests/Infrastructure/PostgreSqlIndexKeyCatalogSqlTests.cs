@@ -42,7 +42,7 @@ public sealed class PostgreSqlIndexKeyCatalogSqlTests
         var state = BuildStateExpression(context, PlainKeys(3));
 
         // Assert
-        Assert.Contains("null_property, null_default) WHERE NOT COALESCE(", state, StringComparison.Ordinal);
+        Assert.Contains("null_property, null_default)\nWHERE NOT COALESCE(", state, StringComparison.Ordinal);
     }
 
     /// <summary>The zero-based catalog vectors keep their offset from the one-based positions.</summary>
@@ -124,7 +124,7 @@ public sealed class PostgreSqlIndexKeyCatalogSqlTests
         var state = BuildStateExpression(context, keys);
 
         // Assert
-        Assert.Contains("CASE WHEN i.indcollation[0] = 0 THEN TRUE ELSE", state, StringComparison.Ordinal);
+        Assert.Contains("CASE WHEN i.indcollation[0] = 0\nTHEN TRUE ELSE", state, StringComparison.Ordinal);
         Assert.Contains("pg_catalog.pg_collation_for((SELECT lower(column_0)", state, StringComparison.Ordinal);
         Assert.Contains("FROM shape_table LIMIT 0)))::oid", state, StringComparison.Ordinal);
     }

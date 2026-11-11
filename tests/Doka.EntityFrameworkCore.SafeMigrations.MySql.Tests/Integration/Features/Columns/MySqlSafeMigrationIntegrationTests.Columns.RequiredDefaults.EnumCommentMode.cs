@@ -531,15 +531,15 @@ public sealed partial class
         // WHY: A backslash-escaped apostrophe is valid only in the selected
         // standard mode. Matching emits no target DDL and must not validate an
         // unused native scope as though a new member were being created.
-        return "CREATE TABLE `enum_comment_items` (`key` int NOT NULL PRIMARY KEY, `value` "
-            + (useSetStorage
+        // Constant-only interpolation chunks retain every native escape and whitespace byte while wrapping C#.
+        return $"""
+            CREATE TABLE `enum_comment_items` (`key` int NOT NULL PRIMARY KEY, `value` {(useSetStorage
                 ? "set"
-                : "enum")
-            + @"('quo\'te') NOT NULL COMMENT 'comment\\path'"
-            + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin; "
-            + "INSERT INTO `enum_comment_items` (`key`, `value`) VALUES (1, "
-            + AtomicRequiredAddLiteral("quo'te")
-            + ");";
+                : "enum")}{
+                """('quo\'te') NOT NULL COMMENT 'comment\\path') ENGINE=InnoDB """
+                + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin; "
+                + "INSERT INTO `enum_comment_items` (`key`, `value`) VALUES (1, "}{AtomicRequiredAddLiteral("quo'te")});
+            """;
     }
 
     /// <summary>Captures the exact two-backslash raw member declaration and one-backslash target comment.</summary>
@@ -577,16 +577,14 @@ public sealed partial class
             ? @"'comment\\path'"
             : "'legacy'";
 
-        return "CREATE TABLE `enum_comment_items` (`key` int NOT NULL PRIMARY KEY, `value` "
-            + (useSetStorage
+        return $"""
+            CREATE TABLE `enum_comment_items` (`key` int NOT NULL PRIMARY KEY, `value` {(useSetStorage
                 ? "set"
-                : "enum")
-            + @"('slash\\tail') NOT NULL COMMENT "
-            + commentLiteral
-            + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin; "
-            + "INSERT INTO `enum_comment_items` (`key`, `value`) VALUES (1, "
-            + AtomicRequiredAddLiteral(@"slash\tail")
-            + ");";
+                : "enum")}{"""('slash\\tail') NOT NULL COMMENT """}{commentLiteral}{
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin; "
+                + "INSERT INTO `enum_comment_items` (`key`, `value`) VALUES (1, "}{
+                AtomicRequiredAddLiteral(@"slash\tail")});
+            """;
     }
 }
 
@@ -629,8 +627,12 @@ public sealed partial class
         CancellationToken cancellationToken
     ) => ScalarStringAsync(
         connectionString,
-        "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-        + "AND TABLE_NAME = 'enum_comment_items' AND COLUMN_NAME = 'value';",
+        """
+        SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'enum_comment_items'
+        AND COLUMN_NAME = 'value';
+        """,
         cancellationToken: cancellationToken);
 
     /// <summary>Reads exact comment bytes so a fixture escaping error cannot impersonate target ownership.</summary>
@@ -642,7 +644,11 @@ public sealed partial class
         CancellationToken cancellationToken
     ) => ScalarStringAsync(
         connectionString,
-        "SELECT HEX(COLUMN_COMMENT) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-        + "AND TABLE_NAME = 'enum_comment_items' AND COLUMN_NAME = 'value';",
+        """
+        SELECT HEX(COLUMN_COMMENT) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'enum_comment_items'
+        AND COLUMN_NAME = 'value';
+        """,
         cancellationToken: cancellationToken);
 }

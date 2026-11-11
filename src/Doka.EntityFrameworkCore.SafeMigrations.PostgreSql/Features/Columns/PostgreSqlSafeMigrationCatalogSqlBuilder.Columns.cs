@@ -156,11 +156,20 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             : matching;
 
         var plan = Plan(
-                $"CASE WHEN NOT {table} THEN 'prerequisite_missing' "
-                + $"WHEN NOT {exists} AND {dataBlocked} THEN 'data_blocked' "
-                + $"WHEN NOT {exists} THEN 'missing' "
-                + $"WHEN ({repairInvariantExpression}) AND ({repairDataBlocked}) THEN 'data_blocked' "
-                + $"WHEN {stateMatching} THEN 'matching' ELSE 'different' END",
+                $"""
+                CASE WHEN NOT {table}
+                THEN 'prerequisite_missing'
+                WHEN NOT {exists}
+                AND {dataBlocked}
+                THEN 'data_blocked'
+                WHEN NOT {exists}
+                THEN 'missing'
+                WHEN ({repairInvariantExpression})
+                AND ({repairDataBlocked})
+                THEN 'data_blocked'
+                WHEN {stateMatching}
+                THEN 'matching' ELSE 'different' END
+                """,
                 matching,
                 repairCapability,
                 repairPrecondition) with
@@ -206,52 +215,72 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var dependency = GeneratedDropDependency(intent);
         var lockPrivilege = GeneratedDropLockPrivilege(intent);
         var standalone = GeneratedDropStandaloneOwner(intent);
-        var catalogsReadable = "pg_catalog.has_table_privilege('pg_catalog.pg_depend', 'SELECT') "
-            + "AND pg_catalog.has_table_privilege('pg_catalog.pg_attrdef', 'SELECT') "
-            + "AND pg_catalog.has_table_privilege('pg_catalog.pg_inherits', 'SELECT')";
+        const string catalogsReadable = """
+            pg_catalog.has_table_privilege('pg_catalog.pg_depend', 'SELECT')
+            AND pg_catalog.has_table_privilege('pg_catalog.pg_attrdef', 'SELECT')
+            AND pg_catalog.has_table_privilege('pg_catalog.pg_inherits', 'SELECT')
+            """;
 
-        var runtimeCapability = "("
-            + catalogsReadable
-            + ") AND ("
-            + lockPrivilege
-            + ") AND (pg_catalog.current_setting('transaction_isolation') OPERATOR(pg_catalog.=) 'read committed' "
-            + "OR pg_catalog.current_setting('transaction_isolation') OPERATOR(pg_catalog.=) 'read uncommitted')";
+        var runtimeCapability = $"""
+            ({catalogsReadable}) AND ({lockPrivilege})
+            AND (pg_catalog.current_setting('transaction_isolation')
+            OPERATOR(pg_catalog.=) 'read committed'
+            OR pg_catalog.current_setting('transaction_isolation')
+            OPERATOR(pg_catalog.=) 'read uncommitted')
+            """;
 
         return Plan(
-                $"CASE WHEN NOT {relation} THEN 'missing' WHEN NOT {table} THEN 'different' "
-                + $"WHEN NOT {exists} THEN 'missing' WHEN NOT ({standalone}) THEN 'unsupported' "
-                + $"WHEN {dependency} THEN 'different' "
-                + $"WHEN NOT ({lockPrivilege}) THEN 'unsupported' ELSE 'matching' END",
+                $"""
+                CASE WHEN NOT {relation}
+                THEN 'missing'
+                WHEN NOT {table}
+                THEN 'different'
+                WHEN NOT {exists}
+                THEN 'missing'
+                WHEN NOT ({standalone})
+                THEN 'unsupported'
+                WHEN {dependency}
+                THEN 'different'
+                WHEN NOT ({lockPrivilege})
+                THEN 'unsupported' ELSE 'matching' END
+                """,
                 $"NOT {exists}") with
             {
                 // WHY: A revoked catalog privilege is not an empty dependency set.
                 // The preliminary phase prevents planning the dependency query;
                 // an independently absent target still remains an idempotent no-op.
                 StateEvaluationGuardExpression = catalogsReadable,
-                StateEvaluationGuardFailureExpression = $"CASE WHEN NOT {relation} THEN 'missing' "
-                + $"WHEN NOT {table} THEN 'different' WHEN NOT {exists} THEN 'missing' ELSE 'unsupported' END",
+                StateEvaluationGuardFailureExpression = $"""
+                CASE WHEN NOT {relation}
+                THEN 'missing'
+                WHEN NOT {table}
+                THEN 'different'
+                WHEN NOT {exists}
+                THEN 'missing' ELSE 'unsupported' END
+                """,
                 UnsupportedCode = "generated_column_drop_unproven",
                 GeneratedDropRuntimeGuardExpression = runtimeCapability,
 
                 // WHY: Lock only this exact owner before the fresh hierarchy
                 // check. Native DROP retains its original recursive semantics;
                 // newly appearing descendants are refused, never silently removed.
-                GeneratedDropLockSqlExpression = "pg_catalog.format('LOCK TABLE ONLY %I.%I IN ACCESS EXCLUSIVE MODE', "
-                + (intent.Schema is null
+                GeneratedDropLockSqlExpression = $"""
+                pg_catalog.format('LOCK TABLE ONLY %I.%I IN ACCESS EXCLUSIVE MODE', {(intent.Schema is null
                     ? "pg_catalog.current_schema()"
-                    : Literal(intent.Schema))
-                + ", "
-                + Literal(intent.Table)
-                + ")",
-                ClassificationCodeExpression = $"CASE WHEN ({table}) AND ({exists}) AND ({standalone}) "
-                + $"THEN CASE WHEN {dependency} "
-                + "THEN 'generated_column_drop_dependency' WHEN ("
-                + lockPrivilege
-                + ") AND "
-                + NoSurvivingGeneratedDropMembers(intent)
-                + " THEN '"
-                + EmptyGeneratedDropSetCode
-                + "' ELSE NULL END ELSE NULL END",
+                    : Literal(intent.Schema))},
+                {Literal(intent.Table)})
+                """,
+                ClassificationCodeExpression = $"""
+                CASE WHEN ({table})
+                AND ({exists})
+                AND ({standalone})
+                THEN CASE WHEN {dependency}
+                THEN 'generated_column_drop_dependency'
+                WHEN ({lockPrivilege})
+                AND {NoSurvivingGeneratedDropMembers(intent)}
+                THEN '{EmptyGeneratedDropSetCode}'
+                ELSE NULL END ELSE NULL END
+                """,
             };
     }
 
@@ -264,8 +293,14 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var target = ColumnExists(intent.Table, intent.Schema, intent.NewName);
 
         return Plan(
-            $"CASE WHEN NOT {source} THEN 'missing' WHEN NOT {table} THEN 'different' "
-            + $"WHEN {target} THEN 'different' ELSE 'matching' END",
+            $"""
+            CASE WHEN NOT {source}
+            THEN 'missing'
+            WHEN NOT {table}
+            THEN 'different'
+            WHEN {target}
+            THEN 'different' ELSE 'matching' END
+            """,
             $"NOT {source}");
     }
 
@@ -337,20 +372,28 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             : matching;
 
         return Plan(
-                $"CASE WHEN NOT {exists} THEN 'different' "
-                + (integerWidening
+                $"""
+                CASE WHEN NOT {exists}
+                THEN 'different' {(integerWidening
                     ? $"WHEN NOT ({matching}) AND NOT ({integerLockPrivilege}) THEN 'unsupported' "
-                    : string.Empty)
-                + $"WHEN ({repairInvariantExpression}) AND ({dataBlocked}) THEN 'data_blocked' "
-                + $"WHEN {stateMatching} THEN 'matching' ELSE 'different' END",
+                    : string.Empty)}WHEN ({repairInvariantExpression})
+                AND ({dataBlocked})
+                THEN 'data_blocked'
+                WHEN {stateMatching}
+                THEN 'matching' ELSE 'different' END
+                """,
                 matching,
                 repair,
                 $"({repairInvariantExpression}) AND NOT ({dataBlocked})") with
             {
                 DataProbe = transition.DataProbe,
                 ClassificationCodeExpression = integerWidening
-                    ? $"CASE WHEN NOT ({matching}) AND NOT ({integerLockPrivilege}) "
-                    + "THEN 'integer_widening_unproven' ELSE NULL END"
+                    ? $"""
+                    CASE WHEN NOT ({matching})
+                    AND NOT ({integerLockPrivilege})
+                    THEN 'integer_widening_unproven'
+                    ELSE NULL END
+                    """
                     : transition.HasDataProbe
                         ? $"CASE WHEN {transition.DataBlockedExpression} "
                         + "THEN 'varchar_narrowing_value_too_long' ELSE NULL END"
@@ -368,26 +411,32 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     ? $"({exists}) AND ({integerCatalogsReadable})"
                     : exists,
                 StateEvaluationGuardFailureExpression = integerWidening
-                    ? $"CASE WHEN ({matching}) THEN 'matching' "
-                    + $"WHEN NOT ({exists}) THEN 'different' ELSE 'unsupported' END"
+                    ? $"""
+                    CASE WHEN ({matching})
+                    THEN 'matching'
+                    WHEN NOT ({exists})
+                    THEN 'different' ELSE 'unsupported' END
+                    """
                     : "'different'",
                 UnsupportedCode = integerWidening
                     ? "integer_widening_unproven"
                     : null,
                 ColumnTransitionRuntimeGuardExpression = integerWidening
-                    ? $"({integerCatalogsReadable}) AND ({integerLockPrivilege}) "
-                    + "AND pg_catalog.current_setting('transaction_isolation') "
-                    + "IN ('read committed', 'read uncommitted')"
+                    ? $"""
+                    ({integerCatalogsReadable}) AND ({integerLockPrivilege})
+                    AND pg_catalog.current_setting('transaction_isolation')
+                    IN ('read committed', 'read uncommitted')
+                    """
                     : null,
                 ColumnTransitionTargetCatalogGuardExpression = integerWidening && !intent.Definition.IsNullable
                     ? "pg_catalog.has_table_privilege('pg_catalog.pg_constraint', 'SELECT')"
                     : null,
                 ColumnTransitionLockSqlExpression = integerWidening
-                    ? "pg_catalog.format('LOCK TABLE ONLY %I.%I IN ACCESS EXCLUSIVE MODE', "
-                    + SchemaExpression(intent.Schema)
-                    + ", "
-                    + Literal(intent.Table)
-                    + ")"
+                    ? $"""
+                    pg_catalog.format('LOCK TABLE ONLY %I.%I IN ACCESS EXCLUSIVE MODE',
+                    {SchemaExpression(intent.Schema)},
+                    {Literal(intent.Table)})
+                    """
                     : null,
                 MayRequireNullabilityDataProof = repair == SafeMigrationRepairCapability.Safe
                 && intent.OldDefinition!.IsNullable
@@ -454,14 +503,18 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             conditions.Add($"a.attnum = {ordinal.Value.ToString(CultureInfo.InvariantCulture)}");
         }
 
-        return "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a "
-            + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
-            + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-            + "JOIN pg_catalog.pg_type t ON t.oid = a.atttypid "
-            + "LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum "
-            + $"WHERE n.nspname = {SchemaExpression(schema)} AND c.relname = {Literal(table)} "
-            + $"AND a.attname = {Literal(definition.Name)} AND a.attnum > 0 AND NOT a.attisdropped "
-            + $"AND {string.Join(" AND ", conditions)})";
+        return $"""
+            EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a
+            JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_catalog.pg_type t ON t.oid = a.atttypid
+            LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = c.oid
+            AND d.adnum = a.attnum WHERE n.nspname = {SchemaExpression(schema)}
+            AND c.relname = {Literal(table)}
+            AND a.attname = {Literal(definition.Name)}
+            AND a.attnum > 0 AND NOT a.attisdropped
+            AND {string.Join(" AND ", conditions)})
+            """;
     }
 
     /// <summary>Builds the facet predicates one expected column requires of the catalog row.</summary>
@@ -692,12 +745,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string table,
         string? schema,
         string column
-    ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a "
-        + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
-        + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-        + $"WHERE n.nspname = {SchemaExpression(schema)} AND c.relname = {Literal(table)} "
-        + $"AND a.attname = {Literal(column)} AND a.attnum > 0 AND NOT a.attisdropped "
-        + $"AND NOT c.relhassubclass AND ({ValidatedNotNullContract()}))";
+    ) => $"""
+        EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a
+        JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = {SchemaExpression(schema)}
+        AND c.relname = {Literal(table)}
+        AND a.attname = {Literal(column)}
+        AND a.attnum > 0 AND NOT a.attisdropped
+        AND NOT c.relhassubclass AND ({ValidatedNotNullContract()}))
+        """;
 
     /// <summary>Checks the declared nullability without treating an unvalidated constraint as matching.</summary>
     private static string ColumnNullabilityMatches(
@@ -709,12 +766,17 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     // WHY: PostgreSQL 18 allows attnotnull with an unvalidated constraint.
     // JSON field access keeps conenforced safe to parse on PostgreSQL 14-17.
     /// <summary>Checks the enforced and validated local NOT NULL contract on every supported catalog version.</summary>
-    private static string ValidatedNotNullContract() => "a.attnotnull AND ("
-        + "pg_catalog.current_setting('server_version_num')::integer < 180000 "
-        + "OR EXISTS (SELECT 1 FROM pg_catalog.pg_constraint not_null_constraint "
-        + "WHERE not_null_constraint.conrelid = c.oid AND not_null_constraint.contype = 'n' "
-        + "AND not_null_constraint.conkey = ARRAY[a.attnum] AND not_null_constraint.convalidated "
-        + "AND COALESCE((pg_catalog.to_jsonb(not_null_constraint)->>'conenforced')::boolean, FALSE)))";
+    private static string ValidatedNotNullContract() => """
+        a.attnotnull AND (pg_catalog.current_setting('server_version_num')::integer
+        < 180000
+        OR EXISTS (SELECT 1 FROM pg_catalog.pg_constraint not_null_constraint
+        WHERE not_null_constraint.conrelid = c.oid
+        AND not_null_constraint.contype = 'n'
+        AND not_null_constraint.conkey = ARRAY[a.attnum]
+        AND not_null_constraint.convalidated
+        AND COALESCE((pg_catalog.to_jsonb(not_null_constraint)->>'conenforced')::boolean,
+        FALSE)))
+        """;
 
     private string BuildColumnDiagnosticEvidence(
         string table,
@@ -752,14 +814,21 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 definition.IsNullable
                     ? "'nullable'"
                     : "'not_nullable'",
-                $"CASE WHEN {ValidatedNotNullContract()} THEN 'not_nullable' "
-                + "WHEN a.attnotnull THEN 'not_nullable_unvalidated_or_unenforced' ELSE 'nullable' END"),
+                $"""
+                CASE WHEN {ValidatedNotNullContract()}
+                THEN 'not_nullable'
+                WHEN a.attnotnull THEN 'not_nullable_unvalidated_or_unenforced'
+                ELSE 'nullable' END
+                """),
             DiagnosticRecord(
                 $"NOT ({CollationMatches(definition)})",
                 "column_collation",
                 definition.Collation is null
-                    ? "COALESCE((SELECT default_coll.collname FROM pg_catalog.pg_collation default_coll "
-                    + "WHERE default_coll.oid = t.typcollation), 'default')"
+                    ? """
+                    COALESCE((SELECT default_coll.collname
+                    FROM pg_catalog.pg_collation default_coll
+                    WHERE default_coll.oid = t.typcollation), 'default')
+                    """
                     : Literal(definition.Collation.Name),
                 "COALESCE(live_coll.collname, 'default')"),
             DiagnosticRecord(
@@ -804,22 +873,27 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     "COALESCE(live_column.character_maximum_length::text, 'unbounded')"));
         }
 
-        return "(SELECT NULLIF(concat_ws(chr(30), "
-            + string.Join(", ", records)
-            + "), '') FROM pg_catalog.pg_attribute a "
-            + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
-            + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-            + "JOIN pg_catalog.pg_type t ON t.oid = a.atttypid "
-            + (hasVarcharLength
-                ? "JOIN information_schema.columns live_column "
-                + "ON live_column.table_schema = n.nspname "
-                + "AND live_column.table_name = c.relname "
-                + "AND live_column.column_name = a.attname "
-                : string.Empty)
-            + "LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum "
-            + "LEFT JOIN pg_catalog.pg_collation live_coll ON live_coll.oid = a.attcollation "
-            + $"WHERE n.nspname = {SchemaExpression(schema)} AND c.relname = {Literal(table)} "
-            + $"AND a.attname = {Literal(definition.Name)} AND a.attnum > 0 AND NOT a.attisdropped LIMIT 1)";
+        return $"""
+            (SELECT NULLIF(concat_ws(chr(30), {string.Join(", ", records)}), '')
+            FROM pg_catalog.pg_attribute a
+            JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_catalog.pg_type t ON t.oid = a.atttypid {(hasVarcharLength
+                ? """
+                JOIN information_schema.columns live_column
+                ON live_column.table_schema = n.nspname
+                AND live_column.table_name = c.relname
+                AND live_column.column_name = a.attname
+
+                """
+                : string.Empty)}LEFT
+            JOIN pg_catalog.pg_attrdef d ON d.adrelid = c.oid
+            AND d.adnum = a.attnum LEFT JOIN pg_catalog.pg_collation live_coll ON live_coll.oid = a.attcollation
+            WHERE n.nspname = {SchemaExpression(schema)}
+            AND c.relname = {Literal(table)}
+            AND a.attname = {Literal(definition.Name)}
+            AND a.attnum > 0 AND NOT a.attisdropped LIMIT 1)
+            """;
     }
 
     private static string DiagnosticRecord(
@@ -827,7 +901,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string facet,
         string expected,
         string actual
-    ) => $"CASE WHEN {mismatch} THEN concat_ws(chr(31), '{facet}', {expected}, {actual}) END";
+    ) => $"""
+        CASE WHEN {mismatch}
+        THEN concat_ws(chr(31), '{facet}', {expected},
+        {actual}) END
+        """;
 
     private static string DefaultKind(
         ExpectedColumnDefinition definition
@@ -896,9 +974,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             : PostgreSqlTemporalLiteral.RenderMapped(mapping, literal);
     }
 
-    private static string ActualDefaultKindExpression()
-        => "CASE WHEN a.attidentity <> '' THEN 'identity' WHEN a.attgenerated <> '' THEN 'generated' "
-            + "WHEN d.oid IS NOT NULL THEN 'present' ELSE 'none' END";
+    private static string ActualDefaultKindExpression() => """
+        CASE WHEN a.attidentity <> ''
+        THEN 'identity'
+        WHEN a.attgenerated <> '' THEN 'generated'
+        WHEN d.oid IS NOT NULL THEN 'present'
+        ELSE 'none' END
+        """;
 
     private static string ValueGenerationKind(
         ExpectedColumnDefinition definition
@@ -931,13 +1013,15 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             return PostgreSqlColumnRepairTransition.None;
         }
 
-        var narrowing = "EXISTS (SELECT 1 FROM information_schema.columns narrowing_column "
-            + $"WHERE narrowing_column.table_schema = {SchemaExpression(schema)} "
-            + $"AND narrowing_column.table_name = {Literal(table)} "
-            + $"AND narrowing_column.column_name = {Literal(definition.Name)} "
-            + "AND narrowing_column.data_type = 'character varying' "
-            + "AND (narrowing_column.character_maximum_length IS NULL "
-            + $"OR narrowing_column.character_maximum_length > {targetLength}))";
+        var narrowing = $"""
+            EXISTS (SELECT 1 FROM information_schema.columns narrowing_column
+            WHERE narrowing_column.table_schema = {SchemaExpression(schema)}
+            AND narrowing_column.table_name = {Literal(table)}
+            AND narrowing_column.column_name = {Literal(definition.Name)}
+            AND narrowing_column.data_type = 'character varying'
+            AND (narrowing_column.character_maximum_length IS NULL
+            OR narrowing_column.character_maximum_length > {targetLength}))
+            """;
 
         return new PostgreSqlColumnRepairTransition(
             PostgreSqlSafeMigrationRuntimePlan.TransitionInvariantPlaceholder,
@@ -957,10 +1041,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                         table,
                         schema,
                         definition.Name,
-                        "t.typname = 'varchar' "
-                        + $"AND live_column.character_maximum_length IS DISTINCT FROM {targetLength} "
-                        + $"AND {CollationMatches(definition)} "
-                        + $"AND {GenerationMatches(definition)}")
+                        $"""
+                        t.typname = 'varchar' AND live_column.character_maximum_length IS DISTINCT
+                        FROM {targetLength}
+                        AND {CollationMatches(definition)}
+                        AND {GenerationMatches(definition)}
+                        """)
                     : null,
                 narrowing),
             SafeMigrationOperationalImpact.TableRewritePossible);
@@ -971,17 +1057,21 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string? schema,
         string column,
         string invariant
-    ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a "
-        + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
-        + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-        + "JOIN pg_catalog.pg_type t ON t.oid = a.atttypid "
-        + "JOIN information_schema.columns live_column "
-        + "ON live_column.table_schema = n.nspname "
-        + "AND live_column.table_name = c.relname "
-        + "AND live_column.column_name = a.attname "
-        + $"WHERE n.nspname = {SchemaExpression(schema)} AND c.relname = {Literal(table)} "
-        + $"AND a.attname = {Literal(column)} AND a.attnum > 0 AND NOT a.attisdropped "
-        + $"AND ({invariant}))";
+    ) => $"""
+        EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a
+        JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        JOIN pg_catalog.pg_type t ON t.oid = a.atttypid
+        JOIN information_schema.columns live_column ON live_column.table_schema
+        = n.nspname
+        AND live_column.table_name = c.relname
+        AND live_column.column_name = a.attname
+        WHERE n.nspname = {SchemaExpression(schema)}
+        AND c.relname = {Literal(table)}
+        AND a.attname = {Literal(column)}
+        AND a.attnum > 0 AND NOT a.attisdropped
+        AND ({invariant}))
+        """;
 
     private string ResolveStoreType(
         ExpectedColumnDefinition definition
@@ -1046,12 +1136,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             return "a.attcollation = t.typcollation";
         }
 
-        var expected = "(SELECT coll.oid FROM pg_catalog.pg_collation coll "
-            + "JOIN pg_catalog.pg_namespace ns ON ns.oid = coll.collnamespace "
-            + $"WHERE coll.collname = {Literal(definition.Collation.Name)} "
-            + (definition.Collation.Schema is null
+        var expected = $"""
+            (SELECT coll.oid FROM pg_catalog.pg_collation coll
+            JOIN pg_catalog.pg_namespace ns ON ns.oid = coll.collnamespace
+            WHERE coll.collname = {Literal(definition.Collation.Name)} {(definition.Collation.Schema is null
                 ? "AND pg_catalog.pg_collation_is_visible(coll.oid) LIMIT 1)"
-                : $"AND ns.nspname = {Literal(definition.Collation.Schema)})");
+                : $"AND ns.nspname = {Literal(definition.Collation.Schema)})")}
+            """;
 
         // WHY: An absent resolver row must remain FALSE, including diagnostic
         // negation, but comparing its OID once avoids a second identical scan.
@@ -1091,9 +1182,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 // target type before storage. Certify the finite D-format input
                 // locally; never execute an arbitrary native input function or
                 // admit the unrelated TEXT candidate for this UUID contract.
-                return $"a.attidentity = '' AND a.attgenerated = {generation} AND d.oid IS NOT NULL AND "
-                    + "pg_catalog.pg_get_expr(d.adbin, d.adrelid) = "
-                    + Literal("'" + guid.ToString("D", CultureInfo.InvariantCulture) + "'::uuid");
+                return $"""
+                    a.attidentity = '' AND a.attgenerated = {generation}
+                    AND d.oid IS NOT NULL AND pg_catalog.pg_get_expr(d.adbin, d.adrelid) = {Literal(
+                        "'" + guid.ToString("D", CultureInfo.InvariantCulture) + "'::uuid")}
+                    """;
             }
 
             return $"a.attidentity = '' AND a.attgenerated = {generation} AND d.oid IS NOT NULL AND "
@@ -1169,11 +1262,15 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string table,
         string? schema,
         string column
-    ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a "
-        + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
-        + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-        + $"WHERE n.nspname = {SchemaExpression(schema)} AND c.relname = {Literal(table)} "
-        + $"AND a.attname = {Literal(column)} AND a.attnum > 0 AND NOT a.attisdropped)";
+    ) => $"""
+        EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a
+        JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = {SchemaExpression(schema)}
+        AND c.relname = {Literal(table)}
+        AND a.attname = {Literal(column)}
+        AND a.attnum > 0 AND NOT a.attisdropped)
+        """;
 
     private string LiteralDefaultMatches(
         string catalogExpression,
@@ -1193,9 +1290,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             // provider-owned typed literal through the same native output rules;
             // never shorten its value or execute catalog SQL. Column typmods are
             // assignment rules, not permission to truncate the stored default AST.
-            var canonical = $"(pg_catalog.quote_literal(({expected})::pg_catalog.text) "
-                + "OPERATOR(pg_catalog.||) '::' OPERATOR(pg_catalog.||) "
-                + "pg_catalog.format_type(a.atttypid, NULL))";
+            var canonical = $"""
+                (pg_catalog.quote_literal(({expected})::pg_catalog.text)
+                OPERATOR(pg_catalog.||) '::' OPERATOR(pg_catalog.||)
+                pg_catalog.format_type(a.atttypid, NULL))
+                """;
 
             conditions.Add($"{catalogExpression} = {canonical}");
             conditions.Add($"{catalogExpression} = ('(' || {canonical} || ')')");

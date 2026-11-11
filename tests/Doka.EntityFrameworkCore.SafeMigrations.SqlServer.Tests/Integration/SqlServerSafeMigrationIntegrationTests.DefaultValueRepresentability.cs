@@ -25,8 +25,10 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items VALUES (1); "
-            + "CREATE TABLE dbo.default_ddl_events (Id int NOT NULL);",
+            """
+            CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items
+            VALUES (1); CREATE TABLE dbo.default_ddl_events (Id int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
@@ -159,14 +161,19 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
         await ExecuteOperationsAsync(context, [operation], cancellationToken: CancellationToken.None);
         var matchingRows = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM dbo." + table + " WHERE Created = CAST(N'" + expected + "' AS datetime2(7));",
+            $"""
+            SELECT COUNT(*) FROM dbo.{table}
+            WHERE Created = CAST(N'{expected}' AS datetime2(7));
+            """,
             cancellationToken: CancellationToken.None);
 
         var defaults = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.default_constraints WHERE parent_object_id = OBJECT_ID(N'dbo."
-            + table
-            + "', N'U');",
+            $"""
+            SELECT COUNT(*) FROM sys.default_constraints
+            WHERE parent_object_id = OBJECT_ID(N'dbo.{table}',
+            N'U');
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -245,9 +252,11 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
 
         var defaults = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.default_constraints WHERE parent_object_id = OBJECT_ID(N'dbo."
-            + table
-            + "', N'U');",
+            $"""
+            SELECT COUNT(*) FROM sys.default_constraints
+            WHERE parent_object_id = OBJECT_ID(N'dbo.{table}',
+            N'U');
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -356,8 +365,10 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items VALUES (1); "
-            + "CREATE TABLE dbo.default_ddl_events (Id int NOT NULL);",
+            """
+            CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items
+            VALUES (1); CREATE TABLE dbo.default_ddl_events (Id int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
@@ -461,10 +472,11 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.default_items (Id int NOT NULL, "
-            + "Caption varchar(1) COLLATE Latin1_General_100_CI_AS_SC_UTF8 "
-            + "NOT NULL DEFAULT ('A')); INSERT dbo.default_items (Id) VALUES (1); "
-            + "CREATE TABLE dbo.default_ddl_events (Id int NOT NULL);",
+            """
+            CREATE TABLE dbo.default_items (Id int NOT NULL, Caption varchar(1) COLLATE
+            Latin1_General_100_CI_AS_SC_UTF8 NOT NULL DEFAULT ('A')); INSERT dbo.default_items
+            (Id) VALUES (1); CREATE TABLE dbo.default_ddl_events (Id int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
@@ -619,14 +631,18 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items VALUES (1); "
-            + "CREATE TABLE dbo.default_intermediate_events (Id int NOT NULL);",
+            """
+            CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items
+            VALUES (1); CREATE TABLE dbo.default_intermediate_events (Id int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER doka_default_intermediate_audit ON DATABASE FOR DDL_TABLE_EVENTS "
-            + "AS INSERT dbo.default_intermediate_events VALUES (1);",
+            """
+            CREATE TRIGGER doka_default_intermediate_audit ON DATABASE FOR DDL_TABLE_EVENTS
+            AS INSERT dbo.default_intermediate_events VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -675,10 +691,11 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
         var stored = supported
             ? await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM dbo.default_items WHERE CONVERT(varbinary(max), Caption) = "
-                + "CONVERT(varbinary(max), N'"
-                + value.Replace("'", "''", StringComparison.Ordinal)
-                + "');",
+                $"""
+                SELECT COUNT(*) FROM dbo.default_items
+                WHERE CONVERT(varbinary(max), Caption) = CONVERT(varbinary(max), N'{value.Replace(
+                    "'", "''", StringComparison.Ordinal)}');
+                """,
                 cancellationToken: CancellationToken.None)
             : 0;
 

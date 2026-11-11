@@ -19,9 +19,11 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{table}` ("
-            + "`id` int NOT NULL, `code` int NOT NULL, PRIMARY KEY (`id`), "
-            + $"CONSTRAINT `{constraint}` UNIQUE (`code`));",
+            $"""
+            CREATE TABLE `{table}` (`id` int NOT NULL, `code` int
+            NOT NULL,
+            PRIMARY KEY (`id`), CONSTRAINT `{constraint}` UNIQUE (`code`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -44,9 +46,13 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() "
-                + $"AND TABLE_NAME = '{table}' AND INDEX_NAME = '{index}' AND NON_UNIQUE = 0;",
+                $"""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = '{table}'
+                AND INDEX_NAME = '{index}'
+                AND NON_UNIQUE = 0;
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -60,9 +66,11 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{table}` ("
-            + "`id` int NOT NULL, `code` int NOT NULL, PRIMARY KEY (`id`), "
-            + $"UNIQUE INDEX `{index}` (`code`));",
+            $"""
+            CREATE TABLE `{table}` (`id` int NOT NULL, `code` int
+            NOT NULL,
+            PRIMARY KEY (`id`), UNIQUE INDEX `{index}` (`code`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -85,10 +93,13 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() "
-                + $"AND TABLE_NAME = '{table}' AND CONSTRAINT_NAME = '{constraint}' "
-                + "AND CONSTRAINT_TYPE = 'UNIQUE';",
+                $"""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME = '{table}'
+                AND CONSTRAINT_NAME = '{constraint}'
+                AND CONSTRAINT_TYPE = 'UNIQUE';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -101,10 +112,13 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{table}` ("
-            + "`id` int NOT NULL, `code` int NOT NULL, PRIMARY KEY (`id`), "
-            + $"CONSTRAINT `{physicalName}` UNIQUE (`code`)); "
-            + $"INSERT INTO `{table}` VALUES (1, 7);",
+            $"""
+            CREATE TABLE `{table}` (`id` int NOT NULL, `code` int
+            NOT NULL,
+            PRIMARY KEY (`id`), CONSTRAINT `{physicalName}` UNIQUE (`code`));
+            INSERT INTO `{table}` VALUES (1,
+            7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -140,9 +154,12 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() "
-                + $"AND TABLE_NAME = '{table}' AND CONSTRAINT_NAME = '{physicalName}';",
+                $"""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME = '{table}'
+                AND CONSTRAINT_NAME = '{physicalName}';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -155,10 +172,13 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{table}` ("
-            + "`id` int NOT NULL, `code` int NOT NULL, PRIMARY KEY (`id`), "
-            + $"UNIQUE INDEX `{physicalName}` (`code`)); "
-            + $"INSERT INTO `{table}` VALUES (1, 7);",
+            $"""
+            CREATE TABLE `{table}` (`id` int NOT NULL, `code` int
+            NOT NULL,
+            PRIMARY KEY (`id`), UNIQUE INDEX `{physicalName}` (`code`));
+            INSERT INTO `{table}` VALUES (1,
+            7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -194,9 +214,12 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() "
-                + $"AND TABLE_NAME = '{table}' AND INDEX_NAME = '{physicalName}';",
+                $"""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = '{table}'
+                AND INDEX_NAME = '{physicalName}';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -234,9 +257,13 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-                + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{table}' "
-                + $"AND INDEX_NAME IN ('PRIMARY', '{index}');",
+                $"""
+                SELECT COUNT(DISTINCT INDEX_NAME)
+                FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = '{table}'
+                AND INDEX_NAME IN ('PRIMARY', '{index}');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -280,9 +307,12 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{table}` ("
-            + "`id` int NOT NULL, `code` int NOT NULL, PRIMARY KEY (`id`), "
-            + $"INDEX `{requestedName}` (`code`), CONSTRAINT `uq_existing_code` UNIQUE (`code`));",
+            $"""
+            CREATE TABLE `{table}` (`id` int NOT NULL, `code` int
+            NOT NULL,
+            PRIMARY KEY (`id`), INDEX `{requestedName}` (`code`), CONSTRAINT
+            `uq_existing_code` UNIQUE (`code`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -313,10 +343,13 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{table}` ("
-            + "`id` int NOT NULL, `legacy_value` int NOT NULL, `wide_value` varchar(192) NOT NULL, "
-            + $"PRIMARY KEY (`id`), INDEX `{index}` (`legacy_value`)) "
-            + "ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET utf8mb4;",
+            $"""
+            CREATE TABLE `{table}` (`id` int NOT NULL, `legacy_value`
+            int NOT NULL,
+            `wide_value` varchar(192) NOT NULL, PRIMARY KEY (`id`), INDEX `{index}`
+            (`legacy_value`)) ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET
+            utf8mb4;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -342,10 +375,13 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() "
-                + $"AND TABLE_NAME = '{table}' AND INDEX_NAME = '{index}' "
-                + "AND COLUMN_NAME = 'legacy_value';",
+                $"""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = '{table}'
+                AND INDEX_NAME = '{index}'
+                AND COLUMN_NAME = 'legacy_value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -358,10 +394,13 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{table}` ("
-            + "`id` int NOT NULL, `legacy_value` int NOT NULL, `wide_value` varchar(192) NOT NULL, "
-            + $"PRIMARY KEY (`id`), INDEX `{keyName}` (`legacy_value`)) "
-            + "ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET utf8mb4;",
+            $"""
+            CREATE TABLE `{table}` (`id` int NOT NULL, `legacy_value`
+            int NOT NULL,
+            `wide_value` varchar(192) NOT NULL, PRIMARY KEY (`id`), INDEX `{keyName}`
+            (`legacy_value`)) ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET
+            utf8mb4;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -387,10 +426,13 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() "
-                + $"AND TABLE_NAME = '{table}' AND INDEX_NAME = '{keyName}' "
-                + "AND COLUMN_NAME = 'legacy_value';",
+                $"""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = '{table}'
+                AND INDEX_NAME = '{keyName}'
+                AND COLUMN_NAME = 'legacy_value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -403,10 +445,14 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{table}` ("
-            + "`id` int NOT NULL, `legacy_value` int NOT NULL, `target_value` int NOT NULL, "
-            + $"PRIMARY KEY (`id`), CONSTRAINT `{constraint}` UNIQUE (`legacy_value`)); "
-            + $"INSERT INTO `{table}` VALUES (1, 10, 7), (2, 20, 7);",
+            $"""
+            CREATE TABLE `{table}` (`id` int NOT NULL, `legacy_value`
+            int NOT NULL,
+            `target_value` int NOT NULL, PRIMARY KEY (`id`), CONSTRAINT `{constraint}`
+            UNIQUE (`legacy_value`)); INSERT INTO `{table}` VALUES
+            (1,
+            10, 7), (2, 20, 7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -432,10 +478,13 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() "
-                + $"AND TABLE_NAME = '{table}' AND CONSTRAINT_NAME = '{constraint}' "
-                + "AND CONSTRAINT_TYPE = 'UNIQUE';",
+                $"""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME = '{table}'
+                AND CONSTRAINT_NAME = '{constraint}'
+                AND CONSTRAINT_TYPE = 'UNIQUE';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -448,10 +497,13 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{primaryTable}` (`value` varchar(192) NOT NULL) "
-            + "ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET utf8mb4; "
-            + $"CREATE TABLE `{uniqueTable}` (`id` int NOT NULL, `value` varchar(192) NOT NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET utf8mb4;",
+            $"""
+            CREATE TABLE `{primaryTable}` (`value` varchar(192) NOT NULL)
+            ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET utf8mb4; CREATE TABLE
+            `{uniqueTable}` (`id` int NOT NULL,
+            `value` varchar(192) NOT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=COMPACT
+            DEFAULT CHARACTER SET utf8mb4;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -485,10 +537,12 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() "
-                + $"AND TABLE_NAME IN ('{primaryTable}', '{uniqueTable}') "
-                + "AND CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE');",
+                $"""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME IN ('{primaryTable}', '{uniqueTable}')
+                AND CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -501,10 +555,13 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{primaryTable}` (`value` varchar(191) NOT NULL) "
-            + "ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET utf8mb4; "
-            + $"CREATE TABLE `{uniqueTable}` (`id` int NOT NULL, `value` varchar(191) NOT NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET utf8mb4;",
+            $"""
+            CREATE TABLE `{primaryTable}` (`value` varchar(191) NOT NULL)
+            ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET utf8mb4; CREATE TABLE
+            `{uniqueTable}` (`id` int NOT NULL,
+            `value` varchar(191) NOT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=COMPACT
+            DEFAULT CHARACTER SET utf8mb4;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -530,10 +587,12 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
             3,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() "
-                + $"AND TABLE_NAME IN ('{primaryTable}', '{uniqueTable}') "
-                + "AND CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE');",
+                $"""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME IN ('{primaryTable}', '{uniqueTable}')
+                AND CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -556,9 +615,12 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{indexTable}` (`id` int NOT NULL, {columnDefinitions}, PRIMARY KEY (`id`)); "
-            + $"CREATE TABLE `{primaryTable}` ({columnDefinitions}); "
-            + $"CREATE TABLE `{uniqueTable}` (`id` int NOT NULL, {columnDefinitions}, PRIMARY KEY (`id`));",
+            $"""
+            CREATE TABLE `{indexTable}` (`id` int NOT NULL, {columnDefinitions},
+            PRIMARY KEY (`id`)); CREATE TABLE `{primaryTable}` ({columnDefinitions});
+            CREATE TABLE `{uniqueTable}` (`id` int NOT NULL,
+            {columnDefinitions}, PRIMARY KEY (`id`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -615,9 +677,13 @@ public sealed class MySqlConstraintsPhysicalKeysIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{primaryTable}` ({columnDefinitions}, PRIMARY KEY ({keyColumns})); "
-            + $"CREATE TABLE `{uniqueTable}` (`id` int NOT NULL, {columnDefinitions}, PRIMARY KEY (`id`), "
-            + $"CONSTRAINT `{uniqueName}` UNIQUE ({keyColumns}));",
+            $"""
+            CREATE TABLE `{primaryTable}` ({columnDefinitions},
+            PRIMARY KEY ({keyColumns})); CREATE TABLE `{uniqueTable}`
+            (`id` int NOT NULL,
+            {columnDefinitions}, PRIMARY KEY (`id`), CONSTRAINT `{uniqueName}`
+            UNIQUE ({keyColumns}));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

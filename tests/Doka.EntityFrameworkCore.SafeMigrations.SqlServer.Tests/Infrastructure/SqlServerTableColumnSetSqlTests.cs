@@ -344,7 +344,10 @@ public sealed class SqlServerTableColumnSetSqlTests
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "TRY_CONVERT(decimal(38,0), identity_column.increment_value) = expected.identity_increment",
+            """
+            TRY_CONVERT(decimal(38,0), identity_column.increment_value)
+            = expected.identity_increment
+            """,
             plan.Postcondition,
             StringComparison.Ordinal);
 
@@ -413,8 +416,10 @@ public sealed class SqlServerTableColumnSetSqlTests
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CONVERT(nvarchar(64), ep.value) = expected.default_fingerprint "
-            + "COLLATE Latin1_General_100_BIN2",
+            """
+            CONVERT(nvarchar(64), ep.value) = expected.default_fingerprint
+            COLLATE Latin1_General_100_BIN2
+            """,
             tablePlan.Postcondition,
             StringComparison.Ordinal);
 

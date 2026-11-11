@@ -72,6 +72,7 @@ public sealed class MySqlDeferredSetupFragmentTests
     [Theory]
     [InlineData("DO 2")]
     [InlineData("DO 2; -- trailing comment")]
+    [InlineData("DO 2;\n-- trailing comment")]
     [InlineData("")]
     [InlineData(" \r\n")]
     public void UnterminatedDeferredFragmentsRemainIndependent(

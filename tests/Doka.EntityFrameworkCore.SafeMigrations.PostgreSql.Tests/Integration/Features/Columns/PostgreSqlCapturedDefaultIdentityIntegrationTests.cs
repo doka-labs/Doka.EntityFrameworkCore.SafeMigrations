@@ -25,8 +25,10 @@ public sealed class PostgreSqlCapturedDefaultIdentityIntegrationTests : PostgreS
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE FUNCTION \"ABS\"(integer) RETURNS integer LANGUAGE SQL IMMUTABLE AS 'SELECT 99'; "
-            + "CREATE TABLE captured_default_identity(id integer);",
+            """
+            CREATE FUNCTION "ABS"(integer) RETURNS integer LANGUAGE SQL IMMUTABLE AS
+            'SELECT 99'; CREATE TABLE captured_default_identity(id integer);
+            """,
             CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -69,8 +71,12 @@ public sealed class PostgreSqlCapturedDefaultIdentityIntegrationTests : PostgreS
         });
 
         var columns = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM information_schema.columns "
-            + "WHERE table_schema=current_schema() AND table_name='captured_default_identity' AND column_name='v';",
+            """
+            SELECT COUNT(*) FROM information_schema.columns
+            WHERE table_schema=current_schema()
+            AND table_name='captured_default_identity'
+            AND column_name='v';
+            """,
             CancellationToken.None);
 
         var quotedValue = await ScalarIntAsync(connectionString, "SELECT \"ABS\"(1);", CancellationToken.None);

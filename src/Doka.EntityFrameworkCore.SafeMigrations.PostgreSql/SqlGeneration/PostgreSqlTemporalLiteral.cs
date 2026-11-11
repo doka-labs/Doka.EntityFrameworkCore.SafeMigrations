@@ -122,10 +122,10 @@ internal static class PostgreSqlTemporalLiteral
         || (IsClockTimeMapping(mapping) && value.Ticks == TimeSpan.TicksPerDay);
 
     /// <summary>Rejects values outside the native TIME domain before a formatter can discard signs or days.</summary>
-    internal static bool IsUnsupportedClockTime(
+    private static bool IsUnsupportedClockTime(
         RelationalTypeMapping mapping,
         TimeSpan value
-    ) => IsClockTimeMapping(mapping) && (value.Ticks < 0 || value.Ticks > TimeSpan.TicksPerDay);
+    ) => IsClockTimeMapping(mapping) && value.Ticks is < 0 or > TimeSpan.TicksPerDay;
 
     /// <summary>Includes native interval field qualifiers without matching another storage family.</summary>
     private static bool IsIntervalMapping(
@@ -149,7 +149,10 @@ internal static class PostgreSqlTemporalLiteral
         // WHY: PostgreSQL assigns a leading minus to only the day field in its
         // ordinary interval syntax. Explicit units on both signed fields retain
         // native day/time identity without floating-point rounding or overflow.
-        var seconds = value.Ticks % TimeSpan.TicksPerDay / 10 / 1_000_000m;
+        // WHY: Native intervals retain whole microseconds. Keep truncation of
+        // the remaining 100-nanosecond ticks in the integer domain explicitly.
+        var microseconds = value.Ticks % TimeSpan.TicksPerDay / TimeSpan.TicksPerMicrosecond;
+        var seconds = microseconds / 1_000_000m;
 
         return "INTERVAL '"
             + value.Days.ToString(CultureInfo.InvariantCulture)

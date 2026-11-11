@@ -15,12 +15,14 @@ public sealed class PostgreSqlCollationsIntegrationTests : PostgreSqlSafeMigrati
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA collation_a; CREATE SCHEMA collation_b; "
-            + "CREATE COLLATION collation_a.shared FROM \"C\"; "
-            + "CREATE COLLATION collation_b.shared FROM \"C\"; "
-            + "CREATE COLLATION collation_a.\"name.with.dot\" FROM \"C\"; "
-            + "CREATE DOMAIN collation_a.domain_text AS text COLLATE collation_a.shared; "
-            + "CREATE TABLE collation_identity (id integer NOT NULL, domain_value collation_a.domain_text NULL);",
+            """
+            CREATE SCHEMA collation_a; CREATE SCHEMA collation_b; CREATE COLLATION collation_a.shared
+            FROM "C"; CREATE COLLATION collation_b.shared
+            FROM "C"; CREATE COLLATION collation_a."name.with.dot"
+            FROM "C"; CREATE DOMAIN collation_a.domain_text AS text COLLATE collation_a.shared; CREATE TABLE
+            collation_identity (id integer NOT NULL,
+            domain_value collation_a.domain_text NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -112,24 +114,31 @@ public sealed class PostgreSqlCollationsIntegrationTests : PostgreSqlSafeMigrati
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_attribute a "
-                + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
-                + "JOIN pg_catalog.pg_collation coll ON coll.oid = a.attcollation "
-                + "JOIN pg_catalog.pg_namespace ns ON ns.oid = coll.collnamespace "
-                + "WHERE c.relname = 'collation_identity' AND a.attname = 'dotted' "
-                + "AND ns.nspname = 'collation_a' AND coll.collname = 'name.with.dot';",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_attribute a
+                JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+                JOIN pg_catalog.pg_collation coll ON coll.oid = a.attcollation
+                JOIN pg_catalog.pg_namespace ns ON ns.oid = coll.collnamespace
+                WHERE c.relname = 'collation_identity'
+                AND a.attname = 'dotted' AND ns.nspname = 'collation_a'
+                AND coll.collname = 'name.with.dot';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_attribute a "
-                + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
-                + "JOIN pg_catalog.pg_collation coll ON coll.oid = a.attcollation "
-                + "JOIN pg_catalog.pg_namespace ns ON ns.oid = coll.collnamespace "
-                + "WHERE c.relname = 'collation_table_create' AND a.attname = 'qualified_value' "
-                + "AND ns.nspname = 'collation_a' AND coll.collname = 'shared';",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_attribute a
+                JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+                JOIN pg_catalog.pg_collation coll ON coll.oid = a.attcollation
+                JOIN pg_catalog.pg_namespace ns ON ns.oid = coll.collnamespace
+                WHERE c.relname = 'collation_table_create'
+                AND a.attname = 'qualified_value'
+                AND ns.nspname = 'collation_a'
+                AND coll.collname = 'shared';
+                """,
                 cancellationToken: CancellationToken.None));
 
         var drift = new MigrationBuilder(context.Database.ProviderName!);

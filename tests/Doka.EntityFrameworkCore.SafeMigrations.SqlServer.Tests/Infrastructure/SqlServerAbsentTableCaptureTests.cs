@@ -45,7 +45,7 @@ public sealed class SqlServerAbsentTableCaptureTests
         Assert.Equal([true, false, true, false, false], absent);
         var sql = Assert.Single(connection.RecordedStatements);
         Assert.Contains("FROM sys.objects occupied", sql, StringComparison.Ordinal);
-        Assert.Contains("LEFT JOIN sys.schemas", sql, StringComparison.Ordinal);
+        Assert.Contains("LEFT\nJOIN sys.schemas", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("sys.tables", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("first'item", sql, StringComparison.Ordinal);
         Assert.Contains("(0, @schema0, @table0)", sql, StringComparison.Ordinal);
@@ -429,7 +429,7 @@ public sealed class SqlServerAbsentTableCaptureTests
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "WHEN 1 = 0 THEN N'matching' ELSE N'different'",
+            "WHEN 1 = 0\nTHEN N'matching' ELSE N'different'",
             absent.StateExpression,
             StringComparison.Ordinal);
 

@@ -70,9 +70,12 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
         await using var observer = new NpgsqlConnection(connectionString);
         await observer.OpenAsync(cancellationToken);
         await using var command = observer.CreateCommand();
-        command.CommandText = "SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_locks "
-            + "WHERE pid=$1 AND relation='generated_drop'::regclass "
-            + "AND mode='AccessExclusiveLock' AND NOT granted);";
+        command.CommandText = """
+        SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_locks WHERE pid=$1
+        AND relation='generated_drop'::regclass
+        AND mode='AccessExclusiveLock'
+        AND NOT granted);
+        """;
 
         command.Parameters.AddWithValue(processId);
         while (!pending.IsCompleted)

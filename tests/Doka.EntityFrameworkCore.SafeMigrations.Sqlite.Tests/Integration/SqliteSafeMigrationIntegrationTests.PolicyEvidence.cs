@@ -13,8 +13,11 @@ public sealed class SqliteSafeMigrationPolicyEvidenceIntegrationTests : SqliteSa
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE projection_column (Id INTEGER NOT NULL, Value TEXT NULL); "
-            + "INSERT INTO projection_column (Id, Value) VALUES (1, 'preserve');",
+            """
+            CREATE TABLE projection_column (Id INTEGER NOT NULL, Value TEXT NULL); INSERT
+            INTO projection_column (Id,
+            Value) VALUES (1, 'preserve');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -82,8 +85,11 @@ public sealed class SqliteSafeMigrationPolicyEvidenceIntegrationTests : SqliteSa
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE projection_column (Id INTEGER NOT NULL, Value TEXT NULL); "
-            + "INSERT INTO projection_column (Id, Value) VALUES (1, 'preserve');",
+            """
+            CREATE TABLE projection_column (Id INTEGER NOT NULL, Value TEXT NULL); INSERT
+            INTO projection_column (Id,
+            Value) VALUES (1, 'preserve');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -139,9 +145,12 @@ public sealed class SqliteSafeMigrationPolicyEvidenceIntegrationTests : SqliteSa
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE projection_key (Id INTEGER NOT NULL, OtherId INTEGER NOT NULL, "
-            + "CONSTRAINT physical_projection_pk PRIMARY KEY (OtherId)); "
-            + "INSERT INTO projection_key (Id, OtherId) VALUES (1, 2);",
+            """
+            CREATE TABLE projection_key (Id INTEGER NOT NULL, OtherId INTEGER NOT NULL,
+            CONSTRAINT physical_projection_pk PRIMARY KEY (OtherId)); INSERT INTO projection_key
+            (Id,
+            OtherId) VALUES (1, 2);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -203,9 +212,12 @@ public sealed class SqliteSafeMigrationPolicyEvidenceIntegrationTests : SqliteSa
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE projection_key (Id INTEGER NOT NULL, OtherId INTEGER NOT NULL, "
-            + "CONSTRAINT physical_projection_pk PRIMARY KEY (Id)); "
-            + "INSERT INTO projection_key (Id, OtherId) VALUES (1, 2);",
+            """
+            CREATE TABLE projection_key (Id INTEGER NOT NULL, OtherId INTEGER NOT NULL,
+            CONSTRAINT physical_projection_pk PRIMARY KEY (Id)); INSERT INTO projection_key
+            (Id,
+            OtherId) VALUES (1, 2);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);

@@ -35,12 +35,10 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.widening_values (Value "
-            + sourceType
-            + " NOT NULL); "
-            + "INSERT dbo.widening_values VALUES "
-            + rows
-            + ";",
+            $"""
+            CREATE TABLE dbo.widening_values (Value {sourceType} NOT NULL);
+            INSERT dbo.widening_values VALUES {rows};
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -70,10 +68,13 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
 
         var matching = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns c JOIN sys.types ty ON ty.user_type_id=c.user_type_id "
-            + "WHERE c.object_id=OBJECT_ID(N'dbo.widening_values') AND c.name=N'Value' AND ty.name=N'"
-            + targetType
-            + "' AND c.is_nullable=0;",
+            $"""
+            SELECT COUNT(*) FROM sys.columns c
+            JOIN sys.types ty ON ty.user_type_id=c.user_type_id
+            WHERE c.object_id=OBJECT_ID(N'dbo.widening_values')
+            AND c.name=N'Value' AND ty.name=N'{targetType}'
+            AND c.is_nullable=0;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -144,9 +145,12 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var setup = dependency == "partition"
-            ? "CREATE PARTITION FUNCTION widening_partition(int) AS RANGE RIGHT FOR VALUES (100); "
-            + "CREATE PARTITION SCHEME widening_scheme AS PARTITION widening_partition ALL TO ([PRIMARY]); "
-            + "CREATE TABLE dbo.dependent_values (Value int NOT NULL) ON widening_scheme(Value);"
+            ? """
+            CREATE PARTITION FUNCTION widening_partition(int) AS RANGE RIGHT FOR VALUES
+            (100); CREATE PARTITION SCHEME widening_scheme AS PARTITION widening_partition
+            ALL TO ([PRIMARY]); CREATE TABLE dbo.dependent_values (Value int NOT NULL)
+            ON widening_scheme(Value);
+            """
             : "CREATE TABLE dbo.dependent_values (Value int NOT NULL); "
             + dependency switch
             {
@@ -185,8 +189,11 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
 
         var preserved = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.dependent_values') "
-            + "AND name=N'Value' AND system_type_id=56;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.dependent_values')
+            AND name=N'Value' AND system_type_id=56;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -206,8 +213,10 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.identity_widening_values(Value int IDENTITY(3,7) NOT NULL); "
-            + "INSERT dbo.identity_widening_values DEFAULT VALUES;",
+            """
+            CREATE TABLE dbo.identity_widening_values(Value int IDENTITY(3,7) NOT NULL);
+            INSERT dbo.identity_widening_values DEFAULT VALUES;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -260,9 +269,13 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
 
         var retained = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.identity_columns WHERE object_id=OBJECT_ID(N'dbo.identity_widening_values') "
-            + "AND system_type_id=127 AND CONVERT(bigint,seed_value)=3 AND CONVERT(bigint,increment_value)=7 "
-            + "AND CONVERT(bigint,last_value)=10;",
+            """
+            SELECT COUNT(*) FROM sys.identity_columns
+            WHERE object_id=OBJECT_ID(N'dbo.identity_widening_values')
+            AND system_type_id=127 AND CONVERT(bigint,seed_value)=3
+            AND CONVERT(bigint,increment_value)=7
+            AND CONVERT(bigint,last_value)=10;
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -288,9 +301,10 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.default_widening_values(Id int NOT NULL); "
-            + "CREATE TABLE dbo.update_audit(Events int NOT NULL); "
-            + "INSERT dbo.update_audit VALUES(0);",
+            """
+            CREATE TABLE dbo.default_widening_values(Id int NOT NULL); CREATE TABLE
+            dbo.update_audit(Events int NOT NULL); INSERT dbo.update_audit VALUES(0);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -310,8 +324,10 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER dbo.default_widening_audit ON dbo.default_widening_values AFTER UPDATE AS "
-            + "UPDATE dbo.update_audit SET Events=Events+1;",
+            """
+            CREATE TRIGGER dbo.default_widening_audit ON dbo.default_widening_values
+            AFTER UPDATE AS UPDATE dbo.update_audit SET Events=Events+1;
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -359,9 +375,12 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
 
         var stamps = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.default_constraints dc JOIN sys.extended_properties ep "
-            + "ON ep.major_id=dc.object_id WHERE dc.parent_object_id=OBJECT_ID(N'dbo.default_widening_values') "
-            + "AND ep.name=N'Doka:SafeMigrations:Contract';",
+            """
+            SELECT COUNT(*) FROM sys.default_constraints dc
+            JOIN sys.extended_properties ep ON ep.major_id=dc.object_id
+            WHERE dc.parent_object_id=OBJECT_ID(N'dbo.default_widening_values')
+            AND ep.name=N'Doka:SafeMigrations:Contract';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -382,19 +401,23 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.comment_widening_values(Value int NOT NULL); "
-            + "INSERT dbo.comment_widening_values VALUES(-2147483648),(2147483647); "
-            + "CREATE TABLE dbo.comment_ddl_audit(Events int NOT NULL); INSERT dbo.comment_ddl_audit VALUES(0); "
-            + "EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'caller owned exact comment', "
-            + "@level0type=N'SCHEMA', @level0name=N'dbo', @level1type=N'TABLE', "
-            + "@level1name=N'comment_widening_values', "
-            + "@level2type=N'COLUMN', @level2name=N'Value';",
+            """
+            CREATE TABLE dbo.comment_widening_values(Value int NOT NULL); INSERT dbo.comment_widening_values
+            VALUES(-2147483648),(2147483647); CREATE TABLE dbo.comment_ddl_audit(Events
+            int NOT NULL); INSERT dbo.comment_ddl_audit VALUES(0); EXEC sys.sp_addextendedproperty
+            @name=N'MS_Description',
+            @value=N'caller owned exact comment', @level0type=N'SCHEMA', @level0name=N'dbo',
+            @level1type=N'TABLE', @level1name=N'comment_widening_values', @level2type=N'COLUMN',
+            @level2name=N'Value';
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER comment_ddl_audit_trigger ON DATABASE FOR ALTER_TABLE AS "
-            + "UPDATE dbo.comment_ddl_audit SET Events=Events+1;",
+            """
+            CREATE TRIGGER comment_ddl_audit_trigger ON DATABASE FOR ALTER_TABLE AS
+            UPDATE dbo.comment_ddl_audit SET Events=Events+1;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -426,16 +449,21 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
 
         var source = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.comment_widening_values') "
-            + "AND name=N'Value' AND system_type_id=56;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.comment_widening_values')
+            AND name=N'Value' AND system_type_id=56;
+            """,
             cancellationToken: CancellationToken.None);
 
         var comment = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.extended_properties WHERE class=1 "
-            + "AND major_id=OBJECT_ID(N'dbo.comment_widening_values') "
-            + "AND minor_id=COLUMNPROPERTY(major_id,N'Value',N'ColumnId') AND name=N'MS_Description' "
-            + "AND CONVERT(nvarchar(100),value)=N'caller owned exact comment';",
+            """
+            SELECT COUNT(*) FROM sys.extended_properties
+            WHERE class=1 AND major_id=OBJECT_ID(N'dbo.comment_widening_values')
+            AND minor_id=COLUMNPROPERTY(major_id,N'Value',N'ColumnId')
+            AND name=N'MS_Description' AND CONVERT(nvarchar(100),value)=N'caller owned exact comment';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -486,16 +514,17 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
             "primary" => "ALTER TABLE application.dependent_values "
                 + "ADD CONSTRAINT PK_dependent_values PRIMARY KEY(Value);",
             "unique" => "ALTER TABLE application.dependent_values ADD CONSTRAINT UQ_dependent_values UNIQUE(Value);",
-            "foreign-child" => "CREATE TABLE application.principal_values(Value int NOT NULL PRIMARY KEY); "
-                + "INSERT application.principal_values VALUES(1); ALTER TABLE application.dependent_values "
-                + "ADD CONSTRAINT FK_dependent_values FOREIGN KEY(Value) "
-                + "REFERENCES application.principal_values(Value);",
-            "foreign-principal" => "ALTER TABLE application.dependent_values "
-                + "ADD CONSTRAINT PK_dependent_values PRIMARY KEY(Value); "
-                + "CREATE TABLE application.child_values(Value int NOT NULL); "
-                + "INSERT application.child_values VALUES(1); "
-                + "ALTER TABLE application.child_values ADD CONSTRAINT FK_dependent_values FOREIGN KEY(Value) "
-                + "REFERENCES application.dependent_values(Value);",
+            "foreign-child" => """
+                CREATE TABLE application.principal_values(Value int NOT NULL PRIMARY KEY);
+                INSERT application.principal_values VALUES(1); ALTER TABLE application.dependent_values
+                ADD CONSTRAINT FK_dependent_values FOREIGN KEY(Value) REFERENCES application.principal_values(Value);
+                """,
+            "foreign-principal" => """
+                ALTER TABLE application.dependent_values ADD CONSTRAINT PK_dependent_values
+                PRIMARY KEY(Value); CREATE TABLE application.child_values(Value int NOT
+                NULL); INSERT application.child_values VALUES(1); ALTER TABLE application.child_values
+                ADD CONSTRAINT FK_dependent_values FOREIGN KEY(Value) REFERENCES application.dependent_values(Value);
+                """,
             _ => throw new ArgumentOutOfRangeException(nameof(dependency)),
         };
 
@@ -541,8 +570,11 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var target = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'application.dependent_values') "
-            + "AND name=N'Value' AND system_type_id=127;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'application.dependent_values')
+            AND name=N'Value' AND system_type_id=127;
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -586,24 +618,22 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE application.key_precision_values(Value int NOT NULL, Other int NOT NULL); "
-            + "INSERT application.key_precision_values VALUES(1,2); "
-            + "ALTER TABLE application.key_precision_values ADD CONSTRAINT Key_target "
-            + (primaryKey
+            $"""
+            CREATE TABLE application.key_precision_values(Value int NOT NULL, Other
+            int NOT NULL); INSERT application.key_precision_values VALUES(1,2); ALTER
+            TABLE application.key_precision_values ADD CONSTRAINT Key_target {(primaryKey
                 ? "PRIMARY KEY(Value); "
-                : "UNIQUE(Value); ")
-            + "ALTER TABLE application.key_precision_values ADD CONSTRAINT Key_other "
-            + (primaryKey
+                : "UNIQUE(Value); ")}ALTER
+            TABLE application.key_precision_values ADD CONSTRAINT Key_other {(primaryKey
                 ? "UNIQUE(Other); "
-                : "PRIMARY KEY(Other); ")
-            + "CREATE TABLE application.key_target_child(Value int NOT NULL); "
-            + "INSERT application.key_target_child VALUES(1); "
-            + "ALTER TABLE application.key_target_child ADD CONSTRAINT FK_key_target FOREIGN KEY(Value) "
-            + "REFERENCES application.key_precision_values(Value); "
-            + "CREATE TABLE application.key_other_child(Other int NOT NULL); "
-            + "INSERT application.key_other_child VALUES(2); "
-            + "ALTER TABLE application.key_other_child ADD CONSTRAINT FK_key_other FOREIGN KEY(Other) "
-            + "REFERENCES application.key_precision_values(Other);",
+                : "PRIMARY KEY(Other); ")}CREATE
+            TABLE application.key_target_child(Value int NOT NULL); INSERT application.key_target_child
+            VALUES(1); ALTER TABLE application.key_target_child ADD CONSTRAINT FK_key_target
+            FOREIGN KEY(Value) REFERENCES application.key_precision_values(Value); CREATE
+            TABLE application.key_other_child(Other int NOT NULL); INSERT application.key_other_child
+            VALUES(2); ALTER TABLE application.key_other_child ADD CONSTRAINT FK_key_other
+            FOREIGN KEY(Other) REFERENCES application.key_precision_values(Other);
+            """,
             cancellationToken: CancellationToken.None);
 
         if (addProjectedReference)
@@ -672,26 +702,38 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
 
         var targetType = await ScalarIntAsync(
             connectionString,
-            "SELECT system_type_id FROM sys.columns WHERE object_id=OBJECT_ID(N'application.key_precision_values') "
-            + "AND name=N'Value';",
+            """
+            SELECT system_type_id FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'application.key_precision_values')
+            AND name=N'Value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var targetKey = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.key_constraints WHERE parent_object_id="
-            + "OBJECT_ID(N'application.key_precision_values') AND name=N'Key_target';",
+            """
+            SELECT COUNT(*) FROM sys.key_constraints
+            WHERE parent_object_id=OBJECT_ID(N'application.key_precision_values')
+            AND name=N'Key_target';
+            """,
             cancellationToken: CancellationToken.None);
 
         var otherForeignKey = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.foreign_keys WHERE parent_object_id="
-            + "OBJECT_ID(N'application.key_other_child') AND name=N'FK_key_other';",
+            """
+            SELECT COUNT(*) FROM sys.foreign_keys
+            WHERE parent_object_id=OBJECT_ID(N'application.key_other_child')
+            AND name=N'FK_key_other';
+            """,
             cancellationToken: CancellationToken.None);
 
         var targetReferences = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.foreign_keys WHERE referenced_object_id="
-            + "OBJECT_ID(N'application.key_precision_values') AND name IN(N'FK_key_target',N'FK_key_projected');",
+            """
+            SELECT COUNT(*) FROM sys.foreign_keys
+            WHERE referenced_object_id=OBJECT_ID(N'application.key_precision_values')
+            AND name IN(N'FK_key_target',N'FK_key_projected');
+            """,
             cancellationToken: CancellationToken.None);
 
         var projectedRows = addProjectedReference
@@ -703,9 +745,14 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
 
         var rows = await ScalarIntAsync(
             connectionString,
-            "SELECT (SELECT COUNT(*) FROM application.key_precision_values WHERE Value=1 AND Other=2) "
-            + "+ (SELECT COUNT(*) FROM application.key_target_child WHERE Value=1) "
-            + "+ (SELECT COUNT(*) FROM application.key_other_child WHERE Other=2);",
+            """
+            SELECT (SELECT COUNT(*) FROM application.key_precision_values
+            WHERE Value=1 AND Other=2) + (SELECT COUNT(*)
+            FROM application.key_target_child
+            WHERE Value=1) + (SELECT COUNT(*)
+            FROM application.key_other_child
+            WHERE Other=2);
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -769,8 +816,10 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.null_widening_values(Value int NULL); "
-            + "INSERT dbo.null_widening_values VALUES(NULL),(-2147483648),(2147483647);",
+            """
+            CREATE TABLE dbo.null_widening_values(Value int NULL); INSERT dbo.null_widening_values
+            VALUES(NULL),(-2147483648),(2147483647);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -797,8 +846,12 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
 
         var source = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.null_widening_values') "
-            + "AND name=N'Value' AND system_type_id=56 AND is_nullable=1;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.null_widening_values')
+            AND name=N'Value' AND system_type_id=56
+            AND is_nullable=1;
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -834,9 +887,12 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.ddl_source_values(Value int NULL); INSERT dbo.ddl_source_values VALUES(1); "
-            + "CREATE INDEX IX_ddl_source ON dbo.ddl_source_values(Value); "
-            + "CREATE TABLE dbo.ddl_checked_values(Value int NULL); INSERT dbo.ddl_checked_values VALUES(1);",
+            """
+            CREATE TABLE dbo.ddl_source_values(Value int NULL); INSERT dbo.ddl_source_values
+            VALUES(1); CREATE INDEX IX_ddl_source ON dbo.ddl_source_values(Value); CREATE
+            TABLE dbo.ddl_checked_values(Value int NULL); INSERT dbo.ddl_checked_values
+            VALUES(1);
+            """,
             cancellationToken: CancellationToken.None);
 
         var mutation = tightensNullability
@@ -893,8 +949,11 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
 
         var rows = await ScalarIntAsync(
             connectionString,
-            "SELECT (SELECT COUNT(*) FROM dbo.ddl_source_values WHERE Value=1) "
-            + "+ (SELECT COUNT(*) FROM dbo.ddl_checked_values WHERE Value=1);",
+            """
+            SELECT (SELECT COUNT(*) FROM dbo.ddl_source_values
+            WHERE Value=1) + (SELECT COUNT(*)
+            FROM dbo.ddl_checked_values WHERE Value=1);
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -922,11 +981,13 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.visibility_values(Value int NOT NULL); INSERT dbo.visibility_values VALUES(1); "
-            + "CREATE USER ddl_database_reader WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; "
-            + "GRANT VIEW DEFINITION TO ddl_database_reader; "
-            + "GRANT SELECT ON OBJECT::sys.sql_expression_dependencies TO ddl_database_reader; "
-            + "GRANT ALTER,SELECT,UPDATE ON OBJECT::dbo.visibility_values TO ddl_database_reader;",
+            """
+            CREATE TABLE dbo.visibility_values(Value int NOT NULL); INSERT dbo.visibility_values
+            VALUES(1); CREATE USER ddl_database_reader WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo;
+            GRANT VIEW DEFINITION TO ddl_database_reader; GRANT SELECT ON OBJECT::sys.sql_expression_dependencies
+            TO ddl_database_reader; GRANT ALTER,SELECT,UPDATE ON OBJECT::dbo.visibility_values
+            TO ddl_database_reader;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -962,8 +1023,12 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
 
         var trusted = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID(N'dbo.visibility_values') "
-            + "AND name=N'CK_visibility_values' AND is_disabled=0 AND is_not_trusted=0;",
+            """
+            SELECT COUNT(*) FROM sys.check_constraints
+            WHERE parent_object_id=OBJECT_ID(N'dbo.visibility_values')
+            AND name=N'CK_visibility_values'
+            AND is_disabled=0 AND is_not_trusted=0;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -995,11 +1060,13 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.protected_catalog_values(Value int NOT NULL, Caption nvarchar(80) NULL); "
-            + "INSERT dbo.protected_catalog_values VALUES(1,N'short'); "
-            + "CREATE USER protected_catalog_reader WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; "
-            + "GRANT VIEW DEFINITION TO protected_catalog_reader; "
-            + "GRANT ALTER,SELECT ON OBJECT::dbo.protected_catalog_values TO protected_catalog_reader;",
+            """
+            CREATE TABLE dbo.protected_catalog_values(Value int NOT NULL, Caption nvarchar(80)
+            NULL); INSERT dbo.protected_catalog_values VALUES(1,N'short'); CREATE USER
+            protected_catalog_reader WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; GRANT VIEW
+            DEFINITION TO protected_catalog_reader; GRANT ALTER,SELECT ON OBJECT::dbo.protected_catalog_values
+            TO protected_catalog_reader;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1066,8 +1133,12 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
 
         var unchanged = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.protected_catalog_values') "
-            + "AND (name=N'Value' AND system_type_id=56 OR name=N'Caption' AND max_length=160);",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.protected_catalog_values')
+            AND (name=N'Value' AND system_type_id=56
+            OR name=N'Caption' AND max_length=160);
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -1106,18 +1177,18 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.write_permission_values(Value "
-            + (targetMatches
+            $"""
+            CREATE TABLE dbo.write_permission_values(Value {(targetMatches
                 ? "bigint"
-                : "int")
-            + " NOT NULL); INSERT dbo.write_permission_values VALUES(1); "
-            + "CREATE USER widening_writer WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; "
-            + "GRANT VIEW DEFINITION TO widening_writer; "
-            + "GRANT SELECT ON OBJECT::sys.sql_expression_dependencies TO widening_writer; "
-            + "GRANT ALTER,SELECT ON OBJECT::dbo.write_permission_values TO widening_writer; "
-            + (grantUpdate
+                : "int")}
+            NOT NULL); INSERT dbo.write_permission_values VALUES(1); CREATE USER widening_writer
+            WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; GRANT VIEW DEFINITION TO widening_writer;
+            GRANT SELECT ON OBJECT::sys.sql_expression_dependencies TO widening_writer;
+            GRANT ALTER,SELECT ON OBJECT::dbo.write_permission_values TO widening_writer;
+            {(grantUpdate
                 ? "GRANT UPDATE ON OBJECT::dbo.write_permission_values TO widening_writer;"
-                : string.Empty),
+                : string.Empty)}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1271,8 +1342,11 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var target = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.new_widening_values') "
-            + "AND name=N'Value' AND system_type_id=127;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.new_widening_values')
+            AND name=N'Value' AND system_type_id=127;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1304,17 +1378,21 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE TABLE dbo.projected_permission_values(Value int NOT NULL, Other int NULL); "
-                + "INSERT dbo.projected_permission_values VALUES(1,NULL);",
+                """
+                CREATE TABLE dbo.projected_permission_values(Value int NOT NULL, Other int
+                NULL); INSERT dbo.projected_permission_values VALUES(1,NULL);
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE USER projected_permission_reader WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; "
-            + "GRANT VIEW DEFINITION,CREATE TABLE TO projected_permission_reader; "
-            + "GRANT ALTER,SELECT ON SCHEMA::dbo TO projected_permission_reader; "
-            + "DENY SELECT ON OBJECT::sys.sql_expression_dependencies TO projected_permission_reader;",
+            """
+            CREATE USER projected_permission_reader WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo;
+            GRANT VIEW DEFINITION,CREATE TABLE TO projected_permission_reader; GRANT
+            ALTER,SELECT ON SCHEMA::dbo TO projected_permission_reader; DENY SELECT
+            ON OBJECT::sys.sql_expression_dependencies TO projected_permission_reader;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1363,8 +1441,11 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
 
         var sourceCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.projected_permission_values') "
-            + "AND name=N'Value' AND system_type_id=56;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.projected_permission_values')
+            AND name=N'Value' AND system_type_id=56;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1386,8 +1467,11 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.noop_source_values(Value bigint NOT NULL); INSERT dbo.noop_source_values VALUES(1); "
-            + "CREATE TABLE dbo.noop_checked_values(Value int NOT NULL); INSERT dbo.noop_checked_values VALUES(1);",
+            """
+            CREATE TABLE dbo.noop_source_values(Value bigint NOT NULL); INSERT dbo.noop_source_values
+            VALUES(1); CREATE TABLE dbo.noop_checked_values(Value int NOT NULL); INSERT
+            dbo.noop_checked_values VALUES(1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
@@ -1436,16 +1520,20 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.refresh_source_values(Value int NOT NULL); INSERT dbo.refresh_source_values VALUES(1); "
-            + "CREATE INDEX IX_refresh_source ON dbo.refresh_source_values(Value); "
-            + "CREATE TABLE dbo.refresh_checked_values(Value int NOT NULL); "
-            + "INSERT dbo.refresh_checked_values VALUES(1);",
+            """
+            CREATE TABLE dbo.refresh_source_values(Value int NOT NULL); INSERT dbo.refresh_source_values
+            VALUES(1); CREATE INDEX IX_refresh_source ON dbo.refresh_source_values(Value);
+            CREATE TABLE dbo.refresh_checked_values(Value int NOT NULL); INSERT dbo.refresh_checked_values
+            VALUES(1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER refresh_ddl_row_effect ON DATABASE FOR ALTER_TABLE,DROP_INDEX AS "
-            + "UPDATE dbo.refresh_checked_values SET Value=-1;",
+            """
+            CREATE TRIGGER refresh_ddl_row_effect ON DATABASE FOR ALTER_TABLE,DROP_INDEX
+            AS UPDATE dbo.refresh_checked_values SET Value=-1;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1482,9 +1570,12 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
 
         var trusted = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.check_constraints "
-            + "WHERE parent_object_id=OBJECT_ID(N'dbo.refresh_checked_values') "
-            + "AND name=N'CK_refresh_checked' AND is_disabled=0 AND is_not_trusted=0;",
+            """
+            SELECT COUNT(*) FROM sys.check_constraints
+            WHERE parent_object_id=OBJECT_ID(N'dbo.refresh_checked_values')
+            AND name=N'CK_refresh_checked'
+            AND is_disabled=0 AND is_not_trusted=0;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1511,8 +1602,11 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER create_ddl_row_effect ON DATABASE FOR CREATE_TABLE AS "
-            + "IF OBJECT_ID(N'dbo.created_values',N'U') IS NOT NULL INSERT dbo.created_values VALUES(-1);",
+            """
+            CREATE TRIGGER create_ddl_row_effect ON DATABASE FOR CREATE_TABLE AS IF
+            OBJECT_ID(N'dbo.created_values',N'U') IS NOT NULL INSERT dbo.created_values
+            VALUES(-1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1589,8 +1683,10 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.alias_values(Value int NOT NULL); INSERT dbo.alias_values VALUES(1); "
-            + "CREATE INDEX IX_alias_values ON dbo.alias_values(Value);",
+            """
+            CREATE TABLE dbo.alias_values(Value int NOT NULL); INSERT dbo.alias_values
+            VALUES(1); CREATE INDEX IX_alias_values ON dbo.alias_values(Value);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1631,12 +1727,13 @@ public sealed class SqlServerSafeMigrationIntegerWideningIntegrationTests : SqlS
 
         var source = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.alias_values') "
-            + "AND name=N'Value' AND system_type_id="
-            + (caseSensitive
+            $"""
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.alias_values')
+            AND name=N'Value' AND system_type_id={(caseSensitive
                 ? "56"
-                : "127")
-            + ";",
+                : "127")};
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(

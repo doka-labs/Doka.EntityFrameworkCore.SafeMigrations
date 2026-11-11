@@ -24,11 +24,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // WHY: The owned sentinel distinguishes a complete empty inventory
         // from a missing result set. Physical aliases stream independently,
         // never through GROUP_CONCAT or a guessed maximum number of FKs.
-        command.CommandText = "SELECT certificate.index_exists, bound_fk.CONSTRAINT_NAME FROM (SELECT "
-            + exists
-            + " AS index_exists) certificate LEFT JOIN ("
-            + aliases
-            + ") bound_fk ON TRUE ORDER BY bound_fk.CONSTRAINT_NAME;";
+        command.CommandText = $"""
+            SELECT certificate.index_exists, bound_fk.CONSTRAINT_NAME
+            FROM (SELECT {exists} AS index_exists) certificate
+            LEFT JOIN ({aliases}) bound_fk ON TRUE ORDER BY bound_fk.CONSTRAINT_NAME;
+            """;
 
         return valueBytes;
     }

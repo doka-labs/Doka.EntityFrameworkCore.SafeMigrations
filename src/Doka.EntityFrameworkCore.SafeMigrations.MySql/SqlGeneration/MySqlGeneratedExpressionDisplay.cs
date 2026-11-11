@@ -312,7 +312,7 @@ internal static class MySqlGeneratedExpressionDisplay
             switch (character)
             {
                 case '\\':
-                    builder.Append("\\\\");
+                    builder.Append(@"\\");
                     break;
                 case '\'':
                     builder.Append("''");

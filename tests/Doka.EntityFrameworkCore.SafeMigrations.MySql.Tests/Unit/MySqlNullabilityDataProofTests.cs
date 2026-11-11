@@ -166,6 +166,7 @@ public sealed class MySqlNullabilityDataProofTests
         string template
     )
     {
+        // Arrange
         var plan = new MySqlSafeMigrationRuntimePlan(template, "TRUE", SafeMigrationRepairCapability.Safe, template)
         {
             DataProbe = new MySqlSafeMigrationDataProbe(
@@ -179,9 +180,6 @@ public sealed class MySqlNullabilityDataProofTests
             NullabilityDataProbe = new MySqlSafeMigrationNullabilityDataProbe("nullable", "eligible", "null_probe"),
         };
 
-        var analysis = plan.RenderStateExpression(static value => value.Value?.ToString() ?? "NULL");
-        var runtime = plan.RenderPreparedStateExpression([], "length_cache", "eligible_cache");
-
         var expectedAnalysis = template
             .Replace(
                 MySqlSafeMigrationRuntimePlan.DataProbePlaceholder,
@@ -190,7 +188,12 @@ public sealed class MySqlNullabilityDataProofTests
             .Replace(MySqlSafeMigrationRuntimePlan.TransitionInvariantPlaceholder, "eligible", StringComparison.Ordinal)
             .Replace(
                 MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder,
-                "CASE WHEN (nullable) AND (eligible) THEN (null_probe) ELSE FALSE END",
+                """
+                CASE WHEN (nullable)
+                AND (eligible)
+                THEN (null_probe)
+                ELSE FALSE END
+                """,
                 StringComparison.Ordinal)
             .Replace(
                 MySqlSafeMigrationRuntimePlan.ColumnRepairInvariantPlaceholder,
@@ -215,6 +218,11 @@ public sealed class MySqlNullabilityDataProofTests
                 "@doka_sm_column_repair_eligible",
                 StringComparison.Ordinal);
 
+        // Act
+        var analysis = plan.RenderStateExpression(static value => value.Value?.ToString() ?? "NULL");
+        var runtime = plan.RenderPreparedStateExpression([], "length_cache", "eligible_cache");
+
+        // Assert
         Assert.Equal(expectedAnalysis, analysis);
         Assert.Equal(expectedRuntime, runtime);
         Assert.DoesNotContain("@doka_sm_", analysis, StringComparison.Ordinal);
@@ -224,6 +232,7 @@ public sealed class MySqlNullabilityDataProofTests
     [Fact]
     public void NullabilityOnlyPlan_RendersWithoutLengthProbe()
     {
+        // Arrange
         var plan = new MySqlSafeMigrationRuntimePlan(
             MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder,
             "TRUE",
@@ -233,10 +242,19 @@ public sealed class MySqlNullabilityDataProofTests
             NullabilityDataProbe = new MySqlSafeMigrationNullabilityDataProbe("nullable", "eligible", "null_probe"),
         };
 
+        // Act
         var analysis = plan.RenderStateExpression(static _ => throw new InvalidOperationException());
         var runtime = plan.RenderPreparedRepairPrecondition([]);
 
-        Assert.Equal("CASE WHEN (nullable) AND (eligible) THEN (null_probe) ELSE FALSE END", analysis);
+        // Assert
+        Assert.Equal(
+            """
+            CASE WHEN (nullable)
+            AND (eligible)
+            THEN (null_probe)
+            ELSE FALSE END
+            """,
+            analysis);
         Assert.Equal("@doka_sm_nullability_blocked", runtime);
         Assert.Equal("nullable", plan.RenderPreparedNullabilityColumnExpression([]));
         Assert.Equal("eligible", plan.RenderPreparedNullabilityRepairInvariantExpression([]));

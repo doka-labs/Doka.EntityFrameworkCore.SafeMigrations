@@ -9,10 +9,12 @@ public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : Sql
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE provider_rewrite_entities ("
-            + "Id INTEGER NOT NULL PRIMARY KEY, Legacy TEXT NULL, Replacement TEXT NULL); "
-            + "INSERT INTO provider_rewrite_entities (Id, Legacy, Replacement) "
-            + "VALUES (1, 'discard', 'preserve');",
+            """
+            CREATE TABLE provider_rewrite_entities (Id INTEGER NOT NULL PRIMARY KEY,
+            Legacy TEXT NULL, Replacement TEXT NULL); INSERT INTO provider_rewrite_entities
+            (Id,
+            Legacy, Replacement) VALUES (1, 'discard', 'preserve');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteProviderRewriteTestContext(connection);
@@ -45,12 +47,12 @@ public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : Sql
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_constraint_parents PRIMARY KEY (Id)); "
-            + "CREATE TABLE constraint_children (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_constraint_children PRIMARY KEY (Id)); "
-            + "INSERT INTO constraint_parents (Id) VALUES (1); "
-            + "INSERT INTO constraint_children (Id) VALUES (11);",
+            """
+            CREATE TABLE constraint_parents (Id INTEGER NOT NULL, CONSTRAINT pk_constraint_parents
+            PRIMARY KEY (Id)); CREATE TABLE constraint_children (Id INTEGER NOT NULL,
+            CONSTRAINT pk_constraint_children PRIMARY KEY (Id)); INSERT INTO constraint_parents
+            (Id) VALUES (1); INSERT INTO constraint_children (Id) VALUES (11);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -127,8 +129,11 @@ public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : Sql
             1,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM pragma_foreign_key_list('constraint_children') "
-                + "WHERE \"table\" = 'constraint_parents' AND \"from\" = 'ParentId';",
+                """
+                SELECT COUNT(*) FROM pragma_foreign_key_list('constraint_children')
+                WHERE "table" = 'constraint_parents'
+                AND "from" = 'ParentId';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -145,9 +150,12 @@ public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : Sql
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE partial_index_entities (Id INTEGER NOT NULL, Code TEXT NULL); "
-            + "CREATE UNIQUE INDEX ix_partial_index_entities_code "
-            + "ON partial_index_entities (Code)\nWHERE Code IS NOT NULL;",
+            """
+            CREATE TABLE partial_index_entities (Id INTEGER NOT NULL, Code TEXT NULL);
+            CREATE UNIQUE INDEX ix_partial_index_entities_code ON partial_index_entities
+            (Code)
+            WHERE Code IS NOT NULL;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -176,9 +184,12 @@ public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : Sql
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE partial_index_entities (Id INTEGER NOT NULL, Code TEXT NULL); "
-            + "CREATE UNIQUE INDEX ix_partial_index_entities_code "
-            + "ON partial_index_entities (Code)\nWHERE Code IS NOT NULL;",
+            """
+            CREATE TABLE partial_index_entities (Id INTEGER NOT NULL, Code TEXT NULL);
+            CREATE UNIQUE INDEX ix_partial_index_entities_code ON partial_index_entities
+            (Code)
+            WHERE Code IS NOT NULL;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -195,9 +206,11 @@ public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : Sql
             1,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'index' "
-                + "AND name = 'ix_partial_index_entities_code_v2' "
-                + "AND lower(sql) LIKE '%where code is not null%';",
+                """
+                SELECT COUNT(*) FROM sqlite_schema
+                WHERE type = 'index' AND name = 'ix_partial_index_entities_code_v2'
+                AND lower(sql) LIKE '%where code is not null%';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -207,8 +220,11 @@ public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : Sql
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE literal_check_entities (Id INTEGER NOT NULL, Status TEXT NOT NULL, "
-            + "CONSTRAINT ck_literal_check_entities_status CHECK (Status = 'Active')); ",
+            $"""
+            CREATE TABLE literal_check_entities (Id INTEGER NOT NULL, Status TEXT NOT
+            NULL,
+            CONSTRAINT ck_literal_check_entities_status CHECK (Status = 'Active'));{"\u0020"}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -237,11 +253,13 @@ public sealed class SqliteSafeMigrationProviderCompositionIntegrationTests : Sql
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE comment_entities (\n"
-            + "Id INTEGER NOT NULL PRIMARY KEY, -- owner's ) COLLATE RTRIM\n"
-            + "AutoIncrementSeed INTEGER NULL,\n"
-            + "Code TEXT COLLATE NOCASE NULL /* apostrophe's ) COLLATE BINARY */\n"
-            + ");",
+            """
+            CREATE TABLE comment_entities (
+            Id INTEGER NOT NULL PRIMARY KEY, -- owner's ) COLLATE RTRIM
+            AutoIncrementSeed INTEGER NULL,
+            Code TEXT COLLATE NOCASE NULL /* apostrophe's ) COLLATE BINARY */
+            );
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);

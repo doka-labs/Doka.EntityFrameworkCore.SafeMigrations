@@ -30,25 +30,25 @@ public sealed class SqlServerSafeMigrationDmlStructuralDeferralIntegrationTests 
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.dml_source(Id int NOT NULL); "
-            + "CREATE TABLE dbo.dml_other(Value int NOT NULL,OtherValue int NOT NULL); "
-            + "CREATE INDEX IX_matching ON dbo.dml_other(Value); "
-            + (writeKind == "insert"
+            $"""
+            CREATE TABLE dbo.dml_source(Id int NOT NULL); CREATE TABLE dbo.dml_other(Value
+            int NOT NULL,OtherValue int NOT NULL); CREATE INDEX IX_matching ON dbo.dml_other(Value);
+            {(writeKind == "insert"
                 ? string.Empty
-                : "INSERT dbo.dml_source VALUES(1); "),
+                : "INSERT dbo.dml_source VALUES(1); ")}
+            """,
             cancellationToken: CancellationToken.None);
 
         if (triggerMode != "absent")
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE TRIGGER mutate_dml_metadata ON dbo.dml_source AFTER "
-                + writeKind.ToUpperInvariant()
-                + " AS EXEC sys.sp_executesql N'DROP INDEX IX_matching ON dbo.dml_other; "
-                + (different
+                $"""
+                CREATE TRIGGER mutate_dml_metadata ON dbo.dml_source AFTER {writeKind.ToUpperInvariant()}
+                AS EXEC sys.sp_executesql N'DROP INDEX IX_matching ON dbo.dml_other; {(different
                     ? "CREATE INDEX IX_matching ON dbo.dml_other(OtherValue);"
-                    : string.Empty)
-                + "';",
+                    : string.Empty)}';
+                """,
                 cancellationToken: CancellationToken.None);
 
             if (triggerMode == "disabled")
@@ -87,9 +87,13 @@ public sealed class SqlServerSafeMigrationDmlStructuralDeferralIntegrationTests 
 
         var correctKey = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes i JOIN sys.index_columns k ON k.object_id=i.object_id "
-            + "AND k.index_id=i.index_id JOIN sys.columns c ON c.object_id=k.object_id AND c.column_id=k.column_id "
-            + "WHERE i.object_id=OBJECT_ID(N'dbo.dml_other') AND i.name=N'IX_matching' AND c.name=N'Value';",
+            """
+            SELECT COUNT(*) FROM sys.indexes i
+            JOIN sys.index_columns k ON k.object_id=i.object_id
+            AND k.index_id=i.index_id JOIN sys.columns c ON c.object_id=k.object_id
+            AND c.column_id=k.column_id WHERE i.object_id=OBJECT_ID(N'dbo.dml_other')
+            AND i.name=N'IX_matching' AND c.name=N'Value';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -145,17 +149,21 @@ public sealed class SqlServerSafeMigrationDmlStructuralDeferralIntegrationTests 
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.dml_parent(Id int NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE dbo.dml_child(Id int NOT NULL PRIMARY KEY,ParentId int NOT NULL "
-            + "REFERENCES dbo.dml_parent(Id) ON DELETE CASCADE); "
-            + "CREATE TABLE dbo.dml_other(Value int NOT NULL); CREATE INDEX IX_matching ON dbo.dml_other(Value); "
-            + "INSERT dbo.dml_parent VALUES(1); INSERT dbo.dml_child VALUES(1,1);",
+            """
+            CREATE TABLE dbo.dml_parent(Id int NOT NULL PRIMARY KEY); CREATE TABLE dbo.dml_child(Id
+            int NOT NULL PRIMARY KEY,ParentId int NOT NULL REFERENCES dbo.dml_parent(Id)
+            ON DELETE CASCADE); CREATE TABLE dbo.dml_other(Value int NOT NULL); CREATE
+            INDEX IX_matching ON dbo.dml_other(Value); INSERT dbo.dml_parent VALUES(1);
+            INSERT dbo.dml_child VALUES(1,1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER cascade_metadata_mutation ON dbo.dml_child AFTER DELETE AS "
-            + "EXEC sys.sp_executesql N'DROP INDEX IX_matching ON dbo.dml_other;';",
+            """
+            CREATE TRIGGER cascade_metadata_mutation ON dbo.dml_child AFTER DELETE AS
+            EXEC sys.sp_executesql N'DROP INDEX IX_matching ON dbo.dml_other;';
+            """,
             cancellationToken: CancellationToken.None);
 
         if (disabled)
@@ -274,14 +282,19 @@ public sealed class SqlServerSafeMigrationDmlStructuralDeferralIntegrationTests 
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.backfill_source(Value int NULL); INSERT dbo.backfill_source VALUES(NULL); "
-            + "CREATE TABLE dbo.dml_other(Value int NOT NULL); CREATE INDEX IX_matching ON dbo.dml_other(Value);",
+            """
+            CREATE TABLE dbo.backfill_source(Value int NULL); INSERT dbo.backfill_source
+            VALUES(NULL); CREATE TABLE dbo.dml_other(Value int NOT NULL); CREATE INDEX
+            IX_matching ON dbo.dml_other(Value);
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER backfill_metadata_mutation ON dbo.backfill_source AFTER UPDATE AS "
-            + "EXEC sys.sp_executesql N'DROP INDEX IX_matching ON dbo.dml_other;';",
+            """
+            CREATE TRIGGER backfill_metadata_mutation ON dbo.backfill_source AFTER UPDATE
+            AS EXEC sys.sp_executesql N'DROP INDEX IX_matching ON dbo.dml_other;';
+            """,
             cancellationToken: CancellationToken.None);
 
         if (disabled)

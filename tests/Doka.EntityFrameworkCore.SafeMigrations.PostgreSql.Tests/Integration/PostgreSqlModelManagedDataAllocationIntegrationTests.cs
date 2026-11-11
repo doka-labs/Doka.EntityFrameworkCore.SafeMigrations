@@ -17,9 +17,10 @@ public sealed class PostgreSqlModelManagedDataAllocationIntegrationTests : Postg
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE large_model_managed_rows ("
-            + "id integer NOT NULL PRIMARY KEY, managed_value character varying(32) NOT NULL);"
-            + BuildPostgreSqlModelManagedInitialRows(),
+            $"""
+            CREATE TABLE large_model_managed_rows (id integer NOT NULL PRIMARY KEY,
+            managed_value character varying(32) NOT NULL);{BuildPostgreSqlModelManagedInitialRows()}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

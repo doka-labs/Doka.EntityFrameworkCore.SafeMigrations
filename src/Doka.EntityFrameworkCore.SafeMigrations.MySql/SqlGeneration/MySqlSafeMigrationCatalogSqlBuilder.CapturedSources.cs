@@ -69,14 +69,18 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             qualified = string.Join(
                 " AND ",
                 captured.Select(proof =>
-                    "(NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.KEYWORDS k WHERE k.WORD = "
-                    + Literal(proof.RootIdentifier)
-                    + $") OR ({proof.Marker}))"));
+                    $"""
+                    (NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.KEYWORDS k
+                    WHERE k.WORD = {Literal(proof.RootIdentifier)})
+                    OR ({proof.Marker}))
+                    """));
         }
         else
         {
-            qualified = "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.KEYWORDS k WHERE k.RESERVED = 1 AND "
-                + $"k.WORD IN ({string.Join(", ", roots.Select(Literal))}))";
+            qualified = $"""
+                NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.KEYWORDS k
+                WHERE k.RESERVED = 1 AND k.WORD IN ({string.Join(", ", roots.Select(Literal))}))
+                """;
         }
 
         var ordinaryFailure = plan.StateEvaluationGuardFailureExpression ?? "NULL";
@@ -94,9 +98,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             StateEvaluationGuardFailureExpression =
             $"CASE WHEN NOT ({qualified}) THEN 'unsupported' " + $"ELSE ({ordinaryFailure}) END",
             ClassificationCodeExpression =
-            $"CASE WHEN NOT ({qualified}) "
-            + "THEN 'captured_expression_identifier_keyword_unverified' "
-            + $"ELSE ({ordinaryCode}) END",
+            $"""
+            CASE WHEN NOT ({qualified})
+            THEN 'captured_expression_identifier_keyword_unverified'
+            ELSE ({ordinaryCode}) END
+            """,
             Postcondition = $"({qualified}) AND ({plan.Postcondition})",
             RepairPrecondition = $"({qualified}) AND ({plan.RepairPrecondition})",
             RequiresLazyStateEvaluation = true,

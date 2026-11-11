@@ -228,8 +228,11 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `persisted_defaults` (`id` int NOT NULL, `value` varchar(20) NULL) "
-            + "DEFAULT CHARSET=utf8mb4; INSERT INTO `persisted_defaults` VALUES (7, NULL);",
+            """
+            CREATE TABLE `persisted_defaults` (`id` int NOT NULL, `value` varchar(20)
+            NULL) DEFAULT CHARSET=utf8mb4; INSERT INTO `persisted_defaults` VALUES (7,
+            NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         var settings = new MySqlConnectionStringBuilder(connectionString)
@@ -288,8 +291,11 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `persisted_defaults` (`id` int NOT NULL, `value` text NULL) "
-            + "DEFAULT CHARSET=utf8mb4; INSERT INTO `persisted_defaults` VALUES (7, NULL);",
+            """
+            CREATE TABLE `persisted_defaults` (`id` int NOT NULL, `value` text NULL)
+            DEFAULT CHARSET=utf8mb4; INSERT INTO `persisted_defaults` VALUES (7,
+            NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         var settings = new MySqlConnectionStringBuilder(connectionString)
@@ -354,9 +360,11 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         var actualHex = Convert.ToHexString(Encoding.UTF8.GetBytes(actual));
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `persisted_defaults` (`id` int NOT NULL, "
-            + "`value` text COLLATE utf8mb4_unicode_ci NOT NULL "
-            + $"DEFAULT (CONVERT(0x{actualHex} USING utf8mb4)));",
+            $"""
+            CREATE TABLE `persisted_defaults` (`id` int NOT NULL, `value` text COLLATE
+            utf8mb4_unicode_ci NOT NULL DEFAULT (CONVERT(0x{actualHex}
+            USING utf8mb4)));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -643,9 +651,13 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
 
         var catalog = await ScalarStringAsync(
             connectionString,
-            "SELECT CONCAT(COALESCE(COLUMN_DEFAULT, '<null>'), '|', HEX(COALESCE(COLUMN_DEFAULT, '')), '|', EXTRA) "
-            + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'persisted_defaults' AND COLUMN_NAME = 'value';",
+            """
+            SELECT CONCAT(COALESCE(COLUMN_DEFAULT, '<null>'), '|', HEX(COALESCE(COLUMN_DEFAULT,
+            '')), '|', EXTRA) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'persisted_defaults'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -819,8 +831,11 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `persisted_defaults` (`id` int NOT NULL, `value` varbinary(8) NULL); "
-            + "INSERT INTO `persisted_defaults` VALUES (7, NULL);",
+            """
+            CREATE TABLE `persisted_defaults` (`id` int NOT NULL, `value` varbinary(8)
+            NULL); INSERT INTO `persisted_defaults` VALUES (7,
+            NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -897,9 +912,13 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
 
         var generated = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'persisted_defaults' AND COLUMN_NAME = 'value' "
-            + "AND FIND_IN_SET('DEFAULT_GENERATED', REPLACE(EXTRA, ' ', ',')) > 0;",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'persisted_defaults'
+            AND COLUMN_NAME = 'value' AND FIND_IN_SET('DEFAULT_GENERATED', REPLACE(EXTRA,
+            ' ', ',')) > 0;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -924,7 +943,10 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         var quotedColumn = QuoteIdentifier(column);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE {quotedTable} (`id` int NOT NULL, {quotedColumn} varbinary(8) NOT NULL DEFAULT 0x010003);",
+            $"""
+            CREATE TABLE {quotedTable} (`id` int NOT NULL, {quotedColumn}
+            varbinary(8) NOT NULL DEFAULT 0x010003);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1043,8 +1065,12 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
 
         var columns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'persisted_defaults' AND COLUMN_NAME = 'value' AND COLUMN_TYPE = 'varbinary(8)';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'persisted_defaults'
+            AND COLUMN_NAME = 'value' AND COLUMN_TYPE = 'varbinary(8)';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1089,8 +1115,10 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `persisted_defaults` (`id` int NOT NULL, "
-            + $"`value` varbinary(8) NOT NULL DEFAULT 0x{actualHex});",
+            $"""
+            CREATE TABLE `persisted_defaults` (`id` int NOT NULL, `value` varbinary(8)
+            NOT NULL DEFAULT 0x{actualHex});
+            """,
             cancellationToken: CancellationToken.None);
 
         var beforeCatalog = await ReadDefaultCatalogAsync(connectionString, cancellationToken: CancellationToken.None);
@@ -1155,9 +1183,12 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
 
         // WHY: The raw native expression reproduces persisted legacy metadata independently
         // of the corrected SafeMigrations renderer; the existing NULL row must not be repaired.
-        command.CommandText = "CREATE TABLE `persisted_defaults` (`id` int NOT NULL, "
-            + "`value` text NULL DEFAULT (_utf8mb4 X'4E0A6577')) DEFAULT CHARSET=utf8mb4; "
-            + "INSERT INTO `persisted_defaults` VALUES (7, NULL);";
+        command.CommandText = """
+        CREATE TABLE `persisted_defaults` (`id` int NOT NULL, `value` text NULL
+        DEFAULT (_utf8mb4 X'4E0A6577')) DEFAULT CHARSET=utf8mb4; INSERT INTO `persisted_defaults`
+        VALUES (7,
+        NULL);
+        """;
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -1173,8 +1204,13 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         CancellationToken cancellationToken
     ) => ScalarStringAsync(
         connectionString,
-        "SELECT CONCAT(HEX(COALESCE(COLUMN_DEFAULT, '')), '|', EXTRA) FROM INFORMATION_SCHEMA.COLUMNS "
-        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'persisted_defaults' AND COLUMN_NAME = 'value';",
+        """
+        SELECT CONCAT(HEX(COALESCE(COLUMN_DEFAULT, '')), '|', EXTRA)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'persisted_defaults'
+        AND COLUMN_NAME = 'value';
+        """,
         cancellationToken: cancellationToken);
 
     /// <summary>
@@ -1317,9 +1353,12 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
 
             // WHY: A warm table definition can hide corrupt expression serialization.
             // FLUSH targets only this test-owned table and forces the next open to reparse it.
-            command.CommandText = $"FLUSH TABLES {quotedTable}; "
-                + $"INSERT INTO {quotedTable} (`id`) VALUES ({index}); "
-                + $"SELECT HEX({quotedColumn}) FROM {quotedTable} WHERE `id` = {index};";
+            command.CommandText = $"""
+                FLUSH TABLES {quotedTable}; INSERT INTO {quotedTable}
+                (`id`) VALUES ({index}); SELECT HEX({quotedColumn})
+                FROM {quotedTable}
+                WHERE `id` = {index};
+                """;
 
             stored[index] = Convert.ToString(
                     await command.ExecuteScalarAsync(cancellationToken),
@@ -1352,8 +1391,11 @@ public sealed class MySqlPersistedStringDefaultIntegrationTests : MySqlIntegrati
         await using var command = connection.CreateCommand();
         command.CommandText = noBackslashEscapes
             ? "SET SESSION sql_mode = CONCAT_WS(',', @@SESSION.sql_mode, 'NO_BACKSLASH_ESCAPES');"
-            : "SET SESSION sql_mode = TRIM(BOTH ',' FROM REPLACE(CONCAT(',', @@SESSION.sql_mode, ','), "
-            + "',NO_BACKSLASH_ESCAPES,', ','));";
+            : """
+            SET SESSION sql_mode = TRIM(BOTH ','
+            FROM REPLACE(CONCAT(',', @@SESSION.sql_mode, ','), ',NO_BACKSLASH_ESCAPES,',
+            ','));
+            """;
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

@@ -78,22 +78,29 @@ public class SqlServerGuardGenerationBenchmarks
             Enumerable
                 .Range(0, 64)
                 .Select(index =>
-                    "EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[attribution_items]') "
-                    + "AND name = N'value_"
-                    + index.ToString(CultureInfo.InvariantCulture)
-                    + "' AND max_length = 256)"));
+                    $"""
+                    EXISTS (SELECT 1 FROM sys.columns
+                    WHERE object_id = OBJECT_ID(N'[dbo].[attribution_items]')
+                    AND name = N'value_{index.ToString(CultureInfo.InvariantCulture)}'
+                    AND max_length = 256)
+                    """));
 
         var postcondition = "CASE WHEN " + predicate + " THEN 1 ELSE 0 END";
         var catalogState = "CASE WHEN " + predicate + " THEN N'matching' ELSE N'different' END";
-        var rowState = "CASE WHEN "
-            + predicate
-            + " THEN N'matching' "
-            + "WHEN EXISTS (SELECT 1 FROM dbo.attribution_items WHERE value_0 IS NULL) "
-            + "THEN N'data_blocked' ELSE N'different' END";
+        var rowState = $"""
+            CASE WHEN {predicate}
+            THEN N'matching'
+            WHEN EXISTS (SELECT 1 FROM dbo.attribution_items
+            WHERE value_0 IS NULL) THEN N'data_blocked'
+            ELSE N'different' END
+            """;
 
-        var repair = "CASE WHEN "
-            + predicate
-            + " AND NOT EXISTS (SELECT 1 FROM dbo.attribution_items WHERE value_0 IS NULL) THEN 1 ELSE 0 END";
+        var repair = $"""
+            CASE WHEN {predicate}
+            AND NOT EXISTS (SELECT 1 FROM dbo.attribution_items
+            WHERE value_0 IS NULL) THEN 1
+            ELSE 0 END
+            """;
 
         var target = new ExpectedColumnDefinition("value_0", typeof(string), true, "nvarchar(128)", maxLength: 128);
         var intent = new EnsureColumnIntent("attribution_items", target, "dbo");

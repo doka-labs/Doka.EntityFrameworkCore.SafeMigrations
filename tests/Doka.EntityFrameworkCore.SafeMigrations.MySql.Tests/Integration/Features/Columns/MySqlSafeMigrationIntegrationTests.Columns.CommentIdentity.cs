@@ -26,11 +26,12 @@ public sealed class MySqlColumnsCommentIdentityIntegrationTests : MySqlSafeMigra
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `comment_items` (`key` int NOT NULL PRIMARY KEY, "
-            + "`required_value` int NULL COMMENT '"
-            + actualComment
-            + "') ENGINE=InnoDB; "
-            + "INSERT INTO `comment_items` (`key`, `required_value`) VALUES (1, 7);",
+            $"""
+            CREATE TABLE `comment_items` (`key` int NOT NULL PRIMARY KEY, `required_value`
+            int NULL COMMENT '{actualComment}') ENGINE=InnoDB; INSERT INTO
+            `comment_items` (`key`,
+            `required_value`) VALUES (1, 7);
+            """,
             cancellationToken: CancellationToken.None);
 
         var operation = new SafeMigrationOperation(
@@ -124,11 +125,12 @@ public sealed class MySqlColumnsCommentIdentityIntegrationTests : MySqlSafeMigra
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `strict_comment_items` (`key` int NOT NULL PRIMARY KEY, "
-            + "`required_value` int NULL COMMENT '"
-            + actualComment
-            + "') ENGINE=InnoDB; "
-            + "INSERT INTO `strict_comment_items` (`key`, `required_value`) VALUES (1, 7);",
+            $"""
+            CREATE TABLE `strict_comment_items` (`key` int NOT NULL PRIMARY KEY, `required_value`
+            int NULL COMMENT '{actualComment}') ENGINE=InnoDB; INSERT INTO
+            `strict_comment_items` (`key`,
+            `required_value`) VALUES (1, 7);
+            """,
             cancellationToken: CancellationToken.None);
 
         var definition = new ExpectedTableDefinition(
@@ -370,9 +372,13 @@ public sealed class MySqlColumnsCommentIdentityIntegrationTests : MySqlSafeMigra
         // WHY: MariaDB's catalog comparison masks case drift; the qualified
         // MySQL image already distinguishes it. Both forms inspect the same
         // row so exact fixtures cannot hide an engine-specific false match.
-        var predicate = " FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = "
-            + AtomicRequiredAddLiteral(table)
-            + " AND COLUMN_NAME = 'required_value' AND ";
+        var predicate = $"""
+             FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = {AtomicRequiredAddLiteral(table)}
+            AND COLUMN_NAME = 'required_value'
+            AND{"\u0020"}
+            """;
 
         var catalogMatches = await ScalarIntAsync(
             connectionString,

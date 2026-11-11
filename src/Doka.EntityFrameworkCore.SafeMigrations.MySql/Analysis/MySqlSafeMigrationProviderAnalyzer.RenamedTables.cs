@@ -208,10 +208,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                     valueBytes += Encoding.UTF8.GetByteCount(targets[offset + index]) + 32;
                 }
 
-                command.CommandText = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES "
-                    + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ("
-                    + string.Join(", ", parameters)
-                    + ");";
+                command.CommandText = $"""
+                    SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+                    WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME IN ({string.Join(", ", parameters)});
+                    """;
 
                 return new SafeMigrationCatalogProbeStatement(1, valueBytes, offset);
             },

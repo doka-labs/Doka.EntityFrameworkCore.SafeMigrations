@@ -19,11 +19,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             definition.Columns.Select(column =>
                 $"doka_dependent.{Delimited(column)} IS NOT NULL"));
 
-        var orphan = $"EXISTS (SELECT TOP (1) 1 FROM {QualifiedTable(definition.Table, definition.Schema)} "
-            + "doka_dependent LEFT JOIN "
-            + $"{QualifiedTable(definition.PrincipalTable, definition.PrincipalSchema)} doka_principal "
-            + $"ON {joins} WHERE {required} "
-            + $"AND doka_principal.{Delimited(definition.PrincipalColumns[0])} IS NULL)";
+        var orphan = $"""
+            EXISTS (SELECT TOP (1) 1 FROM {QualifiedTable(definition.Table, definition.Schema)} doka_dependent
+            LEFT JOIN {QualifiedTable(definition.PrincipalTable, definition.PrincipalSchema)} doka_principal ON {joins}
+            WHERE {required}
+            AND doka_principal.{Delimited(definition.PrincipalColumns[0])} IS NULL)
+            """;
 
         var preamble = SqlServerForeignKeySafety.BuildCatalogPreamble([definition], Literal);
         var topologyGuard = preamble is null
@@ -31,11 +32,16 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             : $"WHEN NOT ({SqlServerForeignKeySafety.GraphSafePredicate}) THEN N'prerequisite_missing' ";
 
         return Plan(
-                $"CASE WHEN NOT {TableExists(definition.Table, definition.Schema)} THEN N'prerequisite_missing' "
-                + $"WHEN {matching} THEN N'matching' WHEN {occupied} THEN N'different' "
-                + $"WHEN {orphan} THEN N'data_blocked' "
-                + topologyGuard
-                + "ELSE N'missing' END",
+                $"""
+                CASE WHEN NOT {TableExists(definition.Table, definition.Schema)}
+                THEN N'prerequisite_missing'
+                WHEN {matching}
+                THEN N'matching'
+                WHEN {occupied}
+                THEN N'different'
+                WHEN {orphan}
+                THEN N'data_blocked' {topologyGuard}ELSE N'missing' END
+                """,
                 Bit(matching)) with
             {
                 RequiresDelayedBinding = true,
@@ -70,32 +76,38 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             definition.Columns.Select((column, ordinal) =>
                 $"({ordinal + 1}, {Literal(column)}, {Literal(definition.PrincipalColumns[ordinal])})"));
 
-        var targetKey = "EXISTS (SELECT 1 FROM sys.indexes i "
-            + $"WHERE i.object_id = {principal} AND i.is_unique = 1 AND i.is_disabled = 0 "
-            + "AND i.is_hypothetical = 0 AND i.has_filter = 0 "
-            + "AND (SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id = i.object_id "
-            + $"AND ic.index_id = i.index_id AND ic.key_ordinal > 0) = {definition.Columns.Count} "
-            + $"AND NOT EXISTS (SELECT 1 FROM (VALUES {values}) expected(ordinal, dependent, principal) "
-            + "WHERE NOT EXISTS (SELECT 1 FROM sys.index_columns ic "
-            + "JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
-            + "WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id "
-            + "AND ic.key_ordinal = expected.ordinal AND c.name = expected.principal)))";
+        var targetKey = $"""
+            EXISTS (SELECT 1 FROM sys.indexes i
+            WHERE i.object_id = {principal}
+            AND i.is_unique = 1 AND i.is_disabled = 0
+            AND i.is_hypothetical = 0 AND i.has_filter = 0
+            AND (SELECT COUNT(*) FROM sys.index_columns ic
+            WHERE ic.object_id = i.object_id
+            AND ic.index_id = i.index_id AND ic.key_ordinal > 0) = {definition.Columns.Count}
+            AND NOT EXISTS (SELECT 1 FROM (VALUES {values}) expected(ordinal,
+            dependent, principal) WHERE NOT EXISTS (SELECT 1
+            FROM sys.index_columns ic JOIN sys.columns c ON c.object_id = ic.object_id
+            AND c.column_id = ic.column_id
+            WHERE ic.object_id = i.object_id
+            AND ic.index_id = i.index_id AND ic.key_ordinal = expected.ordinal
+            AND c.name = expected.principal)))
+            """;
 
-        var types = $"NOT EXISTS (SELECT 1 FROM (VALUES {values}) expected(ordinal, dependent, principal) "
-            + "JOIN sys.columns dc ON dc.object_id = "
-            + dependent
-            + " AND dc.name = expected.dependent "
-            + "JOIN sys.columns pc ON pc.object_id = "
-            + principal
-            + " AND pc.name = expected.principal "
-            + "WHERE dc.system_type_id <> pc.system_type_id "
-            + "OR dc.max_length <> pc.max_length OR dc.precision <> pc.precision "
-            + "OR dc.scale <> pc.scale OR ISNULL(dc.collation_name, N'') <> ISNULL(pc.collation_name, N'') "
-            + (definition.OnDelete == ReferentialAction.SetNull
+        var types = $"""
+            NOT EXISTS (SELECT 1 FROM (VALUES {values}) expected(ordinal,
+            dependent, principal) JOIN sys.columns dc ON dc.object_id = {dependent}
+            AND dc.name = expected.dependent
+            JOIN sys.columns pc ON pc.object_id = {principal}
+            AND pc.name = expected.principal
+            WHERE dc.system_type_id <> pc.system_type_id
+            OR dc.max_length <> pc.max_length
+            OR dc.precision <> pc.precision
+            OR dc.scale <> pc.scale OR ISNULL(dc.collation_name, N'') <> ISNULL(pc.collation_name,
+            N'') {(definition.OnDelete == ReferentialAction.SetNull
                 || definition.OnUpdate == ReferentialAction.SetNull
                     ? "OR dc.is_nullable = 0 "
-                    : string.Empty)
-            + ")";
+                    : string.Empty)})
+            """;
 
         // WHY: SQL Server requires a real candidate key and physically
         // compatible columns; row probes cannot make malformed FKs safe.
@@ -193,16 +205,22 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             : null;
 
         var targetKey = requireCandidateKey
-            ? "EXISTS (SELECT 1 FROM sys.indexes i "
-            + $"WHERE i.object_id = {principal} AND i.is_unique = 1 AND i.is_disabled = 0 "
-            + "AND i.is_hypothetical = 0 AND i.has_filter = 0 "
-            + "AND (SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id = i.object_id "
-            + $"AND ic.index_id = i.index_id AND ic.key_ordinal > 0) = {foreignKey.PrincipalColumns.Count} "
-            + $"AND NOT EXISTS (SELECT 1 FROM (VALUES {values}) expected(ordinal, principal) "
-            + "WHERE NOT EXISTS (SELECT 1 FROM sys.index_columns ic "
-            + "JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
-            + "WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id "
-            + "AND ic.key_ordinal = expected.ordinal AND c.name = expected.principal)))"
+            ? $"""
+            EXISTS (SELECT 1 FROM sys.indexes i
+            WHERE i.object_id = {principal}
+            AND i.is_unique = 1 AND i.is_disabled = 0
+            AND i.is_hypothetical = 0 AND i.has_filter = 0
+            AND (SELECT COUNT(*) FROM sys.index_columns ic
+            WHERE ic.object_id = i.object_id
+            AND ic.index_id = i.index_id AND ic.key_ordinal > 0) = {foreignKey.PrincipalColumns.Count}
+            AND NOT EXISTS (SELECT 1 FROM (VALUES {values}) expected(ordinal,
+            principal) WHERE NOT EXISTS (SELECT 1
+            FROM sys.index_columns ic JOIN sys.columns c ON c.object_id = ic.object_id
+            AND c.column_id = ic.column_id
+            WHERE ic.object_id = i.object_id
+            AND ic.index_id = i.index_id AND ic.key_ordinal = expected.ordinal
+            AND c.name = expected.principal)))
+            """
             : "1 = 1";
 
         var predicates = new List<string>(foreignKey.Columns.Count + 3)
@@ -259,11 +277,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             }
 
             predicates.Add(
-                "EXISTS (SELECT 1 FROM sys.columns c JOIN sys.types ty ON ty.user_type_id = c.user_type_id "
-                + $"WHERE c.object_id = {principal} AND c.name = {Literal(foreignKey.PrincipalColumns[ordinal])} "
-                + "AND "
-                + string.Join(" AND ", conditions)
-                + ")");
+                $"""
+                EXISTS (SELECT 1 FROM sys.columns c
+                JOIN sys.types ty ON ty.user_type_id = c.user_type_id
+                WHERE c.object_id = {principal}
+                AND c.name = {Literal(foreignKey.PrincipalColumns[ordinal])}
+                AND {string.Join(" AND ", conditions)})
+                """);
         }
 
         return string.Join(" AND ", predicates);
@@ -385,13 +405,19 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             else
             {
                 predicates.Add(
-                    "EXISTS (SELECT 1 FROM sys.columns dc JOIN sys.columns pc ON pc.object_id = "
-                    + $"{principal} AND pc.name = {Literal(foreignKey.PrincipalColumns[ordinal])} "
-                    + $"WHERE dc.object_id = {dependent} AND dc.name = {Literal(name)} "
-                    + "AND dc.is_computed = 0 "
-                    + "AND dc.system_type_id = pc.system_type_id AND dc.user_type_id = pc.user_type_id "
-                    + "AND dc.max_length = pc.max_length AND dc.precision = pc.precision AND dc.scale = pc.scale "
-                    + "AND ISNULL(dc.collation_name, N'') = ISNULL(pc.collation_name, N''))");
+                    $"""
+                    EXISTS (SELECT 1 FROM sys.columns dc
+                    JOIN sys.columns pc ON pc.object_id = {principal}
+                    AND pc.name = {Literal(foreignKey.PrincipalColumns[ordinal])}
+                    WHERE dc.object_id = {dependent}
+                    AND dc.name = {Literal(name)}
+                    AND dc.is_computed = 0 AND dc.system_type_id = pc.system_type_id
+                    AND dc.user_type_id = pc.user_type_id
+                    AND dc.max_length = pc.max_length
+                    AND dc.precision = pc.precision
+                    AND dc.scale = pc.scale AND ISNULL(dc.collation_name, N'') = ISNULL(pc.collation_name,
+                    N''))
+                    """);
             }
         }
 
@@ -424,8 +450,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var foreignKey = ForeignKeyExists(intent.Table, intent.Schema, intent.Name);
 
         return Plan(
-            $"CASE WHEN NOT {occupied} THEN N'missing' WHEN {foreignKey} "
-            + "THEN N'matching' ELSE N'different' END",
+            $"""
+            CASE WHEN NOT {occupied}
+            THEN N'missing'
+            WHEN {foreignKey}
+            THEN N'matching' ELSE N'different' END
+            """,
             Bit($"NOT {occupied}"));
     }
 
@@ -440,22 +470,29 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             definition.Columns.Select((column, index) =>
                 $"({index + 1}, {Literal(column)}, {Literal(definition.PrincipalColumns[index])})"));
 
-        return "EXISTS (SELECT 1 FROM sys.foreign_keys fk "
-            + $"WHERE fk.parent_object_id = {id} AND fk.name = {Literal(definition.Name)} "
-            + $"AND fk.referenced_object_id = {principal} AND fk.is_disabled = 0 "
-            + "AND fk.is_not_trusted = 0 AND fk.is_not_for_replication = 0 "
-            + $"AND fk.delete_referential_action_desc = {Literal(ReferentialActionName(definition.OnDelete))} "
-            + $"AND fk.update_referential_action_desc = {Literal(ReferentialActionName(definition.OnUpdate))} "
-            + "AND (SELECT COUNT(*) FROM sys.foreign_key_columns fkc "
-            + $"WHERE fkc.constraint_object_id = fk.object_id) = {definition.Columns.Count} "
-            + $"AND NOT EXISTS (SELECT 1 FROM (VALUES {values}) expected(ordinal, dependent, principal) "
-            + "WHERE NOT EXISTS (SELECT 1 FROM sys.foreign_key_columns fkc "
-            + "JOIN sys.columns dc ON dc.object_id = fkc.parent_object_id AND dc.column_id = fkc.parent_column_id "
-            + "JOIN sys.columns pc ON pc.object_id = fkc.referenced_object_id "
-            + "AND pc.column_id = fkc.referenced_column_id "
-            + "WHERE fkc.constraint_object_id = fk.object_id "
-            + "AND fkc.constraint_column_id = expected.ordinal "
-            + "AND dc.name = expected.dependent AND pc.name = expected.principal)))";
+        return $"""
+            EXISTS (SELECT 1 FROM sys.foreign_keys fk
+            WHERE fk.parent_object_id = {id}
+            AND fk.name = {Literal(definition.Name)}
+            AND fk.referenced_object_id = {principal}
+            AND fk.is_disabled = 0 AND fk.is_not_trusted = 0
+            AND fk.is_not_for_replication = 0
+            AND fk.delete_referential_action_desc = {Literal(ReferentialActionName(definition.OnDelete))}
+            AND fk.update_referential_action_desc = {Literal(ReferentialActionName(definition.OnUpdate))}
+            AND (SELECT COUNT(*) FROM sys.foreign_key_columns fkc
+            WHERE fkc.constraint_object_id = fk.object_id) = {definition.Columns.Count}
+            AND NOT EXISTS (SELECT 1 FROM (VALUES {values}) expected(ordinal,
+            dependent, principal) WHERE NOT EXISTS (SELECT 1
+            FROM sys.foreign_key_columns fkc
+            JOIN sys.columns dc ON dc.object_id = fkc.parent_object_id
+            AND dc.column_id = fkc.parent_column_id
+            JOIN sys.columns pc ON pc.object_id = fkc.referenced_object_id
+            AND pc.column_id = fkc.referenced_column_id
+            WHERE fkc.constraint_object_id = fk.object_id
+            AND fkc.constraint_column_id = expected.ordinal
+            AND dc.name = expected.dependent
+            AND pc.name = expected.principal)))
+            """;
     }
 
     private static string ReferentialActionName(
@@ -473,6 +510,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string table,
         string? schema,
         string name
-    ) => $"EXISTS (SELECT 1 FROM sys.foreign_keys fk WHERE fk.parent_object_id = {TableId(table, schema)} "
-        + $"AND fk.name = {Literal(name)})";
+    ) => $"""
+        EXISTS (SELECT 1 FROM sys.foreign_keys fk
+        WHERE fk.parent_object_id = {TableId(table, schema)}
+        AND fk.name = {Literal(name)})
+        """;
 }

@@ -63,7 +63,7 @@ internal static class SqliteSqlNormalizer
     }
 
     /// <summary>Produces the canonical comparison form of a SQLite expression.</summary>
-    public static string Normalize(
+    private static string Normalize(
         string value
     ) => Normalize(value, preserveDoubleQuotedValues: false);
 

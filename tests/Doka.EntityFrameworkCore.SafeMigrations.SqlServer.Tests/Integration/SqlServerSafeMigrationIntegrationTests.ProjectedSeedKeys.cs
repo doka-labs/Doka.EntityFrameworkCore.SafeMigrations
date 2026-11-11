@@ -214,8 +214,12 @@ public sealed class SqlServerSafeMigrationProjectedSeedKeysIntegrationTests : Sq
 
         var indexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.authored_seed_keys') "
-            + "AND name = N'IX_authored_seed_keys_Code' AND is_unique = 1;",
+            """
+            SELECT COUNT(*) FROM sys.indexes
+            WHERE object_id = OBJECT_ID(N'dbo.authored_seed_keys')
+            AND name = N'IX_authored_seed_keys_Code'
+            AND is_unique = 1;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -303,8 +307,11 @@ public sealed class SqlServerSafeMigrationProjectedSeedKeysIntegrationTests : Sq
 
         var indexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.authored_seed_keys') "
-            + "AND name = N'IX_authored_seed_keys_Code';",
+            """
+            SELECT COUNT(*) FROM sys.indexes
+            WHERE object_id = OBJECT_ID(N'dbo.authored_seed_keys')
+            AND name = N'IX_authored_seed_keys_Code';
+            """,
             cancellationToken: CancellationToken.None);
 
         var origin = report.Assessments[2].DeferredOrigin;

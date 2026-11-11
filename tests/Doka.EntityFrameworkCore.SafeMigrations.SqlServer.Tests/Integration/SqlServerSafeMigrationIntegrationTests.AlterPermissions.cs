@@ -26,15 +26,14 @@ public sealed class SqlServerSafeMigrationAlterPermissionsIntegrationTests : Sql
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.text_read_values(Caption nvarchar("
-            + length.ToString(CultureInfo.InvariantCulture)
-            + ") NULL); "
-            + "INSERT dbo.text_read_values VALUES(N'short'); "
-            + "CREATE USER text_alter_writer WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; "
-            + "GRANT VIEW DEFINITION TO text_alter_writer; "
-            + "GRANT SELECT ON OBJECT::sys.sql_expression_dependencies TO text_alter_writer; "
-            + "GRANT ALTER,UPDATE ON OBJECT::dbo.text_read_values TO text_alter_writer; "
-            + "DENY SELECT ON OBJECT::dbo.text_read_values TO text_alter_writer;",
+            $"""
+            CREATE TABLE dbo.text_read_values(Caption nvarchar({length.ToString(CultureInfo.InvariantCulture)})
+            NULL); INSERT dbo.text_read_values VALUES(N'short'); CREATE USER text_alter_writer
+            WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; GRANT VIEW DEFINITION TO text_alter_writer;
+            GRANT SELECT ON OBJECT::sys.sql_expression_dependencies TO text_alter_writer;
+            GRANT ALTER,UPDATE ON OBJECT::dbo.text_read_values TO text_alter_writer;
+            DENY SELECT ON OBJECT::dbo.text_read_values TO text_alter_writer;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -121,14 +120,13 @@ public sealed class SqlServerSafeMigrationAlterPermissionsIntegrationTests : Sql
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.text_permission_values(Caption nvarchar("
-            + length.ToString(CultureInfo.InvariantCulture)
-            + ") NULL); "
-            + "INSERT dbo.text_permission_values VALUES(N'short'); "
-            + "CREATE USER text_alter_reader WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; "
-            + "GRANT VIEW DEFINITION TO text_alter_reader; "
-            + "GRANT SELECT ON OBJECT::sys.sql_expression_dependencies TO text_alter_reader; "
-            + "GRANT ALTER,SELECT ON OBJECT::dbo.text_permission_values TO text_alter_reader;",
+            $"""
+            CREATE TABLE dbo.text_permission_values(Caption nvarchar({length.ToString(CultureInfo.InvariantCulture)})
+            NULL); INSERT dbo.text_permission_values VALUES(N'short'); CREATE USER text_alter_reader
+            WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; GRANT VIEW DEFINITION TO text_alter_reader;
+            GRANT SELECT ON OBJECT::sys.sql_expression_dependencies TO text_alter_reader;
+            GRANT ALTER,SELECT ON OBJECT::dbo.text_permission_values TO text_alter_reader;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

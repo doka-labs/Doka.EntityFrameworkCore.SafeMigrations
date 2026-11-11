@@ -136,7 +136,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             : BuildPrerequisiteExpression(operation.Intent);
     }
 
-    public string BuildPrerequisiteExpression(
+    private string BuildPrerequisiteExpression(
         SafeMigrationIntent intent
     )
     {
@@ -212,12 +212,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             return tableExists;
         }
 
-        return $"({tableExists}) AND ((SELECT COUNT(DISTINCT a.attname) "
-            + "FROM pg_catalog.pg_attribute a "
-            + $"WHERE a.attrelid = {QualifiedRegclass(table, schema)} "
-            + "AND a.attnum > 0 AND NOT a.attisdropped "
-            + $"AND a.attname IN ({string.Join(", ", columns.Select(Literal))})) "
-            + $"= {columns.Count.ToString(CultureInfo.InvariantCulture)})";
+        return $"""
+            ({tableExists}) AND ((SELECT COUNT(DISTINCT a.attname) FROM pg_catalog.pg_attribute a
+            WHERE a.attrelid = {QualifiedRegclass(table, schema)} AND a.attnum > 0 AND NOT a.attisdropped
+            AND a.attname IN ({string.Join(", ", columns.Select(Literal))}))
+            = {columns.Count.ToString(CultureInfo.InvariantCulture)})
+            """;
     }
 
     /// <summary>Returns a catalog-independent unsupported contract without querying type or object presence.</summary>
@@ -245,10 +245,6 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ?? GetUnsupportedIndexFeature(intent)
             ?? GetUnsupportedGeneratedCaseCheckFeature(intent);
     }
-
-    public string RenderExpression(
-        SafeMigrationSqlExpression expression
-    ) => _expressionRenderer.Render(expression);
 
     private string? GetUnsupportedSqlExpressionFeature(
         SafeMigrationIntent intent
@@ -354,9 +350,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string exactMatch,
         string expectedName,
         string semanticCandidates
-    ) => $"CASE WHEN ({exactMatch}) THEN {expectedName} ELSE "
-        + "(SELECT CASE WHEN COUNT(*) = 1 THEN MIN(candidate_name) ELSE NULL END "
-        + $"FROM ({semanticCandidates}) AS doka_sm_semantic_candidates) END";
+    ) => $"""
+        CASE WHEN ({exactMatch})
+        THEN {expectedName}
+        ELSE (SELECT CASE WHEN COUNT(*) = 1
+        THEN MIN(candidate_name) ELSE NULL END
+        FROM ({semanticCandidates}) AS doka_sm_semantic_candidates) END
+        """;
 
     private static PostgreSqlSafeMigrationRuntimePlan Unsupported(
         string code

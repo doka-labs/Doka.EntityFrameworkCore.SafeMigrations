@@ -100,21 +100,22 @@ public sealed partial class MySqlTablesCatalogSnapshotIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `verdict_parent` (`id` int NOT NULL,"
-            + " CONSTRAINT `pk_verdict_parent` PRIMARY KEY (`id`));"
-            + " CREATE TABLE `verdict_match` (`id` int NOT NULL, `code` int NOT NULL,"
-            + " `fk_id` int NOT NULL,"
-            + " CONSTRAINT `pk_verdict_match` PRIMARY KEY (`id`),"
-            + " CONSTRAINT `uq_verdict_match` UNIQUE (`code`),"
-            + " CONSTRAINT `ck_verdict_match` CHECK (`code` >= 0),"
-            + " INDEX `ix_verdict_match` (`code`),"
-            + " CONSTRAINT `fk_verdict_match` FOREIGN KEY (`fk_id`)"
-            + " REFERENCES `verdict_parent` (`id`));"
-            + " CREATE TABLE `verdict_renamed` (`id` int NOT NULL, `other` int NOT NULL);"
-            + " CREATE TABLE `verdict_missing` (`id` int NOT NULL);"
-            + " CREATE TABLE `verdict_surplus` (`id` int NOT NULL, `code` int NOT NULL,"
-            + " `extra` int NULL);"
-            + " CREATE TABLE `snapshot_padding` (`id` int NOT NULL, `code` int NOT NULL);",
+            """
+            CREATE TABLE `verdict_parent` (`id` int NOT NULL, CONSTRAINT `pk_verdict_parent`
+            PRIMARY KEY (`id`)); CREATE TABLE `verdict_match` (`id` int NOT NULL,
+            `code` int NOT NULL, `fk_id` int NOT NULL, CONSTRAINT `pk_verdict_match`
+            PRIMARY KEY (`id`),
+            CONSTRAINT `uq_verdict_match` UNIQUE (`code`), CONSTRAINT `ck_verdict_match`
+            CHECK (`code` >= 0),
+            INDEX `ix_verdict_match` (`code`), CONSTRAINT `fk_verdict_match` FOREIGN
+            KEY (`fk_id`) REFERENCES `verdict_parent` (`id`)); CREATE TABLE `verdict_renamed`
+            (`id` int NOT NULL,
+            `other` int NOT NULL); CREATE TABLE `verdict_missing` (`id` int NOT NULL);
+            CREATE TABLE `verdict_surplus` (`id` int NOT NULL,
+            `code` int NOT NULL, `extra` int NULL); CREATE TABLE `snapshot_padding`
+            (`id` int NOT NULL,
+            `code` int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         var database = await ScalarStringAsync(
@@ -166,8 +167,11 @@ public sealed partial class MySqlTablesCatalogSnapshotIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `snapshot_padding` (`id` int NOT NULL, `code` int NOT NULL);"
-            + " CREATE TABLE `snapshot_neighbor` (`id` int NOT NULL, `other` int NOT NULL);",
+            """
+            CREATE TABLE `snapshot_padding` (`id` int NOT NULL, `code` int NOT NULL);
+            CREATE TABLE `snapshot_neighbor` (`id` int NOT NULL,
+            `other` int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         var database = new MySqlConnectionStringBuilder(connectionString).Database;

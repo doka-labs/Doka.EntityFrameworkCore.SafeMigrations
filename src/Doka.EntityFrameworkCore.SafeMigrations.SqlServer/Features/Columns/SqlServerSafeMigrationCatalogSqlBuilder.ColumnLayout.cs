@@ -2,38 +2,50 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 {
-    private const string ColumnLayoutScalarFields = "SELECT COUNT_BIG(*) AS column_count, "
-        + "COALESCE(SUM(CASE WHEN (c.is_computed=1 AND computed.is_persisted=0) "
-        + "OR ty.name IN (N'bit', N'varchar', N'nvarchar', N'varbinary') "
-        + "THEN CONVERT(bigint,0) ELSE CONVERT(bigint,c.max_length) END),0) AS fixed_bytes, "
-        + "COALESCE(SUM(CASE WHEN ty.name=N'bit' AND (c.is_computed=0 OR computed.is_persisted=1) "
-        + "THEN 1 ELSE 0 END),0) AS bit_columns, ";
+    private const string ColumnLayoutScalarFields = $"""
+        SELECT COUNT_BIG(*) AS column_count, COALESCE(SUM(CASE WHEN (c.is_computed=1
+        AND computed.is_persisted=0) OR ty.name IN (N'bit', N'varchar', N'nvarchar',
+        N'varbinary') THEN CONVERT(bigint,0)
+        ELSE CONVERT(bigint,c.max_length) END),0) AS fixed_bytes, COALESCE(SUM(CASE WHEN
+        ty.name=N'bit'
+        AND (c.is_computed=0 OR computed.is_persisted=1)
+        THEN 1 ELSE 0 END),0) AS bit_columns,{"\u0020"}
+        """;
 
-    private const string ColumnLayoutRowFields = "COALESCE(SUM(CASE "
-        + "WHEN ty.name IN (N'varchar',N'nvarchar',N'varbinary') "
-        + "AND (c.is_computed=0 OR computed.is_persisted=1) THEN 1 ELSE 0 END),0) AS variable_columns, "
-        + "COALESCE(SUM(CASE WHEN ty.name IN (N'varchar',N'nvarchar',N'varbinary') "
-        + "AND clustered_key.column_id IS NOT NULL AND c.max_length>24 "
-        + "THEN CONVERT(bigint,c.max_length-24) ELSE CONVERT(bigint,0) END),0) AS clustered_variable_extra, ";
+    private const string ColumnLayoutRowFields = """
+        COALESCE(SUM(CASE
+        WHEN ty.name IN (N'varchar',N'nvarchar',N'varbinary')
+        AND (c.is_computed=0 OR computed.is_persisted=1) THEN 1 ELSE 0 END),0) AS variable_columns,
+        COALESCE(SUM(CASE WHEN ty.name IN (N'varchar',N'nvarchar',N'varbinary')
+        AND clustered_key.column_id IS NOT NULL AND c.max_length>24
+        THEN CONVERT(bigint,c.max_length-24) ELSE CONVERT(bigint,0) END),0) AS clustered_variable_extra,
+        """
+        + " ";
 
-    private const string ColumnLayoutScalarSource = "COALESCE(SUM(CASE "
-        + "WHEN ty.is_user_defined=0 AND ty.is_assembly_type=0 "
-        + "AND (c.is_computed=0 OR computed.column_id IS NOT NULL) "
-        + "AND c.is_sparse=0 AND c.is_column_set=0 AND c.is_filestream=0 "
-        + "AND c.is_hidden=0 AND c.generated_always_type=0 AND c.is_rowguidcol=0 "
-        + "AND ty.name IN (N'bigint',N'binary',N'bit',N'char',N'date',N'datetime',N'datetime2', "
-        + "N'datetimeoffset',N'decimal',N'float',N'int',N'money',N'nchar',N'numeric',N'nvarchar', "
-        + "N'real',N'smalldatetime',N'smallint',N'smallmoney',N'time',N'timestamp',N'tinyint', "
-        + "N'uniqueidentifier',N'varbinary',N'varchar') THEN 0 ELSE 1 END),0) AS unknown_columns "
-        + "FROM sys.columns AS c JOIN sys.types AS ty ON ty.user_type_id=c.user_type_id "
-        + "LEFT JOIN sys.computed_columns AS computed ON computed.object_id=c.object_id "
-        + "AND computed.column_id=c.column_id ";
+    private const string ColumnLayoutScalarSource = """
+        COALESCE(SUM(CASE
+        WHEN ty.is_user_defined=0 AND ty.is_assembly_type=0
+        AND (c.is_computed=0 OR computed.column_id IS NOT NULL)
+        AND c.is_sparse=0 AND c.is_column_set=0 AND c.is_filestream=0
+        AND c.is_hidden=0 AND c.generated_always_type=0 AND c.is_rowguidcol=0
+        AND ty.name IN (N'bigint',N'binary',N'bit',N'char',N'date',N'datetime',N'datetime2',
+        N'datetimeoffset',N'decimal',N'float',N'int',N'money',N'nchar',N'numeric',N'nvarchar',
+        N'real',N'smalldatetime',N'smallint',N'smallmoney',N'time',N'timestamp',N'tinyint',
+        N'uniqueidentifier',N'varbinary',N'varchar') THEN 0 ELSE 1 END),0) AS unknown_columns
+        FROM sys.columns AS c JOIN sys.types AS ty ON ty.user_type_id=c.user_type_id
+        LEFT JOIN sys.computed_columns AS computed ON computed.object_id=c.object_id
+        AND computed.column_id=c.column_id
+        """
+        + " ";
 
-    private const string ColumnLayoutClusteredJoin = "LEFT JOIN "
-        + "(SELECT ic.object_id,ic.column_id FROM sys.index_columns AS ic "
-        + "JOIN sys.indexes AS i ON i.object_id=ic.object_id AND i.index_id=ic.index_id "
-        + "WHERE i.type=1 AND ic.key_ordinal>0) AS clustered_key "
-        + "ON clustered_key.object_id=c.object_id AND clustered_key.column_id=c.column_id ";
+    private const string ColumnLayoutClusteredJoin = """
+        LEFT JOIN
+        (SELECT ic.object_id,ic.column_id FROM sys.index_columns AS ic
+        JOIN sys.indexes AS i ON i.object_id=ic.object_id AND i.index_id=ic.index_id
+        WHERE i.type=1 AND ic.key_ordinal>0) AS clustered_key
+        ON clustered_key.object_id=c.object_id AND clustered_key.column_id=c.column_id
+        """
+        + " ";
 
     private const string ColumnLayoutSchemaQuery = ColumnLayoutScalarFields
         + ColumnLayoutScalarSource
@@ -192,13 +204,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // cannot overflow, so their declared width replaces the root allowance.
         // Without that conservative upper-bound proof, require no rows.
 
-        return "EXISTS(SELECT 1 FROM ("
-            + BuildColumnLayoutCatalogQuery(TableId(intent.Table, intent.Schema))
-            + ") AS layout WHERE "
-            + $"layout.variable_columns + {variables} > 0 AND layout.fixed_bytes + {bytes} "
-            + $"+ (layout.bit_columns + {bits} + 7) / 8 + 6 + (layout.column_count + 8) / 8 "
-            + $"+ 2 + 26 * (layout.variable_columns + {variables}) "
-            + "+ layout.clustered_variable_extra > 8060)";
+        return $"""
+            EXISTS(SELECT 1 FROM ({BuildColumnLayoutCatalogQuery(TableId(intent.Table, intent.Schema))}) AS layout
+            WHERE layout.variable_columns + {variables} > 0
+            AND layout.fixed_bytes + {bytes} + (layout.bit_columns + {bits} + 7) / 8 + 6
+            + (layout.column_count + 8) / 8 + 2 + 26 * (layout.variable_columns + {variables})
+            + layout.clustered_variable_extra > 8060)
+            """;
     }
 
     /// <summary>

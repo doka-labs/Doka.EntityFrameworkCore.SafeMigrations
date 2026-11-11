@@ -164,10 +164,11 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
                 : "(" + string.Join(" AND ", postExecutionGuards) + ")",
             ObjectIdentityGuardFailureCodeExpression = rejected.Count == 0
                 ? plan.ObjectIdentityGuardFailureCodeExpression
-                : "CASE WHEN NOT COALESCE(("
-                + rejectedGuard
-                + "), FALSE) "
-                + "THEN 'schema_alias_transition_invalid' ELSE 'schema_search_path_mismatch' END",
+                : $"""
+                CASE WHEN NOT COALESCE(({rejectedGuard}), FALSE)
+                THEN 'schema_alias_transition_invalid'
+                ELSE 'schema_search_path_mismatch' END
+                """,
         };
     }
 

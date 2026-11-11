@@ -91,11 +91,12 @@ public sealed class
         {
             nativeError = await Assert.ThrowsAsync<PostgresException>(() => ExecuteSqlAsync(
                 connectionString,
-                $"ALTER TABLE mixed_columns ADD CONSTRAINT native_probe CHECK ((id COLLATE \"{collation}\") "
-                + (text
+                $"""
+                ALTER TABLE mixed_columns ADD CONSTRAINT native_probe CHECK ((id COLLATE
+                "{collation}") {(text
                     ? ">= ''"
-                    : ">= 0")
-                + ");",
+                    : ">= 0")});
+                """,
                 cancellationToken: CancellationToken.None));
         }
 

@@ -8,26 +8,32 @@ public sealed class MySqlRuntimeCommandInterceptorTests
 
     private const string RuntimeMarker = "/*doka_sm_runtime:7:0123456789abcdef0123456789abcdef*/";
 
-    private const string AssertionSetup = "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`;"
-        + "CREATE TEMPORARY TABLE `__doka_sm_assert` (`different_code` VARCHAR(40)) "
-        + "CHARACTER SET ascii COLLATE ascii_bin;";
+    private const string AssertionSetup = """
+        DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`;CREATE TEMPORARY TABLE `__doka_sm_assert`
+        (`different_code` VARCHAR(40)) CHARACTER SET ascii COLLATE ascii_bin;
+        """;
 
     private const string Prerequisite = "SET @doka_sm_prerequisite_ok = COALESCE((TRUE), FALSE);";
 
-    private const string InitialState = "SET @doka_sm_state = CASE WHEN NOT @doka_sm_prerequisite_ok "
-        + "THEN 'prerequisite_missing' ELSE NULL END, @doka_sm_repair_ok = FALSE;";
+    private const string InitialState = """
+        SET @doka_sm_state = CASE WHEN NOT @doka_sm_prerequisite_ok
+        THEN 'prerequisite_missing' ELSE NULL END, @doka_sm_repair_ok = FALSE;
+        """;
 
     private const string ActionAssignment = "SET @doka_sm_action = CASE @doka_sm_state "
         + "WHEN 'missing' THEN 'apply' ELSE 'skip' END;";
 
-    private const string CorrelatedActionAssignment = "SET @doka_sm_action = CASE @doka_sm_state "
-        + "WHEN 'missing' THEN 'apply' ELSE 'skip' END, "
-        + "@doka_sm_diag = CONCAT('0123456789abcdef0123456789abcdef-', 7);";
+    private const string CorrelatedActionAssignment = """
+        SET @doka_sm_action = CASE @doka_sm_state
+        WHEN 'missing' THEN 'apply' ELSE 'skip' END, @doka_sm_diag = CONCAT('0123456789abcdef0123456789abcdef-',
+        7);
+        """;
 
-    private const string DecisionAssertion = "INSERT INTO `__doka_sm_assert` "
-        + "SELECT @doka_sm_diag, @doka_sm_diag, @doka_sm_diag, @doka_sm_diag, @doka_sm_diag "
-        + "UNION ALL SELECT @doka_sm_diag, 2, 2, 2, 2 "
-        + "WHERE @doka_sm_action = 'reject_different';";
+    private const string DecisionAssertion = """
+        INSERT INTO `__doka_sm_assert` SELECT @doka_sm_diag, @doka_sm_diag, @doka_sm_diag,
+        @doka_sm_diag, @doka_sm_diag UNION ALL SELECT @doka_sm_diag, 2, 2, 2,
+        2 WHERE @doka_sm_action = 'reject_different';
+        """;
 
     private const string UnknownSetup = "SET @doka_sm_future_probe = FALSE;";
 
@@ -36,14 +42,19 @@ public sealed class MySqlRuntimeCommandInterceptorTests
     /// <param name="expectedCategory">The command's one low-cardinality category.</param>
     [Theory]
     [InlineData(AssertionSetup, "assertion_setup")]
+    [InlineData("CREATE TEMPORARY\nTABLE `__doka_sm_assert` (`value` int);", "other_setup")]
     [InlineData(Prerequisite, "prerequisite_qualification")]
     [InlineData(InitialState, "prerequisite_qualification")]
     [InlineData(
         "SET @doka_sm_state = CASE WHEN COALESCE((TRUE), FALSE) THEN NULL ELSE 'unsupported' END;",
         "prerequisite_qualification")]
     [InlineData(
-        "SET @doka_sm_state = CASE WHEN @doka_sm_state IS NOT NULL THEN @doka_sm_state "
-        + "WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing' ELSE NULL END;",
+        """
+        SET @doka_sm_state = CASE WHEN @doka_sm_state IS NOT NULL
+        THEN @doka_sm_state
+        WHEN NOT @doka_sm_prerequisite_ok
+        THEN 'prerequisite_missing' ELSE NULL END;
+        """,
         "prerequisite_qualification")]
     [InlineData(
         "SET @doka_sm_transition_eligible = CASE WHEN @doka_sm_state IS NULL THEN TRUE ELSE FALSE END;",
@@ -52,9 +63,11 @@ public sealed class MySqlRuntimeCommandInterceptorTests
         "SET @doka_sm_data_probe_required = FALSE, @doka_sm_data_blocked = FALSE;",
         "column_data_probe")]
     [InlineData(
-        "SET @doka_sm_sql = CASE WHEN @doka_sm_data_probe_required THEN CONVERT(0x53454C4543542031 "
-        + "USING utf8mb4) ELSE 'DO 0' END;"
-        + PreparedEvaluation,
+        $"""
+        SET @doka_sm_sql = CASE WHEN @doka_sm_data_probe_required
+        THEN CONVERT(0x53454C4543542031 USING utf8mb4)
+        ELSE 'DO 0' END;{PreparedEvaluation}
+        """,
         "column_data_probe")]
     [InlineData(
         "SET @doka_sm_state = ('matching'), @doka_sm_repair_ok = (FALSE);",
@@ -64,15 +77,22 @@ public sealed class MySqlRuntimeCommandInterceptorTests
         + "THEN COALESCE((TRUE), FALSE) ELSE FALSE END;",
         "state_classification_repair")]
     [InlineData(
-        "SET @doka_sm_state = CASE WHEN @doka_sm_state IS NULL THEN CASE WHEN TRUE "
-        + "THEN 'matching' ELSE NULL END ELSE @doka_sm_state END;",
+        """
+        SET @doka_sm_state = CASE WHEN @doka_sm_state IS NULL
+        THEN CASE WHEN TRUE THEN 'matching'
+        ELSE NULL END ELSE @doka_sm_state END;
+        """,
         "state_classification_repair")]
     [InlineData(ActionAssignment, "decision_prepare")]
     [InlineData(CorrelatedActionAssignment, "decision_prepare")]
     [InlineData(DecisionAssertion, "decision_prepare")]
     [InlineData(
-        "SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' THEN CONVERT(0x444F2030 "
-        + "USING utf8mb4) ELSE 'DO 0' END;PREPARE doka_sm_statement FROM @doka_sm_sql;",
+        """
+        SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply'
+        THEN CONVERT(0x444F2030 USING utf8mb4)
+        ELSE 'DO 0' END;PREPARE doka_sm_statement
+        FROM @doka_sm_sql;
+        """,
         "decision_prepare")]
     [InlineData("PREPARE doka_sm_statement FROM @doka_sm_sql;", "decision_prepare")]
     [InlineData(UnknownSetup, "other_setup")]
@@ -112,6 +132,10 @@ public sealed class MySqlRuntimeCommandInterceptorTests
         "SELECT ('matching'), COALESCE((FALSE), FALSE) INTO @doka_sm_state, @doka_sm_repair_ok",
         "state_classification_repair")]
     [InlineData("SELECT ('matching') INTO @doka_sm_state", "state_classification_repair")]
+    [InlineData("SELECT 1", "other_setup")]
+    [InlineData(
+        "SELECT CASE WHEN COALESCE((TRUE), FALSE) THEN 'data_blocked' ELSE NULL END INTO @doka_sm_state",
+        "other_setup")]
     public void Classify_HexAssignmentsUseOnlyKnownPurposePrefixes(
         string statement,
         string expectedCategory
@@ -119,10 +143,12 @@ public sealed class MySqlRuntimeCommandInterceptorTests
     {
         // Arrange
         var hexadecimal = Convert.ToHexString(Encoding.UTF8.GetBytes(statement));
-        var sql = "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x"
-            + hexadecimal
-            + " USING utf8mb4) ELSE 'DO 0' END;"
-            + PreparedEvaluation;
+
+        // WHY: These leading bytes are the handler's classification protocol, not arbitrary SQL whitespace.
+        var sql = $"""
+            SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x{hexadecimal} USING utf8mb4)
+            ELSE 'DO 0' END;{PreparedEvaluation}
+            """;
 
         // Act
         var category = MySqlRuntimeCommandInterceptor.Classify(sql);
@@ -136,12 +162,14 @@ public sealed class MySqlRuntimeCommandInterceptorTests
     public void Classify_NullabilityEligibilityAndPreparedGroupShareOnePurpose()
     {
         // Arrange
-        const string sql = "SET @doka_sm_column_repair_eligible = CASE WHEN @doka_sm_state IS NULL "
-            + "THEN COALESCE((TRUE), FALSE) ELSE FALSE END, @doka_sm_nullability_blocked = FALSE;"
-            + "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CASE WHEN COALESCE((TRUE) "
-            + "AND @doka_sm_column_repair_eligible, FALSE) THEN CONVERT(0x53454C4543542031 USING utf8mb4) "
-            + "ELSE 'DO 0' END ELSE 'DO 0' END;"
-            + PreparedEvaluation;
+        const string sql = $"""
+            SET @doka_sm_column_repair_eligible = CASE WHEN @doka_sm_state IS NULL
+            THEN COALESCE((TRUE), FALSE) ELSE FALSE END, @doka_sm_nullability_blocked = FALSE;
+            SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CASE WHEN COALESCE((TRUE)
+            AND @doka_sm_column_repair_eligible, FALSE)
+            THEN CONVERT(0x53454C4543542031 USING utf8mb4)
+            ELSE 'DO 0' END ELSE 'DO 0' END;{PreparedEvaluation}
+            """;
 
         // Act
         var category = MySqlRuntimeCommandInterceptor.Classify(sql);

@@ -131,26 +131,26 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     .Skip(offset * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
                     .Take(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
 
-                command.CommandText = "SELECT requested.[schema],requested.[table],"
-                    + "CONVERT(int,layout.column_count),CONVERT(int,layout.fixed_bytes),layout.bit_columns,"
-                    + "layout.variable_columns,CONVERT(int,layout.clustered_variable_extra),"
-                    + "CONVERT(bit,CASE WHEN layout.unknown_columns=0 "
-                    + "AND t.max_column_id_used=layout.column_count THEN 1 ELSE 0 END) FROM (VALUES "
-                    + string.Join(
+                // WHY: Constant chunks preserve the certified dense projection's SQL bytes without runtime allocation.
+                command.CommandText = $"""
+                    SELECT {"requested.[schema],requested.[table],CONVERT(int,layout.column_count),"
+                        + "CONVERT(int,layout.fixed_bytes),layout.bit_columns,layout.variable_columns,"
+                        + "CONVERT(int,layout.clustered_variable_extra),CONVERT(bit,CASE WHEN"}
+                    layout.unknown_columns=0
+                    AND t.max_column_id_used=layout.column_count
+                    THEN 1 ELSE 0 END) FROM (VALUES {string.Join(
                         ",",
                         chunk.Select(static key => "("
                             + KeyLiteral(key.Schema)
                             + ","
                             + KeyLiteral(key.Table)
-                            + ")"))
-                    + ") AS requested([schema],[table]) "
-                    + "JOIN sys.schemas AS s ON s.name=requested.[schema] COLLATE CATALOG_DEFAULT "
-                    + "JOIN sys.tables AS t ON t.schema_id=s.schema_id "
-                    + "AND t.name=requested.[table] COLLATE CATALOG_DEFAULT "
-                    + "CROSS APPLY ("
-                    + SqlServerSafeMigrationCatalogSqlBuilder.BuildColumnLayoutCatalogQuery(
-                        "t.object_id")
-                    + ") AS layout;";
+                            + ")"))}) AS requested([schema],[table])
+                    JOIN sys.schemas AS s ON s.name=requested.[schema] COLLATE CATALOG_DEFAULT
+                    JOIN sys.tables AS t ON t.schema_id=s.schema_id
+                    AND t.name=requested.[table] COLLATE CATALOG_DEFAULT CROSS APPLY ({
+                        SqlServerSafeMigrationCatalogSqlBuilder.BuildColumnLayoutCatalogQuery("t.object_id")})
+                    AS layout;
+                    """;
 
                 return new SafeMigrationCatalogProbeStatement(1, 0, offset);
             },
@@ -208,13 +208,16 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     pending.Add(offset, chunk);
                 }
 
-                command.CommandText = "SELECT requested.[schema],requested.[table],requested.[name],c.column_id,"
-                    + "CASE WHEN ty.name IN(N'varchar',N'nvarchar',N'varbinary') THEN CONVERT(int,c.max_length) "
-                    + "ELSE 0 END,CONVERT(bit,CASE WHEN EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.indexes i "
-                    + "ON i.object_id=ic.object_id AND i.index_id=ic.index_id WHERE i.type=1 AND ic.key_ordinal>0 "
-                    + "AND ic.object_id=c.object_id AND ic.column_id=c.column_id) THEN 1 ELSE 0 END),c.name "
-                    + "FROM (VALUES "
-                    + string.Join(
+                command.CommandText = $"""
+                    SELECT requested.[schema],requested.[table],requested.[name],c.column_id,CASE WHEN
+                    ty.name IN(N'varchar',N'nvarchar',N'varbinary')
+                    THEN CONVERT(int,c.max_length)
+                    ELSE 0 END,CONVERT(bit,CASE WHEN EXISTS(SELECT 1
+                    FROM sys.index_columns ic JOIN sys.indexes i ON i.object_id=ic.object_id
+                    AND i.index_id=ic.index_id WHERE i.type=1
+                    AND ic.key_ordinal>0 AND ic.object_id=c.object_id
+                    AND ic.column_id=c.column_id)
+                    THEN 1 ELSE 0 END),c.name FROM (VALUES {string.Join(
                         ",",
                         chunk.Select(static item =>
                             "("
@@ -223,13 +226,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                             + KeyLiteral(item.Table)
                             + ","
                             + KeyLiteral(item.Name)
-                            + ")"))
-                    + ") AS requested([schema],[table],[name]) JOIN sys.schemas AS s "
-                    + "ON s.name=requested.[schema] COLLATE CATALOG_DEFAULT JOIN sys.tables AS t "
-                    + "ON t.schema_id=s.schema_id AND t.name=requested.[table] COLLATE CATALOG_DEFAULT "
-                    + "JOIN sys.columns AS c ON c.object_id=t.object_id "
-                    + "AND c.name=requested.[name] COLLATE CATALOG_DEFAULT "
-                    + "JOIN sys.types ty ON ty.user_type_id=c.user_type_id;";
+                            + ")"))}) AS requested([schema],[table],[name])
+                    JOIN sys.schemas AS s ON s.name=requested.[schema] COLLATE CATALOG_DEFAULT
+                    JOIN sys.tables AS t ON t.schema_id=s.schema_id
+                    AND t.name=requested.[table] COLLATE CATALOG_DEFAULT
+                    JOIN sys.columns AS c ON c.object_id=t.object_id
+                    AND c.name=requested.[name] COLLATE CATALOG_DEFAULT
+                    JOIN sys.types ty ON ty.user_type_id=c.user_type_id;
+                    """;
 
                 return new SafeMigrationCatalogProbeStatement(1, 0, offset);
             },
@@ -398,10 +402,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 {
                     var qualified = _sqlGenerationHelper.DelimitIdentifier(key.Table, key.Schema);
                     var prefix = "SELECT " + KeyLiteral(key.Schema) + "," + KeyLiteral(key.Table) + ",";
-                    var select = prefix
-                        + "CONVERT(bit,CASE WHEN EXISTS(SELECT TOP(1)1 FROM "
-                        + qualified
-                        + ") THEN 1 ELSE 0 END);";
+                    var select = $"""
+                        {prefix}CONVERT(bit,CASE WHEN EXISTS(SELECT TOP(1)1
+                        FROM {qualified})
+                        THEN 1 ELSE 0 END);
+                        """;
 
                     var argument = SqlServerSqlStringLiteral.ProcedureArgument(
                         select,
@@ -415,21 +420,15 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     // table binding inside the guarded dynamic branch and retain
                     // unknown row presence for a structured fail-closed decision.
 
-                    return "IF HAS_PERMS_BY_NAME("
-                        + KeyLiteral(qualified)
-                        + ",N'OBJECT',N'SELECT')=1 "
-                        + (declaration.Length == 0
+                    return $"""
+                        IF HAS_PERMS_BY_NAME({KeyLiteral(qualified)},N'OBJECT',N'SELECT')=1 {(declaration.Length == 0
                             ? string.Empty
-                            : "BEGIN " + declaration)
-                        + "EXEC sys.sp_executesql "
-                        + argument
-                        + "; "
-                        + (declaration.Length == 0
+                            : "BEGIN " + declaration)}EXEC
+                        sys.sp_executesql {argument}; {(declaration.Length == 0
                             ? string.Empty
-                            : "END ")
-                        + "ELSE "
-                        + prefix
-                        + "CONVERT(bit,NULL);";
+                            : "END ")}ELSE
+                        {prefix}CONVERT(bit,NULL);
+                        """;
                 }));
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);

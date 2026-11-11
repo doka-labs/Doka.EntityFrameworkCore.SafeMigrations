@@ -104,8 +104,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
                     var checkpoint = parameterizer.Capture();
                     var qualification = plan.RenderCurrentDatabaseQualificationExpression(parameterizer.Add);
-                    var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE "
-                        + $"WHEN NOT COALESCE(({qualification}), FALSE) THEN 'unsupported' ELSE NULL END";
+                    var selection = $"""
+                        SELECT {ordinal.ToString(
+                            CultureInfo.InvariantCulture)}, CASE WHEN NOT COALESCE(({qualification}),
+                        FALSE) THEN 'unsupported' ELSE NULL END
+                        """;
 
                     var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                         + (selections.Count == 0
@@ -237,12 +240,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         ? null
                         : plan.RenderCapturedSourceSyntaxExpression(parameterizer.Add);
 
-                    var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE "
-                        + (syntax is null
+                    var selection = $"""
+                        SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE {(syntax is null
                             ? string.Empty
-                            : $"WHEN NOT COALESCE(({syntax}), FALSE) THEN 'unsupported' ")
-                        + $"WHEN NOT COALESCE(({prerequisite}), FALSE) THEN 'prerequisite_missing' "
-                        + "ELSE NULL END";
+                            : $"WHEN NOT COALESCE(({syntax}), FALSE) THEN 'unsupported' ")}WHEN NOT
+                        COALESCE(({prerequisite}),
+                        FALSE) THEN 'prerequisite_missing'
+                        ELSE NULL END
+                        """;
 
                     if (captureIndexIdentity)
                     {
@@ -389,10 +394,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     var classificationCode =
                         plan.RenderStateEvaluationGuardClassificationCodeExpression(parameterizer.Add);
 
-                    var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE "
-                        + $"WHEN NOT COALESCE(({stateEvaluationGuard}), FALSE) THEN ({guardFailure}) "
-                        + "ELSE NULL END, CASE WHEN NOT COALESCE("
-                        + $"({stateEvaluationGuard}), FALSE) THEN ({classificationCode}) ELSE NULL END";
+                    var selection = $"""
+                        SELECT {ordinal.ToString(
+                            CultureInfo.InvariantCulture)}, CASE WHEN NOT COALESCE(({stateEvaluationGuard}),
+                        FALSE) THEN ({guardFailure})
+                        ELSE NULL END, CASE WHEN NOT COALESCE(({stateEvaluationGuard}), FALSE)
+                        THEN ({classificationCode})
+                        ELSE NULL END
+                        """;
 
                     var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                         + (selections.Count == 0

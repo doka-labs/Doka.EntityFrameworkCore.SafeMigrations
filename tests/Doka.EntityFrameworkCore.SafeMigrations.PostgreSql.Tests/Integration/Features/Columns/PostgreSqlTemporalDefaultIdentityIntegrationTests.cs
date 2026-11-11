@@ -44,8 +44,10 @@ public sealed class PostgreSqlTemporalDefaultIdentityIntegrationTests : PostgreS
             : scenario.DifferentValue;
 
         await ExecuteSqlAsync(connectionString,
-            $"CREATE TABLE temporal_identity(v {scenario.StoreType} NOT NULL DEFAULT {actual}); "
-            + "INSERT INTO temporal_identity DEFAULT VALUES;",
+            $"""
+            CREATE TABLE temporal_identity(v {scenario.StoreType} NOT NULL DEFAULT
+            {actual}); INSERT INTO temporal_identity DEFAULT VALUES;
+            """,
             CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -159,8 +161,10 @@ public sealed class PostgreSqlTemporalDefaultIdentityIntegrationTests : PostgreS
         var scenario = TemporalCase(kind);
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            $"CREATE TABLE temporal_identity(v {scenario.StoreType} NOT NULL DEFAULT {scenario.DifferentValue}); "
-            + "INSERT INTO temporal_identity DEFAULT VALUES;",
+            $"""
+            CREATE TABLE temporal_identity(v {scenario.StoreType} NOT NULL DEFAULT
+            {scenario.DifferentValue}); INSERT INTO temporal_identity DEFAULT VALUES;
+            """,
             CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -392,8 +396,10 @@ public sealed class PostgreSqlTemporalDefaultIdentityIntegrationTests : PostgreS
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE temporal_identity(v time(6) NOT NULL DEFAULT '01:02:03.123456'); "
-            + "INSERT INTO temporal_identity DEFAULT VALUES;",
+            """
+            CREATE TABLE temporal_identity(v time(6) NOT NULL DEFAULT '01:02:03.123456');
+            INSERT INTO temporal_identity DEFAULT VALUES;
+            """,
             CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

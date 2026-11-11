@@ -3,8 +3,11 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 /// <summary>Guards nonvacuous matching instrumentation independently of a live database or container fixture.</summary>
 public sealed class MySqlRuntimeMatchingProbeInterceptorTests
 {
-    private const string RequiredAddCatalogExpression = "CASE WHEN EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS "
-        + "WHERE COLUMN_NAME = 'value') THEN 'complete' ELSE 'ordinary' END";
+    private const string RequiredAddCatalogExpression = """
+        CASE WHEN EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE COLUMN_NAME = 'value') THEN 'complete'
+        ELSE 'ordinary' END
+        """;
 
     private const string RequiredAddStatusPrefix =
         "SET @doka_sm_add_status = CASE WHEN @doka_sm_state IS NULL THEN (";
@@ -68,8 +71,11 @@ public sealed class MySqlRuntimeMatchingProbeInterceptorTests
         "SET @doka_sm_state = CASE WHEN @doka_sm_add_status = 'complete' "
         + "THEN 'matching' ELSE @doka_sm_state END;")]
     [InlineData(
-        "SET @doka_sm_required_add_resume = CASE WHEN @doka_sm_action = 'apply' "
-        + "THEN COALESCE((@doka_sm_add_status = 'staged'), FALSE) ELSE FALSE END;")]
+        """
+        SET @doka_sm_required_add_resume = CASE WHEN @doka_sm_action = 'apply'
+        THEN COALESCE((@doka_sm_add_status = 'staged'), FALSE)
+        ELSE FALSE END;
+        """)]
     [InlineData(
         "SET @doka_sm_future_add_status = CASE WHEN @doka_sm_state IS NULL "
         + "THEN ('complete') ELSE NULL END;")]

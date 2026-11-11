@@ -318,10 +318,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
 
         return Bit(
-            "NOT EXISTS (SELECT 1 FROM (VALUES "
-            + string.Join(", ", names.Select(name => "(" + Literal(name) + ")"))
-            + ") expected(name) WHERE NOT EXISTS (SELECT 1 FROM sys.fn_helpcollations() installed "
-            + "WHERE installed.name = expected.name))");
+            $"""
+            NOT EXISTS (SELECT 1 FROM (VALUES {string.Join(
+                ", ", names.Select(name => "(" + Literal(name) + ")"))}) expected(name)
+            WHERE NOT EXISTS (SELECT 1 FROM sys.fn_helpcollations() installed
+            WHERE installed.name = expected.name))
+            """);
     }
 
     private string BuildColumnDefaultSupportPredicate(

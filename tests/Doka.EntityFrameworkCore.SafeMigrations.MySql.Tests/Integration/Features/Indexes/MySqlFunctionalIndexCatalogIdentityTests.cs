@@ -55,8 +55,11 @@ public sealed class MySqlFunctionalIndexCatalogIdentityTests : MySqlSafeMigratio
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE `functional_catalog` (`id` int PRIMARY KEY, `value` varchar(30) NULL) ENGINE=InnoDB; "
-            + "INSERT INTO `functional_catalog` VALUES (42, 'retained');",
+            """
+            CREATE TABLE `functional_catalog` (`id` int PRIMARY KEY, `value` varchar(30)
+            NULL) ENGINE=InnoDB; INSERT INTO `functional_catalog` VALUES (42,
+            'retained');
+            """,
             CancellationToken.None);
 
         if (!Fixture.IsMariaDb)
@@ -77,9 +80,12 @@ public sealed class MySqlFunctionalIndexCatalogIdentityTests : MySqlSafeMigratio
         var nativeDisplay = Fixture.IsMariaDb
             ? "unsupported"
             : await ScalarStringAsync(connectionString,
-                "SELECT HEX(EXPRESSION) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='functional_catalog' "
-                + "AND INDEX_NAME='ix_functional_value';",
+                """
+                SELECT HEX(EXPRESSION) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA=DATABASE()
+                AND TABLE_NAME='functional_catalog'
+                AND INDEX_NAME='ix_functional_value';
+                """,
                 CancellationToken.None);
 
         var operations = new MigrationBuilder(context.Database.ProviderName!);

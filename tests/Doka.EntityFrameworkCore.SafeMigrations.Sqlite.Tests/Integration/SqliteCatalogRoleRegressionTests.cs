@@ -23,8 +23,11 @@ public sealed class SqliteCatalogRoleRegressionTests : SqliteIntegrationTestBase
         await using var connection = await OpenConnectionAsync(CancellationToken.None);
         var delimitedName = "\"" + name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
         await ExecuteSqlAsync(connection,
-            $"CREATE TABLE catalog_indexes(a INTEGER); CREATE INDEX {delimitedName} "
-            + $"ON catalog_indexes (({actualExpression})); INSERT INTO catalog_indexes VALUES (41);",
+            $"""
+            CREATE TABLE catalog_indexes(a INTEGER);
+            CREATE INDEX {delimitedName} ON catalog_indexes (({actualExpression}));
+            INSERT INTO catalog_indexes VALUES (41);
+            """,
             CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -80,8 +83,11 @@ public sealed class SqliteCatalogRoleRegressionTests : SqliteIntegrationTestBase
         // Arrange
         await using var connection = await OpenConnectionAsync(CancellationToken.None);
         await ExecuteSqlAsync(connection,
-            "CREATE TABLE catalog_indexes(a INTEGER, label TEXT); "
-            + $"CREATE INDEX ix_roles ON catalog_indexes (({actualKey})) WHERE {actualFilter};",
+            $"""
+            CREATE TABLE catalog_indexes(a INTEGER, label TEXT); CREATE INDEX ix_roles
+            ON catalog_indexes (({actualKey}))
+            WHERE {actualFilter};
+            """,
             CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -220,9 +226,13 @@ public sealed class SqliteCatalogRoleRegressionTests : SqliteIntegrationTestBase
         // Arrange
         await using var connection = await OpenConnectionAsync(CancellationToken.None);
         await ExecuteSqlAsync(connection,
-            "CREATE TABLE catalog_generated(source TEXT, g TEXT AS(source COLLATE NOCASE) VIRTUAL"
-            + outerCollation
-            + "); INSERT INTO catalog_generated(source) VALUES ('a');",
+            $"""
+            CREATE TABLE catalog_generated (
+                source TEXT,
+                g TEXT AS(source COLLATE NOCASE) VIRTUAL{outerCollation}
+            );
+            INSERT INTO catalog_generated(source) VALUES ('a');
+            """,
             CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -285,9 +295,13 @@ public sealed class SqliteCatalogRoleRegressionTests : SqliteIntegrationTestBase
         await using var connection = await OpenConnectionAsync(CancellationToken.None);
         var token = "'" + name.Replace("'", "''", StringComparison.Ordinal) + "'";
         await ExecuteSqlAsync(connection,
-            $"CREATE TABLE named_primary(a INTEGER, CONSTRAINT {token} PRIMARY KEY(a)); "
-            + $"CREATE TABLE named_check(a INTEGER, CONSTRAINT {token} CHECK(a>0)); "
-            + $"CREATE TABLE named_unique(a INTEGER, CONSTRAINT {token} UNIQUE(a));",
+            $"""
+            CREATE TABLE named_primary(a INTEGER, CONSTRAINT {token}
+            PRIMARY KEY(a)); CREATE TABLE named_check(a INTEGER,
+            CONSTRAINT {token} CHECK(a>0)); CREATE TABLE named_unique(a
+            INTEGER,
+            CONSTRAINT {token} UNIQUE(a));
+            """,
             CancellationToken.None);
 
         // Act
@@ -317,12 +331,17 @@ public sealed class SqliteCatalogRoleRegressionTests : SqliteIntegrationTestBase
         await using var connection = await OpenConnectionAsync(CancellationToken.None);
         var escaped = suffix.Replace("'", "''", StringComparison.Ordinal);
         await ExecuteSqlAsync(connection,
-            "CREATE TABLE drop_parents(Id INTEGER NOT NULL, CONSTRAINT pk_drop_parents PRIMARY KEY(Id)); "
-            + "CREATE TABLE drop_entities(Id INTEGER NOT NULL, Code TEXT NOT NULL, ParentId INTEGER NULL, "
-            + "CONSTRAINT pk_drop_entities PRIMARY KEY(Id), "
-            + $"CONSTRAINT 'uq_{escaped}' UNIQUE(Code), CONSTRAINT 'ck_{escaped}' CHECK(length(Code)>0), "
-            + $"CONSTRAINT 'fk_{escaped}' FOREIGN KEY(ParentId) REFERENCES drop_parents(Id)); "
-            + "INSERT INTO drop_parents VALUES(1); INSERT INTO drop_entities VALUES(11,'existing',1);",
+            $"""
+            CREATE TABLE drop_parents(Id INTEGER NOT NULL, CONSTRAINT pk_drop_parents
+            PRIMARY KEY(Id)); CREATE TABLE drop_entities(Id INTEGER NOT NULL,
+            Code TEXT NOT NULL, ParentId INTEGER NULL, CONSTRAINT pk_drop_entities PRIMARY
+            KEY(Id),
+            CONSTRAINT 'uq_{escaped}' UNIQUE(Code), CONSTRAINT 'ck_{escaped}'
+            CHECK(length(Code)>0),
+            CONSTRAINT 'fk_{escaped}' FOREIGN KEY(ParentId) REFERENCES
+            drop_parents(Id)); INSERT INTO drop_parents VALUES(1); INSERT INTO drop_entities
+            VALUES(11,'existing',1);
+            """,
             CancellationToken.None);
 
         await using var context = new SqliteConstraintDropTestContext(connection);
@@ -360,9 +379,12 @@ public sealed class SqliteCatalogRoleRegressionTests : SqliteIntegrationTestBase
         await using var connection = await OpenConnectionAsync(CancellationToken.None);
         var escaped = name.Replace("'", "''", StringComparison.Ordinal);
         await ExecuteSqlAsync(connection,
-            "CREATE TABLE primary_key_drop_entities(Id INTEGER NOT NULL, Value TEXT NOT NULL, "
-            + $"CONSTRAINT '{escaped}' PRIMARY KEY(Id)); "
-            + "INSERT INTO primary_key_drop_entities VALUES(41,'existing');",
+            $"""
+            CREATE TABLE primary_key_drop_entities(Id INTEGER NOT NULL, Value TEXT NOT
+            NULL,
+            CONSTRAINT '{escaped}' PRIMARY KEY(Id)); INSERT INTO primary_key_drop_entities
+            VALUES(41,'existing');
+            """,
             CancellationToken.None);
 
         await using var context = new SqlitePrimaryKeyDropTestContext(connection);

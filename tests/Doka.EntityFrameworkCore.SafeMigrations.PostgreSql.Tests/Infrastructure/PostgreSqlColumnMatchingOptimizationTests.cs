@@ -167,7 +167,7 @@ public sealed class PostgreSqlColumnMatchingOptimizationTests
         Assert.Contains("doka_state := 'matching';", sql, StringComparison.Ordinal);
         Assert.Contains("AND NOT c.relhassubclass", completeProof, StringComparison.Ordinal);
         Assert.Contains("FOR doka_evaluation_pass IN 1..2 LOOP", sql, StringComparison.Ordinal);
-        Assert.Contains("WHEN doka_target_matches THEN 'matching'", sql, StringComparison.Ordinal);
+        Assert.Contains("WHEN doka_target_matches\nTHEN 'matching'", sql, StringComparison.Ordinal);
     }
 
     /// <summary>Retains the exact old contract as explicit authority for Alter's descendant NULL matching.</summary>
@@ -203,7 +203,7 @@ public sealed class PostgreSqlColumnMatchingOptimizationTests
 
         Assert.Contains(
             "WHEN (doka_target_matches AND (doka_complete_not_null "
-            + "OR doka_nullability_repair_eligible)) THEN 'matching'",
+            + "OR doka_nullability_repair_eligible))\nTHEN 'matching'",
             sql,
             StringComparison.Ordinal);
 

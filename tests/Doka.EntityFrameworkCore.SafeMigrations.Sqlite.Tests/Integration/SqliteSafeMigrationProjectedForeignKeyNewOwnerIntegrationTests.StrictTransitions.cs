@@ -17,8 +17,11 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE transition_items (Id INTEGER NOT NULL, OtherId INTEGER NOT NULL, "
-            + $"CONSTRAINT physical_current_pk PRIMARY KEY({nativeKeyColumn}));",
+            $"""
+            CREATE TABLE transition_items (Id INTEGER NOT NULL, OtherId INTEGER NOT
+            NULL,
+            CONSTRAINT physical_current_pk PRIMARY KEY({nativeKeyColumn}));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -75,8 +78,13 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, CONSTRAINT pk_constraint_parents PRIMARY KEY(Id)); "
-            + "CREATE TABLE other_parents (Id INTEGER NOT NULL PRIMARY KEY);",
+            """
+            CREATE TABLE constraint_parents (
+                Id INTEGER NOT NULL,
+                CONSTRAINT pk_constraint_parents PRIMARY KEY(Id)
+            );
+            CREATE TABLE other_parents (Id INTEGER NOT NULL PRIMARY KEY);
+            """,
             cancellationToken: CancellationToken.None);
 
         var type = scenario == "column_type"
@@ -97,8 +105,10 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
 
         var foreignKey = scenario == "missing_fk"
             ? string.Empty
-            : $", CONSTRAINT fk_constraint_children_parent FOREIGN KEY({columns}) "
-            + $"REFERENCES {principal}(Id) ON DELETE {action}";
+            : $"""
+            , CONSTRAINT fk_constraint_children_parent FOREIGN KEY({columns})
+            REFERENCES {principal}(Id) ON DELETE {action}
+            """;
 
         var extra = scenario == "extra_fk"
             ? ", CONSTRAINT fk_extra FOREIGN KEY(Id) REFERENCES constraint_parents(Id)"
@@ -106,9 +116,11 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
 
         await ExecuteSqlAsync(
             connection,
-            $"CREATE TABLE constraint_children (Id {type} NOT NULL, ParentId INTEGER NULL, "
-            + $"CONSTRAINT pk_constraint_children PRIMARY KEY(Id){foreignKey}{extra}); "
-            + "CREATE INDEX ix_constraint_children_parent_id ON constraint_children(ParentId);",
+            $"""
+            CREATE TABLE constraint_children (Id {type} NOT NULL,
+            ParentId INTEGER NULL, CONSTRAINT pk_constraint_children PRIMARY KEY(Id){foreignKey}{extra});
+            CREATE INDEX ix_constraint_children_parent_id ON constraint_children(ParentId);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -141,13 +153,17 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, OtherId INTEGER NOT NULL, "
-            + "PRIMARY KEY(Id, OtherId)); "
-            + "CREATE TABLE constraint_children (Id INTEGER NOT NULL, ParentId INTEGER NULL, "
-            + "CONSTRAINT pk_constraint_children PRIMARY KEY(Id), "
-            + "CONSTRAINT fk_constraint_children_parent FOREIGN KEY(Id, ParentId) "
-            + "REFERENCES constraint_parents(Id, OtherId) ON DELETE CASCADE); "
-            + "CREATE INDEX ix_constraint_children_parent_id ON constraint_children(ParentId);",
+            """
+            CREATE TABLE constraint_parents (Id INTEGER NOT NULL, OtherId INTEGER NOT
+            NULL,
+            PRIMARY KEY(Id, OtherId)); CREATE TABLE constraint_children (Id INTEGER
+            NOT NULL,
+            ParentId INTEGER NULL, CONSTRAINT pk_constraint_children PRIMARY KEY(Id),
+            CONSTRAINT fk_constraint_children_parent FOREIGN KEY(Id, ParentId) REFERENCES
+            constraint_parents(Id,
+            OtherId) ON DELETE CASCADE); CREATE INDEX ix_constraint_children_parent_id
+            ON constraint_children(ParentId);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -181,12 +197,14 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_parents (Id INTEGER NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE constraint_children (Id INTEGER NOT NULL, ParentId INTEGER NULL, "
-            + "CONSTRAINT pk_constraint_children PRIMARY KEY(Id), "
-            + "CONSTRAINT fk_constraint_children_parent FOREIGN KEY(ParentId) "
-            + "REFERENCES constraint_parents(Id) ON DELETE CASCADE); "
-            + "CREATE INDEX ix_constraint_children_parent_id ON constraint_children(ParentId);",
+            """
+            CREATE TABLE constraint_parents (Id INTEGER NOT NULL PRIMARY KEY); CREATE
+            TABLE constraint_children (Id INTEGER NOT NULL,
+            ParentId INTEGER NULL, CONSTRAINT pk_constraint_children PRIMARY KEY(Id),
+            CONSTRAINT fk_constraint_children_parent FOREIGN KEY(ParentId) REFERENCES
+            constraint_parents(Id) ON DELETE CASCADE); CREATE INDEX ix_constraint_children_parent_id
+            ON constraint_children(ParentId);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -228,12 +246,14 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_parents (Id INTEGER NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE constraint_children (Id INTEGER NOT NULL, ParentId INTEGER NULL, "
-            + "CONSTRAINT pk_constraint_children PRIMARY KEY(Id), "
-            + "CONSTRAINT fk_constraint_children_parent FOREIGN KEY(ParentId) "
-            + "REFERENCES constraint_parents(Id) ON DELETE CASCADE); "
-            + "CREATE INDEX ix_constraint_children_parent_id ON constraint_children(ParentId);",
+            """
+            CREATE TABLE constraint_parents (Id INTEGER NOT NULL PRIMARY KEY); CREATE
+            TABLE constraint_children (Id INTEGER NOT NULL,
+            ParentId INTEGER NULL, CONSTRAINT pk_constraint_children PRIMARY KEY(Id),
+            CONSTRAINT fk_constraint_children_parent FOREIGN KEY(ParentId) REFERENCES
+            constraint_parents(Id) ON DELETE CASCADE); CREATE INDEX ix_constraint_children_parent_id
+            ON constraint_children(ParentId);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);

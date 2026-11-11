@@ -188,21 +188,20 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
             .OrderBy(static key => key.Ordinal)
             .Select(RenderExistingIndexKey);
 
-        var createSql = "CREATE "
-            + (source.Unique
-                ? "UNIQUE "
-                : string.Empty)
-            + "INDEX "
-            + Delimit(intent.NewName)
-            + " ON "
-            + Delimit(intent.Table)
-            + " ("
-            + string.Join(", ", keys)
-            + ")"
-            + (source.Filter is null
-                ? string.Empty
-                : " WHERE " + source.Filter)
-            + ";";
+        var uniqueness = source.Unique
+            ? "UNIQUE "
+            : string.Empty;
+
+        var filterSql = source.Filter is null
+            ? string.Empty
+            : " WHERE " + source.Filter;
+
+        var createSql = $"""
+            CREATE {uniqueness}INDEX {Delimit(intent.NewName)}
+            ON {Delimit(intent.Table)} (
+                {string.Join(", ", keys)}
+            ){filterSql};
+            """;
 
         var dropSql = "DROP INDEX " + Delimit(intent.Name) + ";";
 
@@ -320,17 +319,23 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
                 intent.KeyColumns.Select((column,
                         index) => $"stored.{Delimit(column)} IS incoming.{Delimit($"key_{index}")}"));
 
-            command.CommandText = $"WITH incoming ({string.Join(", ", cteColumns.Select(Delimit))}) AS ("
-                + $"VALUES {string.Join(", ", rows)}) INSERT INTO {Delimit(intent.Table)} "
-                + $"({string.Join(", ", intent.Columns.Select(Delimit))}) "
-                + "SELECT "
-                + string.Join(
+            command.CommandText = $"""
+                WITH incoming ({string.Join(", ", cteColumns.Select(Delimit))}) AS (
+                    VALUES {string.Join(", ", rows)}
+                )
+                INSERT INTO {Delimit(intent.Table)} ({string.Join(", ", intent.Columns.Select(Delimit))})
+                SELECT {string.Join(
                     ", ",
                     Enumerable
                         .Range(0, intent.Columns.Count)
-                        .Select(static index => $"incoming.\"value_{index}\""))
-                + " FROM incoming WHERE NOT EXISTS ("
-                + $"SELECT 1 FROM {Delimit(intent.Table)} AS stored WHERE {keyPredicate});";
+                        .Select(static index => $"incoming.\"value_{index}\""))}
+                FROM incoming
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM {Delimit(intent.Table)} AS stored
+                    WHERE {keyPredicate}
+                );
+                """;
 
             affected += command.ExecuteNonQuery();
         }
@@ -415,13 +420,27 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
 
             var matchPredicate = ModelManagedMatchPredicate(intent, "stored", "incoming", includeSource: true);
             var assignments = intent.Columns.Select((column,
-                    index) => $"{Delimit(column)} = (SELECT incoming.{Delimit($"target_{index}")} "
-                + $"FROM incoming WHERE {matchPredicate} LIMIT 1)");
+                    index) => $"""
+                {Delimit(column)} = (
+                    SELECT incoming.{Delimit($"target_{index}")}
+                    FROM incoming
+                    WHERE {matchPredicate}
+                    LIMIT 1
+                )
+                """);
 
-            command.CommandText = $"WITH incoming ({string.Join(", ", cteColumns.Select(Delimit))}) AS ("
-                + $"VALUES {string.Join(", ", rows)}) UPDATE {Delimit(intent.Table)} AS stored "
-                + $"SET {string.Join(", ", assignments)} WHERE EXISTS ("
-                + $"SELECT 1 FROM incoming WHERE {matchPredicate});";
+            command.CommandText = $"""
+                WITH incoming ({string.Join(", ", cteColumns.Select(Delimit))}) AS (
+                    VALUES {string.Join(", ", rows)}
+                )
+                UPDATE {Delimit(intent.Table)} AS stored
+                SET {string.Join(", ", assignments)}
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM incoming
+                    WHERE {matchPredicate}
+                );
+                """;
 
             affected += command.ExecuteNonQuery();
         }
@@ -492,9 +511,18 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
 
             var matchPredicate = ModelManagedMatchPredicate(intent, "stored", "incoming", includeSource: true);
 
-            command.CommandText = $"WITH incoming ({string.Join(", ", cteColumns.Select(Delimit))}) AS ("
-                + $"VALUES {string.Join(", ", rows)}) DELETE FROM {Delimit(intent.Table)} AS stored "
-                + $"WHERE EXISTS (SELECT 1 FROM incoming WHERE {matchPredicate});";
+            command.CommandText = $"""
+                WITH incoming ({string.Join(", ", cteColumns.Select(Delimit))}) AS (
+                    VALUES {string.Join(", ", rows)}
+                )
+                DELETE
+                FROM {Delimit(intent.Table)} AS stored
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM incoming
+                    WHERE {matchPredicate}
+                );
+                """;
 
             affected += command.ExecuteNonQuery();
         }

@@ -17,9 +17,13 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.cascade_parent (Id int NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE dbo.cascade_child (Id int NOT NULL PRIMARY KEY, ParentId int NOT NULL); "
-            + "INSERT dbo.cascade_parent VALUES (1); INSERT dbo.cascade_child VALUES (2, 1);",
+            """
+            CREATE TABLE dbo.cascade_parent (Id int NOT NULL PRIMARY KEY); CREATE TABLE
+            dbo.cascade_child (Id int NOT NULL PRIMARY KEY,
+            ParentId int NOT NULL); INSERT dbo.cascade_parent VALUES (1); INSERT dbo.cascade_child
+            VALUES (2,
+            1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -70,9 +74,11 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.paths_parent (Id int NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE dbo.paths_child (Id int NOT NULL PRIMARY KEY, "
-            + "FirstId int NOT NULL, SecondId int NOT NULL);",
+            """
+            CREATE TABLE dbo.paths_parent (Id int NOT NULL PRIMARY KEY); CREATE TABLE
+            dbo.paths_child (Id int NOT NULL PRIMARY KEY,
+            FirstId int NOT NULL, SecondId int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -268,10 +274,12 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.replace_parent (Id int NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE dbo.replace_child (Id int NOT NULL PRIMARY KEY, "
-            + "FirstId int NOT NULL, SecondId int NOT NULL, "
-            + "CONSTRAINT FK_replace_old FOREIGN KEY (FirstId) REFERENCES dbo.replace_parent(Id) ON DELETE CASCADE);",
+            """
+            CREATE TABLE dbo.replace_parent (Id int NOT NULL PRIMARY KEY); CREATE TABLE
+            dbo.replace_child (Id int NOT NULL PRIMARY KEY,
+            FirstId int NOT NULL, SecondId int NOT NULL, CONSTRAINT FK_replace_old FOREIGN
+            KEY (FirstId) REFERENCES dbo.replace_parent(Id) ON DELETE CASCADE);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -320,8 +328,11 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.trigger_parent (Id int NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE dbo.trigger_child (Id int NOT NULL PRIMARY KEY, ParentId int NOT NULL);",
+            """
+            CREATE TABLE dbo.trigger_parent (Id int NOT NULL PRIMARY KEY); CREATE TABLE
+            dbo.trigger_child (Id int NOT NULL PRIMARY KEY,
+            ParentId int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
@@ -383,15 +394,15 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.default_parent (Id int NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE dbo.default_child (Id int NOT NULL PRIMARY KEY, ParentId int "
-            + (nullable
+            $"""
+            CREATE TABLE dbo.default_parent (Id int NOT NULL PRIMARY KEY); CREATE TABLE
+            dbo.default_child (Id int NOT NULL PRIMARY KEY,
+            ParentId int {(nullable
                 ? "NULL"
-                : "NOT NULL")
-            + (hasDefault
+                : "NOT NULL")}{(hasDefault
                 ? " DEFAULT (1)"
-                : string.Empty)
-            + ");",
+                : string.Empty)});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -436,8 +447,10 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.version_parent (Version rowversion NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE dbo.version_child (Version rowversion NOT NULL);",
+            """
+            CREATE TABLE dbo.version_parent (Version rowversion NOT NULL PRIMARY KEY);
+            CREATE TABLE dbo.version_child (Version rowversion NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -485,8 +498,10 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.noaction_version_parent (Version rowversion NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE dbo.noaction_version_child (Version rowversion NOT NULL);",
+            """
+            CREATE TABLE dbo.noaction_version_parent (Version rowversion NOT NULL PRIMARY
+            KEY); CREATE TABLE dbo.noaction_version_child (Version rowversion NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -542,8 +557,10 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
         // Act
         var serverException = await Record.ExceptionAsync(() => ExecuteSqlAsync(
             connectionString,
-            "ALTER TABLE dbo.self_cascade ADD CONSTRAINT FK_self_vendor FOREIGN KEY (ParentId) "
-            + "REFERENCES dbo.self_cascade(Id) ON DELETE CASCADE;",
+            """
+            ALTER TABLE dbo.self_cascade ADD CONSTRAINT FK_self_vendor FOREIGN KEY (ParentId)
+            REFERENCES dbo.self_cascade(Id) ON DELETE CASCADE;
+            """,
             cancellationToken: CancellationToken.None));
 
         var report = await context

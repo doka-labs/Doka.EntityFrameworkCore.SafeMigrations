@@ -43,9 +43,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         {
             await ExecuteSqlAsync(
                 connectionString,
-                $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
-                + "native_result tinyint(1) GENERATED ALWAYS AS (id > 0) VIRTUAL, "
-                + "CONSTRAINT ck_source_role CHECK(id > 0));",
+                $"""
+                CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY,
+                native_result tinyint(1) GENERATED ALWAYS AS (id > 0) VIRTUAL, CONSTRAINT
+                ck_source_role CHECK(id > 0));
+                """,
                 cancellationToken: CancellationToken.None);
 
             if (kind == "column")
@@ -87,8 +89,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var owners = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{Table}';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -183,8 +188,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var columns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'source_result';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}'
+            AND COLUMN_NAME = 'source_result';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -213,16 +222,20 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY); "
-            + $"INSERT INTO `{Table}` VALUES (1);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY);
+            INSERT INTO `{Table}` VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         if (adoptExisting)
         {
             await ExecuteSqlAsync(
                 connectionString,
-                $"ALTER TABLE `{Table}` ADD COLUMN source_result varchar(20) "
-                + $"GENERATED ALWAYS AS ({source}) VIRTUAL;",
+                $"""
+                ALTER TABLE `{Table}` ADD COLUMN source_result varchar(20)
+                GENERATED ALWAYS AS ({source}) VIRTUAL;
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -279,8 +292,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY); "
-            + $"INSERT INTO `{Table}` VALUES (1);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY);
+            INSERT INTO `{Table}` VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         var definition = SafeMigrationExpectedDefinitionFactory.From(

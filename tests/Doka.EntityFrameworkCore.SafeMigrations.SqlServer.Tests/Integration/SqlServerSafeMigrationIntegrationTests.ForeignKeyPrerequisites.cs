@@ -20,10 +20,13 @@ public sealed class SqlServerSafeMigrationForeignKeyPrerequisitesIntegrationTest
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.valid_parent (Id int NOT NULL CONSTRAINT PK_valid_parent PRIMARY KEY); "
-            + "CREATE TABLE dbo.valid_child (Id int NOT NULL, ParentId int NOT NULL); "
-            + "INSERT INTO dbo.valid_parent (Id) VALUES (3); "
-            + "INSERT INTO dbo.valid_child (Id, ParentId) VALUES (1, 3);",
+            """
+            CREATE TABLE dbo.valid_parent (Id int NOT NULL CONSTRAINT PK_valid_parent
+            PRIMARY KEY); CREATE TABLE dbo.valid_child (Id int NOT NULL,
+            ParentId int NOT NULL); INSERT INTO dbo.valid_parent (Id) VALUES (3); INSERT
+            INTO dbo.valid_child (Id,
+            ParentId) VALUES (1, 3);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -41,9 +44,12 @@ public sealed class SqlServerSafeMigrationForeignKeyPrerequisitesIntegrationTest
 
         var trustedForeignKeyCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.foreign_keys "
-            + "WHERE parent_object_id = OBJECT_ID(N'dbo.valid_child', N'U') "
-            + "AND name = N'FK_valid_child_parent' AND is_disabled = 0 AND is_not_trusted = 0;",
+            """
+            SELECT COUNT(*) FROM sys.foreign_keys
+            WHERE parent_object_id = OBJECT_ID(N'dbo.valid_child', N'U')
+            AND name = N'FK_valid_child_parent'
+            AND is_disabled = 0 AND is_not_trusted = 0;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -60,10 +66,13 @@ public sealed class SqlServerSafeMigrationForeignKeyPrerequisitesIntegrationTest
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.orphan_parent (Id int NOT NULL CONSTRAINT PK_orphan_parent PRIMARY KEY); "
-            + "CREATE TABLE dbo.orphan_child (Id int NOT NULL, ParentId int NOT NULL); "
-            + "INSERT INTO dbo.orphan_parent (Id) VALUES (3); "
-            + "INSERT INTO dbo.orphan_child (Id, ParentId) VALUES (1, 4);",
+            """
+            CREATE TABLE dbo.orphan_parent (Id int NOT NULL CONSTRAINT PK_orphan_parent
+            PRIMARY KEY); CREATE TABLE dbo.orphan_child (Id int NOT NULL,
+            ParentId int NOT NULL); INSERT INTO dbo.orphan_parent (Id) VALUES (3); INSERT
+            INTO dbo.orphan_child (Id,
+            ParentId) VALUES (1, 4);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -117,8 +126,11 @@ public sealed class SqlServerSafeMigrationForeignKeyPrerequisitesIntegrationTest
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE dbo.prereq_parent (Id int NOT NULL {parentKey}); "
-            + $"CREATE TABLE dbo.prereq_child (Id int NOT NULL, ParentId {dependentType} NOT NULL);",
+            $"""
+            CREATE TABLE dbo.prereq_parent (Id int NOT NULL {parentKey});
+            CREATE TABLE dbo.prereq_child (Id int NOT NULL,
+            ParentId {dependentType} NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

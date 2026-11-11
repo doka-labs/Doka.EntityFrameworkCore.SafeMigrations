@@ -24,8 +24,11 @@ public sealed class SqlServerSafeMigrationRenameOccupancyIntegrationTests : SqlS
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.rename_source (Id int NOT NULL); INSERT INTO dbo.rename_source VALUES (11); "
-            + "CREATE TABLE dbo.rename_destination (Id int NOT NULL); INSERT INTO dbo.rename_destination VALUES (29);",
+            """
+            CREATE TABLE dbo.rename_source (Id int NOT NULL); INSERT INTO dbo.rename_source
+            VALUES (11); CREATE TABLE dbo.rename_destination (Id int NOT NULL); INSERT
+            INTO dbo.rename_destination VALUES (29);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -113,8 +116,11 @@ public sealed class SqlServerSafeMigrationRenameOccupancyIntegrationTests : SqlS
 
         var sourceCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE schema_id = SCHEMA_ID(N'dbo') "
-            + "AND name IN (N'rename_source', N'rename_destination');",
+            """
+            SELECT COUNT(*) FROM sys.tables
+            WHERE schema_id = SCHEMA_ID(N'dbo')
+            AND name IN (N'rename_source', N'rename_destination');
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -142,9 +148,11 @@ public sealed class SqlServerSafeMigrationRenameOccupancyIntegrationTests : SqlS
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE rename_target.rename_destination (Id int NOT NULL); "
-            + "INSERT INTO rename_target.rename_destination VALUES (11); "
-            + "CREATE TABLE dbo.rename_destination (Id int NOT NULL); INSERT INTO dbo.rename_destination VALUES (29);",
+            """
+            CREATE TABLE rename_target.rename_destination (Id int NOT NULL); INSERT
+            INTO rename_target.rename_destination VALUES (11); CREATE TABLE dbo.rename_destination
+            (Id int NOT NULL); INSERT INTO dbo.rename_destination VALUES (29);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

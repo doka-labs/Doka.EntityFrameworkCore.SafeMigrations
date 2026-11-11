@@ -63,8 +63,14 @@ internal static class PostgreSqlOwnedConcurrentAttempt
         {
             // WHY: Observer, commit and cancellation callback failures cannot
             // release a DbContext while the native command still borrows it.
+            var cleanupFailure = primaryFailure;
+            if (cleanupFailure is null)
+            {
+                cleanupFailure = handledNativeFailure;
+            }
+
             await OwnedTestOperationCleanup.CompleteAsync(
-                primaryFailure ?? handledNativeFailure,
+                cleanupFailure,
                 pending,
                 released
                     ? null

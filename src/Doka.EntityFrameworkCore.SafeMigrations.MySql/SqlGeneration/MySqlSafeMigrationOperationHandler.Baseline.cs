@@ -308,10 +308,14 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         bool hasNativeSqlModeCleanup = false
     )
     {
-        const string prefix = "SET @doka_sm_state = NULL, @doka_sm_action = NULL, "
-            + "@doka_sm_repair_ok = NULL, @doka_sm_prerequisite_ok = NULL, @doka_sm_sql = NULL, "
-            + "@doka_sm_post_ok = NULL, @doka_sm_data_probe_required = NULL, @doka_sm_data_blocked = NULL, "
-            + "@doka_sm_diag = NULL; ";
+        const string prefix = $"""
+            SET @doka_sm_state = NULL, @doka_sm_action = NULL, @doka_sm_repair_ok =
+            NULL,
+            @doka_sm_prerequisite_ok = NULL, @doka_sm_sql = NULL, @doka_sm_post_ok =
+            NULL,
+            @doka_sm_data_probe_required = NULL, @doka_sm_data_blocked = NULL, @doka_sm_diag
+            = NULL;{"\u0020"}
+            """;
 
         const string suffix = "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`;";
         var requiredColumnAddCleanup = hasRequiredColumnAdd

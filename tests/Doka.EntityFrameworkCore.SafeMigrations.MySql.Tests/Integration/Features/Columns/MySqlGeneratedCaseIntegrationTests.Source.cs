@@ -20,16 +20,20 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY); "
-            + $"INSERT INTO `{Table}` VALUES (1);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY);
+            INSERT INTO `{Table}` VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         if (adoptExisting)
         {
             await ExecuteSqlAsync(
                 connectionString,
-                $"ALTER TABLE `{Table}` ADD COLUMN numeric_result double "
-                + $"GENERATED ALWAYS AS ({sql}) VIRTUAL;",
+                $"""
+                ALTER TABLE `{Table}` ADD COLUMN numeric_result double
+                GENERATED ALWAYS AS ({sql}) VIRTUAL;
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -93,8 +97,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY); "
-            + $"INSERT INTO `{Table}` VALUES (1);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY);
+            INSERT INTO `{Table}` VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         var definition = SafeMigrationExpectedDefinitionFactory.From(
@@ -144,9 +150,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // WHY: The authored utf8mb4_bin CHECK must not inherit latin1 from an older image's database default.
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY) "
-            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + $"INSERT INTO `{Table}` VALUES (1);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY)
+            DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; INSERT INTO `{Table}`
+            VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         var initial = new MigrationBuilder(context.Database.ProviderName!);
@@ -160,8 +168,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             ? null
             : await ScalarStringAsync(
                 connectionString,
-                "SELECT CHECK_CLAUSE FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = 'ck_case_literal';",
+                """
+                SELECT CHECK_CLAUSE FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND CONSTRAINT_NAME = 'ck_case_literal';
+                """,
                 cancellationToken: CancellationToken.None);
 
         var expected = new MigrationBuilder(context.Database.ProviderName!);

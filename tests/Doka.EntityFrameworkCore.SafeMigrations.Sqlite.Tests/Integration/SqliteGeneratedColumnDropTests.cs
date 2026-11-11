@@ -231,9 +231,13 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY KEY, "
-            + "source INTEGER NOT NULL, extra INTEGER NOT NULL); "
-            + "INSERT INTO drop_nodes (id, source, extra) VALUES (1, 3, 7);",
+            """
+            CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY
+            KEY,
+            source INTEGER NOT NULL, extra INTEGER NOT NULL); INSERT INTO drop_nodes
+            (id,
+            source, extra) VALUES (1, 3, 7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new DropContext(connection, _internalServices);
@@ -468,9 +472,11 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         await CreateNativeTableAsync(connection, "source << 1", cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE native_control (source INTEGER, extra INTEGER, "
-            + "derived INTEGER GENERATED ALWAYS AS (source << 1) VIRTUAL); "
-            + "INSERT INTO native_control (source, extra) VALUES (3, 7);",
+            """
+            CREATE TABLE native_control (source INTEGER, extra INTEGER, derived INTEGER
+            GENERATED ALWAYS AS (source << 1) VIRTUAL); INSERT INTO native_control (source,
+            extra) VALUES (3, 7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new OpaqueExtraDropContext(connection, _internalServices);
@@ -795,10 +801,14 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY KEY, "
-            + "source INTEGER NOT NULL, \"so\"\"urce\" INTEGER NOT NULL, "
-            + $"derived INTEGER GENERATED ALWAYS AS ({AdjacentQuotedSourceExpression}) VIRTUAL); "
-            + "INSERT INTO drop_nodes (id, source, \"so\"\"urce\") VALUES (1, 3, 7);",
+            $"""
+            CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY
+            KEY,
+            source INTEGER NOT NULL, "so""urce" INTEGER NOT NULL, derived INTEGER GENERATED
+            ALWAYS AS ({AdjacentQuotedSourceExpression}) VIRTUAL); INSERT INTO drop_nodes
+            (id,
+            source, "so""urce") VALUES (1, 3, 7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new AdjacentQuotedSourceDropContext(connection, _internalServices);
@@ -852,10 +862,14 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY KEY, "
-            + "source INTEGER NOT NULL, \"so\"\"urce\" INTEGER NOT NULL, extra INTEGER NOT NULL, "
-            + $"derived INTEGER GENERATED ALWAYS AS ({AdjacentQuotedSourceExpression}) VIRTUAL); "
-            + "INSERT INTO drop_nodes (id, source, \"so\"\"urce\", extra) VALUES (1, 3, 7, 11);",
+            $"""
+            CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY
+            KEY,
+            source INTEGER NOT NULL, "so""urce" INTEGER NOT NULL, extra INTEGER NOT NULL,
+            derived INTEGER GENERATED ALWAYS AS ({AdjacentQuotedSourceExpression}) VIRTUAL);
+            INSERT INTO drop_nodes (id,
+            source, "so""urce", extra) VALUES (1, 3, 7, 11);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new AdjacentQuotedUnrelatedDropContext(connection, _internalServices);
@@ -919,10 +933,14 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY KEY, "
-            + "source INTEGER NOT NULL, \"\u00A0operand\" INTEGER NOT NULL, "
-            + $"derived INTEGER GENERATED ALWAYS AS ({expression}) VIRTUAL); "
-            + "INSERT INTO drop_nodes (id, source, \"\u00A0operand\") VALUES (1, 3, 7);",
+            $"""
+            CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY
+            KEY,
+            source INTEGER NOT NULL, "{"\u00A0"}operand" INTEGER NOT
+            NULL, derived INTEGER GENERATED ALWAYS AS ({expression}) VIRTUAL);
+            INSERT INTO drop_nodes (id,
+            source, "{"\u00A0"}operand") VALUES (1, 3, 7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = (atStart, opaque) switch
@@ -1002,10 +1020,15 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY KEY, "
-            + "source INTEGER NOT NULL, \"\u00A0operand\" INTEGER NOT NULL, extra INTEGER NOT NULL, "
-            + $"derived INTEGER GENERATED ALWAYS AS ({expression}) VIRTUAL); "
-            + "INSERT INTO drop_nodes (id, source, \"\u00A0operand\", extra) VALUES (1, 3, 7, 11);",
+            $"""
+            CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY
+            KEY,
+            source INTEGER NOT NULL, "{"\u00A0"}operand" INTEGER NOT
+            NULL, extra INTEGER NOT NULL,
+            derived INTEGER GENERATED ALWAYS AS ({expression}) VIRTUAL);
+            INSERT INTO drop_nodes (id,
+            source, "{"\u00A0"}operand", extra) VALUES (1, 3, 7, 11);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = opaque
@@ -1061,10 +1084,15 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY KEY, "
-            + "source INTEGER NOT NULL, \"\u00A0operand\" INTEGER NOT NULL, extra INTEGER NOT NULL, "
-            + "derived INTEGER GENERATED ALWAYS AS (source + \u00A0operand + 1) VIRTUAL); "
-            + "INSERT INTO drop_nodes (id, source, \"\u00A0operand\", extra) VALUES (1, 3, 7, 11);",
+            $"""
+            CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY
+            KEY,
+            source INTEGER NOT NULL, "{"\u00A0"}operand" INTEGER NOT
+            NULL, extra INTEGER NOT NULL,
+            derived INTEGER GENERATED ALWAYS AS (source + {"\u00A0"}operand
+            + 1) VIRTUAL); INSERT INTO drop_nodes (id,
+            source, "{"\u00A0"}operand", extra) VALUES (1, 3, 7, 11);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new UnicodeWhitespaceDriftDropContext(connection, _internalServices);
@@ -1273,10 +1301,14 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY KEY, "
-            + "source INTEGER NOT NULL, extra INTEGER NOT NULL, "
-            + $"derived INTEGER GENERATED ALWAYS AS (source << 1) {facets}); "
-            + "INSERT INTO drop_nodes (id, source, extra) VALUES (1, 3, 7);",
+            $"""
+            CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY
+            KEY,
+            source INTEGER NOT NULL, extra INTEGER NOT NULL, derived INTEGER GENERATED
+            ALWAYS AS (source << 1) {facets}); INSERT INTO drop_nodes
+            (id,
+            source, extra) VALUES (1, 3, 7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new OpaqueExtraDropContext(connection, _internalServices);
@@ -1426,8 +1458,13 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         await CreateNativeTableAsync(connection, "source + 1", cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE other_nodes (extra INTEGER, derived INTEGER GENERATED ALWAYS AS (extra + 1)); "
-            + "INSERT INTO other_nodes (extra) VALUES (11);",
+            """
+            CREATE TABLE other_nodes (
+                extra INTEGER,
+                derived INTEGER GENERATED ALWAYS AS (extra + 1)
+            );
+            INSERT INTO other_nodes (extra) VALUES (11);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new ExtraDropContext(connection, _internalServices);
@@ -1608,10 +1645,14 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         CancellationToken cancellationToken
     ) => ExecuteSqlAsync(
         connection,
-        "CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY KEY, "
-        + "source INTEGER NOT NULL, extra INTEGER NOT NULL, "
-        + $"derived INTEGER GENERATED ALWAYS AS ({expression}) VIRTUAL); "
-        + "INSERT INTO drop_nodes (id, source, extra) VALUES (1, 3, 7);",
+        $"""
+        CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY
+        KEY,
+        source INTEGER NOT NULL, extra INTEGER NOT NULL, derived INTEGER GENERATED
+        ALWAYS AS ({expression}) VIRTUAL); INSERT INTO drop_nodes
+        (id,
+        source, extra) VALUES (1, 3, 7);
+        """,
         cancellationToken: cancellationToken);
 
     /// <summary>Captures the complete native table SQL so refusal cannot silently rebuild the owner.</summary>

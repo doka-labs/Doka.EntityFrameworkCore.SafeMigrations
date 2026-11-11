@@ -153,9 +153,13 @@ public sealed class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrationInteg
         // guards the counting predicate's three-valued semantics rather than an ordinary inequality.
         var nullComparison = await ScalarIntAsync(
             connectionString,
-            "SELECT (c.COLUMN_DEFAULT IN ('7')) IS NULL FROM INFORMATION_SCHEMA.COLUMNS c "
-            + "WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = 'strict_column_default' "
-            + "AND c.COLUMN_NAME = 'code';",
+            """
+            SELECT (c.COLUMN_DEFAULT IN ('7')) IS NULL
+            FROM INFORMATION_SCHEMA.COLUMNS c
+            WHERE c.TABLE_SCHEMA = DATABASE()
+            AND c.TABLE_NAME = 'strict_column_default'
+            AND c.COLUMN_NAME = 'code';
+            """,
             cancellationToken: CancellationToken.None);
 
         var definitionBefore = await ReadStrictColumnTableDefinitionAsync(
@@ -251,9 +255,11 @@ public sealed class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrationInteg
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `mixed_collation` ("
-            + $"`pinned` varchar(32) CHARACTER SET utf8mb4 COLLATE {liveCollation} NOT NULL, "
-            + "`inherited` varchar(32) NOT NULL) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;",
+            $"""
+            CREATE TABLE `mixed_collation` (`pinned` varchar(32) CHARACTER SET utf8mb4
+            COLLATE {liveCollation} NOT NULL,
+            `inherited` varchar(32) NOT NULL) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

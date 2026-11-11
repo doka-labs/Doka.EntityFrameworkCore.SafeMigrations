@@ -34,10 +34,12 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA repair_collation; CREATE COLLATION repair_collation.shared FROM \"C\"; "
-            + $"CREATE TABLE matching_optimization_rows (value character varying(32) COLLATE {collationSql} "
-            + "NOT NULL DEFAULT 'legacy'); COMMENT ON COLUMN matching_optimization_rows.value IS 'legacy'; "
-            + "INSERT INTO matching_optimization_rows VALUES ('preserved');",
+            $"""
+            CREATE SCHEMA repair_collation; CREATE COLLATION repair_collation.shared
+            FROM "C"; CREATE TABLE matching_optimization_rows (value character varying(32) COLLATE
+            {collationSql} NOT NULL DEFAULT 'legacy'); COMMENT ON COLUMN matching_optimization_rows.value
+            IS 'legacy'; INSERT INTO matching_optimization_rows VALUES ('preserved');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -61,8 +63,11 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
 
         var oidBefore = await ScalarIntAsync(
             connectionString,
-            "SELECT attcollation::integer FROM pg_catalog.pg_attribute "
-            + "WHERE attrelid = 'matching_optimization_rows'::regclass AND attname = 'value';",
+            """
+            SELECT attcollation::integer FROM pg_catalog.pg_attribute WHERE attrelid =
+            'matching_optimization_rows'::regclass
+            AND attname = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Act
@@ -86,8 +91,11 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
 
         var oidAfter = await ScalarIntAsync(
             connectionString,
-            "SELECT attcollation::integer FROM pg_catalog.pg_attribute "
-            + "WHERE attrelid = 'matching_optimization_rows'::regclass AND attname = 'value';",
+            """
+            SELECT attcollation::integer FROM pg_catalog.pg_attribute WHERE attrelid =
+            'matching_optimization_rows'::regclass
+            AND attname = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var preserved = await ScalarIntAsync(
@@ -114,9 +122,11 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA repair_collation; CREATE COLLATION repair_collation.shared FROM \"C\"; "
-            + "CREATE TABLE matching_optimization_rows (value character varying(32) COLLATE \"C\" NOT NULL); "
-            + "INSERT INTO matching_optimization_rows VALUES ('preserved');",
+            """
+            CREATE SCHEMA repair_collation; CREATE COLLATION repair_collation.shared
+            FROM "C"; CREATE TABLE matching_optimization_rows (value character varying(32) COLLATE "C" NOT
+            NULL); INSERT INTO matching_optimization_rows VALUES ('preserved');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -164,8 +174,10 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE matching_optimization_rows (value text COLLATE \"C\" NULL); "
-            + "INSERT INTO matching_optimization_rows VALUES ('preserved');",
+            """
+            CREATE TABLE matching_optimization_rows (value text COLLATE "C" NULL); INSERT
+            INTO matching_optimization_rows VALUES ('preserved');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -238,9 +250,11 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE matching_optimization_rows (value {storeType} NOT NULL); "
-            + $"INSERT INTO matching_optimization_rows VALUES ({value}); "
-            + NullProofSentinelSql,
+            $"""
+            CREATE TABLE matching_optimization_rows (value {storeType}
+            NOT NULL); INSERT INTO matching_optimization_rows VALUES ({value});
+            {NullProofSentinelSql}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -308,12 +322,13 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE matching_optimization_rows (value character varying(32) NULL); "
-            + "CREATE TABLE matching_optimization_child () INHERITS (matching_optimization_rows); "
-            + "INSERT INTO matching_optimization_rows VALUES ('preserved'); "
-            + "INSERT INTO matching_optimization_child VALUES (NULL); "
-            + $"ALTER TABLE matching_optimization_rows ADD CONSTRAINT parent_not_null {constraint}; "
-            + NullProofSentinelSql,
+            $"""
+            CREATE TABLE matching_optimization_rows (value character varying(32) NULL);
+            CREATE TABLE matching_optimization_child () INHERITS (matching_optimization_rows);
+            INSERT INTO matching_optimization_rows VALUES ('preserved'); INSERT INTO
+            matching_optimization_child VALUES (NULL); ALTER TABLE matching_optimization_rows
+            ADD CONSTRAINT parent_not_null {constraint}; {NullProofSentinelSql}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -376,11 +391,13 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE matching_optimization_rows (value character varying(32) NULL); "
-            + "CREATE TABLE matching_optimization_child () INHERITS (matching_optimization_rows); "
-            + "INSERT INTO matching_optimization_rows VALUES ('parent'); "
-            + $"INSERT INTO matching_optimization_child VALUES ({childValue}); "
-            + $"ALTER TABLE matching_optimization_rows ADD CONSTRAINT parent_not_null {constraint};",
+            $"""
+            CREATE TABLE matching_optimization_rows (value character varying(32) NULL);
+            CREATE TABLE matching_optimization_child () INHERITS (matching_optimization_rows);
+            INSERT INTO matching_optimization_rows VALUES ('parent'); INSERT INTO matching_optimization_child
+            VALUES ({childValue}); ALTER TABLE matching_optimization_rows
+            ADD CONSTRAINT parent_not_null {constraint};
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -466,8 +483,10 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE matching_optimization_rows (value timestamp without time zone NOT NULL); "
-            + "INSERT INTO matching_optimization_rows VALUES ('2026-01-02 03:04:05');",
+            """
+            CREATE TABLE matching_optimization_rows (value timestamp without time zone
+            NOT NULL); INSERT INTO matching_optimization_rows VALUES ('2026-01-02 03:04:05');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -482,8 +501,10 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
             operation,
             new SqlOperation
             {
-                Sql = "ALTER TABLE matching_optimization_rows ALTER COLUMN value DROP NOT NULL; "
-                    + "INSERT INTO matching_optimization_rows VALUES (NULL);",
+                Sql = """
+                    ALTER TABLE matching_optimization_rows ALTER COLUMN value DROP NOT NULL;
+                    INSERT INTO matching_optimization_rows VALUES (NULL);
+                    """,
             },
             operation,
         ];

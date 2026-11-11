@@ -55,8 +55,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             // Required ordinary integer metadata excludes nullable, derived,
             // floating/decimal and unsigned coercion domains without scans.
             builder
-                .Append("EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS generated_source ")
-                .Append("WHERE generated_source.TABLE_SCHEMA = DATABASE() AND generated_source.TABLE_NAME = ")
+                .Append("""
+                    EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS generated_source
+                    WHERE generated_source.TABLE_SCHEMA = DATABASE() AND generated_source.TABLE_NAME =
+                    """
+                    + " ")
                 .Append(Literal(table))
                 .Append(" AND generated_source.COLUMN_NAME = ")
                 .Append(Literal(source))
@@ -67,11 +70,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 .Append(" AND CAST(LOWER(generated_source.COLUMN_NAME) AS BINARY) = CAST(LOWER(")
                 .Append(Literal(source))
                 .Append(") AS BINARY)")
-                .Append(" AND generated_source.IS_NULLABLE = 'NO' ")
-                .Append("AND LOWER(generated_source.DATA_TYPE) IN ")
-                .Append("('tinyint', 'smallint', 'mediumint', 'int', 'bigint') ")
-                .Append("AND LOCATE('unsigned', LOWER(generated_source.COLUMN_TYPE)) = 0 ")
-                .Append("AND COALESCE(generated_source.GENERATION_EXPRESSION, '') = '')");
+                .Append(" "
+                    + """
+                    AND generated_source.IS_NULLABLE = 'NO'
+                    AND LOWER(generated_source.DATA_TYPE) IN ('tinyint', 'smallint', 'mediumint', 'int', 'bigint')
+                    AND LOCATE('unsigned', LOWER(generated_source.COLUMN_TYPE)) = 0
+                    AND COALESCE(generated_source.GENERATION_EXPRESSION, '') = '')
+                    """);
         }
 
         return builder.ToString();
@@ -88,8 +93,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         return plan with
         {
-            StateExpression = $"CASE WHEN {BaseTableExists(intent.Table)} AND NOT ({exists}) "
-            + $"AND NOT ({qualification}) THEN 'unsupported' ELSE ({plan.StateExpression}) END",
+            StateExpression = $"""
+            CASE WHEN {BaseTableExists(intent.Table)}
+            AND NOT ({exists})
+            AND NOT ({qualification})
+            THEN 'unsupported' ELSE ({plan.StateExpression}) END
+            """,
             UnsupportedCode = "generated_column_nullability",
         };
     }

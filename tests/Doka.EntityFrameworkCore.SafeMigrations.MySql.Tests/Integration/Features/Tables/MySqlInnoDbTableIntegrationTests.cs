@@ -118,8 +118,11 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
             CancellationToken.None);
 
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE `items` (`Id` int NOT NULL) ENGINE=InnoDB; INSERT INTO `items` VALUES (41); "
-            + "CREATE TABLE `ITEMS` (`Id` int NOT NULL) ENGINE=MyISAM; INSERT INTO `ITEMS` VALUES (42);",
+            """
+            CREATE TABLE `items` (`Id` int NOT NULL) ENGINE=InnoDB; INSERT INTO `items`
+            VALUES (41); CREATE TABLE `ITEMS` (`Id` int NOT NULL) ENGINE=MyISAM; INSERT
+            INTO `ITEMS` VALUES (42);
+            """,
             CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -464,7 +467,10 @@ public sealed class MySqlInnoDbTableIntegrationTests : MySqlSafeMigrationIntegra
             : "items";
 
         await ExecuteSqlAsync(connectionString,
-            $"CREATE TABLE `{source}` (`Id` int NOT NULL) ENGINE=MyISAM; INSERT INTO `{source}` VALUES (42);",
+            $"""
+            CREATE TABLE `{source}` (`Id` int NOT NULL) ENGINE=MyISAM;
+            INSERT INTO `{source}` VALUES (42);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

@@ -84,8 +84,12 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var keys = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'uuid_keys' AND COLUMN_NAME = 'id' AND SUB_PART IS NULL;",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'uuid_keys' AND COLUMN_NAME = 'id'
+            AND SUB_PART IS NULL;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -172,8 +176,10 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `uuid_key_budget` (`id` uuid NOT NULL, `value` varchar(700) NOT NULL) "
-            + "ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
+            """
+            CREATE TABLE `uuid_key_budget` (`id` uuid NOT NULL, `value` varchar(700)
+            NOT NULL) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -208,14 +214,23 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
 
         var indexes = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'uuid_key_budget';",
+            """
+            SELECT COUNT(DISTINCT INDEX_NAME)
+            FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'uuid_key_budget';
+            """,
             cancellationToken: CancellationToken.None);
 
         var actualLength = await ScalarIntAsync(
             connectionString,
-            "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'uuid_key_budget' AND COLUMN_NAME = 'value';",
+            """
+            SELECT CHARACTER_MAXIMUM_LENGTH
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'uuid_key_budget'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -289,8 +304,11 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE TABLE `uuid_parents` (`id` uuid NOT NULL, PRIMARY KEY (`id`)); "
-                + "CREATE TABLE `uuid_children` (`row` int NOT NULL, `owner_id` uuid NULL);",
+                """
+                CREATE TABLE `uuid_parents` (`id` uuid NOT NULL, PRIMARY KEY (`id`)); CREATE
+                TABLE `uuid_children` (`row` int NOT NULL,
+                `owner_id` uuid NULL);
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -316,8 +334,11 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "INSERT INTO `uuid_parents` VALUES ('00112233-4455-6677-8899-aabbccddeeff'); "
-            + "INSERT INTO `uuid_children` VALUES (1, '00112233-4455-6677-8899-aabbccddeeff'), (2, NULL);",
+            """
+            INSERT INTO `uuid_parents` VALUES ('00112233-4455-6677-8899-aabbccddeeff');
+            INSERT INTO `uuid_children` VALUES (1,
+            '00112233-4455-6677-8899-aabbccddeeff'), (2, NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         var postflight = await runner.VerifyAsync(
@@ -353,9 +374,12 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `uuid_parents` (`id` char(36) NOT NULL, PRIMARY KEY (`id`)) "
-            + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "CREATE TABLE `uuid_children` (`owner_id` uuid NULL, KEY `ix_uuid_owner` (`owner_id`));",
+            """
+            CREATE TABLE `uuid_parents` (`id` char(36) NOT NULL, PRIMARY KEY (`id`))
+            DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; CREATE TABLE `uuid_children`
+            (`owner_id` uuid NULL,
+            KEY `ix_uuid_owner` (`owner_id`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -383,8 +407,11 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
 
         var foreignKeys = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'uuid_children';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'uuid_children';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -409,9 +436,12 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         // both original physical storage representations unchanged.
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `uuid_binary_parents` (`id` binary(16) NOT NULL, PRIMARY KEY (`id`)); "
-            + "CREATE TABLE `uuid_binary_children` (`owner_id` uuid NULL, KEY `ix_uuid_owner` (`owner_id`)); "
-            + "INSERT INTO `uuid_binary_parents` VALUES (0x00112233445566778899AABBCCDDEEFF);",
+            """
+            CREATE TABLE `uuid_binary_parents` (`id` binary(16) NOT NULL, PRIMARY KEY
+            (`id`)); CREATE TABLE `uuid_binary_children` (`owner_id` uuid NULL,
+            KEY `ix_uuid_owner` (`owner_id`)); INSERT INTO `uuid_binary_parents` VALUES
+            (0x00112233445566778899AABBCCDDEEFF);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -454,20 +484,31 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var preserved = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM `uuid_binary_parents` p JOIN `uuid_binary_children` c ON c.`owner_id` = p.`id` "
-            + "WHERE p.`id` = 0x00112233445566778899AABBCCDDEEFF;",
+            """
+            SELECT COUNT(*) FROM `uuid_binary_parents` p
+            JOIN `uuid_binary_children` c ON c.`owner_id` = p.`id`
+            WHERE p.`id` = 0x00112233445566778899AABBCCDDEEFF;
+            """,
             cancellationToken: CancellationToken.None);
 
         var binaryColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'uuid_binary_parents' AND COLUMN_TYPE = 'binary(16)';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'uuid_binary_parents'
+            AND COLUMN_TYPE = 'binary(16)';
+            """,
             cancellationToken: CancellationToken.None);
 
         var nativeColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'uuid_binary_children' AND COLUMN_TYPE = 'uuid';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'uuid_binary_children'
+            AND COLUMN_TYPE = 'uuid';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -535,8 +576,12 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
 
         var columnCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'uuid_add' AND COLUMN_NAME = 'id' AND DATA_TYPE = 'uuid' AND IS_NULLABLE = 'NO';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'uuid_add' AND COLUMN_NAME = 'id'
+            AND DATA_TYPE = 'uuid' AND IS_NULLABLE = 'NO';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -624,8 +669,12 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
 
         var columns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'uuid_add_race' AND COLUMN_NAME = 'id';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'uuid_add_race'
+            AND COLUMN_NAME = 'id';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -659,11 +708,13 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `uuid_tighten` (`value` int NOT NULL, `owner_id` uuid NULL); "
-            + "INSERT INTO `uuid_tighten` VALUES (1, '00112233-4455-6677-8899-aabbccddeeff'); "
-            + (includeNull
+            $"""
+            CREATE TABLE `uuid_tighten` (`value` int NOT NULL, `owner_id` uuid NULL);
+            INSERT INTO `uuid_tighten` VALUES (1,
+            '00112233-4455-6677-8899-aabbccddeeff'); {(includeNull
                 ? "INSERT INTO `uuid_tighten` VALUES (2, NULL);"
-                : string.Empty),
+                : string.Empty)}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -714,8 +765,12 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
 
         var required = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'uuid_tighten' AND COLUMN_NAME = 'owner_id' AND IS_NULLABLE = 'NO';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'uuid_tighten'
+            AND COLUMN_NAME = 'owner_id' AND IS_NULLABLE = 'NO';
+            """,
             cancellationToken: CancellationToken.None);
 
         var replaced = includeNull && hasDefault
@@ -778,13 +833,15 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `uuid_siblings` (`id` uuid NOT NULL, `value` varchar(10) NULL, "
-            + "`flag` tinyint(1) NULL, PRIMARY KEY (`id`)"
-            + (kind is "varchar" or "alter_varchar"
+            $"""
+            CREATE TABLE `uuid_siblings` (`id` uuid NOT NULL, `value` varchar(10) NULL,
+            `flag` tinyint(1) NULL, PRIMARY KEY (`id`){(kind is "varchar" or "alter_varchar"
                 ? ", INDEX `ix_uuid_siblings_value` (`value`, `id`)"
-                : string.Empty)
-            + ") ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `uuid_siblings` VALUES ('00112233-4455-6677-8899-aabbccddeeff', 'preserved', 1);",
+                : string.Empty)}) ENGINE=InnoDB
+            ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT
+            INTO `uuid_siblings` VALUES ('00112233-4455-6677-8899-aabbccddeeff',
+            'preserved', 1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -840,8 +897,11 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
 
         var preserved = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM `uuid_siblings` WHERE `id` = '00112233-4455-6677-8899-aabbccddeeff' "
-            + "AND `value` = 'preserved' AND `flag` = 1;",
+            """
+            SELECT COUNT(*) FROM `uuid_siblings`
+            WHERE `id` = '00112233-4455-6677-8899-aabbccddeeff'
+            AND `value` = 'preserved' AND `flag` = 1;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -879,12 +939,10 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `uuid_format` (`id` "
-            + sourceType
-            + " NOT NULL); "
-            + "INSERT INTO `uuid_format` VALUES ("
-            + literal
-            + ");",
+            $"""
+            CREATE TABLE `uuid_format` (`id` {sourceType} NOT NULL); INSERT
+            INTO `uuid_format` VALUES ({literal});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -927,8 +985,12 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
 
         var actualType = await ScalarStringAsync(
             connectionString,
-            "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'uuid_format' AND COLUMN_NAME = 'id';",
+            """
+            SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'uuid_format'
+            AND COLUMN_NAME = 'id';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -1070,8 +1132,11 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `uuid_managed` (`id` uuid NOT NULL, `value` int NOT NULL, PRIMARY KEY (`id`)); "
-            + "INSERT INTO `uuid_managed` VALUES ('00112233-4455-6677-8899-aabbccddeeff', 9);",
+            """
+            CREATE TABLE `uuid_managed` (`id` uuid NOT NULL, `value` int NOT NULL,
+            PRIMARY KEY (`id`)); INSERT INTO `uuid_managed` VALUES ('00112233-4455-6677-8899-aabbccddeeff',
+            9);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateNativeContext(connectionString);

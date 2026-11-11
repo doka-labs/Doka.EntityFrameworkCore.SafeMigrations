@@ -145,12 +145,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             throw new InvalidOperationException("SQL Server inventory temporary scope is occupied.");
         }
 
-        var createStatement = $"IF OBJECT_ID(N'tempdb..{temporaryTable}') IS NOT NULL "
-            + "THROW 51002, N'doka_sm_unsupported', 1; "
-            + $"CREATE TABLE {temporaryTable} (kind int NOT NULL, "
-            + "schema_name nvarchar(128) COLLATE CATALOG_DEFAULT NOT NULL, "
-            + "table_name nvarchar(128) COLLATE CATALOG_DEFAULT NOT NULL, "
-            + "name nvarchar(128) COLLATE CATALOG_DEFAULT NOT NULL);";
+        var createStatement = $"""
+            IF OBJECT_ID(N'tempdb..{temporaryTable}') IS NOT NULL THROW 51002,
+            N'doka_sm_unsupported', 1; CREATE TABLE {temporaryTable} (kind
+            int NOT NULL,
+            schema_name nvarchar(128) COLLATE CATALOG_DEFAULT NOT NULL, table_name nvarchar(128)
+            COLLATE CATALOG_DEFAULT NOT NULL,
+            name nvarchar(128) COLLATE CATALOG_DEFAULT NOT NULL);
+            """;
 
         Exception? originalFailure = null;
         try
@@ -210,40 +212,54 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             }
 
             command.Parameters.Clear();
-            var tableInventorySql = "SELECT 0, s.name, t.name FROM sys.tables t "
-                + "JOIN sys.schemas s ON s.schema_id = t.schema_id "
-                + $"WHERE EXISTS (SELECT 1 FROM {temporaryTable} e WHERE e.schema_name = s.name) "
-                + $"AND NOT EXISTS (SELECT 1 FROM {temporaryTable} e WHERE e.kind = 0 "
-                + "AND e.schema_name = s.name AND e.table_name = t.name) ORDER BY s.name, t.name;";
+            var tableInventorySql = $"""
+                SELECT 0, s.name, t.name FROM sys.tables t
+                JOIN sys.schemas s ON s.schema_id = t.schema_id
+                WHERE EXISTS (SELECT 1 FROM {temporaryTable} e
+                WHERE e.schema_name = s.name)
+                AND NOT EXISTS (SELECT 1 FROM {temporaryTable} e
+                WHERE e.kind = 0 AND e.schema_name = s.name
+                AND e.table_name = t.name) ORDER BY s.name, t.name;
+                """;
 
-            var childInventorySql = "WITH expected(schema_name, table_name) AS ("
-                + $"SELECT schema_name, table_name FROM {temporaryTable} WHERE kind = 0), "
-                + "physical(kind, schema_name, table_name, name) AS ("
-                + "SELECT 1, s.name, t.name, c.name FROM expected e "
-                + "JOIN sys.schemas s ON s.name = e.schema_name "
-                + "JOIN sys.tables t ON t.schema_id = s.schema_id AND t.name = e.table_name "
-                + "JOIN sys.columns c ON c.object_id = t.object_id "
-                + "UNION ALL SELECT 2, s.name, t.name, i.name FROM expected e "
-                + "JOIN sys.schemas s ON s.name = e.schema_name "
-                + "JOIN sys.tables t ON t.schema_id = s.schema_id AND t.name = e.table_name "
-                + "JOIN sys.indexes i ON i.object_id = t.object_id "
-                + "WHERE i.name IS NOT NULL AND i.is_primary_key = 0 AND i.is_unique_constraint = 0 "
-                + "UNION ALL SELECT CASE kc.type WHEN 'PK' THEN 3 ELSE 4 END, s.name, t.name, kc.name "
-                + "FROM expected e JOIN sys.schemas s ON s.name = e.schema_name "
-                + "JOIN sys.tables t ON t.schema_id = s.schema_id AND t.name = e.table_name "
-                + "JOIN sys.key_constraints kc ON kc.parent_object_id = t.object_id "
-                + "UNION ALL SELECT 5, s.name, t.name, cc.name FROM expected e "
-                + "JOIN sys.schemas s ON s.name = e.schema_name "
-                + "JOIN sys.tables t ON t.schema_id = s.schema_id AND t.name = e.table_name "
-                + "JOIN sys.check_constraints cc ON cc.parent_object_id = t.object_id "
-                + "UNION ALL SELECT 6, s.name, t.name, fk.name FROM expected e "
-                + "JOIN sys.schemas s ON s.name = e.schema_name "
-                + "JOIN sys.tables t ON t.schema_id = s.schema_id AND t.name = e.table_name "
-                + "JOIN sys.foreign_keys fk ON fk.parent_object_id = t.object_id) "
-                + "SELECT 1, p.kind, p.schema_name, p.table_name, p.name FROM physical p "
-                + $"WHERE NOT EXISTS (SELECT 1 FROM {temporaryTable} e WHERE e.kind = p.kind "
-                + "AND e.schema_name = p.schema_name AND e.table_name = p.table_name AND e.name = p.name) "
-                + "ORDER BY p.kind, p.schema_name, p.table_name, p.name;";
+            var childInventorySql = $"""
+                WITH expected(schema_name, table_name) AS (SELECT schema_name, table_name
+                FROM {temporaryTable}
+                WHERE kind = 0), physical(kind, schema_name, table_name, name) AS (SELECT
+                1,
+                s.name, t.name, c.name FROM expected e
+                JOIN sys.schemas s ON s.name = e.schema_name
+                JOIN sys.tables t ON t.schema_id = s.schema_id
+                AND t.name = e.table_name JOIN sys.columns c ON c.object_id = t.object_id
+                UNION ALL SELECT 2,
+                s.name, t.name, i.name FROM expected e
+                JOIN sys.schemas s ON s.name = e.schema_name
+                JOIN sys.tables t ON t.schema_id = s.schema_id
+                AND t.name = e.table_name JOIN sys.indexes i ON i.object_id = t.object_id
+                WHERE i.name IS NOT NULL AND i.is_primary_key = 0
+                AND i.is_unique_constraint = 0 UNION ALL SELECT CASE kc.type
+                WHEN 'PK' THEN 3 ELSE 4 END, s.name, t.name, kc.name
+                FROM expected e JOIN sys.schemas s ON s.name = e.schema_name
+                JOIN sys.tables t ON t.schema_id = s.schema_id
+                AND t.name = e.table_name JOIN sys.key_constraints kc ON kc.parent_object_id
+                = t.object_id UNION ALL SELECT 5,
+                s.name, t.name, cc.name FROM expected e
+                JOIN sys.schemas s ON s.name = e.schema_name
+                JOIN sys.tables t ON t.schema_id = s.schema_id
+                AND t.name = e.table_name JOIN sys.check_constraints cc ON cc.parent_object_id
+                = t.object_id UNION ALL SELECT 6,
+                s.name, t.name, fk.name FROM expected e
+                JOIN sys.schemas s ON s.name = e.schema_name
+                JOIN sys.tables t ON t.schema_id = s.schema_id
+                AND t.name = e.table_name JOIN sys.foreign_keys fk ON fk.parent_object_id
+                = t.object_id) SELECT 1,
+                p.kind, p.schema_name, p.table_name, p.name
+                FROM physical p WHERE NOT EXISTS (SELECT 1
+                FROM {temporaryTable} e
+                WHERE e.kind = p.kind AND e.schema_name = p.schema_name
+                AND e.table_name = p.table_name
+                AND e.name = p.name) ORDER BY p.kind, p.schema_name, p.table_name, p.name;
+                """;
 
             // WHY: Loading the owned scope is a prerequisite. Only its two
             // immutable final reads share a transport, before owned cleanup.

@@ -58,9 +58,12 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
 
         var facetCount = await ScalarIntAsync(
             connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') "
-            + "WHERE name = 'has_descendants' AND type = 'INTEGER' "
-            + $"AND \"notnull\" = {(nullable ? 0 : 1)} AND hidden = {(stored ? 3 : 2)};",
+            $"""
+            SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes')
+            WHERE name = 'has_descendants'
+            AND type = 'INTEGER' AND "notnull" = {(nullable ? 0 : 1)}
+            AND hidden = {(stored ? 3 : 2)};
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -91,11 +94,15 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE generated_nodes (id INTEGER NOT NULL CONSTRAINT pk_generated_nodes PRIMARY KEY, "
-            + "left_bound INTEGER NOT NULL, right_bound INTEGER NOT NULL, "
-            + $"has_descendants {storeType} {(nullable ? string.Empty : "NOT NULL")} "
-            + $"GENERATED ALWAYS AS ({expression}) {storage}); "
-            + "INSERT INTO generated_nodes (id, left_bound, right_bound) VALUES (1, 2, 3);",
+            $"""
+            CREATE TABLE generated_nodes (id INTEGER NOT NULL CONSTRAINT pk_generated_nodes
+            PRIMARY KEY,
+            left_bound INTEGER NOT NULL, right_bound INTEGER NOT NULL, has_descendants
+            {storeType} {(nullable ? string.Empty : "NOT NULL")} GENERATED ALWAYS AS
+            ({expression}) {storage}); INSERT INTO generated_nodes
+            (id,
+            left_bound, right_bound) VALUES (1, 2, 3);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -172,8 +179,12 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
 
         var nativeCount = await ScalarIntAsync(
             connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') "
-            + "WHERE name = 'has_descendants' AND type = '' AND \"notnull\" = 0 AND hidden = 2;",
+            """
+            SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes')
+            WHERE name = 'has_descendants'
+            AND type = '' AND "notnull" = 0
+            AND hidden = 2;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -208,14 +219,21 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var ordinaryColumns = await ScalarIntAsync(
             connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('ordinary_generated') "
-            + "WHERE name = 'derived' AND type = '' AND \"notnull\" = 0 AND hidden = 2;",
+            """
+            SELECT COUNT(*) FROM pragma_table_xinfo('ordinary_generated')
+            WHERE name = 'derived' AND type = ''
+            AND "notnull" = 0 AND hidden = 2;
+            """,
             cancellationToken: CancellationToken.None);
 
         var guardedColumns = await ScalarIntAsync(
             connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') "
-            + "WHERE name = 'has_descendants' AND type = 'INTEGER' AND \"notnull\" = 1 AND hidden = 2;",
+            """
+            SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes')
+            WHERE name = 'has_descendants'
+            AND type = 'INTEGER' AND "notnull" = 1
+            AND hidden = 2;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -252,14 +270,21 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var ordinaryColumns = await ScalarIntAsync(
             connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('ordinary_generated') "
-            + "WHERE name = 'derived' AND type = '' AND \"notnull\" = 0 AND hidden = 2;",
+            """
+            SELECT COUNT(*) FROM pragma_table_xinfo('ordinary_generated')
+            WHERE name = 'derived' AND type = ''
+            AND "notnull" = 0 AND hidden = 2;
+            """,
             cancellationToken: CancellationToken.None);
 
         var guardedColumns = await ScalarIntAsync(
             connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') "
-            + "WHERE name = 'has_descendants' AND type = 'INTEGER' AND \"notnull\" = 1 AND hidden = 2;",
+            """
+            SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes')
+            WHERE name = 'has_descendants'
+            AND type = 'INTEGER' AND "notnull" = 1
+            AND hidden = 2;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -322,8 +347,11 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
 
         var safeColumns = await ScalarIntAsync(
             connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') "
-            + "WHERE name = 'has_descendants' AND type = 'INTEGER' AND \"notnull\" = 1;",
+            """
+            SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes')
+            WHERE name = 'has_descendants'
+            AND type = 'INTEGER' AND "notnull" = 1;
+            """,
             cancellationToken: CancellationToken.None);
 
         var otherColumns = await ScalarIntAsync(
@@ -352,11 +380,16 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE generated_nodes (id INTEGER NOT NULL CONSTRAINT pk_generated_nodes PRIMARY KEY, "
-            + "left_bound INTEGER NOT NULL, right_bound INTEGER NOT NULL, label TEXT NOT NULL, "
-            + "has_descendants AS (right_bound > left_bound), temporary TEXT NULL, "
-            + "CONSTRAINT ck_generated_nodes_bounds CHECK (right_bound >= left_bound)); "
-            + "INSERT INTO generated_nodes (id, left_bound, right_bound, label) VALUES (1, 1, 3, 'retained');",
+            """
+            CREATE TABLE generated_nodes (id INTEGER NOT NULL CONSTRAINT pk_generated_nodes
+            PRIMARY KEY,
+            left_bound INTEGER NOT NULL, right_bound INTEGER NOT NULL, label TEXT NOT
+            NULL,
+            has_descendants AS (right_bound > left_bound), temporary TEXT NULL, CONSTRAINT
+            ck_generated_nodes_bounds CHECK (right_bound >= left_bound)); INSERT INTO
+            generated_nodes (id,
+            left_bound, right_bound, label) VALUES (1, 1, 3, 'retained');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteGeneratedTableContractContext(connection, _internalServices);
@@ -378,8 +411,12 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var ordinaryColumns = await ScalarIntAsync(
             connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') "
-            + "WHERE name = 'has_descendants' AND type = '' AND \"notnull\" = 0 AND hidden = 2;",
+            """
+            SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes')
+            WHERE name = 'has_descendants'
+            AND type = '' AND "notnull" = 0
+            AND hidden = 2;
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -459,8 +496,12 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE generated_text (source TEXT NOT NULL, "
-            + "display TEXT COLLATE BINARY NOT NULL GENERATED ALWAYS AS (\"source\") VIRTUAL);",
+            """
+            CREATE TABLE generated_text (
+                source TEXT NOT NULL,
+                display TEXT COLLATE BINARY NOT NULL GENERATED ALWAYS AS ("source") VIRTUAL
+            );
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -509,8 +550,12 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE generated_nodes (id INTEGER NOT NULL, left_bound INTEGER NOT NULL, "
-            + "right_bound INTEGER NOT NULL); INSERT INTO generated_nodes VALUES (1, 2, 3), (2, 3, 3);",
+            """
+            CREATE TABLE generated_nodes (id INTEGER NOT NULL, left_bound INTEGER NOT
+            NULL,
+            right_bound INTEGER NOT NULL); INSERT INTO generated_nodes VALUES (1,
+            2, 3), (2, 3, 3);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -650,11 +695,13 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE generated_nodes (id INTEGER NOT NULL, left_bound INTEGER NOT NULL, "
-            + "right_bound INTEGER NOT NULL);"
-            + (populated
+            $"""
+            CREATE TABLE generated_nodes (id INTEGER NOT NULL, left_bound INTEGER NOT
+            NULL,
+            right_bound INTEGER NOT NULL);{(populated
                 ? "INSERT INTO generated_nodes VALUES (1, 1, 3);"
-                : ""),
+                : "")}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -739,10 +786,11 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "INSERT INTO generated_nodes (id, left_bound, right_bound) VALUES "
-            + "(1, 1, 3), (2, 1, 2), (3, 9223372036854775807, 9223372036854775807), "
-            + "(4, 9223372036854775806, 9223372036854775807), "
-            + "(5, -9223372036854775808, 9223372036854775807);",
+            """
+            INSERT INTO generated_nodes (id, left_bound, right_bound) VALUES (1, 1,
+            3), (2, 1, 2), (3, 9223372036854775807, 9223372036854775807), (4, 9223372036854775806,
+            9223372036854775807), (5, -9223372036854775808, 9223372036854775807);
+            """,
             cancellationToken: CancellationToken.None);
 
         var matchingRows = await ScalarIntAsync(
@@ -853,8 +901,12 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         var history = await context.Database.GetAppliedMigrationsAsync();
         var generatedColumns = await ScalarIntAsync(
             connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') "
-            + "WHERE name = 'has_descendants' AND type = 'INTEGER' AND \"notnull\" = 1 AND hidden = 2;",
+            """
+            SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes')
+            WHERE name = 'has_descendants'
+            AND type = 'INTEGER' AND "notnull" = 1
+            AND hidden = 2;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -898,11 +950,16 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE generated_nodes (id INTEGER NOT NULL CONSTRAINT pk_generated_nodes PRIMARY KEY, "
-            + "left_bound INTEGER NOT NULL, right_bound INTEGER NOT NULL, label TEXT NULL, "
-            + "has_descendants INTEGER NOT NULL GENERATED ALWAYS AS (right_bound > left_bound) VIRTUAL, "
-            + "CONSTRAINT ck_generated_nodes_bounds CHECK (right_bound >= left_bound)); "
-            + "INSERT INTO generated_nodes (id, left_bound, right_bound, label) VALUES (1, 1, 3, 'preserved');",
+            """
+            CREATE TABLE generated_nodes (id INTEGER NOT NULL CONSTRAINT pk_generated_nodes
+            PRIMARY KEY,
+            left_bound INTEGER NOT NULL, right_bound INTEGER NOT NULL, label TEXT NULL,
+            has_descendants INTEGER NOT NULL GENERATED ALWAYS AS (right_bound > left_bound)
+            VIRTUAL,
+            CONSTRAINT ck_generated_nodes_bounds CHECK (right_bound >= left_bound));
+            INSERT INTO generated_nodes (id,
+            left_bound, right_bound, label) VALUES (1, 1, 3, 'preserved');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteGeneratedTableContractContext(connection, _internalServices);
@@ -917,8 +974,12 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var matchingColumns = await ScalarIntAsync(
             connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') "
-            + "WHERE name = 'has_descendants' AND type = 'INTEGER' AND \"notnull\" = 1 AND hidden = 2;",
+            """
+            SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes')
+            WHERE name = 'has_descendants'
+            AND type = 'INTEGER' AND "notnull" = 1
+            AND hidden = 2;
+            """,
             cancellationToken: CancellationToken.None);
 
         var matchingRows = await ScalarIntAsync(
@@ -944,8 +1005,11 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
 
         await ExecuteSqlAsync(
             connection,
-            "INSERT INTO generated_nodes (id, left_bound, right_bound, label) VALUES (1, 1, 3, 'retained'); "
-            + "ALTER TABLE generated_nodes ADD temporary TEXT NULL;",
+            """
+            INSERT INTO generated_nodes (id, left_bound, right_bound, label) VALUES
+            (1,
+            1, 3, 'retained'); ALTER TABLE generated_nodes ADD temporary TEXT NULL;
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -1372,8 +1436,10 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE generated_parents (id INTEGER NOT NULL CONSTRAINT pk_generated_parents PRIMARY KEY); "
-            + "INSERT INTO generated_parents VALUES (1);",
+            """
+            CREATE TABLE generated_parents (id INTEGER NOT NULL CONSTRAINT pk_generated_parents PRIMARY KEY);
+            INSERT INTO generated_parents VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -1397,8 +1463,11 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
 
         var foreignKeys = await ScalarIntAsync(
             connection,
-            "SELECT COUNT(*) FROM pragma_foreign_key_list('generated_nodes') "
-            + "WHERE \"table\" = 'generated_parents' AND \"from\" = 'parent_id' AND on_delete = 'CASCADE';",
+            """
+            SELECT COUNT(*) FROM pragma_foreign_key_list('generated_nodes')
+            WHERE "table" = 'generated_parents'
+            AND "from" = 'parent_id' AND on_delete = 'CASCADE';
+            """,
             cancellationToken: CancellationToken.None);
 
         var indexes = await ScalarIntAsync(
@@ -1431,8 +1500,10 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE generated_parents (id INTEGER NOT NULL CONSTRAINT pk_generated_parents PRIMARY KEY); "
-            + "INSERT INTO generated_parents VALUES (1);",
+            """
+            CREATE TABLE generated_parents (id INTEGER NOT NULL CONSTRAINT pk_generated_parents PRIMARY KEY);
+            INSERT INTO generated_parents VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);

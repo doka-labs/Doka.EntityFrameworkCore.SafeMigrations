@@ -120,8 +120,11 @@ public sealed class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSaf
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'unsupported_structured_cast';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'unsupported_structured_cast';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 

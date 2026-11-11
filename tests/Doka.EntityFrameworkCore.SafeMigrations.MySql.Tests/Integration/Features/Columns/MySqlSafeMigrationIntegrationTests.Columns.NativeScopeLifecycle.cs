@@ -6,8 +6,10 @@ public sealed class MySqlColumnsNativeScopeLifecycleIntegrationTests : MySqlSafe
     private const string NativeScopeLifecycleComment = "native\\scope";
 
     private const string NativeScopeLifecycleFixtureSql =
-        "CREATE TABLE `native_scope_items` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-        + "INSERT INTO `native_scope_items` (`key`) VALUES (1);";
+        """
+        CREATE TABLE `native_scope_items` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+        INSERT INTO `native_scope_items` (`key`) VALUES (1);
+        """;
 
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
@@ -76,8 +78,12 @@ public sealed class MySqlColumnsNativeScopeLifecycleIntegrationTests : MySqlSafe
 
         var targetColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'native_scope_items' AND COLUMN_NAME = 'rejected_value';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'native_scope_items'
+            AND COLUMN_NAME = 'rejected_value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var preservedRows = await ScalarIntAsync(
@@ -184,8 +190,12 @@ public sealed class MySqlColumnsNativeScopeLifecycleIntegrationTests : MySqlSafe
 
         var targetColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'native_scope_items' AND COLUMN_NAME = 'prior_value';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'native_scope_items'
+            AND COLUMN_NAME = 'prior_value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var preservedRows = await ScalarIntAsync(
@@ -290,11 +300,13 @@ public sealed class MySqlColumnsNativeScopeLifecycleIntegrationTests : MySqlSafe
 
         var targetColumns = await ScalarIntAsync(
             pooledConnectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'native_scope_items' AND COLUMN_NAME = 'prior_value' "
-            + "AND COLUMN_COMMENT = "
-            + AtomicRequiredAddLiteral(NativeScopeLifecycleComment)
-            + ";",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'native_scope_items'
+            AND COLUMN_NAME = 'prior_value'
+            AND COLUMN_COMMENT = {AtomicRequiredAddLiteral(NativeScopeLifecycleComment)};
+            """,
             cancellationToken: CancellationToken.None);
 
         var preservedRows = await ScalarIntAsync(
@@ -401,8 +413,11 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         }
 
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT @@SESSION.sql_mode, CONNECTION_ID(), @__doka_previous_sql_mode, "
-            + "@doka_sm_provider_setup_entered IS NULL, @doka_sm_state IS NULL AND @doka_sm_action IS NULL;";
+        command.CommandText = """
+        SELECT @@SESSION.sql_mode, CONNECTION_ID(), @__doka_previous_sql_mode,
+        @doka_sm_provider_setup_entered IS NULL, @doka_sm_state IS NULL
+        AND @doka_sm_action IS NULL;
+        """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
@@ -554,8 +569,10 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
                     && !FaultInjected)
                 {
                     await using var checkpoint = connection.CreateCommand();
-                    checkpoint.CommandText = "SELECT COALESCE(@doka_sm_provider_setup_entered = 1 "
-                        + "AND FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) > 0, FALSE);";
+                    checkpoint.CommandText = """
+                    SELECT COALESCE(@doka_sm_provider_setup_entered = 1
+                    AND FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) > 0, FALSE);
+                    """;
 
                     FaultCheckpointObserved = Convert.ToInt32(
                             await checkpoint.ExecuteScalarAsync(CancellationToken.None),

@@ -194,8 +194,11 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY); "
-            + "CREATE TABLE dbo.renamed_principal (Id bigint NOT NULL CONSTRAINT PK_occupied_principal PRIMARY KEY);",
+            """
+            CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal
+            PRIMARY KEY); CREATE TABLE dbo.renamed_principal (Id bigint NOT NULL CONSTRAINT
+            PK_occupied_principal PRIMARY KEY);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -302,10 +305,13 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var foreignKeyCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.foreign_keys WHERE name=N'FK_inline_dependent' "
-            + "AND parent_object_id=OBJECT_ID(N'dbo.inline_dependent',N'U') "
-            + "AND referenced_object_id=OBJECT_ID(N'dbo.renamed_principal',N'U') "
-            + "AND is_disabled=0 AND is_not_trusted=0;",
+            """
+            SELECT COUNT(*) FROM sys.foreign_keys
+            WHERE name=N'FK_inline_dependent'
+            AND parent_object_id=OBJECT_ID(N'dbo.inline_dependent',N'U')
+            AND referenced_object_id=OBJECT_ID(N'dbo.renamed_principal',N'U')
+            AND is_disabled=0 AND is_not_trusted=0;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -420,8 +426,11 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal PRIMARY KEY, "
-            + "CONSTRAINT UQ_inline_principal UNIQUE (Id));",
+            """
+            CREATE TABLE dbo.inline_principal (Id int NOT NULL CONSTRAINT PK_inline_principal
+            PRIMARY KEY,
+            CONSTRAINT UQ_inline_principal UNIQUE (Id));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -458,9 +467,11 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.drop_principal (Id int NOT NULL CONSTRAINT PK_drop_principal PRIMARY KEY); "
-            + "CREATE TABLE dbo.drop_dependent (ParentId int NOT NULL, "
-            + "CONSTRAINT FK_drop_dependent FOREIGN KEY (ParentId) REFERENCES dbo.drop_principal(Id));",
+            """
+            CREATE TABLE dbo.drop_principal (Id int NOT NULL CONSTRAINT PK_drop_principal
+            PRIMARY KEY); CREATE TABLE dbo.drop_dependent (ParentId int NOT NULL,
+            CONSTRAINT FK_drop_dependent FOREIGN KEY (ParentId) REFERENCES dbo.drop_principal(Id));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -506,9 +517,11 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.drop_principal (Id int NOT NULL CONSTRAINT PK_drop_principal PRIMARY KEY); "
-            + "CREATE TABLE dbo.drop_dependent (ParentId int NOT NULL, "
-            + "CONSTRAINT FK_drop_dependent FOREIGN KEY (ParentId) REFERENCES dbo.drop_principal(Id));",
+            """
+            CREATE TABLE dbo.drop_principal (Id int NOT NULL CONSTRAINT PK_drop_principal
+            PRIMARY KEY); CREATE TABLE dbo.drop_dependent (ParentId int NOT NULL,
+            CONSTRAINT FK_drop_dependent FOREIGN KEY (ParentId) REFERENCES dbo.drop_principal(Id));
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
@@ -724,12 +737,15 @@ public sealed class SqlServerSafeMigrationOrderedInlinePrerequisitesIntegrationT
 
         var foreignKeyCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.foreign_keys fk JOIN sys.foreign_key_columns fkc "
-            + "ON fkc.constraint_object_id = fk.object_id "
-            + "JOIN sys.columns principal ON principal.object_id = fkc.referenced_object_id "
-            + "AND principal.column_id = fkc.referenced_column_id "
-            + "WHERE fk.name = N'FK_inline_dependent' AND fk.is_disabled = 0 AND fk.is_not_trusted = 0 "
-            + $"AND principal.name = N'{(renameColumn ? "RenamedId" : "Id")}';",
+            $"""
+            SELECT COUNT(*) FROM sys.foreign_keys fk
+            JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+            JOIN sys.columns principal ON principal.object_id = fkc.referenced_object_id
+            AND principal.column_id = fkc.referenced_column_id
+            WHERE fk.name = N'FK_inline_dependent'
+            AND fk.is_disabled = 0 AND fk.is_not_trusted = 0
+            AND principal.name = N'{(renameColumn ? "RenamedId" : "Id")}';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert

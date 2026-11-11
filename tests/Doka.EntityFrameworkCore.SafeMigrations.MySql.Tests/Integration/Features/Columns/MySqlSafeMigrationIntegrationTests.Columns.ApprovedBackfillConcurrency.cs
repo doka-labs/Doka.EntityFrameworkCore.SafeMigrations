@@ -9,11 +9,13 @@ public sealed class MySqlColumnsApprovedBackfillConcurrencyIntegrationTests : My
     // WHY: The existing gate helpers use these separate test-owned tables.
     // Neither participates in the target's data, metadata, or advisory lock.
     private const string ApprovedBackfillGateSql =
-        "CREATE TABLE `atomic_add_checkpoint` "
-        + "(`key` int NOT NULL PRIMARY KEY, `reached` int NOT NULL) ENGINE=InnoDB; "
-        + "INSERT INTO `atomic_add_checkpoint` VALUES (1, 0); "
-        + "CREATE TABLE `atomic_add_gate` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-        + "INSERT INTO `atomic_add_gate` VALUES (1);";
+        """
+        CREATE TABLE `atomic_add_checkpoint` (`key` int NOT NULL PRIMARY KEY,
+        `reached` int NOT NULL) ENGINE=InnoDB; INSERT INTO `atomic_add_checkpoint`
+        VALUES (1,
+        0); CREATE TABLE `atomic_add_gate` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+        INSERT INTO `atomic_add_gate` VALUES (1);
+        """;
 
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
@@ -456,19 +458,17 @@ public sealed class MySqlColumnsApprovedBackfillConcurrencyIntegrationTests : My
                 .Replace("'", "''", StringComparison.Ordinal)
             + "'";
 
-        return "CREATE TABLE `approved_backfill_items` (`key` int NOT NULL PRIMARY KEY, `required_value` "
-            + storeType
-            + (alreadyMatching
+        return $"""
+            CREATE TABLE `approved_backfill_items` (`key` int NOT NULL PRIMARY KEY,
+            `required_value` {storeType}{(alreadyMatching
                 ? " NOT NULL DEFAULT " + defaultLiteral
-                : " NULL")
-            + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `approved_backfill_items` (`key`, `required_value`) VALUES (1, "
-            + (alreadyMatching
+                : " NULL")}) ENGINE=InnoDB
+            DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT INTO `approved_backfill_items`
+            (`key`,
+            `required_value`) VALUES (1, {(alreadyMatching
                 ? declaredValue
-                : "NULL")
-            + "), (2, "
-            + preservedValue
-            + ");";
+                : "NULL")}), (2, {preservedValue});
+            """;
     }
 
     /// <summary>Returns the portable SQL value for a bounded, explicitly declared or preserved test sentinel.</summary>
@@ -522,8 +522,13 @@ public sealed class MySqlColumnsApprovedBackfillConcurrencyIntegrationTests : My
         CancellationToken cancellationToken
     ) => ScalarIntAsync(
         connectionString,
-        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-        + "AND TABLE_NAME = 'approved_backfill_items' AND COLUMN_NAME = 'required_value' AND IS_NULLABLE = 'YES';",
+        """
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'approved_backfill_items'
+        AND COLUMN_NAME = 'required_value'
+        AND IS_NULLABLE = 'YES';
+        """,
         cancellationToken: cancellationToken);
 
     /// <summary>Reads current character width so failed widening cannot masquerade as completed DDL.</summary>
@@ -535,9 +540,13 @@ public sealed class MySqlColumnsApprovedBackfillConcurrencyIntegrationTests : My
         CancellationToken cancellationToken
     ) => ScalarIntAsync(
         connectionString,
-        "SELECT COALESCE(CHARACTER_MAXIMUM_LENGTH, 0) FROM INFORMATION_SCHEMA.COLUMNS "
-        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'approved_backfill_items' "
-        + "AND COLUMN_NAME = 'required_value';",
+        """
+        SELECT COALESCE(CHARACTER_MAXIMUM_LENGTH, 0)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'approved_backfill_items'
+        AND COLUMN_NAME = 'required_value';
+        """,
         cancellationToken: cancellationToken);
 
     /// <summary>Waits for a committed marker after the real UPDATE and before the real ALTER.</summary>
@@ -592,8 +601,11 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         private const string BodyPrefix = "SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' THEN";
         private const string StageEnd = "DEALLOCATE PREPARE doka_sm_statement;";
 
-        private const string CheckpointSql = "UPDATE `atomic_add_checkpoint` SET `reached` = 1 WHERE `key` = 1; "
-            + "SELECT `key` FROM `atomic_add_gate` WHERE `key` = 1 FOR UPDATE; ";
+        private const string CheckpointSql = $"""
+            UPDATE `atomic_add_checkpoint` SET `reached` = 1
+            WHERE `key` = 1; SELECT `key`
+            FROM `atomic_add_gate` WHERE `key` = 1 FOR UPDATE;{"\u0020"}
+            """;
 
         private static readonly string s_updateHex = Convert.ToHexString(
             Encoding.UTF8.GetBytes("UPDATE `approved_backfill_items`"));

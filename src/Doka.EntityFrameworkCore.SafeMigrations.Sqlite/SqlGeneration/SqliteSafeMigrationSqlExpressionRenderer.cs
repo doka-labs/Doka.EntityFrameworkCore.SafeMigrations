@@ -6,7 +6,7 @@ internal sealed class SqliteSafeMigrationSqlExpressionRenderer
     internal const string ProviderId = "microsoft_sqlite";
 
     private static readonly Regex s_storeTypePattern = new(
-        "^[A-Za-z][A-Za-z0-9_ ]*(?:\\([0-9]+(?:\\s*,\\s*[0-9]+)?\\))?$",
+        @"^[A-Za-z][A-Za-z0-9_ ]*(?:\([0-9]+(?:\s*,\s*[0-9]+)?\))?$",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
 
     private readonly ISqlGenerationHelper _sqlGenerationHelper;

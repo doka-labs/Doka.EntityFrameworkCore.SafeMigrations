@@ -17,8 +17,10 @@ public sealed class MySqlModelManagedDataPendingKeyIdentityIntegrationTests : My
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `managed_pending_keys` (`Id` int NOT NULL, `Code` int NOT NULL, "
-            + "`Marker` int NOT NULL, PRIMARY KEY (`Id`, `Code`)) ENGINE=InnoDB;",
+            """
+            CREATE TABLE `managed_pending_keys` (`Id` int NOT NULL, `Code` int NOT NULL,
+            `Marker` int NOT NULL, PRIMARY KEY (`Id`, `Code`)) ENGINE=InnoDB;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new ModelManagedPendingKeyDbContext(connectionString, Fixture.ServerVersion);

@@ -50,9 +50,14 @@ public sealed class SqlServerSafeMigrationColumnLayoutAuditingIntegrationTests :
 
         var added = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U') "
-            + "AND name=N'Added' AND column_id=2 AND system_type_id=TYPE_ID(N'int') "
-            + "AND user_type_id=TYPE_ID(N'int') AND max_length=4 AND is_nullable=1;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U')
+            AND name=N'Added' AND column_id=2
+            AND system_type_id=TYPE_ID(N'int')
+            AND user_type_id=TYPE_ID(N'int')
+            AND max_length=4 AND is_nullable=1;
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -160,10 +165,16 @@ public sealed class SqlServerSafeMigrationColumnLayoutAuditingIntegrationTests :
 
         var acceptedBindings = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U') "
-            + "AND system_type_id=TYPE_ID(N'char') AND user_type_id=TYPE_ID(N'char') AND is_nullable=1 "
-            + "AND ((name=N'Existing' AND column_id=1 AND max_length=4000) "
-            + "OR (name=N'First' AND column_id=2 AND max_length=3000));",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U')
+            AND system_type_id=TYPE_ID(N'char')
+            AND user_type_id=TYPE_ID(N'char')
+            AND is_nullable=1 AND ((name=N'Existing'
+            AND column_id=1 AND max_length=4000)
+            OR (name=N'First' AND column_id=2
+            AND max_length=3000));
+            """,
             cancellationToken: CancellationToken.None);
 
         var rejected = await ScalarIntAsync(

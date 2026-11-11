@@ -184,49 +184,40 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
         return builder.Operations.ToList();
     }
 
-    private static string BuildLargeMigrationStressCatalog() => "CREATE TABLE large_migration_parent ("
-        + "id integer NOT NULL, tenant_id integer NOT NULL, "
-        + "CONSTRAINT pk_large_migration_parent PRIMARY KEY (id, tenant_id)); "
-        + "CREATE TABLE large_migration_secondary_parent ("
-        + "id integer NOT NULL, tenant_id integer NOT NULL, "
-        + "CONSTRAINT pk_large_migration_secondary_parent PRIMARY KEY (id, tenant_id)); "
-        + "CREATE TABLE large_migration_target ("
-        + "id integer NOT NULL, matching_value integer NULL, "
-        + "repair_value character varying(40) NULL DEFAULT 'legacy', "
-        + "blocked_value character varying(40) NULL, widening_value character varying(40) NULL, "
-        + "narrowing_value character varying(40) NULL, "
-        + "blocked_narrowing_value character varying(40) NULL, "
-        + "boolean_value boolean NULL, indexed_value integer NOT NULL, "
-        + "unique_value integer NOT NULL, check_value integer NOT NULL, "
-        + "parent_id integer NOT NULL, parent_tenant_id integer NOT NULL, "
-        + "secondary_parent_id integer NOT NULL, secondary_parent_tenant_id integer NOT NULL, "
-        + "CONSTRAINT pk_large_migration_target PRIMARY KEY (id), "
-        + "CONSTRAINT uq_large_migration_target_value UNIQUE (unique_value, matching_value), "
-        + "CONSTRAINT ck_large_migration_target_value CHECK (check_value >= 0), "
-        + "CONSTRAINT fk_large_migration_target_parent "
-        + "FOREIGN KEY (parent_id, parent_tenant_id) "
-        + "REFERENCES large_migration_parent (id, tenant_id)); "
-        + "CREATE INDEX ix_large_migration_target_indexed "
-        + "ON large_migration_target (indexed_value, matching_value); "
-        + "CREATE INDEX ix_large_migration_target_parent "
-        + "ON large_migration_target (parent_id, parent_tenant_id); "
-        + "CREATE INDEX ix_large_migration_target_secondary_parent "
-        + "ON large_migration_target (secondary_parent_id, secondary_parent_tenant_id); "
-        + "INSERT INTO large_migration_parent (id, tenant_id) VALUES (1, 1); "
-        + "INSERT INTO large_migration_secondary_parent (id, tenant_id) VALUES (1, 1); "
-        + "INSERT INTO large_migration_target ("
-        + "id, matching_value, repair_value, blocked_value, widening_value, "
-        + "narrowing_value, blocked_narrowing_value, boolean_value, indexed_value, "
-        + "unique_value, check_value, parent_id, parent_tenant_id, "
-        + "secondary_parent_id, secondary_parent_tenant_id) "
-        + "VALUES (1, 1, 'legacy', NULL, 'wide', 'fits', 'too-long-value', true, 1, 1, 1, 1, 1, 1, 1);"
-        + BuildLargeMigrationModelManagedRows();
+    private static string BuildLargeMigrationStressCatalog() => $"""
+        CREATE TABLE large_migration_parent (id integer NOT NULL, tenant_id integer NOT NULL,
+        CONSTRAINT pk_large_migration_parent PRIMARY KEY (id, tenant_id)); CREATE TABLE
+        large_migration_secondary_parent (id integer NOT NULL,
+        tenant_id integer NOT NULL, CONSTRAINT pk_large_migration_secondary_parent PRIMARY KEY (id,
+        tenant_id)); CREATE TABLE large_migration_target (id integer NOT NULL,
+        matching_value integer NULL, repair_value character varying(40) NULL DEFAULT 'legacy',
+        blocked_value character varying(40) NULL, widening_value character varying(40) NULL,
+        narrowing_value character varying(40) NULL, blocked_narrowing_value character varying(40) NULL,
+        boolean_value boolean NULL, indexed_value integer NOT NULL, unique_value integer NOT NULL,
+        check_value integer NOT NULL, parent_id integer NOT NULL, parent_tenant_id integer NOT NULL,
+        secondary_parent_id integer NOT NULL, secondary_parent_tenant_id integer NOT NULL,
+        CONSTRAINT pk_large_migration_target PRIMARY KEY (id), CONSTRAINT uq_large_migration_target_value UNIQUE
+        (unique_value,
+        matching_value), CONSTRAINT ck_large_migration_target_value CHECK (check_value >= 0),
+        CONSTRAINT fk_large_migration_target_parent FOREIGN KEY (parent_id, parent_tenant_id) REFERENCES
+        large_migration_parent (id,
+        tenant_id)); CREATE INDEX ix_large_migration_target_indexed ON large_migration_target (indexed_value,
+        matching_value); CREATE INDEX ix_large_migration_target_parent ON large_migration_target (parent_id,
+        parent_tenant_id); CREATE INDEX ix_large_migration_target_secondary_parent ON large_migration_target
+        (secondary_parent_id,
+        secondary_parent_tenant_id); INSERT INTO large_migration_parent (id, tenant_id) VALUES (1,
+        1); INSERT INTO large_migration_secondary_parent (id, tenant_id) VALUES (1,
+        1); INSERT INTO large_migration_target (id, matching_value, repair_value,
+        blocked_value, widening_value, narrowing_value, blocked_narrowing_value,
+        boolean_value, indexed_value, unique_value, check_value, parent_id, parent_tenant_id,
+        secondary_parent_id, secondary_parent_tenant_id) VALUES (1, 1, 'legacy',
+        NULL, 'wide', 'fits', 'too-long-value', true, 1, 1, 1, 1, 1, 1, 1);{BuildLargeMigrationModelManagedRows()}
+        """;
 
-    private static string BuildLargeMigrationModelManagedRows() => "INSERT INTO large_migration_target ("
-        + "id, matching_value, repair_value, blocked_value, indexed_value, "
-        + "unique_value, check_value, parent_id, parent_tenant_id, "
-        + "secondary_parent_id, secondary_parent_tenant_id) VALUES "
-        + string.Join(
+    private static string BuildLargeMigrationModelManagedRows() => $"""
+        INSERT INTO large_migration_target (id, matching_value, repair_value,
+        blocked_value, indexed_value, unique_value, check_value, parent_id, parent_tenant_id,
+        secondary_parent_id, secondary_parent_tenant_id) VALUES {string.Join(
             ", ",
             LargeMigrationStressContract
                 .ModelManagedUpdateOrdinals(LargeMigrationStressDialect.PostgreSql)
@@ -239,8 +230,8 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
                     var value = ordinal.ToString(CultureInfo.InvariantCulture);
 
                     return $"({key}, {value}, 'canonical', NULL, {value}, {key}, {value}, 1, 1, 1, 1)";
-                }))
-        + ";";
+                }))};
+        """;
 
     private static string BuildPostgreSqlPerformanceTables(
         string prefix,

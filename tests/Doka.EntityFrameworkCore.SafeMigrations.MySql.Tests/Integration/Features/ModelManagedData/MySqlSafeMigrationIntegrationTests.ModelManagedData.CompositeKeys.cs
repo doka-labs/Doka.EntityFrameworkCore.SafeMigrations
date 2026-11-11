@@ -15,11 +15,13 @@ public sealed class MySqlModelManagedDataCompositeKeysIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `model_composite_roles` ("
-            + "`tenant_id` int NOT NULL, `id` int NOT NULL, `name` varchar(64) NOT NULL, "
-            + "PRIMARY KEY (`tenant_id`, `id`)) ENGINE=InnoDB;"
-            + "INSERT INTO `model_composite_roles` (`tenant_id`, `id`, `name`) VALUES "
-            + "(1, 1, 'source'), (2, 1, 'removed');",
+            """
+            CREATE TABLE `model_composite_roles` (`tenant_id` int NOT NULL, `id` int
+            NOT NULL,
+            `name` varchar(64) NOT NULL, PRIMARY KEY (`tenant_id`, `id`)) ENGINE=InnoDB;INSERT
+            INTO `model_composite_roles` (`tenant_id`,
+            `id`, `name`) VALUES (1, 1, 'source'), (2, 1, 'removed');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

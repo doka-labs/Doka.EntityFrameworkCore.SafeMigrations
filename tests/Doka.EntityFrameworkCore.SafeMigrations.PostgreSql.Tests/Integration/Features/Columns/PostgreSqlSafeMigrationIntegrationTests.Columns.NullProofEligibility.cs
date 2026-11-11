@@ -42,10 +42,12 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE proof_eligibility_rows (id integer PRIMARY KEY, value {storeType} NOT NULL{defaultClause}); "
-            + $"COMMENT ON COLUMN proof_eligibility_rows.value IS '{comment}'; "
-            + $"INSERT INTO proof_eligibility_rows VALUES (1, {value}); "
-            + NullProofSentinelSql,
+            $"""
+            CREATE TABLE proof_eligibility_rows (id integer PRIMARY KEY, value {storeType} NOT
+            NULL{defaultClause}); COMMENT ON COLUMN proof_eligibility_rows.value IS '{comment}'; INSERT
+            INTO proof_eligibility_rows VALUES (1,
+            {value}); {NullProofSentinelSql}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -82,8 +84,12 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
 
         var canonicalColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'proof_eligibility_rows' "
-            + "AND column_name = 'value' AND is_nullable = 'NO' AND column_default IS NULL;",
+            """
+            SELECT COUNT(*) FROM information_schema.columns
+            WHERE table_name = 'proof_eligibility_rows'
+            AND column_name = 'value' AND is_nullable = 'NO'
+            AND column_default IS NULL;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -128,9 +134,11 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE proof_eligibility_rows (id integer PRIMARY KEY, value character varying(800) NULL); "
-            + $"INSERT INTO proof_eligibility_rows VALUES (1, {value}); "
-            + NullProofSentinelSql,
+            $"""
+            CREATE TABLE proof_eligibility_rows (id integer PRIMARY KEY, value character varying(800) NULL);
+            INSERT INTO proof_eligibility_rows VALUES (1,
+            {value}); {NullProofSentinelSql}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -233,11 +241,13 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE proof_eligibility_rows (id integer PRIMARY KEY, value character varying(800) NULL); "
-            + "COMMENT ON COLUMN proof_eligibility_rows.value IS 'canonical'; "
-            + $"INSERT INTO proof_eligibility_rows VALUES (1, {value}); "
-            + $"ALTER TABLE proof_eligibility_rows ADD CONSTRAINT proof_not_null {constraint}; "
-            + NullProofSentinelSql,
+            $"""
+            CREATE TABLE proof_eligibility_rows (id integer PRIMARY KEY, value character varying(800) NULL);
+            COMMENT ON COLUMN proof_eligibility_rows.value IS 'canonical'; INSERT INTO
+            proof_eligibility_rows VALUES (1,
+            {value}); ALTER TABLE proof_eligibility_rows ADD CONSTRAINT proof_not_null {constraint};
+            {NullProofSentinelSql}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -247,8 +257,11 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         // Act
         var declaredNotNull = await ScalarIntAsync(
             connectionString,
-            "SELECT attnotnull::integer FROM pg_catalog.pg_attribute "
-            + "WHERE attrelid = 'proof_eligibility_rows'::regclass AND attname = 'value';",
+            """
+            SELECT attnotnull::integer FROM pg_catalog.pg_attribute WHERE attrelid =
+            'proof_eligibility_rows'::regclass
+            AND attname = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var providerAnalysis = await context
@@ -358,13 +371,13 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE proof_eligibility_rows (id integer, value character varying(800) NULL); "
-            + "CREATE TABLE proof_eligibility_child () INHERITS (proof_eligibility_rows); "
-            + "COMMENT ON COLUMN proof_eligibility_rows.value IS 'canonical'; "
-            + "INSERT INTO proof_eligibility_rows VALUES (1, 'parent'); "
-            + $"INSERT INTO proof_eligibility_child VALUES (2, {childValue}); "
-            + $"ALTER TABLE proof_eligibility_rows ADD CONSTRAINT proof_parent_not_null {constraint}; "
-            + NullProofSentinelSql,
+            $"""
+            CREATE TABLE proof_eligibility_rows (id integer, value character varying(800) NULL); CREATE
+            TABLE proof_eligibility_child () INHERITS (proof_eligibility_rows); COMMENT ON COLUMN
+            proof_eligibility_rows.value IS 'canonical'; INSERT INTO proof_eligibility_rows VALUES (1,
+            'parent'); INSERT INTO proof_eligibility_child VALUES (2, {childValue}); ALTER TABLE
+            proof_eligibility_rows ADD CONSTRAINT proof_parent_not_null {constraint}; {NullProofSentinelSql}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -455,9 +468,12 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE proof_eligibility_rows (id integer, value character varying(800) {nullability}); "
-            + "COMMENT ON COLUMN proof_eligibility_rows.value IS 'canonical'; "
-            + "INSERT INTO proof_eligibility_rows VALUES (1, 'parent');",
+            $"""
+            CREATE TABLE proof_eligibility_rows (id integer, value character varying(800) {nullability});
+            COMMENT ON COLUMN proof_eligibility_rows.value IS 'canonical'; INSERT INTO
+            proof_eligibility_rows VALUES (1,
+            'parent');
+            """,
             cancellationToken: CancellationToken.None);
 
         if (inherited)
@@ -468,9 +484,11 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
 
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE TABLE proof_eligibility_child () INHERITS (proof_eligibility_rows); "
-                + "INSERT INTO proof_eligibility_child VALUES (2, 'child'); "
-                + $"ALTER TABLE proof_eligibility_rows ADD CONSTRAINT proof_parent_not_null {constraint};",
+                $"""
+                CREATE TABLE proof_eligibility_child () INHERITS (proof_eligibility_rows); INSERT INTO
+                proof_eligibility_child VALUES (2,
+                'child'); ALTER TABLE proof_eligibility_rows ADD CONSTRAINT proof_parent_not_null {constraint};
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -568,8 +586,11 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE proof_eligibility_rows (id integer PRIMARY KEY, value character varying(800) NULL); "
-            + "INSERT INTO proof_eligibility_rows VALUES (1, 'preserved');",
+            """
+            CREATE TABLE proof_eligibility_rows (id integer PRIMARY KEY, value character varying(800) NULL);
+            INSERT INTO proof_eligibility_rows VALUES (1,
+            'preserved');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -634,8 +655,11 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         var connectionString = await CreateDatabaseAsync(cancellation.Token);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE proof_eligibility_rows (id integer PRIMARY KEY, value timestamp without time zone NULL); "
-            + "INSERT INTO proof_eligibility_rows VALUES (1, '2026-01-02 03:04:05.123456');",
+            """
+            CREATE TABLE proof_eligibility_rows (id integer PRIMARY KEY, value timestamp without time zone
+            NULL); INSERT INTO proof_eligibility_rows VALUES (1,
+            '2026-01-02 03:04:05.123456');
+            """,
             cancellationToken: cancellation.Token);
 
         await using var context = CreateContext(connectionString);
@@ -672,8 +696,11 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
 
         var nullableColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'proof_eligibility_rows' "
-            + "AND column_name = 'value' AND is_nullable = 'YES';",
+            """
+            SELECT COUNT(*) FROM information_schema.columns
+            WHERE table_name = 'proof_eligibility_rows'
+            AND column_name = 'value' AND is_nullable = 'YES';
+            """,
             cancellationToken: cancellation.Token);
 
         var insertedNullRows = await ScalarIntAsync(

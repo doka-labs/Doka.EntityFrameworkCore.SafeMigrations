@@ -165,9 +165,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         parameterizer.Add);
 
                     selections.Add(
-                        $"SELECT {candidate.Ordinal.ToString(CultureInfo.InvariantCulture)}, "
-                        + $"COALESCE(({transitionExpression}), FALSE), "
-                        + $"COALESCE(({narrowingExpression}), FALSE)");
+                        $"""
+                        SELECT {candidate.Ordinal.ToString(
+                            CultureInfo.InvariantCulture)}, COALESCE(({transitionExpression}),
+                        FALSE), COALESCE(({narrowingExpression}), FALSE)
+                        """);
                 }
 
                 command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
@@ -244,10 +246,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 if (candidates.Length == 1)
                 {
                     var probe = candidates[0].Probe;
-                    command.CommandText = "SELECT EXISTS(SELECT 1 FROM "
-                        + $"{table} WHERE {probe.DelimitedColumn} IS NOT NULL "
-                        + $"AND CHAR_LENGTH({probe.DelimitedColumn}) "
-                        + $"> {probe.TargetLength.ToString(CultureInfo.InvariantCulture)} LIMIT 1);";
+                    command.CommandText = $"""
+                        SELECT EXISTS(SELECT 1 FROM {table}
+                        WHERE {probe.DelimitedColumn} IS NOT NULL
+                        AND CHAR_LENGTH({probe.DelimitedColumn}) > {probe.TargetLength.ToString(
+                            CultureInfo.InvariantCulture)}
+                        LIMIT 1);
+                        """;
                 }
                 else
                 {
@@ -256,9 +261,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     {
                         var probe = candidate.Probe;
                         selections.Add(
-                            "COALESCE(MAX(CASE WHEN "
-                            + $"{probe.DelimitedColumn} IS NOT NULL AND CHAR_LENGTH({probe.DelimitedColumn}) "
-                            + $"> {probe.TargetLength.ToString(CultureInfo.InvariantCulture)} THEN 1 ELSE 0 END), 0)");
+                            $"""
+                            COALESCE(MAX(CASE WHEN {probe.DelimitedColumn} IS NOT NULL
+                            AND CHAR_LENGTH({probe.DelimitedColumn}) > {probe.TargetLength.ToString(
+                                CultureInfo.InvariantCulture)}
+                            THEN 1 ELSE 0 END), 0)
+                            """);
                     }
 
                     command.CommandText = $"SELECT {string.Join(", ", selections)} FROM {table};";

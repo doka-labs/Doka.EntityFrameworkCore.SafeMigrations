@@ -46,11 +46,14 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
             expectedIdentity,
             await ScalarStringAsync(
                 connectionString,
-                "SELECT a.attidentity FROM pg_catalog.pg_attribute a "
-                + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
-                + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-                + "WHERE n.nspname = current_schema() AND c.relname = 'scaffolded_identity' "
-                + "AND a.attname = 'id';",
+                """
+                SELECT a.attidentity FROM pg_catalog.pg_attribute a
+                JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = current_schema()
+                AND c.relname = 'scaffolded_identity'
+                AND a.attname = 'id';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -67,9 +70,11 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE scaffolded_identity_drift ("
-            + "id integer NOT NULL, display_name character varying(80) NULL, "
-            + "CONSTRAINT pk_scaffolded_identity_drift PRIMARY KEY (id));",
+            """
+            CREATE TABLE scaffolded_identity_drift (id integer NOT NULL, display_name
+            character varying(80) NULL,
+            CONSTRAINT pk_scaffolded_identity_drift PRIMARY KEY (id));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -97,12 +102,16 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
             "none",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT CASE WHEN a.attidentity = '' THEN 'none' ELSE a.attidentity::text END "
-                + "FROM pg_catalog.pg_attribute a "
-                + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
-                + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-                + "WHERE n.nspname = current_schema() AND c.relname = 'scaffolded_identity_drift' "
-                + "AND a.attname = 'id';",
+                """
+                SELECT CASE WHEN a.attidentity = ''
+                THEN 'none' ELSE a.attidentity::text END
+                FROM pg_catalog.pg_attribute a
+                JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = current_schema()
+                AND c.relname = 'scaffolded_identity_drift'
+                AND a.attname = 'id';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -136,9 +145,12 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_class c "
-                + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-                + "WHERE n.nspname = current_schema() AND c.relname = 'unsupported_scaffolded_annotation';",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_class c
+                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = current_schema()
+                AND c.relname = 'unsupported_scaffolded_annotation';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -174,9 +186,12 @@ public sealed class PostgreSqlColumnsScaffoldingIntegrationTests : PostgreSqlSaf
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_class c "
-                + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-                + "WHERE n.nspname = current_schema() AND c.relname = 'unsupported_serial_strategy';",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_class c
+                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = current_schema()
+                AND c.relname = 'unsupported_serial_strategy';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 

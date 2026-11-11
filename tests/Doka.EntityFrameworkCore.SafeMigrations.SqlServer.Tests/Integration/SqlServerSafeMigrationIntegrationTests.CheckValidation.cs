@@ -52,8 +52,12 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var trusted = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID(N'dbo.checked_values') "
-            + "AND name=N'CK_checked_values' AND is_disabled=0 AND is_not_trusted=0;",
+            """
+            SELECT COUNT(*) FROM sys.check_constraints
+            WHERE parent_object_id=OBJECT_ID(N'dbo.checked_values')
+            AND name=N'CK_checked_values'
+            AND is_disabled=0 AND is_not_trusted=0;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -125,12 +129,10 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.typed_check_values(Value "
-            + storeType
-            + " NULL); "
-            + "INSERT dbo.typed_check_values VALUES("
-            + value
-            + ");",
+            $"""
+            CREATE TABLE dbo.typed_check_values(Value {storeType} NULL);
+            INSERT dbo.typed_check_values VALUES({value});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -173,12 +175,13 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.permission_check_values(Value int NOT NULL); "
-            + "INSERT dbo.permission_check_values VALUES(1); "
-            + "CREATE USER check_metadata_reader WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; "
-            + "GRANT VIEW DEFINITION TO check_metadata_reader; "
-            + "GRANT ALTER ON OBJECT::dbo.permission_check_values TO check_metadata_reader; "
-            + "DENY SELECT ON OBJECT::dbo.permission_check_values TO check_metadata_reader;",
+            """
+            CREATE TABLE dbo.permission_check_values(Value int NOT NULL); INSERT dbo.permission_check_values
+            VALUES(1); CREATE USER check_metadata_reader WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo;
+            GRANT VIEW DEFINITION TO check_metadata_reader; GRANT ALTER ON OBJECT::dbo.permission_check_values
+            TO check_metadata_reader; DENY SELECT ON OBJECT::dbo.permission_check_values
+            TO check_metadata_reader;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -265,10 +268,11 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
 
         await ExecuteSqlAsync(
             connectionString,
-            "ALTER TABLE dbo.legacy_check_values ADD CONSTRAINT CK_legacy_values CHECK([Value]>=0); "
-            + catalog.Build(operation)
-                .PostApplySql
-            + "; INSERT dbo.legacy_check_values VALUES(1);",
+            $"""
+            ALTER TABLE dbo.legacy_check_values ADD CONSTRAINT CK_legacy_values CHECK([Value]>=0);
+            {catalog.Build(operation)
+                .PostApplySql}; INSERT dbo.legacy_check_values VALUES(1);
+            """,
             cancellationToken: CancellationToken.None);
 
         // Act
@@ -351,13 +355,13 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.replacement_check_values(Value int NOT NULL); "
-            + "INSERT dbo.replacement_check_values VALUES("
-            + (valid
+            $"""
+            CREATE TABLE dbo.replacement_check_values(Value int NOT NULL); INSERT dbo.replacement_check_values
+            VALUES({(valid
                 ? "1"
-                : "0")
-            + "),(2147483647); "
-            + "ALTER TABLE dbo.replacement_check_values ADD CONSTRAINT CK_replacement_values CHECK(Value>=0);",
+                : "0")}),(2147483647); ALTER TABLE dbo.replacement_check_values
+            ADD CONSTRAINT CK_replacement_values CHECK(Value>=0);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -390,9 +394,12 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
 
         var trusted = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.check_constraints "
-            + "WHERE parent_object_id=OBJECT_ID(N'dbo.replacement_check_values') "
-            + "AND name=N'CK_replacement_values' AND is_disabled=0 AND is_not_trusted=0;",
+            """
+            SELECT COUNT(*) FROM sys.check_constraints
+            WHERE parent_object_id=OBJECT_ID(N'dbo.replacement_check_values')
+            AND name=N'CK_replacement_values'
+            AND is_disabled=0 AND is_not_trusted=0;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -423,11 +430,13 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.opaque_replacement_values(Value int NOT NULL); "
-            + "ALTER TABLE dbo.opaque_replacement_values ADD CONSTRAINT CK_opaque_values CHECK(Value>=0); "
-            + (populated
+            $"""
+            CREATE TABLE dbo.opaque_replacement_values(Value int NOT NULL); ALTER TABLE
+            dbo.opaque_replacement_values ADD CONSTRAINT CK_opaque_values CHECK(Value>=0);
+            {(populated
                 ? "INSERT dbo.opaque_replacement_values VALUES(1);"
-                : string.Empty),
+                : string.Empty)}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -485,8 +494,11 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.alias_check_values(Value int NOT NULL); INSERT dbo.alias_check_values VALUES(1); "
-            + "ALTER TABLE dbo.alias_check_values ADD CONSTRAINT CK_alias_check_values CHECK([Value]>=0);",
+            """
+            CREATE TABLE dbo.alias_check_values(Value int NOT NULL); INSERT dbo.alias_check_values
+            VALUES(1); ALTER TABLE dbo.alias_check_values ADD CONSTRAINT CK_alias_check_values
+            CHECK([Value]>=0);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -533,12 +545,14 @@ public sealed class SqlServerSafeMigrationCheckValidationIntegrationTests : SqlS
 
         var checks = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID(N'dbo.alias_check_values') "
-            + "AND is_disabled=0 AND is_not_trusted=0 AND CHARINDEX(N'"
-            + (caseSensitive
+            $"""
+            SELECT COUNT(*) FROM sys.check_constraints
+            WHERE parent_object_id=OBJECT_ID(N'dbo.alias_check_values')
+            AND is_disabled=0 AND is_not_trusted=0
+            AND CHARINDEX(N'{(caseSensitive
                 ? ">=(0)"
-                : ">=(1)")
-            + "',definition)>0;",
+                : ">=(1)")}',definition)>0;
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(

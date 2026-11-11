@@ -35,9 +35,11 @@ public sealed class PostgreSqlIndexExpressionIdentityIntegrationTests : PostgreS
         };
 
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE index_identity(a integer, b integer, c integer, value text); "
-            + $"CREATE INDEX ix_identity ON index_identity (({native})); "
-            + "INSERT INTO index_identity VALUES (42, NULL, NULL, 'preserved');",
+            $"""
+            CREATE TABLE index_identity(a integer, b integer, c integer, value text); CREATE INDEX
+            ix_identity ON index_identity (({native})); INSERT INTO index_identity VALUES (42,
+            NULL, NULL, 'preserved');
+            """,
             CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -97,9 +99,11 @@ public sealed class PostgreSqlIndexExpressionIdentityIntegrationTests : PostgreS
             : "text";
 
         await ExecuteSqlAsync(connectionString,
-            $"CREATE TABLE index_identity(a integer, value {storeType}); "
-            + "CREATE INDEX ix_identity ON index_identity(a) WHERE value='ACTIVE'; "
-            + "INSERT INTO index_identity VALUES (42, 'preserved');",
+            $"""
+            CREATE TABLE index_identity(a integer, value {storeType}); CREATE INDEX ix_identity ON
+            index_identity(a)
+            WHERE value='ACTIVE'; INSERT INTO index_identity VALUES (42, 'preserved');
+            """,
             CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -161,11 +165,12 @@ public sealed class PostgreSqlIndexExpressionIdentityIntegrationTests : PostgreS
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE SCHEMA custom; "
-            + "CREATE COLLATION custom.\"C\" (provider=icu, locale='en-US-u-ks-level1', deterministic=false); "
-            + "CREATE TABLE public.index_identity(value text); "
-            + $"CREATE INDEX ix_identity ON public.index_identity(value COLLATE {actualSchema}.\"C\"); "
-            + "INSERT INTO public.index_identity VALUES ('preserved');",
+            $"""
+            CREATE SCHEMA custom; CREATE COLLATION custom."C" (provider=icu, locale='en-US-u-ks-level1',
+            deterministic=false); CREATE TABLE public.index_identity(value text); CREATE INDEX ix_identity
+            ON public.index_identity(value COLLATE {actualSchema}."C"); INSERT INTO public.index_identity
+            VALUES ('preserved');
+            """,
             CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

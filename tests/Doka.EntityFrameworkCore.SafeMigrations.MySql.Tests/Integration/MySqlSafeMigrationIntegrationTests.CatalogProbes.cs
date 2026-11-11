@@ -130,9 +130,11 @@ public sealed class MySqlCatalogProbesIntegrationTests : MySqlSafeMigrationInteg
         var setup = new StringBuilder();
         for (var index = 0; index < 65; index++)
         {
-            setup.Append(
-                $"CREATE TABLE `bounded_probe_{index}` (`value` varchar(20) NULL) "
-                + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; ");
+            // WHY: Preserve the existing Append(string) call rather than selecting its handler overload.
+            setup.Append((string)$"""
+                CREATE TABLE `bounded_probe_{index}` (`value` varchar(20) NULL)
+                ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;{" "}
+                """);
 
             var value = index % 3 == 0
                 ? "too-long-value"

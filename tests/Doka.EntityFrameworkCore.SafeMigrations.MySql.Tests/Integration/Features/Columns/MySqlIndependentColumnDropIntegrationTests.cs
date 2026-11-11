@@ -45,18 +45,24 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
             cancellationToken: CancellationToken.None);
 
         var replacement = newIdentifier
-            ? $"ALTER TABLE `replacement_items` ADD COLUMN `id` {IdentifierStorage} "
-            + $"NOT NULL DEFAULT ({IdentifierDefault}); "
-            + "ALTER TABLE `replacement_items` ADD PRIMARY KEY (`id`);"
-            : "ALTER TABLE `replacement_items` MODIFY COLUMN `tag_id` int NOT NULL; "
-            + "ALTER TABLE `replacement_items` ADD PRIMARY KEY (`event_id`, `tag_id`);";
+            ? $"""
+            ALTER TABLE `replacement_items` ADD COLUMN `id` {IdentifierStorage}
+            NOT NULL DEFAULT ({IdentifierDefault}); ALTER TABLE `replacement_items`
+            ADD PRIMARY KEY (`id`);
+            """
+            : """
+            ALTER TABLE `replacement_items` MODIFY COLUMN `tag_id` int NOT NULL; ALTER
+            TABLE `replacement_items` ADD PRIMARY KEY (`event_id`,
+            `tag_id`);
+            """;
 
         // Act
         await ExecuteSqlAsync(
             connectionString,
-            "ALTER TABLE `replacement_items` DROP PRIMARY KEY; "
-            + "ALTER TABLE `replacement_items` DROP COLUMN `legacy_value`; "
-            + replacement,
+            $"""
+            ALTER TABLE `replacement_items` DROP PRIMARY KEY; ALTER TABLE `replacement_items`
+            DROP COLUMN `legacy_value`; {replacement}
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -66,16 +72,24 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
 
         var primary = await ScalarStringAsync(
             connectionString,
-            "SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY ORDINAL_POSITION) "
-            + "FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND CONSTRAINT_NAME = 'PRIMARY';",
+            """
+            SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY ORDINAL_POSITION)
+            FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'replacement_items'
+            AND CONSTRAINT_NAME = 'PRIMARY';
+            """,
             cancellationToken: CancellationToken.None);
 
         var identifierDefault = newIdentifier
             ? await ScalarStringAsync(
                 connectionString,
-                "SELECT COLUMN_DEFAULT FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-                + "AND TABLE_NAME = 'replacement_items' AND COLUMN_NAME = 'id';",
+                """
+                SELECT COLUMN_DEFAULT FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'replacement_items'
+                AND COLUMN_NAME = 'id';
+                """,
                 cancellationToken: CancellationToken.None)
             : null;
 
@@ -112,8 +126,12 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
 
         var identifierColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND COLUMN_NAME = 'id';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'replacement_items'
+            AND COLUMN_NAME = 'id';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -187,15 +205,22 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
 
         var rows = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM `replacement_items` WHERE (`event_id` = 1 AND `tag_id` = 10) "
-            + "OR (`event_id` = 2 AND `tag_id` = 20);",
+            """
+            SELECT COUNT(*) FROM `replacement_items`
+            WHERE (`event_id` = 1 AND `tag_id` = 10)
+            OR (`event_id` = 2 AND `tag_id` = 20);
+            """,
             cancellationToken: CancellationToken.None);
 
         var primary = await ScalarStringAsync(
             connectionString,
-            "SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY ORDINAL_POSITION) "
-            + "FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND CONSTRAINT_NAME = 'PRIMARY';",
+            """
+            SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY ORDINAL_POSITION)
+            FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'replacement_items'
+            AND CONSTRAINT_NAME = 'PRIMARY';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -315,8 +340,12 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
 
         var legacy = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND COLUMN_NAME = 'legacy_value';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'replacement_items'
+            AND COLUMN_NAME = 'legacy_value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var retained = await ScalarIntAsync(
@@ -342,10 +371,11 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)")
-            + $"ALTER TABLE `replacement_items` ADD COLUMN `id` {IdentifierStorage} "
-            + $"NOT NULL DEFAULT ({IdentifierDefault}); "
-            + $"UPDATE `replacement_items` SET `id` = {DuplicateIdentifierLiteral};",
+            $"""
+            {ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)")}ALTER TABLE `replacement_items` ADD COLUMN `id`
+            {IdentifierStorage} NOT NULL DEFAULT ({IdentifierDefault});
+            UPDATE `replacement_items` SET `id` = {DuplicateIdentifierLiteral};
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -362,8 +392,12 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
 
         var legacy = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND COLUMN_NAME = 'legacy_value';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'replacement_items'
+            AND COLUMN_NAME = 'legacy_value';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -387,9 +421,13 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `replacement_items` (`id` int NOT NULL PRIMARY KEY, `legacy_value` int NULL, "
-            + "`tag_id` int NULL, KEY `ix_transformed` (`legacy_value`, `tag_id`)) ENGINE=InnoDB; "
-            + "INSERT INTO `replacement_items` VALUES (1, 2, 3);",
+            """
+            CREATE TABLE `replacement_items` (`id` int NOT NULL PRIMARY KEY, `legacy_value`
+            int NULL,
+            `tag_id` int NULL, KEY `ix_transformed` (`legacy_value`, `tag_id`)) ENGINE=InnoDB;
+            INSERT INTO `replacement_items` VALUES (1,
+            2, 3);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -416,15 +454,23 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
 
         var physical = await ScalarStringAsync(
             connectionString,
-            "SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'replacement_items' "
-            + "AND INDEX_NAME = 'ix_transformed';",
+            """
+            SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX)
+            FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'replacement_items'
+            AND INDEX_NAME = 'ix_transformed';
+            """,
             cancellationToken: CancellationToken.None);
 
         var redundant = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND INDEX_NAME = 'ix_requested';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'replacement_items'
+            AND INDEX_NAME = 'ix_requested';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -524,11 +570,15 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `dependency_owners` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-            + "CREATE TABLE `dependency_items` (`id` int NOT NULL PRIMARY KEY, `legacy_value` int NULL, "
-            + "`owner_id` int NULL, CONSTRAINT `fk_dependency_owner` FOREIGN KEY (`owner_id`) "
-            + "REFERENCES `dependency_owners` (`id`) ON DELETE SET NULL) ENGINE=InnoDB; "
-            + "INSERT INTO `dependency_owners` VALUES (1); INSERT INTO `dependency_items` VALUES (1, 2, 1);",
+            """
+            CREATE TABLE `dependency_owners` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+            CREATE TABLE `dependency_items` (`id` int NOT NULL PRIMARY KEY,
+            `legacy_value` int NULL, `owner_id` int NULL, CONSTRAINT `fk_dependency_owner`
+            FOREIGN KEY (`owner_id`) REFERENCES `dependency_owners` (`id`) ON DELETE
+            SET NULL) ENGINE=InnoDB; INSERT INTO `dependency_owners` VALUES (1); INSERT
+            INTO `dependency_items` VALUES (1,
+            2, 1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -566,8 +616,12 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
 
         var nullable = await ScalarStringAsync(
             connectionString,
-            "SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'dependency_items' AND COLUMN_NAME = 'owner_id';",
+            """
+            SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'dependency_items'
+            AND COLUMN_NAME = 'owner_id';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -597,8 +651,11 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `dependency_items` (`id` int NOT NULL PRIMARY KEY, `legacy_value` int NULL) "
-            + "ENGINE=InnoDB; INSERT INTO `dependency_items` VALUES (1, 2);",
+            """
+            CREATE TABLE `dependency_items` (`id` int NOT NULL PRIMARY KEY, `legacy_value`
+            int NULL) ENGINE=InnoDB; INSERT INTO `dependency_items` VALUES (1,
+            2);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -723,8 +780,12 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
 
         var primary = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND CONSTRAINT_TYPE = 'PRIMARY KEY';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'replacement_items'
+            AND CONSTRAINT_TYPE = 'PRIMARY KEY';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -749,12 +810,14 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
     /// <summary>Builds neutral populated rows valid under the original two-member primary key.</summary>
     private static string ExistingKeyFixture(
         string rows
-    ) => "CREATE TABLE `replacement_items` (`event_id` int NOT NULL, `legacy_value` varchar(20) NOT NULL, "
-        + "`tag_id` int NULL, PRIMARY KEY (`event_id`, `legacy_value`)) ENGINE=InnoDB "
-        + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-        + "INSERT INTO `replacement_items` (`event_id`, `legacy_value`, `tag_id`) VALUES "
-        + rows
-        + ";";
+    ) => $"""
+        CREATE TABLE `replacement_items` (`event_id` int NOT NULL, `legacy_value`
+        varchar(20) NOT NULL,
+        `tag_id` int NULL, PRIMARY KEY (`event_id`, `legacy_value`)) ENGINE=InnoDB
+        DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT INTO `replacement_items`
+        (`event_id`,
+        `legacy_value`, `tag_id`) VALUES {rows};
+        """;
 
     /// <summary>Declares the exact removal, surviving-column or generated-value transition, and new key.</summary>
     private List<MigrationOperation> ReplacementOperations(

@@ -119,10 +119,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     var ordinal = offset + sources.Count;
                     var request = requests[ordinal];
                     var checkpoint = parameters.Capture();
-                    var source = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)} AS request_ordinal, "
-                        + $"{parameters.AddString(request.Table)} AS table_name, "
-                        + $"{parameters.AddString(request.Column)} AS column_name, "
-                        + $"{(request.Nullable ? "TRUE" : "FALSE")} AS target_nullable";
+                    var source = $"""
+                        SELECT {ordinal.ToString(
+                            CultureInfo.InvariantCulture)} AS request_ordinal, {parameters.AddString(request.Table)}
+                        AS table_name,
+                        {parameters.AddString(
+                            request.Column)} AS column_name, {(request.Nullable ? "TRUE" : "FALSE")} AS
+                        target_nullable
+                        """;
 
                     var addedBytes = Encoding.UTF8.GetByteCount(source)
                         + (sources.Count == 0
@@ -195,32 +199,34 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         // WHY: Sentinels prove absence rather than inferring it from a missing
         // result. Both dependency roles share one bounded source window, while
         // actual FK names remain complete separate rows, never concatenations.
-        return ColumnDependencyQueryMarker
-            + "\nSELECT request.request_ordinal, 0 AS proof_kind, "
-            + "request.target_nullable, NULL AS primary_member, NULL AS foreign_key_name "
-            + $"FROM ({source}) request\nUNION ALL\n"
-            + "SELECT request.request_ordinal, 1, TRUE, COUNT(primary_column.COLUMN_NAME) > 0, NULL "
-            + $"FROM ({source}) request LEFT JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS primary_key "
-            + "ON primary_key.CONSTRAINT_SCHEMA = DATABASE() "
-            + $"AND {primarySchema} AND primary_key.TABLE_NAME = request.table_name AND {primaryOwner} "
-            + "AND primary_key.CONSTRAINT_TYPE = 'PRIMARY KEY' "
-            + "LEFT JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE primary_column "
-            + "ON CAST(primary_column.CONSTRAINT_SCHEMA AS BINARY) = CAST(primary_key.CONSTRAINT_SCHEMA AS BINARY) "
-            + "AND CAST(primary_column.TABLE_NAME AS BINARY) = CAST(primary_key.TABLE_NAME AS BINARY) "
-            + "AND primary_column.CONSTRAINT_NAME = primary_key.CONSTRAINT_NAME "
-            + "AND primary_column.COLUMN_NAME = request.column_name "
-            + "WHERE request.target_nullable = TRUE GROUP BY request.request_ordinal\nUNION ALL\n"
-            + "SELECT DISTINCT request.request_ordinal, 2, FALSE, NULL, rc.CONSTRAINT_NAME "
-            + $"FROM ({source}) request JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc "
-            + $"ON rc.CONSTRAINT_SCHEMA = DATABASE() AND {foreignSchema} "
-            + $"AND rc.TABLE_NAME = request.table_name AND {foreignOwner} "
-            + "JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE local_key "
-            + "ON CAST(local_key.CONSTRAINT_SCHEMA AS BINARY) = CAST(rc.CONSTRAINT_SCHEMA AS BINARY) "
-            + "AND CAST(local_key.TABLE_NAME AS BINARY) = CAST(rc.TABLE_NAME AS BINARY) "
-            + "AND local_key.CONSTRAINT_NAME = rc.CONSTRAINT_NAME "
-            + "AND local_key.COLUMN_NAME = request.column_name "
-            + "WHERE request.target_nullable = FALSE "
-            + "AND (rc.DELETE_RULE = 'SET NULL' OR rc.UPDATE_RULE = 'SET NULL')\nORDER BY 1, 2, 5;";
+        return $"""
+            {ColumnDependencyQueryMarker}
+            SELECT request.request_ordinal, 0 AS proof_kind,
+            request.target_nullable, NULL AS primary_member, NULL AS foreign_key_name FROM ({source}) request
+            UNION ALL
+            SELECT request.request_ordinal, 1, TRUE, COUNT(primary_column.COLUMN_NAME) > 0, NULL
+            FROM ({source}) request LEFT JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS primary_key
+            ON primary_key.CONSTRAINT_SCHEMA = DATABASE()
+            AND {primarySchema} AND primary_key.TABLE_NAME = request.table_name AND {primaryOwner}
+            AND primary_key.CONSTRAINT_TYPE = 'PRIMARY KEY'
+            LEFT JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE primary_column
+            ON CAST(primary_column.CONSTRAINT_SCHEMA AS BINARY) = CAST(primary_key.CONSTRAINT_SCHEMA AS BINARY)
+            AND CAST(primary_column.TABLE_NAME AS BINARY) = CAST(primary_key.TABLE_NAME AS BINARY)
+            AND primary_column.CONSTRAINT_NAME = primary_key.CONSTRAINT_NAME
+            AND primary_column.COLUMN_NAME = request.column_name
+            WHERE request.target_nullable = TRUE GROUP BY request.request_ordinal
+            UNION ALL
+            SELECT DISTINCT request.request_ordinal, 2, FALSE, NULL, rc.CONSTRAINT_NAME
+            FROM ({source}) request JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+            ON rc.CONSTRAINT_SCHEMA = DATABASE() AND {foreignSchema}
+            AND rc.TABLE_NAME = request.table_name AND {foreignOwner}
+            JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE local_key
+            ON CAST(local_key.CONSTRAINT_SCHEMA AS BINARY) = CAST(rc.CONSTRAINT_SCHEMA AS BINARY)
+            AND CAST(local_key.TABLE_NAME AS BINARY) = CAST(rc.TABLE_NAME AS BINARY)
+            AND local_key.CONSTRAINT_NAME = rc.CONSTRAINT_NAME AND local_key.COLUMN_NAME = request.column_name
+            WHERE request.target_nullable = FALSE AND (rc.DELETE_RULE = 'SET NULL' OR rc.UPDATE_RULE = 'SET NULL')
+            ORDER BY 1, 2, 5;
+            """;
     }
 
     /// <summary>Validates a bounded statement before publishing its shared read-only dependency facts.</summary>

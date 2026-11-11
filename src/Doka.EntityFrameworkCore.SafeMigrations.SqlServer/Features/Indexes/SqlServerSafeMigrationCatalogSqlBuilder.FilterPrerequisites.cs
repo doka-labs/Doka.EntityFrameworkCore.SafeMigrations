@@ -129,13 +129,18 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 ? "1 = 1"
                 : BuildPhysicalFilterLiteralProof(literal);
 
-            var physical = "EXISTS (SELECT 1 FROM sys.columns c JOIN sys.types ty ON ty.user_type_id = c.user_type_id "
-                + $"WHERE c.object_id = {TableId(definition.Table, definition.Schema)} AND c.name = {Literal(column)} "
-                + "AND c.is_computed = 0 AND ty.is_user_defined = 0 AND ty.is_assembly_type = 0 "
-                + "AND ty.name IN (N'bigint', N'binary', N'bit', N'char', N'date', N'datetime', N'datetime2', "
-                + "N'datetimeoffset', N'decimal', N'float', N'int', N'money', N'nchar', N'numeric', N'nvarchar', "
-                + "N'real', N'smalldatetime', N'smallint', N'smallmoney', N'time', N'tinyint', N'uniqueidentifier', "
-                + $"N'varbinary', N'varchar') AND ({conversion}))";
+            var physical = $"""
+                EXISTS (SELECT 1 FROM sys.columns c
+                JOIN sys.types ty ON ty.user_type_id = c.user_type_id
+                WHERE c.object_id = {TableId(definition.Table, definition.Schema)}
+                AND c.name = {Literal(column)}
+                AND c.is_computed = 0 AND ty.is_user_defined = 0
+                AND ty.is_assembly_type = 0 AND ty.name IN (N'bigint', N'binary', N'bit',
+                N'char', N'date', N'datetime', N'datetime2', N'datetimeoffset', N'decimal',
+                N'float', N'int', N'money', N'nchar', N'numeric', N'nvarchar', N'real',
+                N'smalldatetime', N'smallint', N'smallmoney', N'time', N'tinyint', N'uniqueidentifier',
+                N'varbinary', N'varchar') AND ({conversion}))
+                """;
 
             // WHY: A missing predicate column remains an ordered prerequisite;
             // an existing forbidden column or invalid constant is immutable

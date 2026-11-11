@@ -17,8 +17,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
-            + "left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY,
+            left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         if (!acceptedPrefix)
@@ -79,8 +81,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
-            + "left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY,
+            left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await SeedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
@@ -126,14 +130,22 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var physical = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-            + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND INDEX_NAME = 'ix_generated_physical';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}'
+            AND INDEX_NAME = 'ix_generated_physical';
+            """,
             cancellationToken: CancellationToken.None);
 
         var requested = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-            + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND INDEX_NAME = 'ix_generated_requested';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}'
+            AND INDEX_NAME = 'ix_generated_requested';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -161,8 +173,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
-            + "left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY,
+            left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -207,8 +221,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
-            + "left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY,
+            left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -252,9 +268,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
-            + "left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL, "
-            + "payload varchar(1000) CHARACTER SET utf8mb4 NULL) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY,
+            left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL,
+            payload varchar(1000) CHARACTER SET utf8mb4 NULL) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
+            """,
             cancellationToken: CancellationToken.None);
 
         await SeedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
@@ -337,8 +355,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await ExecuteOperationsAsync(context, initial.Operations, CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            $"ALTER TABLE `{Table}` ADD unrelated int NULL; "
-            + $"CREATE INDEX ix_generated_shrink ON `{Table}` (has_descendants, unrelated);",
+            $"""
+            ALTER TABLE `{Table}` ADD unrelated int NULL; CREATE
+            INDEX ix_generated_shrink ON `{Table}` (has_descendants,
+            unrelated);
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -367,15 +388,22 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var requested = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-            + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' "
-            + "AND INDEX_NAME = 'ix_generated_shrink_requested';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}'
+            AND INDEX_NAME = 'ix_generated_shrink_requested';
+            """,
             cancellationToken: CancellationToken.None);
 
         var alias = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-            + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND INDEX_NAME = 'ix_generated_shrink';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}'
+            AND INDEX_NAME = 'ix_generated_shrink';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -415,8 +443,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await ExecuteOperationsAsync(context, initial.Operations, CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            $"ALTER TABLE `{Table}` ADD unrelated int NULL; "
-            + $"CREATE INDEX `{actual}` ON `{Table}` (has_descendants);",
+            $"""
+            ALTER TABLE `{Table}` ADD unrelated int NULL; CREATE
+            INDEX `{actual}` ON `{Table}` (has_descendants);
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -529,8 +559,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var physical = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-            + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND INDEX_NAME = '{name}';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}'
+            AND INDEX_NAME = '{name}';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -624,9 +658,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var index = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-            + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' "
-            + "AND INDEX_NAME = 'ix_generated_member_lifetime';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}'
+            AND INDEX_NAME = 'ix_generated_member_lifetime';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -683,9 +720,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await ExecuteOperationsAsync(context, initial.Operations, CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE generated_matching_parent(id int NOT NULL PRIMARY KEY); "
-            + $"ALTER TABLE `{Table}` ADD parent_id int NULL, ADD unrelated int NULL; "
-            + $"CREATE INDEX ix_generated_original_alias ON `{Table}` (has_descendants);",
+            $"""
+            CREATE TABLE generated_matching_parent(id int NOT NULL PRIMARY KEY); ALTER
+            TABLE `{Table}` ADD parent_id int NULL,
+            ADD unrelated int NULL; CREATE INDEX ix_generated_original_alias ON `{Table}`
+            (has_descendants);
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -746,9 +786,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var supporting = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-            + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND INDEX_NAME = '{name}' "
-            + "AND COLUMN_NAME = 'parent_id';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}'
+            AND INDEX_NAME = '{name}'
+            AND COLUMN_NAME = 'parent_id';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -788,9 +832,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE generated_index_parent(id int NOT NULL PRIMARY KEY); "
-            + $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, left_bound bigint NOT NULL, "
-            + "right_bound bigint NOT NULL, parent_id int NULL, unrelated int NULL);",
+            $"""
+            CREATE TABLE generated_index_parent(id int NOT NULL PRIMARY KEY); CREATE
+            TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY,
+            left_bound bigint NOT NULL, right_bound bigint NOT NULL, parent_id int NULL,
+            unrelated int NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         if (existingIndex)
@@ -840,9 +887,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var supporting = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-            + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND INDEX_NAME = '{name}' "
-            + "AND COLUMN_NAME = 'parent_id';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}'
+            AND INDEX_NAME = '{name}'
+            AND COLUMN_NAME = 'parent_id';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert

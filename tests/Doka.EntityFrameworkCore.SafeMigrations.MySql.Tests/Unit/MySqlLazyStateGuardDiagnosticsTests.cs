@@ -115,7 +115,7 @@ public sealed class MySqlLazyStateGuardDiagnosticsTests
         }
 
         Assert.Contains(
-            "THEN (NULL) ELSE NULL END",
+            "THEN (NULL)\nELSE NULL END",
             Assert.Single(connection.Submissions)
                 .Sql,
             StringComparison.Ordinal);

@@ -125,8 +125,11 @@ public sealed class GeneratedInitialMigrationPreflightTests : IClassFixture<Gene
 
         // Act
         _ = await context.Database.ExecuteSqlRawAsync(
-            "INSERT INTO \"scaffolding_work_items\" (\"Id\", \"Caption\", \"Discriminator\") "
-            + "VALUES (1, 'Known', 0), (2, 'External', 1), (3, 'Future', 2);",
+            """
+            INSERT INTO "scaffolding_work_items" ("Id", "Caption", "Discriminator")
+            VALUES (1,
+            'Known', 0), (2, 'External', 1), (3, 'Future', 2);
+            """,
             cancellationToken);
 
         var baseCount = await context
@@ -165,12 +168,12 @@ public sealed class GeneratedInitialMigrationPreflightTests : IClassFixture<Gene
 
         // Act
         _ = await context.Database.ExecuteSqlRawAsync(
-            "INSERT INTO \"scaffolding_attributed_work_items\" "
-            + "(\"Id\", \"Caption\", \"AttributedDiscriminator\") VALUES "
-            + "(11, 'Json', 'json-named'), "
-            + "(12, 'Contract', 'contract-named'), "
-            + "(13, 'Fallback', 'Fallback'), "
-            + "(14, 'Future', 'future-value');",
+            """
+            INSERT INTO "scaffolding_attributed_work_items" ("Id", "Caption", "AttributedDiscriminator")
+            VALUES (11,
+            'Json', 'json-named'), (12, 'Contract', 'contract-named'), (13, 'Fallback',
+            'Fallback'), (14, 'Future', 'future-value');
+            """,
             cancellationToken);
 
         var baseCount = await context
@@ -251,10 +254,12 @@ public sealed class GeneratedInitialMigrationPreflightTests : IClassFixture<Gene
 
         var convertedCount = await ScalarIntAsync(
             context,
-            "SELECT COUNT(*) FROM \"scaffolding_attributed_work_items\" "
-            + "WHERE (\"Id\" = 15 AND \"AttributedDiscriminator\" = 'json-named') "
-            + "OR (\"Id\" = 16 AND \"AttributedDiscriminator\" = 'contract-named') "
-            + "OR (\"Id\" = 17 AND \"AttributedDiscriminator\" = 'Fallback');",
+            """
+            SELECT COUNT(*) FROM "scaffolding_attributed_work_items"
+            WHERE ("Id" = 15 AND "AttributedDiscriminator" = 'json-named')
+            OR ("Id" = 16 AND "AttributedDiscriminator" = 'contract-named')
+            OR ("Id" = 17 AND "AttributedDiscriminator" = 'Fallback');
+            """,
             cancellationToken: cancellationToken);
 
         // Assert

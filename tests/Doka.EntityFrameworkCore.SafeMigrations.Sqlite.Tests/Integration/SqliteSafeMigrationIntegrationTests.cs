@@ -8,8 +8,11 @@ public sealed class SqliteSafeMigrationIntegrationTests : SqliteIntegrationTestB
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE mixed_records (id INTEGER NOT NULL PRIMARY KEY, code TEXT NOT NULL); "
-            + "INSERT INTO mixed_records VALUES (1, 'duplicate'), (2, 'duplicate');",
+            """
+            CREATE TABLE mixed_records (id INTEGER NOT NULL PRIMARY KEY, code TEXT NOT
+            NULL); INSERT INTO mixed_records VALUES (1,
+            'duplicate'), (2, 'duplicate');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -43,8 +46,11 @@ public sealed class SqliteSafeMigrationIntegrationTests : SqliteIntegrationTestB
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE mixed_records (id INTEGER NOT NULL PRIMARY KEY, code TEXT NOT NULL); "
-            + "INSERT INTO mixed_records VALUES (1, 'first'), (2, 'second');",
+            """
+            CREATE TABLE mixed_records (id INTEGER NOT NULL PRIMARY KEY, code TEXT NOT
+            NULL); INSERT INTO mixed_records VALUES (1,
+            'first'), (2, 'second');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);

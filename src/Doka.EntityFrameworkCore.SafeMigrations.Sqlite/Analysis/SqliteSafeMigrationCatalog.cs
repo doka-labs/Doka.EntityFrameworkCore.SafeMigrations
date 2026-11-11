@@ -379,12 +379,8 @@ internal static partial class SqliteSafeMigrationCatalog
                 .ToString();
         }
 
-        if (!found)
-        {
-            return ReferentialAction.NoAction;
-        }
-
-        if (SqliteSqlIdentifierScanner.IndexOfKeywordSequence(action, "NO", "ACTION") == 0)
+        if (!found
+            || SqliteSqlIdentifierScanner.IndexOfKeywordSequence(action, "NO", "ACTION") == 0)
         {
             return ReferentialAction.NoAction;
         }

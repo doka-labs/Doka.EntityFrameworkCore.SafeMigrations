@@ -129,8 +129,10 @@ public sealed class SqlServerExpressionCatalogIntegrationTests : SqlServerIntegr
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.scalar_roles(Id int NOT NULL PRIMARY KEY, Value int NULL); "
-            + "INSERT INTO dbo.scalar_roles VALUES(1,-1),(2,NULL),(3,1);",
+            """
+            CREATE TABLE dbo.scalar_roles(Id int NOT NULL PRIMARY KEY, Value int NULL);
+            INSERT INTO dbo.scalar_roles VALUES(1,-1),(2,NULL),(3,1);
+            """,
             CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

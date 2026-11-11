@@ -28,8 +28,10 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE native_candidate ({declaration}, "
-            + $"result boolean GENERATED ALWAYS AS ({source}) STORED);",
+            $"""
+            CREATE TABLE native_candidate ({declaration}, result boolean
+            GENERATED ALWAYS AS ({source}) STORED);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -84,9 +86,12 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE identifier_roles (left_bound bigint, "
-            + $"\"Left_Bound\" bigint, result boolean GENERATED ALWAYS AS ({physical} > 0) STORED); "
-            + "INSERT INTO identifier_roles (left_bound, \"Left_Bound\") VALUES (1, -1);",
+            $"""
+            CREATE TABLE identifier_roles (left_bound bigint, "Left_Bound" bigint,
+            result boolean GENERATED ALWAYS AS ({physical} > 0) STORED);
+            INSERT INTO identifier_roles (left_bound,
+            "Left_Bound") VALUES (1, -1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -147,9 +152,11 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE unicode_roles (\"\u00C6\" bigint, \"\u00E6\" bigint, "
-            + "result boolean GENERATED ALWAYS AS (\"\u00C6\" > 0) STORED); "
-            + "INSERT INTO unicode_roles (\"\u00C6\", \"\u00E6\") VALUES (1, -1);",
+            $"""
+            CREATE TABLE unicode_roles ("{"\u00C6"}" bigint, "{"\u00E6"}" bigint, result boolean
+            GENERATED ALWAYS AS ("{"\u00C6"}" > 0) STORED); INSERT INTO unicode_roles ("{"\u00C6"}",
+            "{"\u00E6"}") VALUES (1, -1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -197,9 +204,10 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE keyword_roles (\"select\" integer, "
-            + "result integer GENERATED ALWAYS AS (\"select\" + 1) STORED); "
-            + "INSERT INTO keyword_roles (\"select\") VALUES (1);",
+            """
+            CREATE TABLE keyword_roles ("select" integer, result integer GENERATED ALWAYS
+            AS ("select" + 1) STORED); INSERT INTO keyword_roles ("select") VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -256,9 +264,11 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE qualified_roles (\"select\" integer, "
-            + "result integer GENERATED ALWAYS AS (\"select\" + 1) STORED); "
-            + "INSERT INTO qualified_roles (\"select\") VALUES (1);",
+            """
+            CREATE TABLE qualified_roles ("select" integer, result integer GENERATED
+            ALWAYS AS ("select" + 1) STORED); INSERT INTO qualified_roles ("select")
+            VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -309,11 +319,13 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            (shadowed
+            $"""
+            {(shadowed
                 ? "CREATE DOMAIN public.int8 AS bigint CHECK (VALUE < 0); "
-                : string.Empty)
-            + "CREATE TABLE type_roles (id integer, result bigint GENERATED ALWAYS AS (CAST(1 AS bigint)) STORED); "
-            + "INSERT INTO type_roles (id) VALUES (1);",
+                : string.Empty)}CREATE TABLE type_roles (
+            id integer, result bigint GENERATED ALWAYS AS (CAST(1 AS bigint)) STORED);
+            INSERT INTO type_roles (id) VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -374,14 +386,14 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE FUNCTION public.metadata_type_probe(pg_catalog.oid) "
-            + "RETURNS boolean LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN RAISE EXCEPTION USING ERRCODE = 'P9878', "
-            + "MESSAGE = 'metadata domain invoked'; END $$; CREATE DOMAIN public."
-            + alias
-            + " AS pg_catalog."
-            + alias
-            + " CHECK (public.metadata_type_probe(VALUE::pg_catalog.oid)); "
-            + "CREATE TABLE metadata_type_binding (value integer);",
+            $"""
+            CREATE FUNCTION public.metadata_type_probe(pg_catalog.oid) RETURNS boolean
+            {"LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN RAISE EXCEPTION USING ERRCODE = 'P9878', "
+                + "MESSAGE = 'metadata domain invoked'; END $$;"}
+            CREATE DOMAIN public.{alias} AS pg_catalog.{alias} CHECK
+            (public.metadata_type_probe(VALUE::pg_catalog.oid)); CREATE TABLE metadata_type_binding
+            (value integer);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -417,8 +429,10 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'metadata_type_binding'::regclass "
-                + "AND attname = 'result' AND NOT attisdropped;",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'metadata_type_binding'::regclass
+                AND attname = 'result' AND NOT attisdropped;
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -436,6 +450,9 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
     )
     {
         // Arrange
+        const string sentinelBody = " BEGIN RAISE EXCEPTION USING ERRCODE = 'P9879', "
+            + "MESSAGE = 'application unary operator invoked'; END ";
+
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -450,10 +467,13 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE FUNCTION public.unary_binding_sentinel(integer) RETURNS integer LANGUAGE plpgsql "
-                + "IMMUTABLE AS $$ BEGIN RAISE EXCEPTION USING ERRCODE = 'P9879', "
-                + "MESSAGE = 'application unary operator invoked'; END $$; "
-                + "CREATE OPERATOR public.+ (RIGHTARG=integer, FUNCTION=public.unary_binding_sentinel);",
+                $"""
+                CREATE FUNCTION public.unary_binding_sentinel(integer) RETURNS integer LANGUAGE plpgsql
+                IMMUTABLE AS
+                $${sentinelBody}$$;
+                CREATE OPERATOR public.+ (RIGHTARG=integer,
+                FUNCTION=public.unary_binding_sentinel);
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -500,8 +520,10 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                 : 0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'unary_binding'::regclass "
-                + "AND attname = 'result' AND NOT attisdropped;",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'unary_binding'::regclass
+                AND attname = 'result' AND NOT attisdropped;
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -529,10 +551,12 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE FUNCTION public.\"LOWER\"(text) RETURNS text "
-            + "LANGUAGE sql IMMUTABLE AS 'SELECT upper($1)'; "
-            + $"CREATE TABLE quoted_function (name text, result text GENERATED ALWAYS AS ({originalFunction}(name)) "
-            + "STORED); INSERT INTO quoted_function (name) VALUES ('AbC');",
+            $"""
+            CREATE FUNCTION public."LOWER"(text) RETURNS text LANGUAGE sql IMMUTABLE AS 'SELECT upper($1)';
+            CREATE TABLE quoted_function (name text,
+            result text GENERATED ALWAYS AS ({originalFunction}(name)) STORED); INSERT INTO
+            quoted_function (name) VALUES ('AbC');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -595,12 +619,12 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             "CREATE TABLE function_binding (value text); "
             + "INSERT INTO function_binding VALUES ('A'); "
             + (shadowed
-                ? "CREATE FUNCTION public."
-                + (constant
+                ? $"""
+                CREATE FUNCTION public.{(constant
                     ? "abs(integer) RETURNS integer"
-                    : "lower(text) RETURNS text")
-                + " LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN RAISE EXCEPTION USING ERRCODE = 'P9876', "
-                + "MESSAGE = 'application function invoked'; END $$;"
+                    : "lower(text) RETURNS text")} LANGUAGE plpgsql IMMUTABLE
+                AS $$ BEGIN RAISE EXCEPTION USING ERRCODE = 'P9876', MESSAGE = 'application function invoked'; END $$;
+                """
                 : string.Empty),
             cancellationToken: CancellationToken.None);
 
@@ -739,8 +763,10 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'generated_clock'::regclass "
-                + "AND attname = 'result' AND NOT attisdropped;",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'generated_clock'::regclass
+                AND attname = 'result' AND NOT attisdropped;
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -764,6 +790,9 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
     )
     {
         // Arrange
+        const string sentinelBody = " BEGIN RAISE EXCEPTION USING ERRCODE = 'P9877', "
+            + "MESSAGE = 'application operator invoked'; END ";
+
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var type = metadataSignature
             ? "text"
@@ -780,10 +809,13 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                 ? "INSERT INTO operator_binding VALUES ('x'); "
                 : "INSERT INTO operator_binding VALUES (1); ")
             + (shadowed
-                ? $"CREATE FUNCTION public.application_op({type}, {type}) RETURNS boolean "
-                + "LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN RAISE EXCEPTION USING ERRCODE = 'P9877', "
-                + $"MESSAGE = 'application operator invoked'; END $$; CREATE OPERATOR public.{symbol} "
-                + $"(FUNCTION = public.application_op, LEFTARG = {type}, RIGHTARG = {type});"
+                ? $"""
+                CREATE FUNCTION public.application_op({type}, {type}) RETURNS boolean LANGUAGE plpgsql
+                IMMUTABLE AS
+                $${sentinelBody}$$;
+                CREATE OPERATOR public.{symbol} (FUNCTION = public.application_op,
+                LEFTARG = {type}, RIGHTARG = {type});
+                """
                 : string.Empty),
             cancellationToken: CancellationToken.None);
 
@@ -869,11 +901,12 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE assignment_binding (value integer"
-            + (adopt
+            $"""
+            CREATE TABLE assignment_binding (value integer{(adopt
                 ? $", result {storeType} GENERATED ALWAYS AS ({source}) STORED"
-                : string.Empty)
-            + "); INSERT INTO assignment_binding (value) VALUES (1);",
+                : string.Empty)});
+            INSERT INTO assignment_binding (value) VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -999,9 +1032,11 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE quoted_identifier (value integer, "
-            + "result boolean GENERATED ALWAYS AS (value > 0) STORED); "
-            + "INSERT INTO quoted_identifier (value) VALUES (1);",
+            """
+            CREATE TABLE quoted_identifier (value integer, result boolean GENERATED
+            ALWAYS AS (value > 0) STORED); INSERT INTO quoted_identifier (value) VALUES
+            (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1181,11 +1216,12 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE numeric_source (id integer NOT NULL"
-            + (adopt
+            $"""
+            CREATE TABLE numeric_source (id integer NOT NULL{(adopt
                 ? $", result {storeType} GENERATED ALWAYS AS ({source}) STORED"
-                : string.Empty)
-            + "); INSERT INTO numeric_source (id) VALUES (1);",
+                : string.Empty)});
+            INSERT INTO numeric_source (id) VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1245,9 +1281,11 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE numeric_source (id integer NOT NULL, "
-            + "result numeric GENERATED ALWAYS AS (9007199254740992e0) STORED); "
-            + "INSERT INTO numeric_source (id) VALUES (1);",
+            """
+            CREATE TABLE numeric_source (id integer NOT NULL, result numeric GENERATED
+            ALWAYS AS (9007199254740992e0) STORED); INSERT INTO numeric_source (id)
+            VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

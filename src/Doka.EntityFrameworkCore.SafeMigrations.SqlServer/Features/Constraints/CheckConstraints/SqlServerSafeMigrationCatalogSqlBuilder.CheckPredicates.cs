@@ -188,13 +188,18 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         IEnumerable<string> columns
     )
     {
-        var proofs = columns.Select(column => "EXISTS(SELECT 1 FROM sys.columns c JOIN sys.types ty "
-            + "ON ty.user_type_id=c.user_type_id "
-            + $"WHERE c.object_id={TableId(definition.Table, definition.Schema)} AND c.name={Literal(column)} "
-            + "AND ty.is_user_defined = 0 AND ty.is_assembly_type = 0 "
-            + "AND ty.name IN (N'tinyint', N'smallint', N'int', N'bigint') "
-            + "AND c.is_computed=0 AND c.is_sparse=0 AND c.is_column_set=0 AND c.is_hidden=0 "
-            + "AND c.generated_always_type=0 AND c.encryption_type IS NULL)");
+        var proofs = columns.Select(column => $"""
+            EXISTS(SELECT 1 FROM sys.columns c
+            JOIN sys.types ty ON ty.user_type_id=c.user_type_id
+            WHERE c.object_id={TableId(definition.Table, definition.Schema)}
+            AND c.name={Literal(column)}
+            AND ty.is_user_defined = 0 AND ty.is_assembly_type = 0
+            AND ty.name IN (N'tinyint', N'smallint', N'int', N'bigint')
+            AND c.is_computed=0 AND c.is_sparse=0
+            AND c.is_column_set=0 AND c.is_hidden=0
+            AND c.generated_always_type=0
+            AND c.encryption_type IS NULL)
+            """);
 
         var predicate = string.Join(" AND ", proofs);
 

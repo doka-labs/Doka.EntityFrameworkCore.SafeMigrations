@@ -340,14 +340,14 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             var proof = PostgreSqlIndexInputEligibilitySql.Render(input);
             if (request.AbsentRelationName is not null)
             {
-                proof = "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class rel JOIN pg_catalog.pg_namespace ns "
-                    + "ON ns.oid = rel.relnamespace WHERE ns.nspname = "
-                    + (request.OwnerSchema is null
+                proof = $"""
+                    NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class rel
+                    JOIN pg_catalog.pg_namespace ns ON ns.oid = rel.relnamespace
+                    WHERE ns.nspname = {(request.OwnerSchema is null
                         ? "pg_catalog.current_schema()"
-                        : parameters.AddString(request.OwnerSchema))
-                    + " AND rel.relname = "
-                    + parameters.AddString(request.AbsentRelationName)
-                    + ")";
+                        : parameters.AddString(request.OwnerSchema))}
+                    AND rel.relname = {parameters.AddString(request.AbsentRelationName)})
+                    """;
             }
 
             if (request.MemberSchema is not null)
@@ -356,13 +356,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     ? "current_schema()"
                     : parameters.AddString(request.OwnerSchema);
 
-                proof = "CASE WHEN "
-                    + parameters.AddString(request.MemberSchema)
-                    + " = "
-                    + owner
-                    + " THEN ("
-                    + proof
-                    + ") ELSE NULL::boolean END";
+                proof = $"""
+                    CASE WHEN {parameters.AddString(request.MemberSchema)} = {owner}
+                    THEN ({proof})
+                    ELSE NULL::boolean END
+                    """;
             }
 
             var selection = "SELECT " + ordinal.ToString(CultureInfo.InvariantCulture) + ", (" + proof + ")";

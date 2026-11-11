@@ -46,22 +46,35 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             sql.Append(')');
         }
 
+        // WHY: Keep boundary spaces constant-folded outside the raw text so
+        // cleanup cannot trim them or add a runtime interpolation allocation.
         sql
-            .Append(") expected(name, type_name, max_length, precision_value, scale_value) ")
-            .Append("LEFT JOIN sys.columns c ON c.object_id = ")
+            .Append(
+                """
+                ) expected(name, type_name, max_length, precision_value, scale_value)
+                LEFT JOIN sys.columns c ON c.object_id =
+                """
+                + " ")
             .Append(TableId(table, schema))
-            .Append(" AND c.name = expected.name ")
-            .Append("LEFT JOIN sys.types ty ON ty.user_type_id = c.user_type_id ")
+            .Append(" "
+                + """
+                AND c.name = expected.name
+                LEFT JOIN sys.types ty ON ty.user_type_id = c.user_type_id
+                """
+                + " ")
 
             // WHY: NOT(predicate) loses UNKNOWN rows from absent columns or
             // unavailable metadata. A positive CASE accepts only the complete
             // original EXISTS proof, including builtin type provenance.
-            .Append("WHERE CASE WHEN c.column_id IS NOT NULL ")
-            .Append("AND ty.name = expected.type_name AND ty.is_user_defined = 0 AND ty.is_assembly_type = 0 ")
-            .Append("AND (expected.max_length IS NULL OR c.max_length = expected.max_length) ")
-            .Append("AND (expected.precision_value IS NULL OR c.precision = expected.precision_value) ")
-            .Append("AND (expected.scale_value IS NULL OR c.scale = expected.scale_value) ")
-            .Append("THEN 0 ELSE 1 END = 1)");
+            .Append(
+                """
+                WHERE CASE WHEN c.column_id IS NOT NULL
+                AND ty.name = expected.type_name AND ty.is_user_defined = 0 AND ty.is_assembly_type = 0
+                AND (expected.max_length IS NULL OR c.max_length = expected.max_length)
+                AND (expected.precision_value IS NULL OR c.precision = expected.precision_value)
+                AND (expected.scale_value IS NULL OR c.scale = expected.scale_value)
+                THEN 0 ELSE 1 END = 1)
+                """);
 
         return sql.ToString();
     }

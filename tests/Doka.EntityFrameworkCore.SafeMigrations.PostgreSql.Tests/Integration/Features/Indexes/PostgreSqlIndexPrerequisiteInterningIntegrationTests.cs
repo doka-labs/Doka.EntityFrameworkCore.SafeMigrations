@@ -24,8 +24,10 @@ public sealed class PostgreSqlIndexPrerequisiteInterningIntegrationTests : Postg
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE \"_doka_sm_index_input_0\" (id integer, parent_id integer);"
-            + " CREATE INDEX ix_prerequisite ON \"_doka_sm_index_input_0\" (id,parent_id);",
+            """
+            CREATE TABLE "_doka_sm_index_input_0" (id integer, parent_id integer); CREATE
+            INDEX ix_prerequisite ON "_doka_sm_index_input_0" (id,parent_id);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -91,15 +93,12 @@ public sealed class PostgreSqlIndexPrerequisiteInterningIntegrationTests : Postg
         const string owner = "_doka_sm_index_input_0";
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE \""
-            + owner
-            + "\" (id integer, label text, payload json); CREATE INDEX ix_computed ON \""
-            + owner
-            + "\" ("
-            + (cast
+            $"""
+            CREATE TABLE "{owner}" (id integer, label text, payload
+            json); CREATE INDEX ix_computed ON "{owner}" ({(cast
                 ? "(payload::text)"
-                : "lower(label)")
-            + ");",
+                : "lower(label)")});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -154,12 +153,13 @@ public sealed class PostgreSqlIndexPrerequisiteInterningIntegrationTests : Postg
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE input_members (id integer, payload "
-            + (jsonb
+            $$"""
+            CREATE TABLE input_members (id integer, payload {{(jsonb
                 ? "jsonb"
-                : "json")
-            + "); CREATE UNIQUE INDEX ix_target ON input_members(id); "
-            + "INSERT INTO input_members VALUES (1,'{}'),(2,'{}');",
+                : "json")}});
+            CREATE UNIQUE INDEX ix_target ON input_members(id); INSERT INTO input_members
+            VALUES (1,'{}'),(2,'{}');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -210,16 +210,14 @@ public sealed class PostgreSqlIndexPrerequisiteInterningIntegrationTests : Postg
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE input_members (id integer, payload jsonb, label text);"
-            + " INSERT INTO input_members VALUES (1,'{}','FIRST'),(2,'"
-            + (duplicate
+            $$"""
+            CREATE TABLE input_members (id integer, payload jsonb, label text); INSERT
+            INTO input_members VALUES (1,'{}','FIRST'),(2,'{{(duplicate
                 ? "{}"
-                : "{\"value\":2}")
-            + "','"
-            + (duplicate
+                : "{\"value\":2}")}}','{{(duplicate
                 ? "first"
-                : "second")
-            + "');",
+                : "second")}}');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -307,18 +305,17 @@ public sealed class PostgreSqlIndexPrerequisiteInterningIntegrationTests : Postg
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA hidden; CREATE OPERATOR CLASS hidden.int4_ops "
-            + "FOR TYPE integer USING btree AS OPERATOR 1 <(integer,integer), OPERATOR 2 <=(integer,integer), "
-            + "OPERATOR 3 =(integer,integer), OPERATOR 4 >=(integer,integer), OPERATOR 5 >(integer,integer), "
-            + "FUNCTION 1 btint4cmp(integer,integer); CREATE TABLE input_members(id integer); CREATE INDEX "
-            + (alias
+            $"""
+            CREATE SCHEMA hidden; CREATE OPERATOR CLASS hidden.int4_ops FOR TYPE integer USING btree AS
+            OPERATOR 1 <(integer,integer),
+            OPERATOR 2 <=(integer,integer), OPERATOR 3 =(integer,integer), OPERATOR 4 >=(integer,integer),
+            OPERATOR 5 >(integer,integer), FUNCTION 1 btint4cmp(integer,integer); CREATE TABLE
+            input_members(id integer); CREATE INDEX {(alias
                 ? "ix_alias"
-                : "ix_target")
-            + " ON input_members(id "
-            + (hidden
+                : "ix_target")} ON input_members(id {(hidden
                 ? "hidden.int4_ops"
-                : "pg_catalog.int4_ops")
-            + ");",
+                : "pg_catalog.int4_ops")});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

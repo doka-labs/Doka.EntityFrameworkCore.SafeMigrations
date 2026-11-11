@@ -73,13 +73,16 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
         // WHY: sys.objects, rather than only sys.tables, preserves occupied view/sequence/synonym
         // boundaries. Server-side catalog collation owns name comparison; no CLR case folding is inferred.
-        command.CommandText = "SELECT requested.ordinal, CASE WHEN target_schema.schema_id IS NOT NULL "
-            + "AND NOT EXISTS (SELECT 1 FROM sys.objects occupied "
-            + "WHERE occupied.schema_id = target_schema.schema_id AND occupied.name = requested.table_name) "
-            + "THEN 1 ELSE 0 END FROM (VALUES "
-            + string.Join(", ", values)
-            + ") requested(ordinal, schema_name, table_name) "
-            + "LEFT JOIN sys.schemas target_schema ON target_schema.name = requested.schema_name ORDER BY requested.ordinal;";
+        command.CommandText = $"""
+            SELECT requested.ordinal, CASE WHEN target_schema.schema_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM sys.objects occupied
+            WHERE occupied.schema_id = target_schema.schema_id
+            AND occupied.name = requested.table_name)
+            THEN 1 ELSE 0 END FROM (VALUES {string.Join(", ", values)}) requested(ordinal,
+            schema_name, table_name) LEFT
+            JOIN sys.schemas target_schema ON target_schema.name = requested.schema_name
+            ORDER BY requested.ordinal;
+            """;
 
         activity?.SetTag("safe_migrations.catalog.statement_count", 1);
         var consumed = 0;

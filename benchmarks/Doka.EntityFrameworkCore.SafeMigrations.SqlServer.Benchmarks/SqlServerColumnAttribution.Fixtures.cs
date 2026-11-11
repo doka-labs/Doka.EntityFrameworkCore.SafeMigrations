@@ -110,10 +110,14 @@ public partial class SqlServerColumnAttribution
                         ? "NULL"
                         : "N'short'"));
 
-        var fixture = $"CREATE TABLE dbo.attribution_items ([Id] int NOT NULL, {definitions});\n"
-            + ";WITH numbers AS (SELECT 1 AS value UNION ALL SELECT value + 1 FROM numbers "
-            + $"WHERE value < {rows.ToString(CultureInfo.InvariantCulture)})\n"
-            + $"INSERT dbo.attribution_items SELECT value, {values} FROM numbers OPTION (MAXRECURSION 0);\n";
+        var fixture = $"""
+            CREATE TABLE dbo.attribution_items ([Id] int NOT NULL, {definitions});
+            ;WITH numbers AS (SELECT 1 AS value UNION ALL SELECT value + 1
+            FROM numbers WHERE value < {rows.ToString(CultureInfo.InvariantCulture)})
+            INSERT dbo.attribution_items SELECT value, {values}
+            FROM numbers OPTION (MAXRECURSION 0);
+
+            """;
 
         if (scenario.Name == "caller_owned_index")
         {
@@ -158,20 +162,24 @@ public partial class SqlServerColumnAttribution
     {
         using var command = connection.CreateCommand();
         command.CommandTimeout = CommandTimeoutSeconds;
-        command.CommandText = "SELECT CONVERT(varchar(64), HASHBYTES('SHA2_256', "
-            + "(SELECT * FROM dbo.attribution_items ORDER BY Id FOR JSON PATH, INCLUDE_NULL_VALUES)), 2), "
-            + "CONVERT(varchar(64), HASHBYTES('SHA2_256', "
-            + "(SELECT c.name, c.column_id, c.system_type_id, c.max_length, c.precision, c.scale, "
-            + "c.is_nullable, c.collation_name, c.is_identity, c.is_computed, dc.definition "
-            + "FROM sys.columns c LEFT JOIN sys.default_constraints dc ON dc.object_id = c.default_object_id "
-            + "WHERE c.object_id = OBJECT_ID(N'dbo.attribution_items') ORDER BY c.column_id "
-            + "FOR JSON PATH, INCLUDE_NULL_VALUES)), 2), "
-            + "CONVERT(varchar(64), HASHBYTES('SHA2_256', "
-            + "(SELECT i.name, i.type, i.is_unique, ic.column_id, ic.key_ordinal, ic.is_included_column "
-            + "FROM sys.indexes i LEFT JOIN sys.index_columns ic "
-            + "ON ic.object_id = i.object_id AND ic.index_id = i.index_id "
-            + "WHERE i.object_id = OBJECT_ID(N'dbo.attribution_items') ORDER BY i.index_id, ic.index_column_id "
-            + "FOR JSON PATH, INCLUDE_NULL_VALUES)), 2), COUNT_BIG(*) FROM dbo.attribution_items;";
+        command.CommandText = """
+        SELECT CONVERT(varchar(64), HASHBYTES('SHA2_256', (SELECT *
+        FROM dbo.attribution_items ORDER BY Id FOR JSON PATH, INCLUDE_NULL_VALUES)),
+        2), CONVERT(varchar(64), HASHBYTES('SHA2_256', (SELECT c.name, c.column_id,
+        c.system_type_id, c.max_length, c.precision, c.scale, c.is_nullable, c.collation_name,
+        c.is_identity, c.is_computed, dc.definition
+        FROM sys.columns c LEFT JOIN sys.default_constraints dc ON dc.object_id
+        = c.default_object_id
+        WHERE c.object_id = OBJECT_ID(N'dbo.attribution_items') ORDER BY c.column_id
+        FOR JSON PATH,
+        INCLUDE_NULL_VALUES)), 2), CONVERT(varchar(64), HASHBYTES('SHA2_256',
+        (SELECT i.name, i.type, i.is_unique, ic.column_id, ic.key_ordinal, ic.is_included_column
+        FROM sys.indexes i LEFT JOIN sys.index_columns ic ON ic.object_id = i.object_id
+        AND ic.index_id = i.index_id WHERE i.object_id = OBJECT_ID(N'dbo.attribution_items')
+        ORDER BY i.index_id,
+        ic.index_column_id FOR JSON PATH, INCLUDE_NULL_VALUES)), 2), COUNT_BIG(*)
+        FROM dbo.attribution_items;
+        """;
 
         using var reader = command.ExecuteReader();
         if (!reader.Read())

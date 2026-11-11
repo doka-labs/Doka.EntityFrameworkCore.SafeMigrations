@@ -334,9 +334,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             var request = requests[ordinal];
             var name = parameters.AddString(request.Name);
             var arguments = request.Function
-                ? "ARRAY(SELECT CASE WHEN p.provariadic <> 0 AND arg >= p.pronargs - 1 "
-                + "THEN p.provariadic ELSE p.proargtypes[arg] END "
-                + $"FROM generate_series(0, {request.Arity - 1}) arg)"
+                ? $"""
+                ARRAY(SELECT CASE WHEN p.provariadic <> 0 AND arg >= p.pronargs - 1
+                THEN p.provariadic ELSE p.proargtypes[arg] END
+                FROM generate_series(0, {request.Arity - 1}) arg)
+                """
                 : request.Arity == 1
                     ? "ARRAY[o.oprright]"
                     : "ARRAY[o.oprleft, o.oprright]";
@@ -345,45 +347,52 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             // variadic input unless a native DEFAULT supplies it. Subtracting
             // another argument would invent a callable zero-input overload.
             var rows = request.Collation
-                ? "SELECT c.oid, 16::oid AS result, ARRAY[]::oid[] AS args, "
-                + "FALSE AS variadic, c.collnamespace AS native_namespace FROM pg_catalog.pg_collation c "
-                + "WHERE c.oid = pg_catalog.to_regcollation("
-                + name
-                + ")"
+                ? $"""
+                SELECT c.oid, 16::oid AS result, ARRAY[]::oid[] AS args, FALSE AS variadic,
+                c.collnamespace AS native_namespace
+                FROM pg_catalog.pg_collation c
+                WHERE c.oid = pg_catalog.to_regcollation({name})
+                """
                 : request.ExplicitCast
-                    ? "SELECT cv.oid, cv.casttarget AS result, ARRAY[cv.castsource] AS args, "
-                    + "FALSE AS variadic, 0::oid AS native_namespace "
-                    + "FROM pg_catalog.pg_cast cv WHERE cv.casttarget = pg_catalog.to_regtype("
-                    + name
-                    + ")"
+                    ? $"""
+                    SELECT cv.oid, cv.casttarget AS result, ARRAY[cv.castsource] AS args,
+                    FALSE AS variadic, 0::oid AS native_namespace
+                    FROM pg_catalog.pg_cast cv WHERE cv.casttarget = pg_catalog.to_regtype({name})
+                    """
                     : request.Function
-                        ? "SELECT p.oid, p.prorettype AS result, "
-                        + arguments
-                        + " AS args, "
-                        + "p.provariadic <> 0 AS variadic, p.pronamespace AS native_namespace "
-                        + "FROM pg_catalog.pg_proc p "
-                        + $"WHERE p.proname = {name} AND pg_catalog.pg_function_is_visible(p.oid) "
-                        + $"AND {request.Arity} <= pg_catalog.current_setting('max_function_args')::integer "
-                        + "AND p.prokind = 'f' AND NOT p.proretset "
-                        + $"AND p.pronargs - p.pronargdefaults <= {request.Arity} "
-                        + $"AND (p.provariadic <> 0 OR p.pronargs >= {request.Arity})"
-                        : "SELECT o.oid, o.oprresult AS result, "
-                        + arguments
-                        + " AS args, "
-                        + "FALSE AS variadic, o.oprnamespace AS native_namespace FROM pg_catalog.pg_operator o "
-                        + $"WHERE o.oprname = {name} AND pg_catalog.pg_operator_is_visible(o.oid) "
-                        + $"AND o.oprkind = '{(request.Arity == 1 ? "l" : "b")}' AND o.oprresult <> 0";
+                        ? $"""
+                        SELECT p.oid, p.prorettype AS result, {arguments} AS args,
+                        p.provariadic <> 0 AS variadic, p.pronamespace AS native_namespace
+                        FROM pg_catalog.pg_proc p WHERE p.proname = {name}
+                        AND pg_catalog.pg_function_is_visible(p.oid)
+                        AND {request.Arity} <= pg_catalog.current_setting('max_function_args')::integer
+                        AND p.prokind = 'f' AND NOT p.proretset
+                        AND p.pronargs - p.pronargdefaults <= {request.Arity}
+                        AND (p.provariadic <> 0 OR p.pronargs >= {request.Arity})
+                        """
+                        : $"""
+                        SELECT o.oid, o.oprresult AS result, {arguments} AS args,
+                        FALSE AS variadic, o.oprnamespace AS native_namespace
+                        FROM pg_catalog.pg_operator o
+                        WHERE o.oprname = {name}
+                        AND pg_catalog.pg_operator_is_visible(o.oid)
+                        AND o.oprkind = '{(request.Arity == 1 ? "l" : "b")}'
+                        AND o.oprresult <> 0
+                        """;
 
-            var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, c.oid::bigint, "
-                + "c.result::bigint, array_to_string(c.args, ','), "
-                + "CASE WHEN c.oid IS NULL THEN NULL::text ELSE COALESCE((SELECT string_agg("
-                + "castsource::text || ':' || casttarget::text, ',' ORDER BY castsource, casttarget) "
-                + "FROM pg_catalog.pg_cast WHERE castcontext = 'i' AND casttarget = ANY(c.args)), '') END, "
-                + "CASE WHEN c.oid IS NULL THEN NULL::boolean ELSE EXISTS (SELECT 1 FROM pg_catalog.pg_type t "
-                + "WHERE t.oid = ANY(c.args) AND t.typtype = 'p') END, c.variadic, c.native_namespace::bigint "
-                + "FROM (SELECT 1) seed LEFT JOIN LATERAL ("
-                + rows
-                + ") c ON TRUE";
+            var selection = $"""
+                SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, c.oid::bigint, c.result::bigint,
+                array_to_string(c.args,
+                ','), CASE WHEN c.oid IS NULL
+                THEN NULL::text ELSE COALESCE((SELECT string_agg(castsource::text || ':' || casttarget::text,
+                ',' ORDER BY castsource, casttarget)
+                FROM pg_catalog.pg_cast WHERE castcontext = 'i'
+                AND casttarget = ANY(c.args)), '') END, CASE WHEN c.oid IS NULL
+                THEN NULL::boolean ELSE EXISTS (SELECT 1
+                FROM pg_catalog.pg_type t WHERE t.oid = ANY(c.args)
+                AND t.typtype = 'p') END, c.variadic, c.native_namespace::bigint
+                FROM (SELECT 1) seed LEFT JOIN LATERAL ({rows}) c ON TRUE
+                """;
 
             var bytes = Encoding.UTF8.GetByteCount(selection)
                 + (selections.Count == 0
@@ -1055,12 +1064,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         CheckExpressionType[] operands
     )
     {
-        if (operands.Length == 0)
-        {
-            return new CheckExpressionType(null, Incompatible: true);
-        }
-
-        if (operands.Any(static item => item.Incompatible))
+        if (operands.Length == 0
+            || operands.Any(static item => item.Incompatible))
         {
             return new CheckExpressionType(null, Incompatible: true);
         }
@@ -1290,19 +1295,19 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     Operator: SafeMigrationSqlUnaryOperator.Negate,
                     Operand: SafeMigrationSqlLiteralExpression
                     {
-                        BorrowedValue: long value, NumericSourceToken.IsEmpty: false,
+                        BorrowedValue: 2147483648L, NumericSourceToken.IsEmpty: false,
                     },
                 }
-                when value == 2147483648L => "integer",
+                => "integer",
             SafeMigrationSqlUnaryExpression
                 {
                     Operator: SafeMigrationSqlUnaryOperator.Negate,
                     Operand: SafeMigrationSqlLiteralExpression
                     {
-                        BorrowedValue: ulong value, NumericSourceToken.IsEmpty: false,
+                        BorrowedValue: 9223372036854775808UL, NumericSourceToken.IsEmpty: false,
                     },
                 }
-                when value == 9223372036854775808UL => "bigint",
+                => "bigint",
             SafeMigrationSqlCastExpression cast => _typeMappingSource.FindMapping(cast.StoreType)
                 ?.StoreTypeNameBase,
             SafeMigrationSqlLiteralExpression { StoreType: { } storeType }

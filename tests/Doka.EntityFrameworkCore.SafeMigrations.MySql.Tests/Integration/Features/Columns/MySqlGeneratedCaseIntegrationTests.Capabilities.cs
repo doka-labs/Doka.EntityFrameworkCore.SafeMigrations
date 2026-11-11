@@ -115,9 +115,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Act
         var nativeFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(
             connectionString,
-            "ALTER TABLE native_function_probe ADD COLUMN function_result int GENERATED ALWAYS AS ("
-            + expression
-            + ") VIRTUAL;",
+            $"""
+            ALTER TABLE native_function_probe ADD COLUMN function_result int GENERATED
+            ALWAYS AS ({expression}) VIRTUAL;
+            """,
             cancellationToken: CancellationToken.None));
 
         var report = await context
@@ -159,8 +160,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (`id` int NOT NULL, name varchar(20) NULL); "
-            + $"INSERT INTO `{Table}` VALUES (-1, 'Alpha');",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL, name varchar(20)
+            NULL); INSERT INTO `{Table}` VALUES (-1,
+            'Alpha');
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -261,13 +265,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Act
         var nativeFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(
             connectionString,
-            "ALTER TABLE native_clock_probe ADD COLUMN clock_result datetime(6) GENERATED ALWAYS AS ("
-            + sql
-            + ") "
-            + (stored
+            $"""
+            ALTER TABLE native_clock_probe ADD COLUMN clock_result datetime(6) GENERATED
+            ALWAYS AS ({sql}) {(stored
                 ? "STORED"
-                : "VIRTUAL")
-            + ";",
+                : "VIRTUAL")};
+            """,
             cancellationToken: CancellationToken.None));
 
         var report = await context
@@ -303,9 +306,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` "
-            + "(`id` int NOT NULL AUTO_INCREMENT PRIMARY KEY); "
-            + "CREATE TABLE native_identity_probe (`id` int NOT NULL AUTO_INCREMENT PRIMARY KEY);",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL AUTO_INCREMENT
+            PRIMARY KEY); CREATE TABLE native_identity_probe (`id` int NOT NULL AUTO_INCREMENT
+            PRIMARY KEY);
+            """,
             cancellationToken: CancellationToken.None);
 
         const string expression = "CASE WHEN `id` > 0 THEN 1 ELSE 0 END";
@@ -327,9 +332,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Act
         var nativeFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(
             connectionString,
-            "ALTER TABLE native_identity_probe ADD COLUMN identity_result int GENERATED ALWAYS AS ("
-            + expression
-            + ") VIRTUAL;",
+            $"""
+            ALTER TABLE native_identity_probe ADD COLUMN identity_result int GENERATED
+            ALWAYS AS ({expression}) VIRTUAL;
+            """,
             cancellationToken: CancellationToken.None));
 
         var report = await context

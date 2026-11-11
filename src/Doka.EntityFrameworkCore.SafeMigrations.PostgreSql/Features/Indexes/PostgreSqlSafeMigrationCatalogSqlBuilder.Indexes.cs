@@ -56,14 +56,25 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             requireIndependentIdentity: true);
 
         var plan = Plan(
-                $"CASE WHEN {unsupported} THEN 'unsupported' "
-                + $"WHEN NOT {table} THEN 'prerequisite_missing' "
-                + $"WHEN {exists} AND {matching} THEN 'matching' "
-                + $"WHEN {exists} THEN 'different' "
-                + $"WHEN {semanticAlias} THEN 'matching' "
-                + $"WHEN {nonCanonicalAlias} THEN 'different' "
-                + $"WHEN {namespaceCollision} THEN 'different' "
-                + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
+                $"""
+                CASE WHEN {unsupported}
+                THEN 'unsupported'
+                WHEN NOT {table}
+                THEN 'prerequisite_missing'
+                WHEN {exists}
+                AND {matching}
+                THEN 'matching'
+                WHEN {exists}
+                THEN 'different'
+                WHEN {semanticAlias}
+                THEN 'matching'
+                WHEN {nonCanonicalAlias}
+                THEN 'different'
+                WHEN {namespaceCollision}
+                THEN 'different'
+                WHEN {dataBlocked}
+                THEN 'data_blocked' ELSE 'missing' END
+                """,
                 satisfied) with
             {
                 DiagnosticEvidenceExpression = BuildIndexDiagnosticEvidence(definition),
@@ -76,8 +87,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 // duplicate-row proof hidden by an exact-name shape clash. The
                 // code carries evidence into Core and never authorizes mutation.
                 ClassificationCodeExpression = definition.Unique && includeRuntimeInputGuard
-                    ? $"CASE WHEN {exists} AND NOT ({matching}) AND {dataBlocked} "
-                    + "THEN 'index_replacement_data_blocked' ELSE NULL END"
+                    ? $"""
+                    CASE WHEN {exists}
+                    AND NOT ({matching})
+                    AND {dataBlocked}
+                    THEN 'index_replacement_data_blocked'
+                    ELSE NULL END
+                    """
                     : null,
             };
 
@@ -98,12 +114,15 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ",",
             definition.Keys.Select(static key => key.Column ?? "[expression]"));
 
-        var actualKeysExpression = "array_to_string(ARRAY(SELECT CASE WHEN key.attnum = 0 "
-            + "THEN '[expression]' ELSE key_attribute.attname END "
-            + "FROM unnest(i.indkey) WITH ORDINALITY AS key(attnum, ord) "
-            + "LEFT JOIN pg_catalog.pg_attribute key_attribute "
-            + "ON key_attribute.attrelid = i.indrelid AND key_attribute.attnum = key.attnum "
-            + "WHERE key.ord <= i.indnkeyatts ORDER BY key.ord), ',')";
+        const string actualKeysExpression = """
+            array_to_string(ARRAY(SELECT CASE WHEN key.attnum = 0
+            THEN '[expression]' ELSE key_attribute.attname END
+            FROM unnest(i.indkey) WITH ORDINALITY AS key(attnum, ord)
+            LEFT JOIN pg_catalog.pg_attribute key_attribute
+            ON key_attribute.attrelid = i.indrelid
+            AND key_attribute.attnum = key.attnum
+            WHERE key.ord <= i.indnkeyatts ORDER BY key.ord), ',')
+            """;
 
         var actualKeys = expectedKeys.Length <= SafeMigrationFacetDifference.MaximumValueLength
             ? $"LEFT({actualKeysExpression}, {SafeMigrationFacetDifference.MaximumValueLength})"
@@ -113,34 +132,31 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ? Literal(expectedKeys)
             : $"'md5:' || pg_catalog.md5({Literal(expectedKeys)})";
 
-        return "(SELECT NULLIF(concat_ws(chr(30), "
-            + DiagnosticRecord(
+        return $"""
+            (SELECT NULLIF(concat_ws(chr(30), {DiagnosticRecord(
                 $"{actualKeysExpression} <> {Literal(expectedKeys)}",
                 "index_key_order",
                 expectedKeysDiagnostic,
-                actualKeys)
-            + ", "
-            + DiagnosticRecord(
+                actualKeys)}, {DiagnosticRecord(
                 $"i.indisunique <> {definition.Unique.ToString().ToUpperInvariant()}",
                 "index_uniqueness",
                 definition.Unique
                     ? "'unique'"
                     : "'non_unique'",
-                "CASE WHEN i.indisunique THEN 'unique' ELSE 'non_unique' END")
-            + ", "
-            + DiagnosticRecord(
+                "CASE WHEN i.indisunique THEN 'unique' ELSE 'non_unique' END")},
+            {DiagnosticRecord(
                 $"am.amname <> {Literal(definition.Method ?? "btree")}",
                 "index_method",
                 Literal(definition.Method ?? "btree"),
-                "LEFT(am.amname, 256)")
-            + "), '') FROM pg_catalog.pg_index i "
-            + "JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid "
-            + "JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid "
-            + "JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace "
-            + "JOIN pg_catalog.pg_am am ON am.oid = idx.relam "
-            + $"WHERE n.nspname = {SchemaExpression(definition.Schema)} "
-            + $"AND idx.relname = {Literal(definition.Name)} "
-            + $"AND tbl.relname = {Literal(definition.Table)} LIMIT 1)";
+                "LEFT(am.amname, 256)")}), '')
+            FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid
+            JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid
+            JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace
+            JOIN pg_catalog.pg_am am ON am.oid = idx.relam
+            WHERE n.nspname = {SchemaExpression(definition.Schema)}
+            AND idx.relname = {Literal(definition.Name)}
+            AND tbl.relname = {Literal(definition.Table)} LIMIT 1)
+            """;
     }
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropIndex(
@@ -153,8 +169,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var independentlyOwned = IndependentIndexExists(intent.Name, intent.Schema, intent.Table);
 
         return Plan(
-                $"CASE WHEN NOT {exists} THEN 'missing' "
-                + $"WHEN {belongsToTable} AND {independentlyOwned} THEN 'matching' ELSE 'different' END",
+                $"""
+                CASE WHEN NOT {exists}
+                THEN 'missing'
+                WHEN {belongsToTable}
+                AND {independentlyOwned}
+                THEN 'matching' ELSE 'different' END
+                """,
                 $"NOT {exists}") with
             {
                 // WHY: Core needs a private physical-role certificate, not an
@@ -172,24 +193,32 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <summary>Recognizes only an independently owned ordinary built-in Btree without expression roles.</summary>
     private string OrdinaryIndependentIndexExists(
         DropIndexIntent intent
-    ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_index i "
-        + "JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid "
-        + "JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid "
-        + "JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace "
-        + "JOIN pg_catalog.pg_am am ON am.oid = idx.relam "
-        + $"WHERE n.nspname = {SchemaExpression(intent.Schema)} AND idx.relname = {Literal(intent.Name)} "
-        + $"AND tbl.relname = {Literal(intent.Table)} AND tbl.relkind = 'r' AND idx.relkind = 'i' "
-        + "AND am.amname = 'btree' AND i.indisvalid AND i.indisready AND i.indislive "
-        + "AND NOT i.indisunique AND NOT i.indisprimary AND NOT i.indisexclusion "
-        + "AND NOT i.indisreplident AND NOT i.indisclustered "
-        + "AND i.indexprs IS NULL AND i.indpred IS NULL AND i.indnatts = i.indnkeyatts "
-        + "AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_inherits inh "
-        + "WHERE inh.inhrelid IN (i.indexrelid, i.indrelid) OR inh.inhparent = i.indrelid) "
-        + "AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint co WHERE co.conindid = i.indexrelid) "
-        + "AND NOT EXISTS (SELECT 1 FROM pg_catalog.unnest(i.indclass) role(opclass) "
-        + "JOIN pg_catalog.pg_opclass op ON op.oid = role.opclass "
-        + "JOIN pg_catalog.pg_namespace op_schema ON op_schema.oid = op.opcnamespace "
-        + "WHERE NOT op.opcdefault OR op_schema.nspname <> 'pg_catalog'))";
+    ) => $"""
+        EXISTS (SELECT 1 FROM pg_catalog.pg_index i
+        JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid
+        JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid
+        JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace
+        JOIN pg_catalog.pg_am am ON am.oid = idx.relam
+        WHERE n.nspname = {SchemaExpression(intent.Schema)}
+        AND idx.relname = {Literal(intent.Name)}
+        AND tbl.relname = {Literal(intent.Table)}
+        AND tbl.relkind = 'r' AND idx.relkind = 'i'
+        AND am.amname = 'btree' AND i.indisvalid
+        AND i.indisready AND i.indislive
+        AND NOT i.indisunique AND NOT i.indisprimary
+        AND NOT i.indisexclusion AND NOT i.indisreplident
+        AND NOT i.indisclustered AND i.indexprs IS NULL
+        AND i.indpred IS NULL AND i.indnatts = i.indnkeyatts
+        AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_inherits inh
+        WHERE inh.inhrelid IN (i.indexrelid, i.indrelid)
+        OR inh.inhparent = i.indrelid)
+        AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint co
+        WHERE co.conindid = i.indexrelid)
+        AND NOT EXISTS (SELECT 1 FROM pg_catalog.unnest(i.indclass) role(opclass)
+        JOIN pg_catalog.pg_opclass op ON op.oid = role.opclass
+        JOIN pg_catalog.pg_namespace op_schema ON op_schema.oid = op.opcnamespace
+        WHERE NOT op.opcdefault OR op_schema.nspname <> 'pg_catalog'))
+        """;
 
     private PostgreSqlSafeMigrationRuntimePlan BuildRenameIndex(
         RenameIndexIntent intent
@@ -201,10 +230,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var target = RelationNameExists(intent.NewName, intent.Schema);
 
         return Plan(
-            $"CASE WHEN NOT {source} THEN 'missing' WHEN NOT {sourceOnTable} THEN 'different' "
-            + $"WHEN NOT {independentlyOwned} THEN 'different' "
-            + $"WHEN {target} THEN 'different' "
-            + "ELSE 'matching' END",
+            $"""
+            CASE WHEN NOT {source}
+            THEN 'missing'
+            WHEN NOT {sourceOnTable}
+            THEN 'different'
+            WHEN NOT {independentlyOwned}
+            THEN 'different'
+            WHEN {target}
+            THEN 'different' ELSE 'matching' END
+            """,
             $"NOT {source}");
     }
 
@@ -241,9 +276,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 + "WHERE inh.inhrelid = i.indexrelid)");
 
             conditions.Add(
-                "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint co "
-                + "WHERE co.conindid = i.indexrelid AND co.conrelid = i.indrelid "
-                + "AND co.contype IN ('p'::\"char\", 'u'::\"char\", 'x'::\"char\"))");
+                """
+                NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint co
+                WHERE co.conindid = i.indexrelid
+                AND co.conrelid = i.indrelid AND co.contype IN ('p'::"char", 'u'::"char",
+                'x'::"char"))
+                """);
         }
 
         var structuredFilter = GetStructuredIndexFilter(definition);
@@ -256,7 +294,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                         relationOid: "i.indrelid")
                     : ExpressionMatches("pg_catalog.pg_get_expr(i.indpred, i.indrelid)", definition.Filter!));
 
-        var nullsNotDistinct = "POSITION('NULLS NOT DISTINCT' IN pg_catalog.pg_get_indexdef(i.indexrelid)) > 0";
+        const string nullsNotDistinct =
+            "POSITION('NULLS NOT DISTINCT' IN pg_catalog.pg_get_indexdef(i.indexrelid)) > 0";
+
         conditions.Add(
             definition.NullsDistinct == false
                 ? nullsNotDistinct
@@ -306,15 +346,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 // catalog identity proves that a key uses its column's default collation.
                 conditions.Add($"i.indkey[{optionIndex}] > 0");
                 conditions.Add(
-                    "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute key_attribute "
-                    + "WHERE key_attribute.attrelid = i.indrelid "
-                    + $"AND key_attribute.attnum = i.indkey[{optionIndex}] "
-                    + $"AND key_attribute.attname = {Literal(storedColumn)}"
-                    + (key.Collation is null
+                    $"""
+                    EXISTS (SELECT 1 FROM pg_catalog.pg_attribute key_attribute
+                    WHERE key_attribute.attrelid = i.indrelid
+                    AND key_attribute.attnum = i.indkey[{optionIndex}]
+                    AND key_attribute.attname = {Literal(storedColumn)}{(key.Collation is null
                         && (key.Column is not null
                             || key.StructuredExpression is SafeMigrationSqlIdentifierExpression)
                             ? $" AND i.indcollation[{optionIndex}] = key_attribute.attcollation)"
-                            : ")"));
+                            : ")")}
+                    """);
             }
             else
             {
@@ -349,8 +390,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
             conditions.Add(
                 key.OperatorClass is null
-                    ? $"EXISTS (SELECT 1 FROM pg_catalog.pg_opclass opc "
-                    + $"WHERE opc.oid = i.indclass[{optionIndex}] AND opc.opcdefault)"
+                    ? $"""
+                    EXISTS (SELECT 1 FROM pg_catalog.pg_opclass opc
+                    WHERE opc.oid = i.indclass[{optionIndex}]
+                    AND opc.opcdefault)
+                    """
                     : CatalogPathMatches(
                         $"i.indclass[{optionIndex}]",
                         "pg_catalog.pg_opclass",
@@ -373,19 +417,24 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             var position = definition.Keys.Count + index + 1;
             var column = definition.IncludedColumns[index];
             conditions.Add(
-                $"pg_catalog.pg_get_indexdef(i.indexrelid, {position.ToString(CultureInfo.InvariantCulture)}, TRUE) "
-                + $"IN ({Literal(column)}, {Literal(_sqlGenerationHelper.DelimitIdentifier(column))})");
+                $"""
+                pg_catalog.pg_get_indexdef(i.indexrelid, {position.ToString(CultureInfo.InvariantCulture)}, TRUE)
+                IN ({Literal(column)},
+                {Literal(_sqlGenerationHelper.DelimitIdentifier(column))})
+                """);
         }
 
-        return "SELECT idx.relname AS candidate_name FROM pg_catalog.pg_index i "
-            + "JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid "
-            + "JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid "
-            + "JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace "
-            + "JOIN pg_catalog.pg_am am ON am.oid = idx.relam "
-            + $"WHERE n.nspname = {SchemaExpression(definition.Schema)} "
-            + $"AND idx.relname {(requireExpectedName ? "=" : "<>")} {Literal(definition.Name)} "
-            + $"AND tbl.relname = {Literal(definition.Table)} "
-            + $"AND {string.Join(" AND ", conditions)}";
+        return $"""
+            SELECT idx.relname AS candidate_name
+            FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid
+            JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid
+            JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace
+            JOIN pg_catalog.pg_am am ON am.oid = idx.relam
+            WHERE n.nspname = {SchemaExpression(definition.Schema)}
+            AND idx.relname {(requireExpectedName ? "=" : "<>")} {Literal(definition.Name)}
+            AND tbl.relname = {Literal(definition.Table)}
+            AND {string.Join(" AND ", conditions)}
+            """;
     }
 
     private static string IndexSortMatches(
@@ -470,29 +519,44 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             .ToArray();
 
         const string orderable = "pg_catalog.pg_index_column_has_property(i.indexrelid, key.pos, 'orderable')";
-        var sortMatches = "pg_catalog.pg_index_column_has_property(i.indexrelid, key.pos, key.sort_property) IS TRUE";
-        var nullMatches = "pg_catalog.pg_index_column_has_property(i.indexrelid, key.pos, key.null_property) IS TRUE";
-        var facets = "i.indkey[key.pos - 1] > 0 "
-            + "AND EXISTS (SELECT 1 FROM pg_catalog.pg_attribute key_attribute "
-            + "WHERE key_attribute.attrelid = i.indrelid "
-            + "AND key_attribute.attnum = i.indkey[key.pos - 1] "
-            + "AND key_attribute.attname = key.attname "
-            + "AND i.indcollation[key.pos - 1] = key_attribute.attcollation) "
-            + $"AND CASE WHEN key.sort_default THEN ({orderable} IS NOT TRUE OR {sortMatches}) "
-            + $"ELSE ({orderable} IS TRUE AND {sortMatches}) END "
-            + $"AND CASE WHEN key.null_default THEN ({orderable} IS NOT TRUE OR {nullMatches}) "
-            + $"ELSE ({orderable} IS TRUE AND {nullMatches}) END "
-            + "AND EXISTS (SELECT 1 FROM pg_catalog.pg_opclass opc "
-            + "WHERE opc.oid = i.indclass[key.pos - 1] AND opc.opcdefault)";
+        const string sortMatches =
+            "pg_catalog.pg_index_column_has_property(i.indexrelid, key.pos, key.sort_property) IS TRUE";
+
+        const string nullMatches =
+            "pg_catalog.pg_index_column_has_property(i.indexrelid, key.pos, key.null_property) IS TRUE";
+
+        const string facets = $"""
+            i.indkey[key.pos - 1] > 0 AND EXISTS (SELECT 1
+            FROM pg_catalog.pg_attribute key_attribute
+            WHERE key_attribute.attrelid = i.indrelid
+            AND key_attribute.attnum = i.indkey[key.pos - 1]
+            AND key_attribute.attname = key.attname
+            AND i.indcollation[key.pos - 1] = key_attribute.attcollation)
+            AND CASE WHEN key.sort_default
+            THEN ({orderable} IS NOT TRUE
+            OR {sortMatches})
+            ELSE ({orderable} IS TRUE
+            AND {sortMatches}) END
+            AND CASE WHEN key.null_default
+            THEN ({orderable} IS NOT TRUE
+            OR {nullMatches})
+            ELSE ({orderable} IS TRUE
+            AND {nullMatches}) END
+            AND EXISTS (SELECT 1 FROM pg_catalog.pg_opclass opc
+            WHERE opc.oid = i.indclass[key.pos - 1]
+            AND opc.opcdefault)
+            """;
 
         // WHY: Per-column pg_get_indexdef omits collation decorations. Compare physical OIDs
         // with the column default instead, including zero for noncollatable keys, so an explicit
         // index collation cannot silently satisfy a different default-collation contract.
         // A facet can evaluate to NULL. The per-key form required every condition to be true,
         // so the absent test coalesces to FALSE and keeps that verdict.
-        return $"NOT EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) "
-            + "AS key(pos, attname, sort_property, sort_default, null_property, null_default) "
-            + $"WHERE NOT COALESCE({facets}, FALSE))";
+        return $"""
+            NOT EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) AS key(pos,
+            attname, sort_property, sort_default, null_property, null_default)
+            WHERE NOT COALESCE({facets}, FALSE))
+            """;
     }
 
     /// <summary>Builds the duplicate-row predicate after the caller has qualified its native input binding.</summary>
@@ -552,9 +616,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var expression = IndexDataExpression(key);
         var table = Qualified(definition.Table, definition.Schema);
 
-        return $"CASE WHEN i.indcollation[{optionIndex}] = 0 THEN TRUE ELSE "
-            + $"i.indcollation[{optionIndex}] = pg_catalog.to_regcollation("
-            + $"pg_catalog.pg_collation_for((SELECT {expression} FROM {table} LIMIT 0)))::oid END";
+        return $"""
+            CASE WHEN i.indcollation[{optionIndex}] = 0
+            THEN TRUE ELSE i.indcollation[{optionIndex}] = pg_catalog.to_regcollation(
+            pg_catalog.pg_collation_for((SELECT {expression}
+            FROM {table} LIMIT 0)))::oid END
+            """;
     }
 
     private List<string> IndexExpressionSql(
@@ -664,11 +731,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ? $" AND pg_catalog.pg_opclass_is_visible({alias}.oid)"
             : $" AND ns.nspname = {Literal(parts[0])}";
 
-        return $"EXISTS (SELECT 1 FROM {catalog} {alias} "
-            + $"JOIN pg_catalog.pg_namespace ns ON ns.oid = {alias}.{namespaceColumn} "
-            + $"WHERE {alias}.oid = {oidExpression} AND {alias}.{nameColumn} = {Literal(name)}"
-            + namespaceCondition
-            + ")";
+        return $"""
+            EXISTS (SELECT 1 FROM {catalog} {alias}
+            JOIN pg_catalog.pg_namespace ns ON ns.oid = {alias}.{namespaceColumn}
+            WHERE {alias}.oid = {oidExpression}
+            AND {alias}.{nameColumn} = {Literal(name)}{namespaceCondition})
+            """;
     }
 
     private string CatalogIdentifierMatches(
@@ -688,46 +756,60 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ? $" AND pg_catalog.pg_collation_is_visible({alias}.oid)"
             : $" AND ns.nspname = {Literal(expected.Schema)}";
 
-        return $"EXISTS (SELECT 1 FROM {catalog} {alias} "
-            + $"JOIN pg_catalog.pg_namespace ns ON ns.oid = {alias}.{namespaceColumn} "
-            + $"WHERE {alias}.oid = {oidExpression} AND {alias}.{nameColumn} = {Literal(expected.Name)}"
-            + namespaceCondition
-            + ")";
+        return $"""
+            EXISTS (SELECT 1 FROM {catalog} {alias}
+            JOIN pg_catalog.pg_namespace ns ON ns.oid = {alias}.{namespaceColumn}
+            WHERE {alias}.oid = {oidExpression}
+            AND {alias}.{nameColumn} = {Literal(expected.Name)}{namespaceCondition})
+            """;
     }
 
     private string IndexExists(
         string name,
         string? schema
-    ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_class idx "
-        + "JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace "
-        + $"WHERE n.nspname = {SchemaExpression(schema)} AND idx.relname = {Literal(name)} "
-        + "AND idx.relkind IN ('i', 'I'))";
+    ) => $"""
+        EXISTS (SELECT 1 FROM pg_catalog.pg_class idx
+        JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace
+        WHERE n.nspname = {SchemaExpression(schema)}
+        AND idx.relname = {Literal(name)}
+        AND idx.relkind IN ('i', 'I'))
+        """;
 
     private string IndexExists(
         string name,
         string? schema,
         string table
-    ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_index i "
-        + "JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid "
-        + "JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid "
-        + "JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace "
-        + $"WHERE n.nspname = {SchemaExpression(schema)} AND idx.relname = {Literal(name)} "
-        + $"AND tbl.relname = {Literal(table)} AND idx.relkind IN ('i', 'I'))";
+    ) => $"""
+        EXISTS (SELECT 1 FROM pg_catalog.pg_index i
+        JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid
+        JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid
+        JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace
+        WHERE n.nspname = {SchemaExpression(schema)}
+        AND idx.relname = {Literal(name)}
+        AND tbl.relname = {Literal(table)}
+        AND idx.relkind IN ('i', 'I'))
+        """;
 
     private string IndependentIndexExists(
         string name,
         string? schema,
         string table
-    ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_index i "
-        + "JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid "
-        + "JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid "
-        + "JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace "
-        + $"WHERE n.nspname = {SchemaExpression(schema)} AND idx.relname = {Literal(name)} "
-        + $"AND tbl.relname = {Literal(table)} AND idx.relkind IN ('i', 'I') "
-        + "AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_inherits inh WHERE inh.inhrelid = i.indexrelid) "
-        + "AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint co "
-        + "WHERE co.conindid = i.indexrelid AND co.conrelid = i.indrelid "
-        + "AND co.contype IN ('p'::\"char\", 'u'::\"char\", 'x'::\"char\")))";
+    ) => $"""
+        EXISTS (SELECT 1 FROM pg_catalog.pg_index i
+        JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid
+        JOIN pg_catalog.pg_class tbl ON tbl.oid = i.indrelid
+        JOIN pg_catalog.pg_namespace n ON n.oid = idx.relnamespace
+        WHERE n.nspname = {SchemaExpression(schema)}
+        AND idx.relname = {Literal(name)}
+        AND tbl.relname = {Literal(table)}
+        AND idx.relkind IN ('i', 'I')
+        AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_inherits inh
+        WHERE inh.inhrelid = i.indexrelid)
+        AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint co
+        WHERE co.conindid = i.indexrelid
+        AND co.conrelid = i.indrelid AND co.contype IN ('p'::"char", 'u'::"char",
+        'x'::"char")))
+        """;
 
     private string ExpressionMatches(
         string catalogExpression,

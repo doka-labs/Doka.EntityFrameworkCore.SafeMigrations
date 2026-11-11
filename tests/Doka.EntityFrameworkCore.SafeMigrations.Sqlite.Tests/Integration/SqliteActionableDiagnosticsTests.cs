@@ -38,9 +38,11 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE diagnostic_left (Id INTEGER NOT NULL); "
-            + "CREATE TABLE diagnostic_right (Value TEXT NULL); "
-            + "INSERT INTO diagnostic_right VALUES ('private-row-value');",
+            """
+            CREATE TABLE diagnostic_left (Id INTEGER NOT NULL);
+            CREATE TABLE diagnostic_right (Value TEXT NULL);
+            INSERT INTO diagnostic_right VALUES ('private-row-value');
+            """,
             cancellationToken: CancellationToken.None);
 
         if (scenario == "different")
@@ -250,15 +252,15 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_constraint_parents PRIMARY KEY (Id)); "
-            + "CREATE TABLE constraint_children (Id INTEGER NOT NULL, ParentId INTEGER NULL, "
-            + "CONSTRAINT pk_constraint_children PRIMARY KEY (Id), "
-            + "CONSTRAINT fk_constraint_children_parent FOREIGN KEY (ParentId) "
-            + "REFERENCES constraint_parents (Id) ON DELETE CASCADE); "
-            + "PRAGMA foreign_keys = OFF; "
-            + "INSERT INTO constraint_children (Id, ParentId) VALUES (987654321, 876543219); "
-            + "PRAGMA foreign_keys = ON;",
+            """
+            CREATE TABLE constraint_parents (Id INTEGER NOT NULL, CONSTRAINT pk_constraint_parents
+            PRIMARY KEY (Id)); CREATE TABLE constraint_children (Id INTEGER NOT NULL,
+            ParentId INTEGER NULL, CONSTRAINT pk_constraint_children PRIMARY KEY (Id),
+            CONSTRAINT fk_constraint_children_parent FOREIGN KEY (ParentId) REFERENCES
+            constraint_parents (Id) ON DELETE CASCADE); PRAGMA foreign_keys = OFF; INSERT
+            INTO constraint_children (Id,
+            ParentId) VALUES (987654321, 876543219); PRAGMA foreign_keys = ON;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);

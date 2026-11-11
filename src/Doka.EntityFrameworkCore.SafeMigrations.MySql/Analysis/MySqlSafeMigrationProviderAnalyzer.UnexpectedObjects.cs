@@ -307,7 +307,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     private static string BuildUnexpectedTableSql() => """
         SELECT 'table', t.TABLE_NAME, t.TABLE_NAME, FALSE
         FROM INFORMATION_SCHEMA.TABLES t
-        WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_TYPE = 'BASE TABLE'
+        WHERE t.TABLE_SCHEMA = DATABASE()
+        AND t.TABLE_TYPE = 'BASE TABLE'
         ORDER BY 1, 2, 3;
         """;
 

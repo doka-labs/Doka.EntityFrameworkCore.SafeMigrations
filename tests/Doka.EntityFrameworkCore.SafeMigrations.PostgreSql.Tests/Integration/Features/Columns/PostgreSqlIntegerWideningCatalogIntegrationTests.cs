@@ -42,26 +42,17 @@ public sealed class PostgreSqlIntegerWideningCatalogIntegrationTests : PostgreSq
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE ROLE "
-            + role
-            + "; "
-            + "GRANT USAGE, CREATE ON SCHEMA public TO "
-            + role
-            + "; "
-            + "CREATE TABLE catalog_integer_rows (value "
-            + (targetAlreadyWidened
+            $"""
+            CREATE ROLE {role}; GRANT USAGE, CREATE ON SCHEMA public
+            TO {role}; CREATE TABLE catalog_integer_rows (value
+            {(targetAlreadyWidened
                 ? "bigint"
-                : "integer")
-            + (nullable
+                : "integer")}{(nullable
                 ? " NULL); "
-                : " NOT NULL); ")
-            + "INSERT INTO catalog_integer_rows VALUES (7); "
-            + "ALTER TABLE catalog_integer_rows OWNER TO "
-            + role
-            + "; "
-            + "REVOKE SELECT ON pg_catalog."
-            + catalog
-            + " FROM PUBLIC;",
+                : " NOT NULL); ")}INSERT INTO catalog_integer_rows
+            VALUES (7); ALTER TABLE catalog_integer_rows OWNER TO {role};
+            REVOKE SELECT ON pg_catalog.{catalog} FROM PUBLIC;
+            """,
             cancellationToken: CancellationToken.None);
 
         try
@@ -135,8 +126,12 @@ public sealed class PostgreSqlIntegerWideningCatalogIntegrationTests : PostgreSq
                     : "integer",
                 await ScalarStringAsync(
                     connectionString,
-                    "SELECT data_type FROM information_schema.columns WHERE table_schema = 'public' "
-                    + "AND table_name = 'catalog_integer_rows' AND column_name = 'value';",
+                    """
+                    SELECT data_type FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                    AND table_name = 'catalog_integer_rows'
+                    AND column_name = 'value';
+                    """,
                     cancellationToken: CancellationToken.None));
 
             Assert.Equal(
@@ -150,12 +145,11 @@ public sealed class PostgreSqlIntegerWideningCatalogIntegrationTests : PostgreSq
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "ALTER TABLE catalog_integer_rows OWNER TO postgres; "
-                + "REVOKE USAGE, CREATE ON SCHEMA public FROM "
-                + role
-                + "; DROP ROLE "
-                + role
-                + ";",
+                $"""
+                ALTER TABLE catalog_integer_rows OWNER TO postgres; REVOKE USAGE, CREATE
+                ON SCHEMA public
+                FROM {role}; DROP ROLE {role};
+                """,
                 cancellationToken: CancellationToken.None);
         }
     }
@@ -178,20 +172,13 @@ public sealed class PostgreSqlIntegerWideningCatalogIntegrationTests : PostgreSq
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE ROLE "
-            + role
-            + "; "
-            + "GRANT USAGE, CREATE ON SCHEMA public TO "
-            + role
-            + "; "
-            + "CREATE TABLE optional_index_rows(value integer NOT NULL); "
-            + "CREATE INDEX ix_optional_role ON optional_index_rows(value); "
-            + "ALTER TABLE optional_index_rows OWNER TO "
-            + role
-            + "; "
-            + "REVOKE SELECT ON pg_catalog."
-            + catalog
-            + " FROM PUBLIC;",
+            $"""
+            CREATE ROLE {role}; GRANT USAGE, CREATE ON SCHEMA public
+            TO {role}; CREATE TABLE optional_index_rows(value integer
+            NOT NULL); CREATE INDEX ix_optional_role ON optional_index_rows(value);
+            ALTER TABLE optional_index_rows OWNER TO {role}; REVOKE
+            SELECT ON pg_catalog.{catalog} FROM PUBLIC;
+            """,
             cancellationToken: CancellationToken.None);
 
         try
@@ -230,12 +217,11 @@ public sealed class PostgreSqlIntegerWideningCatalogIntegrationTests : PostgreSq
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "ALTER TABLE optional_index_rows OWNER TO postgres; "
-                + "REVOKE USAGE, CREATE ON SCHEMA public FROM "
-                + role
-                + "; DROP ROLE "
-                + role
-                + ";",
+                $"""
+                ALTER TABLE optional_index_rows OWNER TO postgres; REVOKE USAGE, CREATE
+                ON SCHEMA public
+                FROM {role}; DROP ROLE {role};
+                """,
                 cancellationToken: CancellationToken.None);
         }
     }

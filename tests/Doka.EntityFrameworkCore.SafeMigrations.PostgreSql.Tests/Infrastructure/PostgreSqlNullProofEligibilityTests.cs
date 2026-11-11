@@ -57,8 +57,8 @@ public sealed class PostgreSqlNullProofEligibilityTests
             command.CommandText,
             StringComparison.Ordinal);
 
-        Assert.Contains("THEN (" + nullProbe + ") ELSE FALSE END", analysis, StringComparison.Ordinal);
-        Assert.Contains("THEN (" + nullProbe + ") ELSE FALSE END", repair, StringComparison.Ordinal);
+        Assert.Contains("THEN (" + nullProbe + ")\nELSE FALSE END", analysis, StringComparison.Ordinal);
+        Assert.Contains("THEN (" + nullProbe + ")\nELSE FALSE END", repair, StringComparison.Ordinal);
         Assert.DoesNotContain("doka_nullability_blocked", analysis, StringComparison.Ordinal);
         Assert.DoesNotContain("__DOKA_SM_", analysis, StringComparison.Ordinal);
         Assert.True(
@@ -113,7 +113,7 @@ public sealed class PostgreSqlNullProofEligibilityTests
             command,
             StringComparison.Ordinal);
 
-        Assert.Contains("WHEN (doka_nullability_repair_eligible) AND (", runtimeState, StringComparison.Ordinal);
+        Assert.Contains("WHEN (doka_nullability_repair_eligible)\nAND (", runtimeState, StringComparison.Ordinal);
         Assert.StartsWith("(doka_nullability_repair_eligible) AND NOT (", runtimeRepair, StringComparison.Ordinal);
         Assert.DoesNotContain("doka_nullability_repair_eligible", inlineState, StringComparison.Ordinal);
         Assert.DoesNotContain("__DOKA_SM_", inlineState, StringComparison.Ordinal);
@@ -200,7 +200,12 @@ public sealed class PostgreSqlNullProofEligibilityTests
 
         // Assert
         Assert.Equal(
-            quoted + "CASE WHEN (eligible) AND NOT (proven_not_null) THEN (row_probe) ELSE FALSE END",
+            quoted + """
+                     CASE WHEN (eligible)
+                     AND NOT (proven_not_null)
+                     THEN (row_probe)
+                     ELSE FALSE END
+                     """,
             inline);
 
         Assert.Equal(quoted + "doka_nullability_blocked", runtime);

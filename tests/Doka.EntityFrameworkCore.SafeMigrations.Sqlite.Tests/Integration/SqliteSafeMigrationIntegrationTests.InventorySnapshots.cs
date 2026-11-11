@@ -4,7 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 public sealed class SqliteSafeMigrationInventorySnapshotsIntegrationTests : SqliteSafeMigrationCatalogIntegrationTests
 {
     /// <summary>Alias windows share one catalog without hiding structurally different physical indexes.</summary>
-    /// <param name="aliasCount">The number of semantically matching physical indexes spanning the bounded windows.</param>
+    /// <param name="aliasCount">The matching physical indexes spanning the bounded windows.</param>
     [Theory]
     [InlineData(0)]
     [InlineData(1)]
@@ -130,14 +130,18 @@ public sealed class SqliteSafeMigrationInventorySnapshotsIntegrationTests : Sqli
         await using var secondConnection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             firstConnection,
-            "CREATE TABLE inventory_connections (Code TEXT, Legacy TEXT); "
-            + "CREATE INDEX physical_index ON inventory_connections (Code);",
+            """
+            CREATE TABLE inventory_connections (Code TEXT, Legacy TEXT);
+            CREATE INDEX physical_index ON inventory_connections (Code);
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             secondConnection,
-            "CREATE TABLE inventory_connections (Code TEXT, Legacy TEXT); "
-            + "CREATE INDEX physical_index ON inventory_connections (Legacy);",
+            """
+            CREATE TABLE inventory_connections (Code TEXT, Legacy TEXT);
+            CREATE INDEX physical_index ON inventory_connections (Legacy);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var firstContext = CreateContext(firstConnection);

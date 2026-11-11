@@ -19,8 +19,11 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.fitting_text (Id int NOT NULL, Caption nvarchar(80) NULL); "
-            + "INSERT INTO dbo.fitting_text (Id, Caption) VALUES (1, N'short');",
+            """
+            CREATE TABLE dbo.fitting_text (Id int NOT NULL, Caption nvarchar(80) NULL);
+            INSERT INTO dbo.fitting_text (Id,
+            Caption) VALUES (1, N'short');
+            """,
             cancellationToken: CancellationToken.None);
 
         await ScalarIntAsync(
@@ -52,9 +55,12 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
 
         var matchingColumnCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns "
-            + "WHERE object_id = OBJECT_ID(N'dbo.fitting_text', N'U') "
-            + "AND name = N'Caption' AND max_length = 40 AND is_nullable = 0;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id = OBJECT_ID(N'dbo.fitting_text', N'U')
+            AND name = N'Caption' AND max_length = 40
+            AND is_nullable = 0;
+            """,
             cancellationToken: CancellationToken.None);
 
         var preservedRowCount = await ScalarIntAsync(
@@ -78,8 +84,11 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.expand_text (Id int NOT NULL, Caption varchar(10) NOT NULL); "
-            + "INSERT INTO dbo.expand_text (Id, Caption) VALUES (1, 'short');",
+            """
+            CREATE TABLE dbo.expand_text (Id int NOT NULL, Caption varchar(10) NOT NULL);
+            INSERT INTO dbo.expand_text (Id,
+            Caption) VALUES (1, 'short');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -100,9 +109,12 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
 
         var matchingColumnCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns "
-            + "WHERE object_id = OBJECT_ID(N'dbo.expand_text', N'U') "
-            + "AND name = N'Caption' AND max_length = 200 AND is_nullable = 0;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id = OBJECT_ID(N'dbo.expand_text', N'U')
+            AND name = N'Caption' AND max_length = 200
+            AND is_nullable = 0;
+            """,
             cancellationToken: CancellationToken.None);
 
         var preservedRowCount = await ScalarIntAsync(
@@ -125,8 +137,11 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.null_text (Id int NOT NULL, Caption nvarchar(80) NULL); "
-            + "INSERT INTO dbo.null_text (Id, Caption) VALUES (1, NULL);",
+            """
+            CREATE TABLE dbo.null_text (Id int NOT NULL, Caption nvarchar(80) NULL);
+            INSERT INTO dbo.null_text (Id,
+            Caption) VALUES (1, NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -153,9 +168,11 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
 
         var nullableColumnCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns "
-            + "WHERE object_id = OBJECT_ID(N'dbo.null_text', N'U') "
-            + "AND name = N'Caption' AND is_nullable = 1;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id = OBJECT_ID(N'dbo.null_text', N'U')
+            AND name = N'Caption' AND is_nullable = 1;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -175,9 +192,11 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.statistics_text (Id int NOT NULL, Caption nvarchar(80) NULL); "
-            + "INSERT dbo.statistics_text VALUES (1, N'short'); "
-            + "CREATE STATISTICS caller_statistics ON dbo.statistics_text (Caption);",
+            """
+            CREATE TABLE dbo.statistics_text (Id int NOT NULL, Caption nvarchar(80)
+            NULL); INSERT dbo.statistics_text VALUES (1,
+            N'short'); CREATE STATISTICS caller_statistics ON dbo.statistics_text (Caption);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -211,14 +230,22 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
 
         var preservedColumn = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.statistics_text') "
-            + "AND name = N'Caption' AND max_length = 160 AND is_nullable = 1;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id = OBJECT_ID(N'dbo.statistics_text')
+            AND name = N'Caption' AND max_length = 160
+            AND is_nullable = 1;
+            """,
             cancellationToken: CancellationToken.None);
 
         var preservedStatistics = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.stats WHERE object_id = OBJECT_ID(N'dbo.statistics_text') "
-            + "AND name = N'caller_statistics' AND user_created = 1;",
+            """
+            SELECT COUNT(*) FROM sys.stats
+            WHERE object_id = OBJECT_ID(N'dbo.statistics_text')
+            AND name = N'caller_statistics'
+            AND user_created = 1;
+            """,
             cancellationToken: CancellationToken.None);
 
         var preservedRows = await ScalarIntAsync(
@@ -245,8 +272,11 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.oversized_text (Id int NOT NULL, Caption nvarchar(80) NULL); "
-            + "INSERT dbo.oversized_text VALUES (1, REPLICATE(N'x', 30));",
+            """
+            CREATE TABLE dbo.oversized_text (Id int NOT NULL, Caption nvarchar(80) NULL);
+            INSERT dbo.oversized_text VALUES (1,
+            REPLICATE(N'x', 30));
+            """,
             cancellationToken: CancellationToken.None);
 
         await ScalarIntAsync(
@@ -285,8 +315,12 @@ public sealed class SqlServerSafeMigrationColumnTransitionsIntegrationTests : Sq
 
         var preservedColumn = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.oversized_text') "
-            + "AND name = N'Caption' AND max_length = 160 AND is_nullable = 1;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id = OBJECT_ID(N'dbo.oversized_text')
+            AND name = N'Caption' AND max_length = 160
+            AND is_nullable = 1;
+            """,
             cancellationToken: CancellationToken.None);
 
         var preservedRows = await ScalarIntAsync(

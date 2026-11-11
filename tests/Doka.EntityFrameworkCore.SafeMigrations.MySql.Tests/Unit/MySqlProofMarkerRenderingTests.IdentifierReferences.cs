@@ -23,16 +23,18 @@ public sealed partial class MySqlProofMarkerRenderingTests
         {
             "required-resume" => "(" + expected + ") = 'staged'",
             "prepared-required-resume" => "((" + expected + ")) = 'staged'",
-            "prepared-data-blocked" => "EXISTS(SELECT 1 FROM `proof_items` WHERE "
-                + expected
-                + " IS NOT NULL AND CHAR_LENGTH("
-                + expected
-                + ") > 8 LIMIT 1)",
-            "index-identity" => "CASE WHEN ("
-                + expected
-                + ") THEN 'matching' WHEN ("
-                + expected
-                + ") THEN 'different' ELSE 'missing' END",
+            "prepared-data-blocked" => $"""
+                EXISTS(SELECT 1 FROM `proof_items`
+                WHERE {expected} IS NOT NULL
+                AND CHAR_LENGTH({expected}) > 8
+                LIMIT 1)
+                """,
+            "index-identity" => $"""
+                CASE WHEN ({expected})
+                THEN 'matching'
+                WHEN ({expected})
+                THEN 'different' ELSE 'missing' END
+                """,
             _ => expected,
         };
 

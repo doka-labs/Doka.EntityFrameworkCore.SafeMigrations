@@ -26,14 +26,26 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         // inherited object with the same visible shape is neither a safe alias
         // nor an absent target, because SafeMigrations cannot own its lifecycle.
         return Plan(
-                $"CASE WHEN NOT {tableExists} OR NOT ({additionalPrerequisite}) THEN 'prerequisite_missing' "
-                + $"WHEN {exists} AND {matching} THEN 'matching' "
-                + $"WHEN {exists} THEN 'different' "
-                + $"WHEN ({semanticAlias}) THEN 'matching' "
-                + $"WHEN ({nonCanonicalAlias}) THEN 'different' "
-                + $"WHEN ({singletonConflict}) THEN 'different' "
-                + $"WHEN ({namespaceCollision}) THEN 'different' "
-                + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
+                $"""
+                CASE WHEN NOT {tableExists}
+                OR NOT ({additionalPrerequisite})
+                THEN 'prerequisite_missing'
+                WHEN {exists}
+                AND {matching}
+                THEN 'matching'
+                WHEN {exists}
+                THEN 'different'
+                WHEN ({semanticAlias})
+                THEN 'matching'
+                WHEN ({nonCanonicalAlias})
+                THEN 'different'
+                WHEN ({singletonConflict})
+                THEN 'different'
+                WHEN ({namespaceCollision})
+                THEN 'different'
+                WHEN {dataBlocked}
+                THEN 'data_blocked' ELSE 'missing' END
+                """,
                 satisfied) with
             {
                 DiagnosticEvidenceExpression = diagnosticEvidence,
@@ -57,7 +69,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var local = ConstraintExists(table, schema, name, type, requireLocalIdentity: true);
 
         return Plan(
-            $"CASE WHEN NOT {exists} THEN 'missing' WHEN {local} THEN 'matching' ELSE 'different' END",
+            $"""
+            CASE WHEN NOT {exists}
+            THEN 'missing'
+            WHEN {local}
+            THEN 'matching' ELSE 'different' END
+            """,
             $"NOT {exists}");
     }
 
@@ -121,15 +138,15 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string columnsExpression,
         string namePredicate,
         bool requireLocalIdentity = true
-    ) => ConstraintRowsWithoutName(table, schema, type)
-        + $" AND {namePredicate}"
-        + StandardConstraintSemantics(requireLocalIdentity)
-        + (type == 'u'
-            ? UniqueNullSemanticsMatch()
-            : string.Empty)
-        + " AND ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
-        + "JOIN pg_catalog.pg_attribute a ON a.attrelid = co.conrelid AND a.attnum = key.attnum "
-        + $"ORDER BY key.ord) = {columnsExpression}";
+    ) => $"""
+        {ConstraintRowsWithoutName(table, schema, type)} AND {namePredicate}{
+            StandardConstraintSemantics(requireLocalIdentity)}{(type == 'u'
+                ? UniqueNullSemanticsMatch()
+                : string.Empty)} AND ARRAY(
+        SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord)
+        JOIN pg_catalog.pg_attribute a ON a.attrelid = co.conrelid AND a.attnum = key.attnum
+        ORDER BY key.ord) = {columnsExpression}
+        """;
 
     private static string StandardConstraintSemantics(
             bool requireLocalIdentity = true
@@ -137,12 +154,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         // JSON projection keeps one catalog query compatible with PostgreSQL
         // 14-18 while still rejecting semantics introduced by newer servers.
-        => (requireLocalIdentity
+        => $"""
+            {(requireLocalIdentity
                 ? LocalConstraintIdentity()
-                : string.Empty)
-            + " AND NOT co.condeferrable AND NOT co.condeferred AND co.convalidated"
-            + " AND COALESCE((to_jsonb(co) ->> 'conenforced')::boolean, TRUE)"
-            + " AND NOT COALESCE((to_jsonb(co) ->> 'conperiod')::boolean, FALSE)";
+                : string.Empty)} AND NOT co.condeferrable AND NOT co.condeferred AND co.convalidated
+            AND COALESCE((to_jsonb(co) ->> 'conenforced')::boolean, TRUE)
+            AND NOT COALESCE((to_jsonb(co) ->> 'conperiod')::boolean, FALSE)
+            """;
 
     private static string LocalConstraintIdentity()
 
@@ -155,8 +173,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         // PostgreSQL 15 added indnullsnotdistinct. An ordinary EF unique
         // constraint retains the older/default NULLS DISTINCT behavior.
-        => " AND NOT COALESCE((SELECT (to_jsonb(i) ->> 'indnullsnotdistinct')::boolean "
-            + "FROM pg_catalog.pg_index i WHERE i.indexrelid = co.conindid), FALSE)";
+        => """
+             AND NOT COALESCE((SELECT (to_jsonb(i) ->> 'indnullsnotdistinct')::boolean
+            FROM pg_catalog.pg_index i WHERE i.indexrelid = co.conindid), FALSE)
+            """;
 
     private string DuplicateDataExists(
         string table,
@@ -166,8 +186,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     )
     {
         var snapshot = keys.ToArray();
-        return $"EXISTS (SELECT 1 FROM {Qualified(table, schema)} WHERE {predicate} "
-            + $"GROUP BY {string.Join(", ", snapshot)} HAVING COUNT(*) > 1 LIMIT 1)";
+        return $"""
+            EXISTS (SELECT 1 FROM {Qualified(table, schema)}
+            WHERE {predicate} GROUP BY {string.Join(", ", snapshot)} HAVING
+            COUNT(*) > 1 LIMIT 1)
+            """;
     }
 
     private string Delimited(
@@ -192,11 +215,15 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string table,
         string? schema,
         char type
-    ) => "SELECT co.conname AS candidate_name FROM pg_catalog.pg_constraint co "
-        + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-        + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-        + $"WHERE n.nspname = {SchemaExpression(schema)} AND c.relname = {Literal(table)} "
-        + $"AND co.contype = {Literal(type.ToString())}::\"char\"";
+    ) => $"""
+        SELECT co.conname AS candidate_name
+        FROM pg_catalog.pg_constraint co
+        JOIN pg_catalog.pg_class c ON c.oid = co.conrelid
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = {SchemaExpression(schema)}
+        AND c.relname = {Literal(table)}
+        AND co.contype = {Literal(type.ToString())}::"char"
+        """;
 
     private string ConstraintExists(
         string table,
@@ -214,19 +241,24 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string table,
         string? schema,
         char type
-    ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_constraint co "
-        + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-        + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-        + $"WHERE n.nspname = {SchemaExpression(schema)} AND c.relname = {Literal(table)} "
-        + $"AND co.contype = {Literal(type.ToString())}::\"char\")";
+    ) => $"""
+        EXISTS (SELECT 1 FROM pg_catalog.pg_constraint co
+        JOIN pg_catalog.pg_class c ON c.oid = co.conrelid
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = {SchemaExpression(schema)}
+        AND c.relname = {Literal(table)}
+        AND co.contype = {Literal(type.ToString())}::"char")
+        """;
 
     private string RelationNameExists(
         string name,
         string? schema
-    ) => "EXISTS (SELECT 1 FROM pg_catalog.pg_class relation "
-        + "JOIN pg_catalog.pg_namespace n ON n.oid = relation.relnamespace "
-        + $"WHERE n.nspname = {SchemaExpression(schema)} "
-        + $"AND relation.relname = {Literal(name)})";
+    ) => $"""
+        EXISTS (SELECT 1 FROM pg_catalog.pg_class relation
+        JOIN pg_catalog.pg_namespace n ON n.oid = relation.relnamespace
+        WHERE n.nspname = {SchemaExpression(schema)}
+        AND relation.relname = {Literal(name)})
+        """;
 
     private string ConstraintColumnsSatisfied(
         string table,
@@ -273,18 +305,30 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             .ToArray();
 
         var rowSource = ConstraintRowsWithoutName(table, schema, 'u');
-        var columnsMatch = " AND ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
-            + "JOIN pg_catalog.pg_attribute a ON a.attrelid = co.conrelid AND a.attnum = key.attnum "
-            + "ORDER BY key.ord) = required.columns";
+        var columnsMatch = """
+             AND ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord)
+            JOIN pg_catalog.pg_attribute a ON a.attrelid = co.conrelid AND a.attnum = key.attnum
+            ORDER BY key.ord) = required.columns
+            """;
 
         var semantics = StandardConstraintSemantics() + UniqueNullSemanticsMatch();
-        var exact = $"EXISTS ({rowSource} AND co.conname = required.conname{semantics}{columnsMatch})";
-        var exists = $"EXISTS ({rowSource} AND co.conname = required.conname)";
-        var alias = $"EXISTS ({rowSource} AND co.conname <> required.conname{semantics}{columnsMatch})";
+        var exact = $"""
+            EXISTS ({rowSource}
+            AND co.conname = required.conname{semantics}{columnsMatch})
+            """;
 
-        return $"NOT EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) "
-            + "AS required(conname, columns) WHERE NOT COALESCE("
-            + $"({exact}) OR (NOT ({exists}) AND ({alias})), FALSE))";
+        var exists = $"EXISTS ({rowSource} AND co.conname = required.conname)";
+        var alias = $"""
+            EXISTS ({rowSource}
+            AND co.conname <> required.conname{semantics}{columnsMatch})
+            """;
+
+        return $"""
+            NOT EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) AS required(conname,
+            columns) WHERE NOT COALESCE(({exact})
+            OR (NOT ({exists})
+            AND ({alias})), FALSE))
+            """;
     }
 
     private string AllConstraintsModeled(
@@ -298,13 +342,15 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ? "FALSE"
             : $"({string.Join(" OR ", expectedMatches)})";
 
-        return "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint candidate_co "
-            + "JOIN pg_catalog.pg_class candidate_c ON candidate_c.oid = candidate_co.conrelid "
-            + "JOIN pg_catalog.pg_namespace candidate_n ON candidate_n.oid = candidate_c.relnamespace "
-            + $"WHERE candidate_n.nspname = {SchemaExpression(schema)} "
-            + $"AND candidate_c.relname = {Literal(table)} "
-            + $"AND candidate_co.contype = {Literal(type.ToString())}::\"char\" "
-            + $"AND NOT ({modeled}))";
+        return $"""
+            NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint candidate_co
+            JOIN pg_catalog.pg_class candidate_c ON candidate_c.oid = candidate_co.conrelid
+            JOIN pg_catalog.pg_namespace candidate_n ON candidate_n.oid = candidate_c.relnamespace
+            WHERE candidate_n.nspname = {SchemaExpression(schema)}
+            AND candidate_c.relname = {Literal(table)}
+            AND candidate_co.contype = {Literal(type.ToString())}::"char"
+            AND NOT ({modeled}))
+            """;
     }
 
     private string NameArray(

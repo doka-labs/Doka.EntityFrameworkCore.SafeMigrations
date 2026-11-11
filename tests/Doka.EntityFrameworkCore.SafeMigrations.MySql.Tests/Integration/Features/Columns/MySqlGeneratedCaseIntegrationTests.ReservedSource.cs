@@ -104,9 +104,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (`select` int NOT NULL, "
-            + "native_result tinyint(1) GENERATED ALWAYS AS (`select` > 0) VIRTUAL, "
-            + "CONSTRAINT ck_source_reserved CHECK(`select` > 0));",
+            $"""
+            CREATE TABLE `{Table}` (`select` int NOT NULL, native_result
+            tinyint(1) GENERATED ALWAYS AS (`select` > 0) VIRTUAL,
+            CONSTRAINT ck_source_reserved CHECK(`select` > 0));
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -241,8 +243,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Act
         var nativeFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(
             connectionString,
-            $"PREPARE qualified_source_probe FROM 'SELECT {Table}.select > 0 FROM {Table}'; "
-            + "DEALLOCATE PREPARE qualified_source_probe;",
+            $"""
+            PREPARE qualified_source_probe
+            FROM 'SELECT {Table}.select > 0 FROM {Table}';
+            DEALLOCATE PREPARE qualified_source_probe;
+            """,
             cancellationToken: CancellationToken.None));
 
         var report = await context
@@ -289,8 +294,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Act
         var nativeFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(
             connectionString,
-            $"PREPARE nonreserved_source_probe FROM 'SELECT value > 0 FROM {Table}'; "
-            + "DEALLOCATE PREPARE nonreserved_source_probe;",
+            $"""
+            PREPARE nonreserved_source_probe
+            FROM 'SELECT value > 0 FROM {Table}'; DEALLOCATE PREPARE
+            nonreserved_source_probe;
+            """,
             cancellationToken: CancellationToken.None));
 
         var report = await context

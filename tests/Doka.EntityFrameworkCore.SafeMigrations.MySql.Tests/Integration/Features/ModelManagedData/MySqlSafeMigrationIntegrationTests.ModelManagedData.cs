@@ -99,17 +99,21 @@ public sealed class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIn
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `model_edge_roles` ("
-            + "`id` int NOT NULL, `code` varchar(64) NOT NULL, `name` varchar(64) NULL, "
-            + "PRIMARY KEY (`id`), UNIQUE KEY `ux_model_edge_roles_code` (`code`)) ENGINE=InnoDB;"
-            + "CREATE TABLE `model_edge_audit` (`id` int NOT NULL, `role_id` int NOT NULL, "
-            + "PRIMARY KEY (`id`), CONSTRAINT `fk_model_edge_audit_role` FOREIGN KEY (`role_id`) "
-            + "REFERENCES `model_edge_roles` (`id`) ON DELETE CASCADE) ENGINE=InnoDB;"
-            + "CREATE TABLE `model_edge_non_transactional` (`id` int NOT NULL, `name` varchar(64) NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=MyISAM;"
-            + "INSERT INTO `model_edge_roles` (`id`, `code`, `name`) VALUES "
-            + "(1, 'administrator', NULL), (2, 'member', 'Member');"
-            + "INSERT INTO `model_edge_audit` (`id`, `role_id`) VALUES (11, 1);",
+            """
+            CREATE TABLE `model_edge_roles` (`id` int NOT NULL, `code` varchar(64) NOT
+            NULL,
+            `name` varchar(64) NULL, PRIMARY KEY (`id`), UNIQUE KEY `ux_model_edge_roles_code`
+            (`code`)) ENGINE=InnoDB;CREATE TABLE `model_edge_audit` (`id` int NOT NULL,
+            `role_id` int NOT NULL, PRIMARY KEY (`id`), CONSTRAINT `fk_model_edge_audit_role`
+            FOREIGN KEY (`role_id`) REFERENCES `model_edge_roles` (`id`) ON DELETE CASCADE)
+            ENGINE=InnoDB;CREATE TABLE `model_edge_non_transactional` (`id` int NOT
+            NULL,
+            `name` varchar(64) NULL, PRIMARY KEY (`id`)) ENGINE=MyISAM;INSERT INTO `model_edge_roles`
+            (`id`,
+            `code`, `name`) VALUES (1, 'administrator', NULL), (2, 'member', 'Member');INSERT
+            INTO `model_edge_audit` (`id`,
+            `role_id`) VALUES (11, 1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -220,9 +224,11 @@ public sealed class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIn
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `model_null_roles` (`id` int NOT NULL, `name` varchar(64) NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB;"
-            + "INSERT INTO `model_null_roles` (`id`, `name`) VALUES (1, NULL), (2, 'Owner');",
+            """
+            CREATE TABLE `model_null_roles` (`id` int NOT NULL, `name` varchar(64) NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB;INSERT INTO `model_null_roles` (`id`,
+            `name`) VALUES (1, NULL), (2, 'Owner');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -266,13 +272,17 @@ public sealed class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIn
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `model_roles` (`id` int NOT NULL, `name` varchar(64) NOT NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB;"
-            + "CREATE TABLE `model_user_roles` (`id` int NOT NULL, `role_id` int NOT NULL, "
-            + "PRIMARY KEY (`id`), CONSTRAINT `fk_model_user_roles_role` FOREIGN KEY (`role_id`) "
-            + "REFERENCES `model_roles` (`id`) ON DELETE CASCADE) ENGINE=InnoDB;"
-            + "INSERT INTO `model_roles` (`id`, `name`) VALUES (1, 'administrator'), (2, 'member');"
-            + "INSERT INTO `model_user_roles` (`id`, `role_id`) VALUES (11, 1), (21, 2), (22, 2);",
+            """
+            CREATE TABLE `model_roles` (`id` int NOT NULL, `name` varchar(64) NOT NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB;CREATE TABLE `model_user_roles` (`id`
+            int NOT NULL,
+            `role_id` int NOT NULL, PRIMARY KEY (`id`), CONSTRAINT `fk_model_user_roles_role`
+            FOREIGN KEY (`role_id`) REFERENCES `model_roles` (`id`) ON DELETE CASCADE)
+            ENGINE=InnoDB;INSERT INTO `model_roles` (`id`,
+            `name`) VALUES (1, 'administrator'), (2, 'member');INSERT INTO `model_user_roles`
+            (`id`,
+            `role_id`) VALUES (11, 1), (21, 2), (22, 2);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -336,11 +346,12 @@ public sealed class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIn
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `model_roles` ("
-            + "`id` int NOT NULL, `code` varchar(64) NOT NULL, `name` varchar(64) NULL, "
-            + "PRIMARY KEY (`id`), UNIQUE KEY `ux_model_roles_code` (`code`)) ENGINE=InnoDB;"
-            + "INSERT INTO `model_roles` (`id`, `code`, `name`) VALUES "
-            + "(1, 'administrator', 'Administrator');",
+            """
+            CREATE TABLE `model_roles` (`id` int NOT NULL, `code` varchar(64) NOT NULL,
+            `name` varchar(64) NULL, PRIMARY KEY (`id`), UNIQUE KEY `ux_model_roles_code`
+            (`code`)) ENGINE=InnoDB;INSERT INTO `model_roles` (`id`,
+            `code`, `name`) VALUES (1, 'administrator', 'Administrator');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -452,10 +463,12 @@ public sealed class MySqlModelManagedDataIntegrationTests : MySqlSafeMigrationIn
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `model_roles` ("
-            + "`id` int NOT NULL, `code` varchar(64) NOT NULL, `name` varchar(64) NULL, "
-            + "PRIMARY KEY (`id`), UNIQUE KEY `ux_model_roles_code` (`code`)) ENGINE=InnoDB;"
-            + "INSERT INTO `model_roles` (`id`, `code`, `name`) VALUES (3, 'drift', 'Live value');",
+            """
+            CREATE TABLE `model_roles` (`id` int NOT NULL, `code` varchar(64) NOT NULL,
+            `name` varchar(64) NULL, PRIMARY KEY (`id`), UNIQUE KEY `ux_model_roles_code`
+            (`code`)) ENGINE=InnoDB;INSERT INTO `model_roles` (`id`,
+            `code`, `name`) VALUES (3, 'drift', 'Live value');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

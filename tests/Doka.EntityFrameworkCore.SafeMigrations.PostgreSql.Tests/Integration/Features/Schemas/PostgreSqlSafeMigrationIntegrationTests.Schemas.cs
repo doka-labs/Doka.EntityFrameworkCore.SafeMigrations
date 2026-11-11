@@ -45,8 +45,10 @@ public sealed class PostgreSqlSchemasIntegrationTests : PostgreSqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE public.qualified_parent (id integer NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE public.qualified_child (id integer NOT NULL PRIMARY KEY);",
+            """
+            CREATE TABLE public.qualified_parent (id integer NOT NULL PRIMARY KEY);
+            CREATE TABLE public.qualified_child (id integer NOT NULL PRIMARY KEY);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -143,22 +145,27 @@ public sealed class PostgreSqlSchemasIntegrationTests : PostgreSqlSafeMigrationI
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
-                + "JOIN pg_catalog.pg_class child ON child.oid = co.conrelid "
-                + "JOIN pg_catalog.pg_namespace child_ns ON child_ns.oid = child.relnamespace "
-                + "JOIN pg_catalog.pg_class parent ON parent.oid = co.confrelid "
-                + "JOIN pg_catalog.pg_namespace parent_ns ON parent_ns.oid = parent.relnamespace "
-                + "WHERE co.conname = 'fk_qualified_child_parent' "
-                + "AND child_ns.nspname = 'tenant_core' "
-                + "AND parent_ns.nspname = 'tenant_reference';",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_constraint co
+                JOIN pg_catalog.pg_class child ON child.oid = co.conrelid
+                JOIN pg_catalog.pg_namespace child_ns ON child_ns.oid = child.relnamespace
+                JOIN pg_catalog.pg_class parent ON parent.oid = co.confrelid
+                JOIN pg_catalog.pg_namespace parent_ns ON parent_ns.oid = parent.relnamespace
+                WHERE co.conname = 'fk_qualified_child_parent'
+                AND child_ns.nspname = 'tenant_core'
+                AND parent_ns.nspname = 'tenant_reference';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' "
-                + "AND table_name IN ('qualified_parent', 'qualified_child');",
+                """
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema = 'public'
+                AND table_name IN ('qualified_parent', 'qualified_child');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -168,25 +175,21 @@ public sealed class PostgreSqlSchemasIntegrationTests : PostgreSqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA lifecycle_module; CREATE SCHEMA lifecycle_archive; "
-            + "CREATE TABLE lifecycle_module.lifecycle_parent (id integer NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE lifecycle_module.lifecycle_target ("
-            + "id integer NOT NULL, parent_id integer NULL, code text NULL, "
-            + "quantity integer NOT NULL, payload text NULL, "
-            + "CONSTRAINT pk_lifecycle_target PRIMARY KEY (id), "
-            + "CONSTRAINT uq_lifecycle_target_code UNIQUE (code), "
-            + "CONSTRAINT ck_lifecycle_target_quantity CHECK (quantity >= 0), "
-            + "CONSTRAINT fk_lifecycle_target_parent FOREIGN KEY (parent_id) "
-            + "REFERENCES lifecycle_module.lifecycle_parent (id)); "
-            + "CREATE INDEX ix_lifecycle_target_payload "
-            + "ON lifecycle_module.lifecycle_target (payload); "
-            + "CREATE TABLE lifecycle_module.rename_source (old_value integer NULL); "
-            + "CREATE INDEX ix_rename_source_old "
-            + "ON lifecycle_module.rename_source (old_value); "
-            + "CREATE TABLE lifecycle_module.move_source (id integer NOT NULL); "
-            + "CREATE TABLE public.lifecycle_target (id integer NOT NULL); "
-            + "CREATE TABLE public.renamed_source (id integer NOT NULL); "
-            + "CREATE TABLE public.moved_table (id integer NOT NULL);",
+            """
+            CREATE SCHEMA lifecycle_module; CREATE SCHEMA lifecycle_archive; CREATE TABLE
+            lifecycle_module.lifecycle_parent (id integer NOT NULL PRIMARY KEY); CREATE TABLE
+            lifecycle_module.lifecycle_target (id integer NOT NULL,
+            parent_id integer NULL, code text NULL, quantity integer NOT NULL, payload text NULL,
+            CONSTRAINT pk_lifecycle_target PRIMARY KEY (id), CONSTRAINT uq_lifecycle_target_code UNIQUE (code),
+            CONSTRAINT ck_lifecycle_target_quantity CHECK (quantity >= 0), CONSTRAINT
+            fk_lifecycle_target_parent FOREIGN KEY (parent_id) REFERENCES lifecycle_module.lifecycle_parent
+            (id)); CREATE INDEX ix_lifecycle_target_payload ON lifecycle_module.lifecycle_target (payload);
+            CREATE TABLE lifecycle_module.rename_source (old_value integer NULL); CREATE INDEX
+            ix_rename_source_old ON lifecycle_module.rename_source (old_value); CREATE TABLE
+            lifecycle_module.move_source (id integer NOT NULL); CREATE TABLE public.lifecycle_target (id
+            integer NOT NULL); CREATE TABLE public.renamed_source (id integer NOT NULL); CREATE TABLE
+            public.moved_table (id integer NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -229,8 +232,11 @@ public sealed class PostgreSqlSchemasIntegrationTests : PostgreSqlSafeMigrationI
             3,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' "
-                + "AND table_name IN ('lifecycle_target', 'renamed_source', 'moved_table');",
+                """
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema = 'public'
+                AND table_name IN ('lifecycle_target', 'renamed_source', 'moved_table');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 }

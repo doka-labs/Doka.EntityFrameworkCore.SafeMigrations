@@ -44,16 +44,16 @@ public sealed class MySqlNativeUuidSqlTests : IDisposable
 
         // Assert
         Assert.Contains(
-            "WHEN LOWER(inline_column.DATA_TYPE) = 'uuid' THEN 16 ",
+            "WHEN LOWER(inline_column.DATA_TYPE) = 'uuid' THEN 16\n",
             sql,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "WHEN LOWER(row_column.DATA_TYPE) = 'uuid' THEN 16 ",
+            "WHEN LOWER(row_column.DATA_TYPE) = 'uuid' THEN 16\n",
             sql,
             StringComparison.Ordinal);
 
-        Assert.Contains("WHEN LOWER(ic.DATA_TYPE) = 'uuid' THEN 16 ", sql, StringComparison.Ordinal);
+        Assert.Contains("WHEN LOWER(ic.DATA_TYPE) = 'uuid' THEN 16\n", sql, StringComparison.Ordinal);
     }
 
     /// <summary>A native UUID key has its scalar width without claiming textual prefix semantics.</summary>
@@ -69,7 +69,7 @@ public sealed class MySqlNativeUuidSqlTests : IDisposable
         var sql = Generate(context, builder.Operations);
 
         // Assert
-        Assert.Contains("WHEN c.DATA_TYPE = 'uuid' THEN 16 ", sql, StringComparison.Ordinal);
+        Assert.Contains("WHEN c.DATA_TYPE = 'uuid'\nTHEN 16\n", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("IN ('char', 'varchar', 'uuid'", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("IN ('binary', 'varbinary', 'uuid'", sql, StringComparison.Ordinal);
     }

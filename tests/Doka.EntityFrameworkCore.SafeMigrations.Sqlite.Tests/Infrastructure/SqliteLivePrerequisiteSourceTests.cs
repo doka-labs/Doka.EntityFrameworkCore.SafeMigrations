@@ -20,9 +20,11 @@ public sealed class SqliteLivePrerequisiteSourceTests : SqliteIntegrationTestBas
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE proof_parent (Id TEXT COLLATE NOCASE NOT NULL, "
-            + "CONSTRAINT pk_proof_parent PRIMARY KEY(Id)); "
-            + "CREATE TABLE proof_child (Id INTEGER PRIMARY KEY, ParentId INTEGER NULL);",
+            """
+            CREATE TABLE proof_parent (Id TEXT COLLATE NOCASE NOT NULL, CONSTRAINT pk_proof_parent
+            PRIMARY KEY(Id)); CREATE TABLE proof_child (Id INTEGER PRIMARY KEY,
+            ParentId INTEGER NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         var source = new SqliteLivePrerequisiteSource(SqliteSafeMigrationCatalog.Read(connection, transaction: null));
