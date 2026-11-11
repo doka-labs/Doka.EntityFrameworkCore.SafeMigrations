@@ -22,8 +22,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             while (traversal.TryTake(out var node))
             {
                 if (node is not (SafeMigrationSqlIdentifierExpression
-                    or SafeMigrationSqlLiteralExpression { Value: null or bool or int }
-                    or SafeMigrationSqlLiteralExpression { Value: long and >= int.MinValue and <= int.MaxValue }
+                    or SafeMigrationSqlLiteralExpression { BorrowedValue: null or bool or int }
+                    or SafeMigrationSqlLiteralExpression { BorrowedValue: long and >= int.MinValue and <= int.MaxValue }
                     or SafeMigrationSqlUnaryExpression
                     or SafeMigrationSqlNullTestExpression
                     or SafeMigrationSqlBinaryExpression))

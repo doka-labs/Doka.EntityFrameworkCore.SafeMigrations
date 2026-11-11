@@ -39,48 +39,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 ? parsed
                 : null);
 
+    // WHY: The shared parser recognizes multiple identifier dialects.
+    // Keep native bracket roles but ignore delimiter characters inside
+    // literal values; the shared quote-aware scan owns those boundaries.
+    /// <summary>Certifies native identifier delimiters without reading string contents as syntax.</summary>
     private static bool HasSupportedRawCheckQuoting(
         string sql
-    )
-    {
-        // WHY: The shared parser recognizes multiple identifier dialects.
-        // Raw SQL is preserved, so backticks are invalid and double quotes
-        // depend on unproved QUOTED_IDENTIFIER session state. Bracketed names
-        // may contain either character and must retain their exact identity.
-        var bracketed = false;
-
-        // WHY: Track bracket escape lookahead without treating quoted content as syntax.
-        // ReSharper disable once ForCanBeConvertedToForeach
-        // ReSharper disable once LoopCanBeConvertedToQuery
-        for (var index = 0; index < sql.Length; index++)
-        {
-            if (bracketed)
-            {
-                if (sql[index] == ']')
-                {
-                    if (index + 1 < sql.Length
-                        && sql[index + 1] == ']')
-                    {
-                        index++;
-                    }
-                    else
-                    {
-                        bracketed = false;
-                    }
-                }
-            }
-            else if (sql[index] == '[')
-            {
-                bracketed = true;
-            }
-            else if (sql[index] is '`' or '"')
-            {
-                return false;
-            }
-        }
-
-        return !bracketed;
-    }
+    ) => SafeMigrationSqlExpressionParser.IsCapturedSourceDialectCompatible(sql, '[');
 
     /// <summary>Recognizes nonthrowing integer comparisons, Boolean composition, and null tests only.</summary>
     /// <param name="expression">The bounded expression AST.</param>
@@ -180,7 +145,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // direct comparison remains exact because every built-in integer fits
         // the literal's decimal domain. No arithmetic or narrowing CAST is
         // admitted, including the signed-minimum unary literal boundary.
-        switch (literal.Value)
+        switch (literal.BorrowedValue)
         {
             case byte number:
                 value = number;

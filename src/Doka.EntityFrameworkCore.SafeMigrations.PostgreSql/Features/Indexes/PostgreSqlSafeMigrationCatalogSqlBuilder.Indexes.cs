@@ -251,7 +251,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             definition.Filter is null && definition.StructuredFilter is null
                 ? "i.indpred IS NULL"
                 : structuredFilter is not null
-                    ? ExpressionMatches("pg_catalog.pg_get_expr(i.indpred, i.indrelid)", structuredFilter)
+                    ? ExpressionMatches("pg_catalog.pg_get_expr(i.indpred, i.indrelid)",
+                        structuredFilter,
+                        relationOid: "i.indrelid")
                     : ExpressionMatches("pg_catalog.pg_get_expr(i.indpred, i.indrelid)", definition.Filter!));
 
         var nullsNotDistinct = "POSITION('NULLS NOT DISTINCT' IN pg_catalog.pg_get_indexdef(i.indexrelid)) > 0";
@@ -316,7 +318,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             }
             else
             {
-                var expected = IndexExpressionSql(key);
+                var expected = IndexExpressionSql(key, "i.indrelid");
                 conditions.Add($"i.indkey[{optionIndex}] = 0");
                 conditions.Add(
                     "pg_catalog.pg_get_indexdef(i.indexrelid, "
@@ -556,7 +558,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     }
 
     private List<string> IndexExpressionSql(
-        ExpectedIndexKeyDefinition key
+        ExpectedIndexKeyDefinition key,
+        string relationOid
     )
     {
         var storedExpression = IndexStoredExpression(key);
@@ -578,9 +581,31 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             roots.Add(($"({Literal("(")} || {catalogCandidate} || {Literal(")")})", true));
             roots.Add((deparsedCandidate, true));
             roots.Add(($"({Literal("(")} || {deparsedCandidate} || {Literal(")")})", true));
+            if (_expressionRenderer.RenderCatalogNativeDeparsedCandidateSql(
+                    storedExpression,
+                    Literal,
+                    relationOid,
+                    prettyIndexBooleanOperands: true) is { } nativeCandidate)
+            {
+                // WHY: Index keys use the same source-aware native special forms
+                // and coercions as CHECK/generated expressions. Keep the ordinary
+                // and pretty candidates; only add this finite exact native form.
+                roots.Add((nativeCandidate, true));
+                roots.Add(($"({Literal("(")} || {nativeCandidate} || {Literal(")")})", true));
+            }
+
             if (_expressionRenderer.RenderCatalogIndexCastCandidateSql(storedExpression, Literal) is { } indexCast)
             {
                 roots.Add((indexCast, true));
+            }
+
+            if (_expressionRenderer.RenderCatalogTemporalPrecisionCandidateSql(storedExpression,
+                    Literal,
+                    relationOid,
+                    prettyIndexBooleanOperands: true) is { } temporalPrecision)
+            {
+                roots.Add((temporalPrecision, true));
+                roots.Add(($"({Literal("(")} || {temporalPrecision} || {Literal(")")})", true));
             }
         }
 
@@ -656,7 +681,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     )
     {
         var namespaceCondition = expected.Schema is null
-            ? string.Empty
+
+            // WHY: The same collation name in a different schema can implement
+            // different equality. Match the actual visible unqualified binding,
+            // not any object that happens to carry the requested name.
+            ? $" AND pg_catalog.pg_collation_is_visible({alias}.oid)"
             : $" AND ns.nspname = {Literal(expected.Schema)}";
 
         return $"EXISTS (SELECT 1 FROM {catalog} {alias} "
@@ -754,6 +783,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             [
                 nativeCandidate,
                 $"({Literal("(")} || {nativeCandidate} || {Literal(")")})",
+            ]);
+        }
+
+        if (_expressionRenderer.RenderCatalogTemporalPrecisionCandidateSql(expected, Literal, relationOid)
+            is { } temporalPrecision)
+        {
+            candidates = candidates.Concat(
+            [
+                temporalPrecision,
+                $"({Literal("(")} || {temporalPrecision} || {Literal(")")})",
             ]);
         }
 

@@ -210,7 +210,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 _ = SafeMigrationSqlExpressionParser.TryParse(sql, out expression);
             }
 
-            if (expression is SafeMigrationSqlLiteralExpression { Value: null, StoreType: null })
+            if (expression is SafeMigrationSqlLiteralExpression { BorrowedValue: null, StoreType: null })
             {
                 return false;
             }

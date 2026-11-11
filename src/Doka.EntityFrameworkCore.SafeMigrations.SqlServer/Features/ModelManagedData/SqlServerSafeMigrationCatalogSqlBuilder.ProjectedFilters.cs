@@ -130,9 +130,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         if (rendered.StartsWith("CAST(", StringComparison.OrdinalIgnoreCase)
             || rendered.StartsWith("TRY_CAST(", StringComparison.OrdinalIgnoreCase))
         {
-            return literal.Value is null
+            return literal.BorrowedValue is null
                 ? string.Empty
-                : _typeMappingSource.FindMapping(literal.Value.GetType())
+                : _typeMappingSource.FindMapping(literal.BorrowedValue.GetType())
                     ?.StoreTypeNameBase
                 ?? string.Empty;
         }
@@ -220,11 +220,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 return null;
             }
 
-            var scalar = ManagedValueRepresentationGuard(literal.Value, mapping.StoreType);
+            var scalar = ManagedValueRepresentationGuard(literal.BorrowedValue, mapping.StoreType);
             if (!AddPredicate(scalar)
                 || !AddPredicate(
                     ManagedAnsiValueRepresentationGuard(
-                        literal.Value,
+                        literal.BorrowedValue,
                         mapping.StoreType,
                         column.Collation?.Name)))
             {
@@ -233,8 +233,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
             if (literal.StoreType is { } emittedType)
             {
-                if (!AddPredicate(ManagedValueRepresentationGuard(literal.Value, emittedType))
-                    || !AddPredicate(ManagedAnsiValueRepresentationGuard(literal.Value, emittedType)))
+                if (!AddPredicate(ManagedValueRepresentationGuard(literal.BorrowedValue, emittedType))
+                    || !AddPredicate(ManagedAnsiValueRepresentationGuard(literal.BorrowedValue, emittedType)))
                 {
                     return null;
                 }
@@ -376,7 +376,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     SafeMigrationSqlBinaryExpression
                         {
                             Left: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 },
-                            Right: SafeMigrationSqlLiteralExpression { Value: not null } literal,
+                            Right: SafeMigrationSqlLiteralExpression { BorrowedValue: not null } literal,
                             Operator: SafeMigrationSqlBinaryOperator.Equal
                             or SafeMigrationSqlBinaryOperator.NotEqual
                             or SafeMigrationSqlBinaryOperator.LessThan
@@ -384,17 +384,18 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                             or SafeMigrationSqlBinaryOperator.GreaterThan
                             or SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
                         }
-                        => literal.StoreType is null || IsManagedValueRepresentable(literal.Value, literal.StoreType),
+                        => literal.StoreType is null
+                        || IsManagedValueRepresentable(literal.BorrowedValue, literal.StoreType),
                     SafeMigrationSqlInExpression
                     {
                         Operand: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 },
                         Negated: false,
                     } predicate => predicate.Values.All(static value => value is SafeMigrationSqlLiteralExpression
                         {
-                            Value: not null,
+                            BorrowedValue: not null,
                         } literal
                         && (literal.StoreType is null
-                            || IsManagedValueRepresentable(literal.Value, literal.StoreType))),
+                            || IsManagedValueRepresentable(literal.BorrowedValue, literal.StoreType))),
                     _ => false,
                 };
 
@@ -629,8 +630,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         /// <inheritdoc />
         public SafeMigrationSqlExpression RewriteLeaf(
             SafeMigrationSqlExpression expression
-        ) => expression is SafeMigrationSqlLiteralExpression { Value: string } literal
-            ? new SafeMigrationSqlLiteralExpression(literal.Value, _strings.Dequeue())
+        ) => expression is SafeMigrationSqlLiteralExpression { BorrowedValue: string } literal
+            ? new SafeMigrationSqlLiteralExpression(literal.BorrowedValue, _strings.Dequeue())
             : expression;
     }
 

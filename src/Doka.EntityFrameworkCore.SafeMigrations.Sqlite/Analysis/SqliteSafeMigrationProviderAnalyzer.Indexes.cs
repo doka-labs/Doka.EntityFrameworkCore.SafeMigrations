@@ -169,7 +169,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         if (actual.Unique != expected.Unique
             || actual.Partial != expectedFilter is not null
             || actualKeys.Length != expected.Keys.Count
-            || !SqlEquivalent(actual.Filter, expectedFilter))
+            || !ExpressionMatches(actual.Filter, expectedFilter, expected.StructuredFilter))
         {
             return false;
         }
@@ -187,7 +187,8 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
 
             var identityMatches = expectedKey.Column is not null
                 ? actualKey.Expression is null && s_identifierComparer.Equals(actualKey.Column, expectedKey.Column)
-                : actualKey.Column is null && SqlEquivalent(actualKey.Expression, expectedExpression);
+                : actualKey.Column is null
+                && ExpressionMatches(actualKey.Expression, expectedExpression, expectedKey.StructuredExpression);
 
             var expectedCollation = expectedKey.Collation?.Name
                 ?? (expectedKey.Column is not null && columns.TryGetValue(expectedKey.Column, out var column)
@@ -206,7 +207,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
     }
 
     /// <summary>Checks a retained physical index against the target-model rebuild shape.</summary>
-    private static bool ModelIndexMatches(
+    private bool ModelIndexMatches(
         SqliteIndexSnapshot actual,
         ITableIndex expected
     )
@@ -220,7 +221,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         if (actual.Unique != expected.IsUnique
             || actual.Partial != expected.Filter is not null
             || actualKeys.Length != expected.Columns.Count
-            || !SqlEquivalent(actual.Filter, expected.Filter))
+            || !ModelExpressionMatches(actual.Filter, expected.Filter))
         {
             return false;
         }

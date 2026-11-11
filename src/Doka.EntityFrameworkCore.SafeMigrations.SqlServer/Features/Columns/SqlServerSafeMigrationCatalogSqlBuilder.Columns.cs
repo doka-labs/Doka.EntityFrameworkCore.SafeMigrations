@@ -695,7 +695,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 ?.StoreType
             ?? throw new NotSupportedException("SQL Server has no default-value type mapping.")),
         SafeMigrationDefaultValueKind.Sql when definition.DefaultValue.StructuredExpression is { } expression
-            => _expressionRenderer.Render(expression),
+            => _expressionRenderer.RenderScalar(expression),
         SafeMigrationDefaultValueKind.Sql => definition.DefaultValue.SqlExpression
             ?? throw new InvalidOperationException("A SQL default has no expression."),
         _ => throw new InvalidOperationException("No default expression exists."),

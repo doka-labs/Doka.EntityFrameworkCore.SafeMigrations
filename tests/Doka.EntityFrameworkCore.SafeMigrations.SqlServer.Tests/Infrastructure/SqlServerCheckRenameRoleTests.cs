@@ -11,6 +11,10 @@ public sealed class SqlServerCheckRenameRoleTests
     [InlineData("[Payload]>0 AND 'Upper'='Upper'", "Payload")]
     [InlineData("[Payload]>ABS(0)", "Payload")]
     [InlineData("CAST([Payload] AS int)>0", "Payload")]
+    [InlineData("[Payload]>0 AND LEN('\"')=1", "Payload")]
+    [InlineData("[Payload]>0 AND LEN('`')=1", "Payload")]
+    [InlineData("[Payload]>0 AND LEN('[')=1", "Payload")]
+    [InlineData("[Payload]>0 AND LEN('it''s [quoted]')>0", "Payload")]
     [InlineData("1=1", null)]
     public void CapturedCheckCollectsOnlyColumnRoles(
         string sql,
@@ -39,6 +43,25 @@ public sealed class SqlServerCheckRenameRoleTests
     [InlineData("GETDATE()>[Payload]")]
     [InlineData("[Payload]")]
     public void UnprovenNativeRolesNeverBecomeColumnComparisons(
+        string sql
+    )
+    {
+        // Arrange
+        var definition = Captured(sql);
+
+        // Act
+        var names = SqlServerSafeMigrationCatalogSqlBuilder.GetCheckRenamePrerequisiteColumns(definition);
+
+        // Assert
+        Assert.Null(names);
+    }
+
+    /// <summary>Literal delimiter characters cannot admit an actual unsupported identifier dialect.</summary>
+    /// <param name="sql">The CHECK source containing a nonnative quoted column role.</param>
+    [Theory]
+    [InlineData("\"Payload\">0 AND LEN('[')=1")]
+    [InlineData("`Payload`>0 AND LEN('\"')=1")]
+    public void NonnativeIdentifierQuotingRemainsUnproven(
         string sql
     )
     {

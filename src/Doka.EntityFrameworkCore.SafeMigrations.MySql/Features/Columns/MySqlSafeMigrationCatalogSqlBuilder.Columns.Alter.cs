@@ -563,7 +563,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         var literal = target.DefaultValue.Kind == SafeMigrationDefaultValueKind.Literal
             ? target.DefaultValue.GetLiteralValue()
-            : (target.DefaultValue.StructuredExpression as SafeMigrationSqlLiteralExpression)?.Value;
+            : (target.DefaultValue.StructuredExpression as SafeMigrationSqlLiteralExpression)?.BorrowedValue;
 
         if (literal is bool)
         {
@@ -625,7 +625,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // Plain VARCHAR defaults and source-only defaults do not take that path.
         var value = target.DefaultValue.Kind == SafeMigrationDefaultValueKind.Literal
             ? target.DefaultValue.GetLiteralValue()
-            : (target.DefaultValue.StructuredExpression as SafeMigrationSqlLiteralExpression)?.Value;
+            : (target.DefaultValue.StructuredExpression as SafeMigrationSqlLiteralExpression)?.BorrowedValue;
 
         return value is string text
             && text.Contains('\'', StringComparison.Ordinal)
@@ -645,7 +645,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         var value = target.DefaultValue.Kind == SafeMigrationDefaultValueKind.Literal
             ? target.DefaultValue.GetLiteralValue()
-            : (target.DefaultValue.StructuredExpression as SafeMigrationSqlLiteralExpression)?.Value;
+            : (target.DefaultValue.StructuredExpression as SafeMigrationSqlLiteralExpression)?.BorrowedValue;
 
         // WHY: A backfill can retain these bytes while the engine serializes
         // the TEXT expression default into a different value. Row preservation
@@ -669,7 +669,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         var literal = definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Literal
             ? definition.DefaultValue.GetLiteralValue()
-            : (definition.DefaultValue.StructuredExpression as SafeMigrationSqlLiteralExpression)?.Value;
+            : (definition.DefaultValue.StructuredExpression as SafeMigrationSqlLiteralExpression)?.BorrowedValue;
 
         // WHY: The UTF-8 three-byte catalog surface can expose supplementary
         // defaults as question marks even while the stored default is intact.

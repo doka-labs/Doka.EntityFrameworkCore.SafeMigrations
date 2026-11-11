@@ -39,7 +39,7 @@ internal static class SafeMigrationSqlExpressionContract
                         case (SafeMigrationSqlLiteralExpression first, SafeMigrationSqlLiteralExpression second):
                             if (!StringComparer.Ordinal.Equals(first.StoreType, second.StoreType)
                                 || !first.NumericSourceToken.Span.SequenceEqual(second.NumericSourceToken.Span)
-                                || !LiteralEquivalent(first.Value, second.Value))
+                                || !LiteralEquivalent(first.BorrowedValue, second.BorrowedValue))
                             {
                                 return false;
                             }
@@ -231,7 +231,7 @@ internal static class SafeMigrationSqlExpressionContract
                         }
 
                         writer.Add(value.StoreType);
-                        WriteLiteral(writer, value.Value);
+                        WriteLiteral(writer, value.BorrowedValue);
                         break;
                     case SafeMigrationSqlUnaryExpression value:
                         writer.Add("unary");

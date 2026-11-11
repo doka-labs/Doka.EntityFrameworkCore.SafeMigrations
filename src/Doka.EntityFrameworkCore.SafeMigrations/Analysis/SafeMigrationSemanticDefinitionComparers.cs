@@ -195,7 +195,7 @@ internal static class SafeMigrationSemanticDefinitionComparers
                         }
 
                         hash.Add(value.StoreType, StringComparer.Ordinal);
-                        AddLiteral(ref hash, value.Value);
+                        AddLiteral(ref hash, value.BorrowedValue);
                         break;
                     case SafeMigrationSqlUnaryExpression value:
                         hash.Add(3);

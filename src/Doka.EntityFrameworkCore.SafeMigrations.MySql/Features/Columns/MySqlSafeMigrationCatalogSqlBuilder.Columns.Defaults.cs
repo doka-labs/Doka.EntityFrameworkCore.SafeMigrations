@@ -94,7 +94,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         if (mapping.ClrType == typeof(byte[])
             && expected.StructuredExpression is SafeMigrationSqlLiteralExpression
             {
-                Value: byte[] binary, StoreType: null,
+                BorrowedValue: byte[] binary, StoreType: null,
             })
         {
             // WHY: Native X'...' and 0x... expressions retain the same exact
@@ -104,7 +104,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         }
 
         if (expected.Kind == SafeMigrationDefaultValueKind.Sql
-            && structuredString?.Value is not (string or char))
+            && structuredString?.BorrowedValue is not (string or char))
         {
             var expression = expected.SqlExpression
                 ?? _expressionRenderer.RenderDefault(expected.StructuredExpression!);
@@ -112,7 +112,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             IEnumerable<string> sqlCandidateValues = BuildDefaultSqlCandidates(expression);
             if (expected.StructuredExpression is SafeMigrationSqlLiteralExpression
                 {
-                    Value: string temporal, StoreType: null,
+                    BorrowedValue: string temporal, StoreType: null,
                 }
                 && BuildTemporalSqlLiteralCatalogValue(mapping.StoreType, temporal) is { } temporalDisplay)
             {
@@ -137,7 +137,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return $"{catalogExpression} IN ({string.Join(", ", sqlCandidates)})";
         }
 
-        var value = structuredString?.Value ?? expected.GetLiteralValue();
+        var value = structuredString?.BorrowedValue ?? expected.GetLiteralValue();
         if (value is char character)
         {
             // WHY: Doka's char mapping uses the same textual literal grammar;
@@ -167,10 +167,16 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         AddSimpleStringLiteralDisplayCandidate(candidates, providerLiteral);
         AddExpressionDefaultDisplayCandidate(candidates, providerLiteral);
 
-        var invariant = Convert.ToString(value, CultureInfo.InvariantCulture);
-        if (invariant is not null)
+        // WHY: CLR temporal display formats can discard precision or use
+        // non-SQL calendar forms. Their aliases come only from the mapped
+        // provider literal below, not from general-purpose display strings.
+        if (value is not (DateOnly or TimeOnly or DateTime or TimeSpan))
         {
-            candidates.Add(invariant);
+            var invariant = Convert.ToString(value, CultureInfo.InvariantCulture);
+            if (invariant is not null)
+            {
+                candidates.Add(invariant);
+            }
         }
 
         if (value is bool boolean)
@@ -181,9 +187,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     : "0");
         }
 
-        AddTemporalDefaultCandidates(candidates, value);
+        AddTemporalDefaultCandidates(candidates, value, providerLiteral);
 
-        return $"{catalogExpression} IN ({string.Join(", ", candidates.Select(Literal))})";
+        var matches = $"{catalogExpression} IN ({string.Join(", ", candidates.Select(Literal))})";
+
+        return value is DateTime
+            ? BuildNativeDateTimeDefaultMatches(catalogExpression, providerLiteral, definition, mapping, matches)
+            : matches;
 
         // WHY: MySQL exposes DEFAULT (NULL) as the exact text NULL plus
         // DEFAULT_GENERATED. Neither a plain string 'NULL' nor its serialized
@@ -192,6 +202,65 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             ? $"({catalogExpression} IS NULL OR UPPER({catalogExpression}) = 'NULL')"
             : $"({catalogExpression} IS NULL OR (CAST({catalogExpression} AS BINARY) = 'NULL' "
             + "AND LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(c.EXTRA, ''))) > 0))";
+    }
+
+    /// <summary>
+    /// Uses native target conversion only when DateTime's mapped fraction exceeds physical precision.
+    /// </summary>
+    private static string BuildNativeDateTimeDefaultMatches(
+        string catalogExpression,
+        string providerLiteral,
+        ExpectedColumnDefinition definition,
+        RelationalTypeMapping mapping,
+        string exactMatches
+    )
+    {
+        var storeType = (definition.StoreType ?? mapping.StoreType)
+            .AsSpan()
+            .Trim();
+
+        var open = storeType.IndexOf('(');
+        var precision = definition.Precision ?? mapping.Precision ?? 0;
+        if (open >= 0
+            && (storeType[^1] != ')'
+                || !int.TryParse(storeType[(open + 1)..^1]
+                        .Trim(),
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out precision)))
+        {
+            return exactMatches;
+        }
+
+        var point = providerLiteral.LastIndexOf('.');
+        if (precision is < 0 or >= 6
+            || point < 0
+            || providerLiteral is not ['\'', .., '\''])
+        {
+            return exactMatches;
+        }
+
+        var fraction = providerLiteral.AsSpan(point + 1, providerLiteral.Length - point - 2);
+        if (fraction.Length <= precision
+            || fraction[precision..]
+                .IndexOfAnyExcept('0')
+            < 0)
+        {
+            return exactMatches;
+        }
+
+        // WHY: Doka emits six DateTime fraction digits even for datetime(0/3).
+        // Native DDL rounds or truncates them according to the current engine
+        // and SQL mode. Reuse that exact target conversion rather than guessing
+        // in CLR arithmetic or accepting a shortened, different default value.
+        var target = "CAST(CAST("
+            + providerLiteral
+            + " AS DATETIME("
+            + precision.ToString(CultureInfo.InvariantCulture)
+            + ")) AS CHAR)";
+
+        return $"({exactMatches} OR CAST({catalogExpression} AS BINARY) IN "
+            + $"(CAST({target} AS BINARY), CAST(CONCAT(CHAR(39), {target}, CHAR(39)) AS BINARY)))";
     }
 
     /// <summary>Separates MySQL raw literal values from exact serialized expression defaults.</summary>
@@ -524,47 +593,85 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             .ToArray();
     }
 
+    /// <summary>Derives temporal catalog aliases solely from the mapped provider's exact persisted value.</summary>
     private static void AddTemporalDefaultCandidates(
         HashSet<string> candidates,
-        object value
+        object value,
+        string providerLiteral
     )
     {
         switch (value)
         {
-            case DateOnly date:
+            case DateOnly when providerLiteral.StartsWith("DATE '", StringComparison.Ordinal)
+                && providerLiteral[^1] == '\'':
                 AddTemporalTypedCandidate(
                     candidates,
                     "DATE",
-                    date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+                    providerLiteral[6..^1]);
 
                 break;
-            case TimeOnly time:
-                AddTemporalTypedCandidate(candidates, "TIME", time.ToString("HH:mm:ss", CultureInfo.InvariantCulture));
-                AddTemporalTypedCandidate(
-                    candidates,
-                    "TIME",
-                    time.ToString("HH:mm:ss.ffffff", CultureInfo.InvariantCulture));
+            case TimeOnly when providerLiteral.StartsWith("TIME '", StringComparison.Ordinal)
+                && providerLiteral[^1] == '\'':
+                AddExactTemporalValueCandidates(candidates, "TIME", providerLiteral[6..^1]);
 
                 break;
-            case DateTime dateTime:
-                AddQuotedCandidate(candidates, dateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
-                AddQuotedCandidate(
-                    candidates,
-                    dateTime.ToString("yyyy-MM-dd HH:mm:ss.ffffff", CultureInfo.InvariantCulture));
+            case DateTime when providerLiteral is ['\'', .., '\'']:
+                AddExactTemporalValueCandidates(candidates, null, providerLiteral[1..^1]);
 
                 break;
-            case TimeSpan timeSpan:
-                AddTemporalTypedCandidate(
-                    candidates,
-                    "TIME",
-                    timeSpan.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture));
-
-                AddTemporalTypedCandidate(
-                    candidates,
-                    "TIME",
-                    timeSpan.ToString(@"hh\:mm\:ss\.ffffff", CultureInfo.InvariantCulture));
+            case TimeSpan when providerLiteral is ['\'', .., '\'']:
+                // WHY: The provider already preserves total hours, sign and
+                // declared precision, including its 100-nanosecond truncation.
+                // A TimeSpan hh format loses whole days and negative signs;
+                // derive alternate native spellings only from that exact value.
+                AddExactTemporalValueCandidates(candidates, "TIME", providerLiteral[1..^1]);
 
                 break;
+        }
+    }
+
+    /// <summary>Retains provider precision and omits only mathematically zero trailing fractional digits.</summary>
+    private static void AddExactTemporalValueCandidates(
+        HashSet<string> candidates,
+        string? keyword,
+        string value
+    )
+    {
+        AddTemporalValueCandidate(candidates, keyword, value);
+        var fraction = value.IndexOf('.');
+
+        // WHY: A typed expression can retain fewer fraction digits than its
+        // column's padded display. Omitting trailing zeros preserves value;
+        // dropping any nonzero digit could accept a different default before DDL.
+        var length = value.Length;
+        while (fraction >= 0
+            && length > fraction + 1
+            && value[length - 1] == '0')
+        {
+            length--;
+            if (length == fraction + 1)
+            {
+                length = fraction;
+            }
+
+            AddTemporalValueCandidate(candidates, keyword, value[..length]);
+        }
+    }
+
+    /// <summary>Retains the existing native role-specific spellings for the one exact temporal value.</summary>
+    private static void AddTemporalValueCandidate(
+        HashSet<string> candidates,
+        string? keyword,
+        string value
+    )
+    {
+        if (keyword is null)
+        {
+            AddQuotedCandidate(candidates, value);
+        }
+        else
+        {
+            AddTemporalTypedCandidate(candidates, keyword, value);
         }
     }
 

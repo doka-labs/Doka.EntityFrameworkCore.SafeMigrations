@@ -195,33 +195,33 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 canonical = "nchar(4000)";
             }
 
-            var size = literal.Value switch
+            var size = literal.BorrowedValue switch
             {
                 string text when type is "nchar" or "nvarchar"
                     => (text.Length * 2).ToString(CultureInfo.InvariantCulture),
                 char when type is "nchar" or "nvarchar" => "2",
                 byte[] bytes => bytes.Length.ToString(CultureInfo.InvariantCulture),
-                _ => $"DATALENGTH(CONVERT(varchar(max), {ManagedValueLiteral(literal.Value, canonical)}))",
+                _ => $"DATALENGTH(CONVERT(varchar(max), {ManagedValueLiteral(literal.BorrowedValue, canonical)}))",
             };
 
             var capacity = $"(c.max_length = -1 OR {size} <= c.max_length)";
             if (IsAnsiManagedStoreType(canonical)
-                && literal.Value is string or char)
+                && literal.BorrowedValue is string or char)
             {
-                var text = literal.Value as string ?? ((char)literal.Value).ToString();
+                var text = literal.BorrowedValue as string ?? ((char)literal.BorrowedValue).ToString();
 
                 if (text.Any(static character => character > 127))
                 {
                     capacity += " AND c.collation_name = CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(), 'Collation'))";
                 }
 
-                capacity += " AND (" + ManagedAnsiValueRepresentationGuard(literal.Value, canonical) + ")";
+                capacity += " AND (" + ManagedAnsiValueRepresentationGuard(literal.BorrowedValue, canonical) + ")";
             }
 
             Add(type, canonical, capacity);
         }
 
-        if (TryGetFilterDecimalValue(literal.Value, out var numeric))
+        if (TryGetFilterDecimalValue(literal.BorrowedValue, out var numeric))
         {
             // WHY: Cover each native numeric scale before finding its minimum safe precision.
             // ReSharper disable once ForCanBeConvertedToForeach
@@ -260,10 +260,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             string additional = "1 = 1"
         )
         {
-            if (!FilterLiteralHasCompatibleScalarFamily(literal.Value, type)
+            if (!FilterLiteralHasCompatibleScalarFamily(literal.BorrowedValue, type)
                 || !FilterSourceHasCompatibleScalarFamily(EmittedIndexFilterLiteralStoreType(literal), type)
                 || !IsIndexFilterLiteralCompatible(literal, canonical)
-                || (literal.Value is string { Length: > 4_000 } && !IsCharacterManagedStoreType(canonical)))
+                || (literal.BorrowedValue is string { Length: > 4_000 } && !IsCharacterManagedStoreType(canonical)))
             {
                 return;
             }
@@ -272,15 +272,15 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             var intermediate = literal.StoreType is null
                 ? "1 = 1"
                 : "("
-                + ManagedValueRepresentationGuard(literal.Value, literal.StoreType)
+                + ManagedValueRepresentationGuard(literal.BorrowedValue, literal.StoreType)
                 + ") AND ("
-                + ManagedAnsiValueRepresentationGuard(literal.Value, literal.StoreType)
+                + ManagedAnsiValueRepresentationGuard(literal.BorrowedValue, literal.StoreType)
                 + ")";
 
             predicates.Add(
                 $"(ty.name = {Literal(type)} AND ({additional}) AND ({intermediate}) "
-                + $"AND ({ManagedValueRepresentationGuard(literal.Value, canonical)}) "
-                + $"AND {NonThrowingScalarConversion(source, literal.Value, canonical)} IS NOT NULL)");
+                + $"AND ({ManagedValueRepresentationGuard(literal.BorrowedValue, canonical)}) "
+                + $"AND {NonThrowingScalarConversion(source, literal.BorrowedValue, canonical)} IS NOT NULL)");
         }
     }
 

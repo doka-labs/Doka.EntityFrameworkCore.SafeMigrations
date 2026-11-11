@@ -8,6 +8,42 @@ the shared release identity described in [Release process](docs/release-process.
 
 ### Fixed
 
+- Recognize native MySQL parentheses for nested associative AND/OR chains in
+  CHECK constraints, strict table completeness and generated-column comparisons.
+  Preserve equivalent MariaDB Boolean-group spellings and required OR-group
+  parentheses under AND so a genuinely different CHECK cannot match. Retain
+  exact predicate order, identifier/literal roles and existing drift policies.
+- Preserve native function, type, operator and numeric-token roles when
+  capturing EF SQL defaults instead of silently reinterpreting quoted names.
+  Unsupported source stays opaque at the existing provider boundary. Captured
+  numeric-default contracts now bind their preserved source tokens; fingerprint
+  format and report schemas are unchanged, but affected approvals must be
+  regenerated and reviewed rather than reusing the former digest.
+- Snapshot binary expression literals on input and public value access, while
+  internal read-only consumers reuse the owned snapshot. Caller mutation can no
+  longer change an already constructed definition, equivalence or fingerprint.
+- Compare complete temporal default values without losing duration days/signs
+  or fractional seconds, including MySQL typed TIME expression defaults.
+  Preserve native display settings, default-only safe repair and target precision;
+  DateTime target conversion follows the engine's current SQL mode. Exact
+  zero-fraction MySQL-family temporal types recognize their native spelling.
+  PostgreSQL clock-time bindings retain the valid 24:00 endpoint and reject
+  out-of-domain values; finite date endpoints cannot impersonate infinities.
+  Generated temporal constants, CHECKs and index keys recognize finite native
+  output and precision-cast forms. Invalid literal mappings fail closed before
+  native evaluation; genuine provider value converters retain their mappings.
+- Match PostgreSQL expression keys and partial predicates using native,
+  relation-aware spellings and require the resolved visible collation identity.
+  MySQL functional-key comparison now shares native display and byte-exact
+  literal-role matching without admitting unproven functional-key creation.
+- Read SQLite index owners, key lists, declared collations and constraint names
+  at their actual quoted/depth-aware grammar positions. Preserve double-quoted
+  default values, recognize proven structural index equivalence and retain real
+  literal, operator and collation drift, including during rebuild and replay.
+- Render SQL Server predicates correctly in scalar computed/default consumers
+  while preserving UNKNOWN and CHECK predicate roles. CHECK dependency parsing
+  no longer treats string contents as unsupported identifier quoting. Retain
+  provenance, native dependency refusal and required x64 qualification.
 - Complete an already admitted release from its original qualification and
   package bytes through an explicit protected completion-only workflow mode.
   Preserve original tag, run, artifact and admission identities; recheck current

@@ -5,7 +5,8 @@ internal static partial class SafeMigrationStandardOperationFactory
     private static CreateTableOperation CreateOperation(
         EnsureTableIntent intent,
         Func<SafeMigrationSqlExpression, string>? renderExpression,
-        Func<SafeMigrationCollationIdentifier, string?>? renderCollation
+        Func<SafeMigrationCollationIdentifier, string?>? renderCollation,
+        Func<SafeMigrationSqlExpression, string>? renderScalarExpression
     )
     {
         var definition = intent.Definition;
@@ -21,7 +22,7 @@ internal static partial class SafeMigrationStandardOperationFactory
         foreach (var column in definition.Columns)
         {
             operation.Columns.Add(
-                CreateColumn(definition.Table, definition.Schema, column, renderExpression, renderCollation));
+                CreateColumn(definition.Table, definition.Schema, column, renderScalarExpression, renderCollation));
         }
 
         if (definition.PrimaryKey is not null)

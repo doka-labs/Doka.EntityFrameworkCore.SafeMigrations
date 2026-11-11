@@ -124,10 +124,10 @@ internal static class MySqlCapturedExpressionContract
             {
                 switch (current)
                 {
-                    case SafeMigrationSqlLiteralExpression { Value: string text }:
+                    case SafeMigrationSqlLiteralExpression { BorrowedValue: string text }:
                         flags |= TextFlags(text);
                         break;
-                    case SafeMigrationSqlLiteralExpression { Value: char character }:
+                    case SafeMigrationSqlLiteralExpression { BorrowedValue: char character }:
                         characterBuffer[0] = character;
                         flags |= TextFlags(characterBuffer);
                         break;

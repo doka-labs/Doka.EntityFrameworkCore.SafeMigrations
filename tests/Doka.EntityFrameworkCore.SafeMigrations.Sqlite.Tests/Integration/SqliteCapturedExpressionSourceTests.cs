@@ -1,5 +1,3 @@
-using SQLitePCL;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
 /// <summary>Preserves captured native SQL while validating its bounded structured contract.</summary>

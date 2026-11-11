@@ -966,7 +966,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         int offset
     )
     {
-        var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
+        using var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
         var selections = new List<string>();
         var sqlBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
         while (offset + selections.Count < requests.Count

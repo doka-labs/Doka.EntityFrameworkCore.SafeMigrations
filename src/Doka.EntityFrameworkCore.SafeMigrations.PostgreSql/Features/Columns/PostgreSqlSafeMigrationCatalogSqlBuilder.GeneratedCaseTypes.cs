@@ -558,7 +558,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 inputs.Columns.Add((name, expected));
 
                 return true;
-            case SafeMigrationSqlLiteralExpression { Value: null, StoreType: null }:
+            case SafeMigrationSqlLiteralExpression { BorrowedValue: null, StoreType: null }:
                 return true;
             case SafeMigrationSqlLiteralExpression literal:
                 return GeneratedCaseCategoryMatches(InferGeneratedCaseCategory(literal, declared), expected);
@@ -740,16 +740,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                             ? GeneratedCaseColumnCategory(column)
                             : GeneratedCaseCategory.Unknown,
                     SafeMigrationSqlLiteralExpression { StoreType: { } type } => GeneratedCaseStoreCategory(type),
-                    SafeMigrationSqlLiteralExpression { Value: bool } => GeneratedCaseCategory.Boolean,
+                    SafeMigrationSqlLiteralExpression { BorrowedValue: bool } => GeneratedCaseCategory.Boolean,
                     SafeMigrationSqlLiteralExpression
                         {
-                            Value: byte or sbyte or short or ushort or int or uint or long or ulong,
+                            BorrowedValue: byte or sbyte or short or ushort or int or uint or long or ulong,
                         }
                         => GeneratedCaseCategory.Integer,
-                    SafeMigrationSqlLiteralExpression { Value: decimal or float or double }
+                    SafeMigrationSqlLiteralExpression { BorrowedValue: decimal or float or double }
                         => GeneratedCaseCategory.Number,
-                    SafeMigrationSqlLiteralExpression { Value: string } => GeneratedCaseCategory.Text,
-                    SafeMigrationSqlLiteralExpression { Value: Guid } => GeneratedCaseCategory.Uuid,
+                    SafeMigrationSqlLiteralExpression { BorrowedValue: string } => GeneratedCaseCategory.Text,
+                    SafeMigrationSqlLiteralExpression { BorrowedValue: Guid } => GeneratedCaseCategory.Uuid,
                     SafeMigrationSqlNullTestExpression => GeneratedCaseCategory.Boolean,
                     SafeMigrationSqlUnaryExpression { Operator: SafeMigrationSqlUnaryOperator.Not }
                         => GeneratedCaseCategory.Boolean,

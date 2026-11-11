@@ -169,7 +169,7 @@ internal static class MariaDbGeneratedColumnNullability
 
                     return true;
                 case SafeMigrationSqlLiteralExpression { StoreType: null } value:
-                    return value.Value is bool
+                    return value.BorrowedValue is bool
                         or sbyte
                         or byte
                         or short

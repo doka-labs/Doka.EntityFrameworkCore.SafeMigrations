@@ -9,10 +9,6 @@ internal static partial class SqliteSafeMigrationCatalog
         "\\s+COLLATE\\s+(?:\"(?:\"\"|[^\"])*\"|\\[[^]]+\\]|`(?:``|[^`])*`|[A-Za-z_][A-Za-z0-9_]*)\\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
 
-    private static readonly Regex s_indexKeyListPattern = new(
-        @"\bON\s+" + IdentifierPattern("table") + @"\s*\(",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
-
     private static readonly Regex s_indexSortOrderPattern = new(
         @"\s+(?:ASC|DESC)\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
@@ -27,10 +23,6 @@ internal static partial class SqliteSafeMigrationCatalog
 
     private static readonly Regex s_referencePattern = new(
         @"\bREFERENCES" + IdentifierFollowingKeywordPattern("table") + @"(?:\s*(?<open>\())?",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
-
-    private static readonly Regex s_uniqueConstraintPattern = new(
-        @"^\s*(?:CONSTRAINT\s+" + IdentifierPattern("name") + @"\s+)?UNIQUE\s*\(",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
 
     private static readonly Regex s_virtualTableDefinitionPattern = new(
@@ -179,9 +171,7 @@ internal static partial class SqliteSafeMigrationCatalog
 
                 // WHY: SQLite assigns the latest column CONSTRAINT name to a
                 // following CHECK until the column clause ends.
-                var name = SqliteSqlIdentifierScanner.ReadLastIdentifierFollowingKeyword(
-                    constraintPrefix,
-                    "CONSTRAINT");
+                var name = ReadLastDeclaredConstraintName(constraintPrefix);
 
                 result.Add(new SqliteCheckSnapshot(name, expression));
                 searchStart = closeParenthesis + 1;
@@ -211,18 +201,33 @@ internal static partial class SqliteSafeMigrationCatalog
         var result = new List<ParsedUniqueConstraint>();
         foreach (var clause in tableClauses)
         {
-            var match = s_uniqueConstraintPattern.Match(clause);
-            if (!match.Success)
+            var uniqueStart = SqliteSqlIdentifierScanner.IndexOfKeyword(clause, "UNIQUE");
+            if (uniqueStart < 0)
             {
                 continue;
             }
 
+            var keyList = SqliteSqlIdentifierScanner.IndexOfCharacterFollowingKeyword(clause, "UNIQUE", '(');
+            string[] columns;
+            if (keyList >= 0)
+            {
+                columns = ReadIdentifierList(clause, keyList);
+            }
+            else if (ReadLeadingIdentifier(clause) is { } leadingColumn)
+            {
+                columns = [leadingColumn];
+            }
+            else
+            {
+                continue;
+            }
+
+            // WHY: Native UNIQUE declarations may be table-level or column-level.
+            // Both positions use the same quoted-name grammar, including adjacent tokens.
             result.Add(
                 new ParsedUniqueConstraint(
-                    HasName(match, "name")
-                        ? ReadName(match, "name")
-                        : null,
-                    ReadIdentifierList(clause, match.Index + match.Length - 1)));
+                    ReadLastDeclaredConstraintName(clause[..uniqueStart]),
+                    columns));
         }
 
         return result.AsReadOnly();
@@ -830,7 +835,9 @@ internal static partial class SqliteSafeMigrationCatalog
             return null;
         }
 
-        return SqliteSqlIdentifierScanner.ReadIdentifierFollowingKeyword(columnSql, "COLLATE");
+        // WHY: COLLATE inside AS(...) or DEFAULT(...) belongs to that expression,
+        // not to the column's declared comparison identity.
+        return SqliteSqlIdentifierScanner.ReadTopLevelIdentifierFollowingKeyword(columnSql, "COLLATE");
     }
 
     private static string? ReadGeneratedExpression(
@@ -878,7 +885,7 @@ internal static partial class SqliteSafeMigrationCatalog
             // WHY: A column PRIMARY KEY can follow other named constraints;
             // SQLite binds the latest preceding CONSTRAINT name to the key.
 
-            return SqliteSqlIdentifierScanner.ReadLastIdentifierFollowingKeyword(clause[..primaryKey], "CONSTRAINT");
+            return ReadLastDeclaredConstraintName(clause[..primaryKey]);
         }
 
         return null;
@@ -1008,10 +1015,12 @@ internal static partial class SqliteSafeMigrationCatalog
             return [];
         }
 
-        var match = s_indexKeyListPattern.Match(indexSql);
+        // WHY: A quoted index name may itself contain ON and parentheses.
+        // The shared lexical scanner must identify the real owner before slicing keys.
+        var openParenthesis = SqliteSqlIdentifierScanner.IndexOfOwnerKeyList(indexSql, "ON");
 
-        return match.Success
-            ? SplitTopLevel(ReadBalancedParentheses(indexSql, match.Index + match.Length - 1))
+        return openParenthesis >= 0
+            ? SplitTopLevel(ReadBalancedParentheses(indexSql, openParenthesis))
                 .ToArray()
             : [];
     }

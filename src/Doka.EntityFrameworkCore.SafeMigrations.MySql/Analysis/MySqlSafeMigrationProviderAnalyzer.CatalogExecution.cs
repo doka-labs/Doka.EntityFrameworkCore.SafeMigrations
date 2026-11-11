@@ -498,7 +498,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             : ensure.Definition.DefaultValue is
             {
                 Kind: SafeMigrationDefaultValueKind.Sql,
-                StructuredExpression: SafeMigrationSqlLiteralExpression { Value: null },
+                StructuredExpression: SafeMigrationSqlLiteralExpression { BorrowedValue: null },
             };
     }
 

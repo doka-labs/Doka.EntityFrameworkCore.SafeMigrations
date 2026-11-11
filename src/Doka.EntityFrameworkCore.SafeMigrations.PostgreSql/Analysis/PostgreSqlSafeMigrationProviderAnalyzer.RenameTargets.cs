@@ -53,7 +53,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             commandTimeout,
             (command, offset) =>
             {
-                var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
+                using var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
                 var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
                     _typeMappingSource,
                     _sqlGenerationHelper,

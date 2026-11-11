@@ -1,6 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
-/// <summary>Exercises the ModelManagedDataPendingKeyIdentity migration contracts in an independent class collection.</summary>
+/// <summary>Exercises pending typed-key migration identity in an independent class collection.</summary>
 public sealed class MySqlModelManagedDataPendingKeyIdentityIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
@@ -101,6 +101,7 @@ public sealed class ModelManagedPendingKeyDbContext : DbContext
 {
     private readonly string _connectionString;
     private readonly MySqlServerVersion _serverVersion;
+    private ServiceProvider? _ownedServices;
 
     /// <summary>Initializes the engine fixture without borrowing another test context's history.</summary>
     /// <param name="connectionString">The isolated test-owned native database.</param>
@@ -112,6 +113,13 @@ public sealed class ModelManagedPendingKeyDbContext : DbContext
     {
         _connectionString = connectionString;
         _serverVersion = serverVersion;
+
+        // WHY: This data-only fixture needs a dedicated canonical migration identity.
+        // Its context owns that service profile instead of retaining it in EF's global cache.
+        _ownedServices = new ServiceCollection()
+            .AddEntityFrameworkDokaMySql()
+            .AddEntityFrameworkDokaMySqlSafeMigrations<ModelManagedPendingKeyDbContext>()
+            .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
     }
 
     /// <inheritdoc />
@@ -127,6 +135,40 @@ public sealed class ModelManagedPendingKeyDbContext : DbContext
                 .MigrationsHistoryTable("__ModelManagedPendingKeyHistory"));
 
         optionsBuilder.UseMySqlSafeMigrations<ModelManagedPendingKeyDbContext>();
+        optionsBuilder.UseInternalServiceProvider(
+            _ownedServices ?? throw new ObjectDisposedException(nameof(ModelManagedPendingKeyDbContext)));
+    }
+
+    /// <inheritdoc />
+    public override void Dispose()
+    {
+        try
+        {
+            base.Dispose();
+        }
+        finally
+        {
+            // WHY: Release EF's scope before its privately owned singleton services.
+            Interlocked
+                .Exchange(ref _ownedServices, null)
+                ?.Dispose();
+        }
+    }
+
+    /// <inheritdoc />
+    public override async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await base.DisposeAsync();
+        }
+        finally
+        {
+            if (Interlocked.Exchange(ref _ownedServices, null) is { } services)
+            {
+                await services.DisposeAsync();
+            }
+        }
     }
 
     /// <inheritdoc />

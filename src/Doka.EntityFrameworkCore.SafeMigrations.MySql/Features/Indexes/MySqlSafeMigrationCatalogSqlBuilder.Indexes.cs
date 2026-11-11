@@ -350,7 +350,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                         ? "FALSE"
                         : BuildIndexExpressionMatches(
                             "s.EXPRESSION",
-                            key.Expression ?? _expressionRenderer.Render(key.StructuredExpression!)),
+                            key),
                 BuildIndexSortMatches(key),
                 key.PrefixLength is null
                     ? "s.SUB_PART IS NULL"
@@ -419,16 +419,43 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             : $"LEFT({column}, {key.PrefixLength.Value.ToString(CultureInfo.InvariantCulture)})";
     }
 
+    /// <summary>
+    /// Uses native spellings and exact literal roles without weakening functional-key value identity.
+    /// </summary>
     private string BuildIndexExpressionMatches(
         string catalogExpression,
-        string expected
+        ExpectedIndexKeyDefinition key
     )
     {
-        var candidates = new[] { expected, $"({expected})" }
-            .Distinct(StringComparer.Ordinal)
-            .Select(Literal);
+        var expected = key.Expression ?? _expressionRenderer.Render(key.StructuredExpression!);
+        var candidates = new[]
+            {
+                MySqlExpressionCanonicalizer.CreateComparisonCandidate(expected),
+                MySqlExpressionCanonicalizer.CreateComparisonCandidate($"({expected})"),
+            }
+            .Concat(MySqlExpressionCanonicalizer.BuildComparisonCandidates(expected,
+                includeMySqlEncodedDisplay: true));
 
-        return $"{catalogExpression} IN ({string.Join(", ", candidates)})";
+        if (key.StructuredExpression is { } expression)
+        {
+            // WHY: Functional keys use the ordinary renderer, not the stable
+            // DEFAULT/CHECK string conversion. Native key metadata compacts
+            // argument separators and retains those ordinary literal values.
+            var native = MySqlGeneratedExpressionDisplay.Render(expression,
+                _expressionRenderer,
+                isMariaDb: false,
+                nativeIndexStringLiterals: true);
+
+            candidates = candidates.Concat(MySqlExpressionCanonicalizer.BuildComparisonCandidates(native,
+                includeMySqlEncodedDisplay: true));
+        }
+
+        // WHY: MySQL serializes literal tokens in functional keys just as it
+        // does in CHECKs. Ordinary catalog collation would also fold their
+        // payload case; recognize native spelling without weakening value identity.
+        return MySqlExpressionCatalogComparison.Build(catalogExpression,
+            candidates.DistinctBy(static candidate => candidate.Text, StringComparer.Ordinal),
+            Literal);
     }
 
     private string IndexExists(

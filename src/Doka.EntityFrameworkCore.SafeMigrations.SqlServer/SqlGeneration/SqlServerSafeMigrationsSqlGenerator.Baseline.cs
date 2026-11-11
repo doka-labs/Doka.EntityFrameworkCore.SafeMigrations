@@ -80,7 +80,8 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
             _expressionRenderer.Render,
             static collation => collation.Schema is null
                 ? collation.Name
-                : null);
+                : null,
+            renderScalarExpression: _renderScalarExpression);
 
         var generationModel = model;
 
@@ -242,7 +243,8 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
             _expressionRenderer.Render,
             static collation => collation.Schema is null
                 ? collation.Name
-                : null);
+                : null,
+            renderScalarExpression: _renderScalarExpression);
 
         return _baselineGenerator.Generate([repairOperation], model, options);
     }

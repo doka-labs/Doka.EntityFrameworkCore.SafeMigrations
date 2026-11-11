@@ -29,7 +29,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
 
         if (!SqlServerComputedColumnContract.IsDeterministic(expression)
-            || _expressionRenderer.GetUnsupportedFeature(expression) is not null)
+            || _expressionRenderer.GetUnsupportedScalarFeature(expression) is not null)
         {
             return "computed_expression_unproven";
         }
@@ -467,7 +467,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // WHY: A completely parsed authored literal can still have different native
         // typing from its CLR-rendered form (for example a large numeric constant).
         // Compile exactly the same text as Core's baseline, not a rewritten spelling.
-        => definition.CapturedComputedSql ?? definition.ComputedColumnSql ?? _expressionRenderer.Render(expression);
+        => definition.CapturedComputedSql
+            ?? definition.ComputedColumnSql
+            ?? _expressionRenderer.RenderScalar(expression);
 
     private static string[] ComputedPrerequisiteColumns(
         ExpectedColumnDefinition definition

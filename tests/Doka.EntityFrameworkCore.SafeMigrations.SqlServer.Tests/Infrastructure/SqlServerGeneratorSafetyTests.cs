@@ -9,6 +9,49 @@ public sealed class SqlServerGeneratorSafetyTests
         "Server=127.0.0.1,1433;Database=generation;"
         + "User ID=sa;Password=unused;TrustServerCertificate=True";
 
+    /// <summary>Native baseline DDL receives scalar roots without changing CHECK predicate spelling.</summary>
+    [Fact]
+    public void TypedTableUsesDistinctComputedAndCheckRootRenderers()
+    {
+        // Arrange
+        var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
+        options.UseSqlServer(ConnectionString);
+        options.UseSqlServerSafeMigrations<RecordingBaselineGenerator, SafeMigrationDbContext>();
+        using var context = new SafeMigrationDbContext(options.Options);
+        var baseline = context.GetService<RecordingBaselineGenerator>();
+        var predicate = SafeMigrationSql.IsNull(SafeMigrationSql.Identifier("Value"));
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureTable(new ExpectedTableDefinition("scalar_roots",
+                [
+                    new ExpectedColumnDefinition("Value", typeof(int), true, "int"),
+                    new ExpectedColumnDefinition("Result", typeof(bool), true, "bit", computedExpression: predicate),
+                ],
+                checkConstraints:
+                [ExpectedCheckConstraintDefinition.FromExpression("ck_root", "scalar_roots", predicate)]),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
+
+        // Assert
+        var table = Assert.Single(baseline
+            .Calls
+            .SelectMany(static operations => operations)
+            .OfType<CreateTableOperation>());
+
+        Assert.Equal("CASE WHEN ([Value] IS NULL) THEN CAST(1 AS bit) WHEN NOT ([Value] IS NULL) "
+            + "THEN CAST(0 AS bit) ELSE NULL END",
+            table.Columns.Single(column => column.Name == "Result")
+                .ComputedColumnSql);
+
+        Assert.Equal("([Value] IS NULL)",
+            Assert.Single(table.CheckConstraints)
+                .Sql);
+    }
+
     /// <summary>A safe rename preserves its explicit source schema unless a transfer is requested.</summary>
     [Theory]
     [InlineData(null, "application")]

@@ -130,6 +130,8 @@ internal static class MySqlExpressionCanonicalizer
 
         if (tokens.Any(static token => token.IsTopLevelBooleanOperator))
         {
+            var hasTopLevelAnd = tokens.Any(static token => token.IsTopLevelBooleanOperator && token.Text == "and");
+            var termHasOr = false;
             var unwrapped = new StringBuilder();
             var builder = new StringBuilder("((");
             var term = new StringBuilder();
@@ -138,6 +140,7 @@ internal static class MySqlExpressionCanonicalizer
                 if (!token.IsTopLevelBooleanOperator)
                 {
                     term.Append(token.Text);
+                    termHasOr |= token.IsBooleanOr;
                     continue;
                 }
 
@@ -152,8 +155,14 @@ internal static class MySqlExpressionCanonicalizer
                     .Trim();
 
                 var booleanOperator = token.Text.Trim();
+
+                // WHY: Removing an OR group's parentheses under AND changes the
+                // CHECK's meaning. Retain those groups instead of admitting a
+                // differently associated native clause as an equivalent alias.
                 unwrapped
-                    .Append(RemoveBalancedOuterParentheses(trimmedTerm))
+                    .Append(hasTopLevelAnd && termHasOr
+                        ? trimmedTerm
+                        : RemoveBalancedOuterParentheses(trimmedTerm))
                     .Append(' ')
                     .Append(booleanOperator);
 
@@ -164,6 +173,7 @@ internal static class MySqlExpressionCanonicalizer
                     .Append(" (");
 
                 term.Clear();
+                termHasOr = false;
             }
 
             var finalTerm = term
@@ -172,7 +182,9 @@ internal static class MySqlExpressionCanonicalizer
 
             unwrapped
                 .Append(' ')
-                .Append(RemoveBalancedOuterParentheses(finalTerm));
+                .Append(hasTopLevelAnd && termHasOr
+                    ? finalTerm
+                    : RemoveBalancedOuterParentheses(finalTerm));
 
             builder
                 .Append(finalTerm)
@@ -287,7 +299,10 @@ internal static class MySqlExpressionCanonicalizer
                 // the enclosing expression, even without parentheses in the
                 // native MariaDB display. Quoted CASE/END tokens never enter
                 // this branch and therefore cannot change parser depth.
-                tokens.Add(new CatalogToken(word, depth == 0 && caseDepth == 0 && word is "and" or "or"));
+                tokens.Add(new CatalogToken(word,
+                    depth == 0 && caseDepth == 0 && word is "and" or "or",
+                    IsBooleanOr: caseDepth == 0 && word == "or"));
+
                 continue;
             }
 
@@ -456,6 +471,7 @@ internal static class MySqlExpressionCanonicalizer
 
     private readonly record struct CatalogToken(
         string Text,
-        bool IsTopLevelBooleanOperator = false
+        bool IsTopLevelBooleanOperator = false,
+        bool IsBooleanOr = false
     );
 }

@@ -148,6 +148,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 : null);
 
         var operations = new List<MigrationOperation> { standardOperation };
+        NormalizeOwnedIntervalDefaults(standardOperation);
         foreach (var (table, schema, definition) in QualifiedColumnCollations(operation.Intent))
         {
             operations.Add(
@@ -183,6 +184,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 : null,
             PostgreSqlSafeMigrationColumnMetadata.CanSafelyConverge);
 
+        NormalizeOwnedIntervalDefaults(repairOperation);
         if (intent.Definition.Collation?.Schema is null)
         {
             return _baselineGenerator.Generate([repairOperation], model, options);
@@ -197,6 +199,51 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         };
 
         return _baselineGenerator.Generate([repairOperation, collationOperation], model, options);
+    }
+
+    /// <summary>Corrects duration literals only on private operations synthesized from Safe intents.</summary>
+    private void NormalizeOwnedIntervalDefaults(
+        MigrationOperation operation
+    )
+    {
+        // WHY: Npgsql's multi-field negative duration literal can give the time
+        // field the opposite sign. These operations are fresh owned copies;
+        // native EF operations and caller-owned migration objects remain untouched.
+        if (operation is ColumnOperation column)
+        {
+            NormalizeColumn(column);
+            if (operation is AlterColumnOperation alter)
+            {
+                NormalizeColumn(alter.OldColumn);
+            }
+
+            return;
+        }
+
+        if (operation is CreateTableOperation table)
+        {
+            foreach (var member in table.Columns)
+            {
+                NormalizeColumn(member);
+            }
+        }
+
+        void NormalizeColumn(
+            ColumnOperation column
+        )
+        {
+            if (column.DefaultValue is TimeSpan interval
+                && column.DefaultValueSql is null)
+            {
+                var mapping = _typeMappingSource.FindMapping(interval.GetType(), column.ColumnType);
+                if (mapping is not null
+                    && PostgreSqlTemporalLiteral.RequiresOwnedDefaultRendering(mapping, interval))
+                {
+                    column.DefaultValue = null;
+                    column.DefaultValueSql = PostgreSqlTemporalLiteral.RenderMapped(mapping, interval);
+                }
+            }
+        }
     }
 
     private static IEnumerable<(string Table, string? Schema, ExpectedColumnDefinition Definition)>

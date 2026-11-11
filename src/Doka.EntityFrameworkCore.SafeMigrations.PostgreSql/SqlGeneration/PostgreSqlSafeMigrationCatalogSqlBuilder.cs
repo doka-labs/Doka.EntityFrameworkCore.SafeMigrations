@@ -241,6 +241,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         return GetUnsupportedSqlExpressionFeature(intent)
             ?? GetUnsupportedColumnFeature(intent)
+            ?? GetUnsupportedModelManagedTemporalFeature(intent)
             ?? GetUnsupportedIndexFeature(intent)
             ?? GetUnsupportedGeneratedCaseCheckFeature(intent);
     }
@@ -400,9 +401,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             ? _typeMappingSource.FindMapping(storeType)
             : _typeMappingSource.FindMapping(value.GetType(), storeType);
 
-        return (mapping
-                ?? throw new NotSupportedException(
-                    $"PostgreSQL has no type mapping for store type '{storeType}'."))
-            .GenerateSqlLiteral(value);
+        return PostgreSqlTemporalLiteral.RenderMapped(mapping
+            ?? throw new NotSupportedException($"PostgreSQL has no type mapping for store type '{storeType}'."),
+            value);
     }
 }

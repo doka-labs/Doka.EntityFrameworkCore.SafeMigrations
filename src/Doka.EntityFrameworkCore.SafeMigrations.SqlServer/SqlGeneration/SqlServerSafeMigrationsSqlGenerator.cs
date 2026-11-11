@@ -27,6 +27,7 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSql
     private readonly SqlServerSafeMigrationCatalogSqlBuilder _catalogSqlBuilder;
     private readonly MigrationsSqlGeneratorDependencies _dependencies;
     private readonly SqlServerSafeMigrationSqlExpressionRenderer _expressionRenderer;
+    private readonly Func<SafeMigrationSqlExpression, string> _renderScalarExpression;
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
 
     /// <summary>Initializes the composed SQL Server generator.</summary>
@@ -49,6 +50,10 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSql
         _baselineGenerator = baselineGenerator;
         _catalogSqlBuilder = new SqlServerSafeMigrationCatalogSqlBuilder(typeMappingSource, sqlGenerationHelper);
         _expressionRenderer = new SqlServerSafeMigrationSqlExpressionRenderer(typeMappingSource, sqlGenerationHelper);
+
+        // WHY: The standard factory consumes this bound role for every operation;
+        // retain one delegate for the scoped generator rather than allocate one per column.
+        _renderScalarExpression = _expressionRenderer.RenderScalar;
         _sqlGenerationHelper = sqlGenerationHelper;
         _dependencies = dependencies;
     }

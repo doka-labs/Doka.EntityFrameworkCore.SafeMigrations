@@ -14,7 +14,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             _ => [],
         };
 
-        if (definitions.Any(definition => !CanMap(definition)))
+        if (definitions.Any(definition => !CanMap(definition))
+            || (intent is AlterColumnIntent { OldDefinition: { } previous } && !CanMap(previous)))
         {
             return "column_type_mapping";
         }
@@ -47,8 +48,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         for (var definitionIndex = 0; definitionIndex < definitionCount; definitionIndex++)
         {
             var definition = definitions[definitionIndex];
+            if (GetUnsupportedTemporalDefaultFeature(definition) is { } temporalFeature)
+            {
+                return temporalFeature;
+            }
+
             if (definition.CapturedComputedSql is not null
-                && definition.ComputedExpression is SafeMigrationSqlLiteralExpression { Value: string uuid }
+                && definition.ComputedExpression is SafeMigrationSqlLiteralExpression { BorrowedValue: string uuid }
                 && ColumnStoreType(definition, ColumnMapping(definition)) == "uuid"
                 && !Guid.TryParseExact(uuid, "D", out _))
             {
@@ -59,6 +65,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             }
         }
 
+        if (intent is AlterColumnIntent { OldDefinition: { } oldDefinition }
+            && GetUnsupportedTemporalDefaultFeature(oldDefinition) is { } oldTemporalFeature)
+        {
+            return oldTemporalFeature;
+        }
+
         return definitions.Any(static definition =>
             (definition.ComputedColumnSql is not null || definition.ComputedExpression is not null)
 
@@ -67,6 +79,26 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             && definition.IsStored != true)
             ? "virtual_generated_column"
             : null;
+    }
+
+    /// <summary>Certifies literal clock-time bounds before rendering any native comparison or DDL.</summary>
+    private string? GetUnsupportedTemporalDefaultFeature(
+        ExpectedColumnDefinition definition
+    )
+    {
+        if (definition.DefaultValue.Kind != SafeMigrationDefaultValueKind.Literal)
+        {
+            return null;
+        }
+
+        var value = definition.DefaultValue.GetLiteralValue();
+        if (value is not (DateOnly or TimeOnly or TimeSpan or DateTime or DateTimeOffset)
+            || !CanMap(definition))
+        {
+            return null;
+        }
+
+        return PostgreSqlTemporalLiteral.GetUnsupportedFeature(ColumnMapping(definition), value);
     }
 
     private PostgreSqlSafeMigrationRuntimePlan BuildEnsureColumn(
@@ -471,12 +503,19 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <param name="definition">The expected column.</param>
     /// <param name="mapping">The already resolved type mapping for that column.</param>
     /// <returns>The expected store type as the catalog renders it.</returns>
-    private static string ColumnStoreType(
+    private string ColumnStoreType(
         ExpectedColumnDefinition definition,
         RelationalTypeMapping mapping
     )
     {
         var storeType = definition.StoreType ?? mapping.StoreType;
+        if (PostgreSqlTemporalLiteral.IsClockTimeMapping(mapping))
+        {
+            // WHY: Native TIME aliases share one catalog spelling. Retain the
+            // exact precision while comparing the resolved clock-time family.
+            return _expressionRenderer.FindCanonicalStoreType(storeType);
+        }
+
         if (storeType.StartsWith("character varying(", StringComparison.Ordinal))
         {
             return storeType;
@@ -854,7 +893,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         return literal is null
             ? "NULL"
-            : mapping.GenerateSqlLiteral(literal);
+            : PostgreSqlTemporalLiteral.RenderMapped(mapping, literal);
     }
 
     private static string ActualDefaultKindExpression()
@@ -1044,7 +1083,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 : "'s'";
 
             if (definition.CapturedComputedSql is not null
-                && definition.ComputedExpression is SafeMigrationSqlLiteralExpression { Value: string text }
+                && definition.ComputedExpression is SafeMigrationSqlLiteralExpression { BorrowedValue: string text }
                 && ColumnStoreType(definition, mapping) == "uuid"
                 && Guid.TryParseExact(text, "D", out var guid))
             {
@@ -1075,18 +1114,28 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var expected = definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Sql
             ? definition.DefaultValue.SqlExpression
             ?? _expressionRenderer.Render(definition.DefaultValue.StructuredExpression!)
-            : mapping.GenerateSqlLiteral(definition.DefaultValue.GetLiteralValue());
+            : PostgreSqlTemporalLiteral.RenderMapped(mapping, definition.DefaultValue.GetLiteralValue());
 
         var expressionMatches = definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Literal
             ? LiteralDefaultMatches(
                 "pg_catalog.pg_get_expr(d.adbin, d.adrelid)",
                 expected,
-                definition.DefaultValue.GetLiteralValue())
-            : definition.DefaultValue.StructuredExpression is not null
-                ? ExpressionMatches(
-                    "pg_catalog.pg_get_expr(d.adbin, d.adrelid)",
-                    definition.DefaultValue.StructuredExpression)
-                : ExpressionMatches("pg_catalog.pg_get_expr(d.adbin, d.adrelid)", expected);
+                definition.DefaultValue.GetLiteralValue(),
+                nativeTemporalOutput: PostgreSqlTemporalLiteral.IsNativeTemporalMapping(mapping))
+            : definition.DefaultValue.StructuredExpression is SafeMigrationSqlLiteralExpression
+            {
+                BorrowedValue: DateOnly or TimeOnly or DateTime or DateTimeOffset or TimeSpan,
+            } temporal
+            && HasNativeTemporalOutput(temporal)
+                ? LiteralDefaultMatches("pg_catalog.pg_get_expr(d.adbin, d.adrelid)",
+                    expected,
+                    temporal.BorrowedValue,
+                    temporal.StoreType)
+                : definition.DefaultValue.StructuredExpression is not null
+                    ? ExpressionMatches(
+                        "pg_catalog.pg_get_expr(d.adbin, d.adrelid)",
+                        definition.DefaultValue.StructuredExpression)
+                    : ExpressionMatches("pg_catalog.pg_get_expr(d.adbin, d.adrelid)", expected);
 
         return "a.attidentity = '' AND a.attgenerated = '' AND d.oid IS NOT NULL AND " + expressionMatches;
     }
@@ -1129,12 +1178,42 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     private string LiteralDefaultMatches(
         string catalogExpression,
         string expected,
-        object? value
+        object? value,
+        string? explicitStoreType = null,
+        bool nativeTemporalOutput = true
     )
     {
         var candidates = new HashSet<string>(StringComparer.Ordinal) { expected };
         AddLiteralDefaultCandidates(candidates, value);
         var conditions = new List<string>();
+        if (nativeTemporalOutput && value is DateOnly or TimeOnly or DateTime or DateTimeOffset or TimeSpan)
+        {
+            // WHY: Native output can omit zero fractions, normalize interval days,
+            // or follow DateStyle/IntervalStyle/TimeZone. Format the complete
+            // provider-owned typed literal through the same native output rules;
+            // never shorten its value or execute catalog SQL. Column typmods are
+            // assignment rules, not permission to truncate the stored default AST.
+            var canonical = $"(pg_catalog.quote_literal(({expected})::pg_catalog.text) "
+                + "OPERATOR(pg_catalog.||) '::' OPERATOR(pg_catalog.||) "
+                + "pg_catalog.format_type(a.atttypid, NULL))";
+
+            conditions.Add($"{catalogExpression} = {canonical}");
+            conditions.Add($"{catalogExpression} = ('(' || {canonical} || ')')");
+            if (explicitStoreType is not null)
+            {
+                // WHY: An explicitly typed temporal node can retain its typmod
+                // cast in adbin. Keep that exact authored native type; a column's
+                // assignment precision does not permit dropping this source cast.
+                var typedCanonical = $"(pg_catalog.quote_literal(({expected})::pg_catalog.text) "
+                    + "OPERATOR(pg_catalog.||) "
+                    + Literal("::" + _expressionRenderer.FindCanonicalStoreType(explicitStoreType))
+                    + ")";
+
+                conditions.Add($"{catalogExpression} = {typedCanonical}");
+                conditions.Add($"{catalogExpression} = ('(' || {typedCanonical} || ')')");
+            }
+        }
+
         foreach (var candidate in candidates)
         {
             var castPrefix = Literal($"{candidate}::");
@@ -1147,6 +1226,20 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         }
 
         return $"({string.Join(" OR ", conditions)})";
+    }
+
+    /// <summary>Evaluates only native temporal scalar input, not an uncertified or non-temporal outer cast.</summary>
+    private bool HasNativeTemporalOutput(
+        SafeMigrationSqlLiteralExpression literal
+    )
+    {
+        var value = literal.BorrowedValue;
+        var mapping = value is null
+            ? null
+            : _typeMappingSource.FindMapping(value.GetType(), literal.StoreType)
+            ?? _typeMappingSource.FindMapping(value.GetType());
+
+        return mapping is not null && PostgreSqlTemporalLiteral.IsNativeTemporalMapping(mapping);
     }
 
     private static void AddLiteralDefaultCandidates(
@@ -1180,37 +1273,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             case Guid guid:
                 candidates.Add(QuoteStoredLiteral(guid.ToString("D")));
                 break;
-            case DateOnly date:
-                candidates.Add(QuoteStoredLiteral(date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
-                break;
-            case TimeOnly time:
-                candidates.Add(QuoteStoredLiteral(time.ToString("HH:mm:ss", CultureInfo.InvariantCulture)));
-                candidates.Add(QuoteStoredLiteral(time.ToString("HH:mm:ss.ffffff", CultureInfo.InvariantCulture)));
-                break;
-            case DateTime dateTime:
-                candidates.Add(
-                    QuoteStoredLiteral(dateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)));
-
-                candidates.Add(
-                    QuoteStoredLiteral(dateTime.ToString("yyyy-MM-dd HH:mm:ss.ffffff", CultureInfo.InvariantCulture)));
-
-                break;
-            case DateTimeOffset dateTimeOffset:
-                var utc = dateTimeOffset.ToUniversalTime();
-                candidates.Add(
-                    QuoteStoredLiteral(utc.ToString("yyyy-MM-dd HH:mm:sszzz", CultureInfo.InvariantCulture)));
-
-                candidates.Add(
-                    QuoteStoredLiteral(utc.ToString("yyyy-MM-dd HH:mm:ss.ffffffzzz", CultureInfo.InvariantCulture)));
-
-                candidates.Add(QuoteStoredLiteral(utc.ToString("yyyy-MM-dd HH:mm:sszz", CultureInfo.InvariantCulture)));
-                candidates.Add(
-                    QuoteStoredLiteral(utc.ToString("yyyy-MM-dd HH:mm:ss.ffffffzz", CultureInfo.InvariantCulture)));
-
-                break;
-            case TimeSpan timeSpan:
-                candidates.Add(QuoteStoredLiteral(timeSpan.ToString("c", CultureInfo.InvariantCulture)));
-                candidates.Add(QuoteStoredLiteral(timeSpan.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture)));
+            case DateOnly or TimeOnly or DateTime or DateTimeOffset or TimeSpan:
+                // WHY: Full native typed output is compared by LiteralDefaultMatches.
+                // A shorter time or a finite date alias for infinity changes its value.
                 break;
             case Enum enumeration:
                 candidates.Add(

@@ -387,16 +387,16 @@ internal sealed class SqliteSafeMigrationSqlExpressionRenderer
             throw new NotSupportedException($"SQLite store type '{expression.StoreType}' is not safe to render.");
         }
 
-        var mapping = expression.Value is null
+        var mapping = expression.BorrowedValue is null
             ? null
-            : _typeMappingSource.FindMapping(expression.Value.GetType(), expression.StoreType)
-            ?? _typeMappingSource.FindMapping(expression.Value.GetType());
+            : _typeMappingSource.FindMapping(expression.BorrowedValue.GetType(), expression.StoreType)
+            ?? _typeMappingSource.FindMapping(expression.BorrowedValue.GetType());
 
-        var literal = expression.Value is null
+        var literal = expression.BorrowedValue is null
             ? "NULL"
-            : mapping?.GenerateSqlLiteral(expression.Value)
+            : mapping?.GenerateSqlLiteral(expression.BorrowedValue)
             ?? throw new NotSupportedException(
-                $"SQLite has no type mapping for structured literal '{expression.Value.GetType().FullName}'.");
+                $"SQLite has no type mapping for structured literal '{expression.BorrowedValue.GetType().FullName}'.");
 
         if (expression.StoreType is null)
         {
@@ -416,9 +416,9 @@ internal sealed class SqliteSafeMigrationSqlExpressionRenderer
         SafeMigrationSqlLiteralExpression expression
     ) => expression.StoreType is not null && !IsStoreType(expression.StoreType)
         ? "structured_cast_type"
-        : expression.Value is not null
-        && _typeMappingSource.FindMapping(expression.Value.GetType(), expression.StoreType) is null
-        && _typeMappingSource.FindMapping(expression.Value.GetType()) is null
+        : expression.BorrowedValue is not null
+        && _typeMappingSource.FindMapping(expression.BorrowedValue.GetType(), expression.StoreType) is null
+        && _typeMappingSource.FindMapping(expression.BorrowedValue.GetType()) is null
             ? "structured_literal_mapping"
             : null;
 

@@ -243,6 +243,24 @@ operation does not carry a general proof of every resulting row value. Split
 the column materialization and the check into ordered migrations, then analyze
 the check against the resulting live data.
 
+## Catalog expression identity
+
+Native catalog extraction retains SQL grammar roles. Quoted index names cannot
+stand in for the index owner's key list, and single-quoted constraint names are
+decoded only at their identifier positions. Generated/default expression
+collations remain separate from a column's declared collation.
+
+Structured expression-index keys and partial predicates use the same bounded,
+source-preserving comparison as structured CHECK/generated expressions. Identifier
+delimiters and harmless trivia may differ; literal bytes, numeric source forms,
+operators and grouping remain part of the contract. Opaque definitions do not
+gain structural equivalence. DEFAULT comparison preserves double-quoted string
+payloads instead of applying ordinary identifier case folding, independently of
+the current connection's double-quoted-string parsing configuration.
+
+Quoted function names, CAST type names and COLLATE names retain their proven
+identifier-role case equivalence; value tokens inside those expressions do not.
+
 ## Generated columns
 
 Fresh safe table creation, direct virtual-column additions and owned rebuilds

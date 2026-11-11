@@ -6,6 +6,118 @@ public sealed class SqlServerSafeMigrationSqlExpressionRendererTests
     private const string ConnectionString = "Server=127.0.0.1;Database=renderer;"
         + "User ID=sa;Password=unused;TrustServerCertificate=True";
 
+    /// <summary>Every scalar operand preserves the three-valued result of a typed predicate.</summary>
+    /// <param name="role">The scalar role that consumes the predicate.</param>
+    [Theory]
+    [InlineData("cast")]
+    [InlineData("function")]
+    [InlineData("comparison")]
+    [InlineData("arithmetic")]
+    [InlineData("null-test")]
+    [InlineData("between")]
+    [InlineData("in")]
+    public void ScalarOperandsConvertPredicatesWithoutLosingUnknown(
+        string role
+    )
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var renderer = CreateRenderer(context);
+        var predicate = SafeMigrationSql.Binary(SafeMigrationSql.Identifier("value"),
+            SafeMigrationSqlBinaryOperator.GreaterThan,
+            SafeMigrationSql.Literal(0));
+
+        var expression = role switch
+        {
+            "cast" => SafeMigrationSql.Cast(predicate, "int"),
+            "function" => SafeMigrationSql.Function("COALESCE", predicate, SafeMigrationSql.Literal(false)),
+            "comparison" => SafeMigrationSql.Binary(predicate,
+                SafeMigrationSqlBinaryOperator.Equal,
+                SafeMigrationSql.Literal(true)),
+            "arithmetic" => SafeMigrationSql.Binary(predicate,
+                SafeMigrationSqlBinaryOperator.Add,
+                SafeMigrationSql.Literal(1)),
+            "null-test" => SafeMigrationSql.IsNull(predicate),
+            "between" => SafeMigrationSql.Between(predicate,
+                SafeMigrationSql.Literal(false),
+                SafeMigrationSql.Literal(true)),
+            "in" => SafeMigrationSql.In(SafeMigrationSql.Literal(true), [predicate]),
+            _ => throw new UnreachableException(),
+        };
+
+        // Act
+        var sql = renderer.Render(expression);
+
+        // Assert
+        Assert.Contains("CASE WHEN ([value] > 0) THEN CAST(1 AS bit) WHEN NOT ([value] > 0) "
+            + "THEN CAST(0 AS bit) ELSE NULL END",
+            sql,
+            StringComparison.Ordinal);
+
+        Assert.Null(renderer.GetUnsupportedFeature(expression));
+    }
+
+    /// <summary>A computed scalar root converts a predicate while a CHECK root retains its native condition.</summary>
+    [Fact]
+    public void ScalarRootAndPredicateRootKeepDistinctNativeRoles()
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var renderer = CreateRenderer(context);
+        var expression = SafeMigrationSql.IsNull(SafeMigrationSql.Identifier("value"));
+
+        // Act
+        var scalar = renderer.RenderScalar(expression);
+        var predicate = renderer.Render(expression);
+
+        // Assert
+        Assert.Equal("CASE WHEN ([value] IS NULL) THEN CAST(1 AS bit) WHEN NOT ([value] IS NULL) "
+            + "THEN CAST(0 AS bit) ELSE NULL END",
+            scalar);
+
+        Assert.Equal("([value] IS NULL)", predicate);
+    }
+
+    /// <summary>Synthetic scalar conversions participate in SQL Server's real CASE nesting budget.</summary>
+    /// <param name="depth">The explicit CASE nesting beneath the predicate.</param>
+    /// <param name="unsupported">Whether its additional scalar conversion exceeds the native limit.</param>
+    [Theory]
+    [InlineData(9, false)]
+    [InlineData(10, true)]
+    public void ScalarPredicateCaseDepthIncludesItsConversion(
+        int depth,
+        bool unsupported
+    )
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var renderer = CreateRenderer(context);
+        var expression = SafeMigrationSql.Literal(1);
+
+        // WHY: Build an exact native CASE depth without recursive test fixture construction.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var index = 0; index < depth; index++)
+        {
+            expression = SafeMigrationSql.Case(
+                [new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.Literal(true), expression)]);
+        }
+
+        var predicate = SafeMigrationSql.IsNull(expression);
+
+        // Act
+        var scalarFeature = renderer.GetUnsupportedScalarFeature(predicate);
+        var predicateFeature = renderer.GetUnsupportedFeature(predicate);
+
+        // Assert
+        Assert.Equal(unsupported
+                ? "structured_case_nesting"
+                : null,
+            scalarFeature);
+
+        Assert.Null(predicateFeature);
+    }
+
     /// <summary>Captured integer-to-decimal boundaries retain their native T-SQL token roles.</summary>
     /// <param name="sql">The exact provider-authored numeric token.</param>
     [Theory]

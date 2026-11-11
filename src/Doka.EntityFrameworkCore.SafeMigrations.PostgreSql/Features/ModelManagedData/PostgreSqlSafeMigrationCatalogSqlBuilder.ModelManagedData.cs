@@ -2,6 +2,84 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 {
+    /// <summary>Classifies temporal mapping failures before rendering a seed relation or mutation.</summary>
+    private string? GetUnsupportedModelManagedTemporalFeature(
+        SafeMigrationIntent intent
+    )
+    {
+        if (intent is not ModelManagedDataIntent managed)
+        {
+            return null;
+        }
+
+        return GetUnsupportedTemporalValues(managed.KeyColumnTypes, managed.KeyValues)
+            ?? intent switch
+            {
+                EnsureModelManagedDataIntent value => GetUnsupportedTemporalValues(value.ColumnTypes, value.Values),
+                UpdateModelManagedDataIntent value => GetUnsupportedTemporalValues(value.ColumnTypes, value.OldValues)
+                    ?? GetUnsupportedTemporalValues(value.ColumnTypes, value.NewValues),
+                DeleteModelManagedDataIntent value => GetUnsupportedTemporalValues(value.ColumnTypes, value.OldValues),
+                _ => null,
+            };
+    }
+
+    /// <summary>Scans only value-sensitive temporal columns with their native mappings and matrix ordinals.</summary>
+    private string? GetUnsupportedTemporalValues(
+        IReadOnlyList<string> types,
+        ModelManagedDataMatrix values
+    )
+    {
+        // WHY: The native type and each immutable matrix cell share this ordinal.
+        // Other column families never need a row scan or a per-cell mapping lookup.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var column = 0; column < types.Count; column++)
+        {
+            var mapping = _typeMappingSource.FindMapping(types[column]);
+            if (mapping is null)
+            {
+                continue;
+            }
+
+            var temporal = PostgreSqlTemporalLiteral.IsNativeTemporalMapping(mapping)
+                || (mapping.ElementTypeMapping is RelationalTypeMapping element
+                    && PostgreSqlTemporalLiteral.IsNativeTemporalMapping(element));
+
+            if (!temporal)
+            {
+                continue;
+            }
+
+            // WHY: Use the immutable matrix's native row/column access without copying values.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var row = 0; row < values.RowCount; row++)
+            {
+                var value = values.GetUnsafeValue(row, column);
+                if (value is not (DateOnly or TimeOnly or DateTime or DateTimeOffset or TimeSpan))
+                {
+                    continue;
+                }
+
+                var valueMapping = mapping.ClrType.IsInstanceOfType(value)
+                    ? mapping
+                    : _typeMappingSource.FindMapping(value.GetType(), types[column]);
+
+                if (valueMapping is null)
+                {
+                    return "temporal_literal_mapping";
+                }
+
+                if (PostgreSqlTemporalLiteral.GetUnsupportedFeature(valueMapping, value) is { } feature)
+                {
+                    return feature;
+                }
+            }
+        }
+
+        return null;
+    }
+
     private PostgreSqlSafeMigrationRuntimePlan BuildEnsureModelManagedData(
         EnsureModelManagedDataIntent intent
     )

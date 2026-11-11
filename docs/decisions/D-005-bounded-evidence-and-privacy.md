@@ -99,6 +99,10 @@ branches and wrappers directly and traverses immutable inputs by index; these
 changes do not cache live evidence or retain pooled buffers.
 
 Definitions snapshot enumerable inputs into owned read-only collections.
+Binary expression literals likewise snapshot incoming bytes and return a
+defensive copy through their public value getter. Trusted internal comparison,
+fingerprint and rendering paths borrow the owned snapshot without exposing or
+mutating it; public immutability does not require another clone on each visit.
 Model fingerprints stream length-prefixed canonical relational metadata into
 a provider-bound, versioned SHA-256 representation. Operation-contract
 fingerprints preserve operation order and safe-operation definitions and
@@ -268,6 +272,9 @@ window. Neither a hash nor a report proves the database server is honest.
   and are not numerical baselines for the new engine.
   Neither counter establishes peak live or native memory. Resource, privacy,
   transport, live test and product correctness contracts remain unchanged.
+- 2026-11-10: Snapshot binary expression literal inputs and public reads so a
+  caller cannot mutate an established SQL or fingerprint contract. Trusted
+  internal consumers borrow the owned snapshot without repeated array copies.
 
 [bdn-gc]: https://raw.githubusercontent.com/dotnet/BenchmarkDotNet/v0.15.8/src/BenchmarkDotNet/Engines/GcStats.cs
 
@@ -289,6 +296,7 @@ stamps therefore gate proof reuse; they are neither report fields nor log payloa
 
 ### Implementation References
 
+- [Binary expression literal ownership](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Expressions/SafeMigrationLiteralOwnershipTests.cs)
 - [Catalog query limits](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationCatalogQueryLimits.cs)
 - [Catalog batch adapter](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationCatalogBatch.cs)
 - [Qualified probe transport](../../src/Doka.EntityFrameworkCore.SafeMigrations/Analysis/SafeMigrationCatalogProbeBatch.cs)

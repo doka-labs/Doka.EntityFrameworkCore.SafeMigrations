@@ -336,6 +336,24 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return "LOWER(c.DATA_TYPE) = 'longtext'";
         }
 
+        if (memberStart > 0
+            && typeExpression[memberStart..]
+                .Equals("(0)", StringComparison.Ordinal)
+            && (typeExpression[..memberStart]
+                    .TrimEnd()
+                    .Equals("time", StringComparison.OrdinalIgnoreCase)
+                || typeExpression[..memberStart]
+                    .TrimEnd()
+                    .Equals("datetime", StringComparison.OrdinalIgnoreCase)
+                || typeExpression[..memberStart]
+                    .TrimEnd()
+                    .Equals("timestamp", StringComparison.OrdinalIgnoreCase)))
+        {
+            // WHY: Native catalogs omit a zero temporal fractional precision.
+            // This exact alias does not erase a nonzero precision or another type's facets.
+            return $"LOWER(c.COLUMN_TYPE) = LOWER({Literal(typeExpression[..memberStart].TrimEnd().ToString())})";
+        }
+
         if (!isMariaDb
             && typeExpression.Equals("integer", StringComparison.OrdinalIgnoreCase))
         {

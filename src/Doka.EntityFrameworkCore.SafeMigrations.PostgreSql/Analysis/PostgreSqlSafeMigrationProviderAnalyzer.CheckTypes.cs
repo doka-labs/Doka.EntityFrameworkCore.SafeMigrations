@@ -323,7 +323,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         int offset
     )
     {
-        var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
+        using var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
         var selections = new List<string>();
         var sqlBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
         while (offset + selections.Count < requests.Count
@@ -728,7 +728,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                         : default;
             case SafeMigrationSqlLiteralExpression literal:
                 if (literal.StoreType is null
-                    && literal.Value is null or string)
+                    && literal.BorrowedValue is null or string)
                 {
                     // WHY: Uncast SQL strings and NULL begin as native unknown,
                     // not TEXT. Assigning TEXT would falsely reject integer = '1'.
@@ -736,7 +736,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 }
 
                 var literalType = CheckExpressionNativeType(literal);
-                if (literal.Value is not null
+                if (literal.BorrowedValue is not null
                     && literal.StoreType is not null
                     && literalType.TypeOid is 20 or 21 or 23)
                 {
@@ -753,7 +753,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                         : default;
                 }
 
-                if (literal.Value is string text)
+                if (literal.BorrowedValue is string text)
                 {
                     return literalType.TypeOid is 25 or 1042 or 1043
                         && !text.Contains('\0', StringComparison.Ordinal)
@@ -803,7 +803,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             return default;
         }
 
-        if (cast.Operand is SafeMigrationSqlLiteralExpression { Value: string }
+        if (cast.Operand is SafeMigrationSqlLiteralExpression { BorrowedValue: string }
             && target.TypeOid is not (25 or 1042 or 1043))
         {
             var integerTarget = target.TypeOid switch
@@ -1183,12 +1183,12 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             return false;
         }
 
-        if (literal.Value is null)
+        if (literal.BorrowedValue is null)
         {
             return IsBuiltinCheckScalar(target);
         }
 
-        if (literal.Value is string text
+        if (literal.BorrowedValue is string text
             && target is 25 or 1042 or 1043)
         {
             return !text.Contains('\0', StringComparison.Ordinal);
@@ -1290,7 +1290,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     Operator: SafeMigrationSqlUnaryOperator.Negate,
                     Operand: SafeMigrationSqlLiteralExpression
                     {
-                        Value: long value, NumericSourceToken.IsEmpty: false,
+                        BorrowedValue: long value, NumericSourceToken.IsEmpty: false,
                     },
                 }
                 when value == 2147483648L => "integer",
@@ -1299,7 +1299,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     Operator: SafeMigrationSqlUnaryOperator.Negate,
                     Operand: SafeMigrationSqlLiteralExpression
                     {
-                        Value: ulong value, NumericSourceToken.IsEmpty: false,
+                        BorrowedValue: ulong value, NumericSourceToken.IsEmpty: false,
                     },
                 }
                 when value == 9223372036854775808UL => "bigint",
@@ -1310,25 +1310,25 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     ?.StoreTypeNameBase,
             SafeMigrationSqlLiteralExpression { NumericSourceToken.IsEmpty: false } literal
                 when literal.NumericSourceToken.Span.ContainsAny('.', 'e', 'E') => "numeric",
-            SafeMigrationSqlLiteralExpression { Value: bool } => "boolean",
-            SafeMigrationSqlLiteralExpression { Value: byte or sbyte or short or ushort or int } => "integer",
-            SafeMigrationSqlLiteralExpression { Value: long value }
+            SafeMigrationSqlLiteralExpression { BorrowedValue: bool } => "boolean",
+            SafeMigrationSqlLiteralExpression { BorrowedValue: byte or sbyte or short or ushort or int } => "integer",
+            SafeMigrationSqlLiteralExpression { BorrowedValue: long value }
                 => value is >= int.MinValue and <= int.MaxValue
                     ? "integer"
                     : "bigint",
-            SafeMigrationSqlLiteralExpression { Value: uint value }
+            SafeMigrationSqlLiteralExpression { BorrowedValue: uint value }
                 => value <= int.MaxValue
                     ? "integer"
                     : "bigint",
-            SafeMigrationSqlLiteralExpression { Value: ulong value }
+            SafeMigrationSqlLiteralExpression { BorrowedValue: ulong value }
                 => value <= int.MaxValue
                     ? "integer"
                     : value <= long.MaxValue
                         ? "bigint"
                         : "numeric",
-            SafeMigrationSqlLiteralExpression { Value: decimal } => "numeric",
-            SafeMigrationSqlLiteralExpression { Value: float } => "real",
-            SafeMigrationSqlLiteralExpression { Value: double } => "double precision",
+            SafeMigrationSqlLiteralExpression { BorrowedValue: decimal } => "numeric",
+            SafeMigrationSqlLiteralExpression { BorrowedValue: float } => "real",
+            SafeMigrationSqlLiteralExpression { BorrowedValue: double } => "double precision",
             SafeMigrationSqlCurrentValueExpression current => current.Value switch
             {
                 SafeMigrationSqlCurrentValue.Date => "date",

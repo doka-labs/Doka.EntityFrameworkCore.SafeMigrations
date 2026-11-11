@@ -64,9 +64,7 @@ public sealed class SqlServerStackSafeExpressionTests
         }
 
         var expected = Repeat("(NOT ", DeepCount)
-            + (predicateRole
-                ? "([enabled] = CAST(1 AS bit))"
-                : "[enabled]")
+            + "([enabled] = CAST(1 AS bit))"
             + new string(')', DeepCount);
 
         if (predicateRole)

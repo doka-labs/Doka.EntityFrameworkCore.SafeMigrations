@@ -11,6 +11,9 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         /// <summary>Whether this catalog candidate uses native literal and SQL special-form spelling.</summary>
         bool NativeLiteralForms { get; }
 
+        /// <summary>Whether native index pretty output omits redundant Boolean operand parentheses.</summary>
+        bool PrettyIndexBooleanOperands { get; }
+
         /// <summary>Gets or sets the nesting local to this one render, never shared across callers.</summary>
         int CaseDepth { get; set; }
 
@@ -113,6 +116,9 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         public bool NativeLiteralForms => false;
 
         /// <inheritdoc />
+        public bool PrettyIndexBooleanOperands => false;
+
+        /// <inheritdoc />
         public int CaseDepth { get; set; }
 
         /// <inheritdoc />
@@ -206,12 +212,16 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         /// <param name="nativeLiteralForms">Whether to use the native deparser's literal forms.</param>
         /// <param name="relationOid">The independently resolved physical source owner, when present.</param>
         /// <param name="capturedSourceRoles">Whether all authored source qualifiers have been certified.</param>
+        /// <param name="prettyIndexBooleanOperands">Whether to retain the index-only pretty operand form.</param>
+        /// <param name="retainTemporalPrecision">Whether constant labels retain temporal precision.</param>
         public CatalogExpressionTextWriter(
             Func<string, string> literal,
             bool parenthesizeCollations = true,
             bool nativeLiteralForms = false,
             string? relationOid = null,
-            bool capturedSourceRoles = false
+            bool capturedSourceRoles = false,
+            bool prettyIndexBooleanOperands = false,
+            bool retainTemporalPrecision = false
         )
         {
             _literal = literal;
@@ -222,13 +232,21 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             NativeLiteralForms = nativeLiteralForms;
             _relationOid = relationOid;
             _capturedSourceRoles = capturedSourceRoles;
+            PrettyIndexBooleanOperands = prettyIndexBooleanOperands;
+            RetainTemporalPrecision = retainTemporalPrecision;
         }
+
+        /// <summary>Gets whether this finite candidate keeps temporal type modifiers on constant labels.</summary>
+        internal bool RetainTemporalPrecision { get; }
 
         /// <inheritdoc />
         public bool ParenthesizeCollations { get; }
 
         /// <inheritdoc />
         public bool NativeLiteralForms { get; }
+
+        /// <inheritdoc />
+        public bool PrettyIndexBooleanOperands { get; }
 
         /// <inheritdoc />
         public int CaseDepth { get; set; }
@@ -342,7 +360,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         {
             if (!NativeLiteralForms
                 || _relationOid is null
-                || literal is not { Value: string value, StoreType: null })
+                || literal is not { BorrowedValue: string value, StoreType: null })
             {
                 return false;
             }
@@ -541,6 +559,26 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             _parts.Add($"(pg_catalog.to_regcollation({identifier})::text)");
         }
 
+        /// <summary>Formats a provider-owned temporal constant with native output functions.</summary>
+        /// <param name="sqlLiteral">The validated native scalar literal, never catalog text.</param>
+        /// <param name="storeType">The validated native type spelling of that scalar.</param>
+        internal void AppendNativeTemporalLiteral(
+            string sqlLiteral,
+            string storeType
+        )
+        {
+            // WHY: Native catalogs store typed constant output, not the input's
+            // DATE/TIME/INTERVAL keyword form. Only this already validated
+            // immutable literal is evaluated; no catalog SQL or application row.
+            FlushText();
+            _parts.Add("(pg_catalog.quote_literal(("
+                + sqlLiteral
+                + ")::pg_catalog.text) "
+                + "OPERATOR(pg_catalog.||) "
+                + _literal("::" + storeType)
+                + ")");
+        }
+
         /// <summary>Shares the same native operand type proof without rendering or evaluating the expression.</summary>
         internal string? GetNativeResultType(
             SafeMigrationSqlExpression expression
@@ -594,7 +632,9 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 ParenthesizeCollations,
                 nativeLiteralForms: true,
                 _relationOid,
-                _capturedSourceRoles)
+                _capturedSourceRoles,
+                PrettyIndexBooleanOperands,
+                RetainTemporalPrecision)
             {
                 CaseDepth = CaseDepth,
                 _caseResultTypes = _caseResultTypes,
@@ -662,7 +702,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 return "numeric";
             }
 
-            return literal.Value switch
+            return literal.BorrowedValue switch
             {
                 int => "integer",
                 long number when negate && number == 2_147_483_648L => "integer",
@@ -679,7 +719,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             ref SafeMigrationWorkStack<RenderStep> pending
         )
         {
-            if (result is SafeMigrationSqlLiteralExpression { Value: null })
+            if (result is SafeMigrationSqlLiteralExpression { BorrowedValue: null })
             {
                 AppendImplicitCaseNull(expression);
 
@@ -695,7 +735,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 return false;
             }
 
-            if (result is SafeMigrationSqlLiteralExpression { Value: string text, StoreType: null })
+            if (result is SafeMigrationSqlLiteralExpression { BorrowedValue: string text, StoreType: null })
             {
                 FlushText();
                 _parts.Add(
@@ -718,7 +758,9 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 ParenthesizeCollations,
                 nativeLiteralForms: true,
                 _relationOid,
-                _capturedSourceRoles)
+                _capturedSourceRoles,
+                PrettyIndexBooleanOperands,
+                RetainTemporalPrecision)
             {
                 CaseDepth = CaseDepth,
                 _caseResultTypes = _caseResultTypes,
@@ -926,13 +968,13 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 },
             SafeMigrationSqlLiteralExpression { StoreType: { } storeType } =>
                 "pg_catalog.to_regtype(" + _literal(storeType) + ")::pg_catalog.oid",
-            SafeMigrationSqlLiteralExpression { Value: null or string } => "705",
-            SafeMigrationSqlLiteralExpression { Value: bool } => "16",
-            SafeMigrationSqlLiteralExpression { Value: sbyte or byte or short or ushort or int } => "23",
-            SafeMigrationSqlLiteralExpression { Value: uint or long } => "20",
-            SafeMigrationSqlLiteralExpression { Value: decimal or ulong } => "1700",
-            SafeMigrationSqlLiteralExpression { Value: float } => "700",
-            SafeMigrationSqlLiteralExpression { Value: double } => "701",
+            SafeMigrationSqlLiteralExpression { BorrowedValue: null or string } => "705",
+            SafeMigrationSqlLiteralExpression { BorrowedValue: bool } => "16",
+            SafeMigrationSqlLiteralExpression { BorrowedValue: sbyte or byte or short or ushort or int } => "23",
+            SafeMigrationSqlLiteralExpression { BorrowedValue: uint or long } => "20",
+            SafeMigrationSqlLiteralExpression { BorrowedValue: decimal or ulong } => "1700",
+            SafeMigrationSqlLiteralExpression { BorrowedValue: float } => "700",
+            SafeMigrationSqlLiteralExpression { BorrowedValue: double } => "701",
             SafeMigrationSqlIdentifierExpression column when _relationOid is not null =>
                 "(SELECT a.atttypid FROM pg_catalog.pg_attribute a WHERE a.attrelid OPERATOR(pg_catalog.=) "
                 + _relationOid

@@ -67,13 +67,20 @@ internal static partial class SafeMigrationExpectedDefinitionFactory
         };
     }
 
+    /// <summary>Preserves native default token roles before granting structural comparison.</summary>
     private static SafeMigrationDefaultValue CaptureDefault(
         ColumnOperation operation
     )
     {
         if (operation.DefaultValueSql is not null)
         {
-            return SafeMigrationSqlExpressionParser.TryParse(operation.DefaultValueSql, out var expression)
+            // WHY: Default SQL has the same native function/type/operator roles
+            // as computed and CHECK source. Ordinary parsing would unquote a
+            // different function or erase an overloadable unary plus. Preserve
+            // numeric lexemes and leave unrepresentable native syntax opaque.
+            return SafeMigrationSqlExpressionParser.TryParseCapturedSource(
+                operation.DefaultValueSql,
+                out var expression)
                 ? SafeMigrationDefaultValue.Sql(expression)
                 : SafeMigrationDefaultValue.Sql(operation.DefaultValueSql);
         }

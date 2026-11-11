@@ -259,7 +259,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                         && workIndex < workOrder.Length)
                     {
                         var command = batch.CreateCommand();
-                        var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
+                        using var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
                         var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
                             _typeMappingSource,
                             _sqlGenerationHelper,
@@ -547,7 +547,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                 && ordinal < operations.Count)
             {
                 var command = batch.CreateCommand();
-                var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
+                using var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
                 var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
                     _typeMappingSource,
                     _sqlGenerationHelper,
@@ -703,7 +703,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                 && ordinal < operations.Count)
             {
                 var command = batch.CreateCommand();
-                var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
+                using var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
                 var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
                     _typeMappingSource,
                     _sqlGenerationHelper,

@@ -487,6 +487,13 @@ property appear supported. EF-captured SQL is translated through the bounded
 expression grammar, including searched CASE and two-argument
 `CONVERT(type, expression)`. The native SQL Server limit of ten nested CASE
 levels also counts predicate-to-scalar CASE forms emitted by the renderer.
+Typed predicates in scalar roots, CAST/function arguments, arithmetic operands
+and other scalar positions use a CASE conversion retaining TRUE, FALSE and
+UNKNOWN as bit values 1, 0 and NULL. CHECK/filter conditions keep their native
+predicate role. The same roles govern private compilation and actual baseline
+DDL; a successful catalog probe cannot substitute for scalar-correct creation.
+Captured SQL retains its authored native roles and cannot borrow conversions
+that apply only to the structured authoring API.
 Opaque grammar, unproved deterministic semantics or unsupported expression
 rendering remain blocked; see
 [generated-column authoring](migration-authoring.md#generated-columns).
@@ -532,6 +539,11 @@ A known accepted CHECK dependency rejects with
 `projected_check_source_dependency_unproven`. SafeMigrations does not silently
 drop or rewrite a dependent computed column or CHECK to make a rename succeed.
 An explicitly removed dependency must cease supplying proof in later steps.
+Delimiter characters inside CHECK string literals do not become identifier
+quoting or unknown dependencies. Actual nonnative identifier delimiters remain
+unproven. Native CHECK and filtered-index dependencies also prevent an external
+referenced-column rename, including when those objects are disabled; a retained
+ownership stamp does not remove those native dependency restrictions.
 
 The same ordered dependency lifetime applies to source-column DROP. A surviving
 computed dependency blocks removal before DDL; removing that dependent first
