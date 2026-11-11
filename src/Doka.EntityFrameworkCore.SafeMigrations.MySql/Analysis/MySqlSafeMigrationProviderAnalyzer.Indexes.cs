@@ -404,18 +404,19 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     ? string.Join(", ", parameterNames.Select(static parameter => $"LOWER({parameter})"))
                     : string.Join(", ", parameterNames);
 
-                command.CommandText = "SELECT t.TABLE_NAME, t.ENGINE, t.ROW_FORMAT, "
-                    + "c.COLUMN_NAME, c.DATA_TYPE, c.CHARACTER_MAXIMUM_LENGTH, "
-                    + "c.CHARACTER_OCTET_LENGTH, c.NUMERIC_PRECISION, "
-                    + "c.NUMERIC_SCALE, c.DATETIME_PRECISION "
-                    + "FROM INFORMATION_SCHEMA.TABLES t "
-                    + "JOIN INFORMATION_SCHEMA.COLUMNS c "
-                    + "ON CAST(c.TABLE_SCHEMA AS BINARY) = CAST(t.TABLE_SCHEMA AS BINARY) "
-                    + "AND CAST(c.TABLE_NAME AS BINARY) = CAST(t.TABLE_NAME AS BINARY) "
-                    + "WHERE t.TABLE_SCHEMA = DATABASE() "
-                    + "AND CAST(t.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY) "
-                    + $"AND t.TABLE_NAME IN ({string.Join(", ", parameterNames)}) "
-                    + $"AND {nativeOwner} IN ({nativeOwners});";
+                command.CommandText = $"""
+                    SELECT t.TABLE_NAME, t.ENGINE, t.ROW_FORMAT, c.COLUMN_NAME, c.DATA_TYPE,
+                    c.CHARACTER_MAXIMUM_LENGTH, c.CHARACTER_OCTET_LENGTH, c.NUMERIC_PRECISION,
+                    c.NUMERIC_SCALE, c.DATETIME_PRECISION
+                    FROM INFORMATION_SCHEMA.TABLES t
+                    JOIN INFORMATION_SCHEMA.COLUMNS c ON CAST(c.TABLE_SCHEMA AS BINARY) = CAST(t.TABLE_SCHEMA
+                    AS BINARY)
+                    AND CAST(c.TABLE_NAME AS BINARY) = CAST(t.TABLE_NAME AS BINARY)
+                    WHERE t.TABLE_SCHEMA = DATABASE()
+                    AND CAST(t.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)
+                    AND t.TABLE_NAME IN ({string.Join(", ", parameterNames)})
+                    AND {nativeOwner} IN ({nativeOwners});
+                    """;
 
                 return new SafeMigrationCatalogProbeStatement(1, valueBytes, offset);
             },
@@ -544,8 +545,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     {
         await using var command = connection.CreateCommand();
         ApplyCommandTimeout(command, commandTimeout);
-        command.CommandText = "SELECT @@default_storage_engine, @@innodb_default_row_format, @@innodb_page_size, "
-            + "@@character_set_database, @@SESSION.sql_mode, VERSION();";
+        command.CommandText = """
+        SELECT @@default_storage_engine, @@innodb_default_row_format, @@innodb_page_size,
+        @@character_set_database, @@SESSION.sql_mode, VERSION();
+        """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))

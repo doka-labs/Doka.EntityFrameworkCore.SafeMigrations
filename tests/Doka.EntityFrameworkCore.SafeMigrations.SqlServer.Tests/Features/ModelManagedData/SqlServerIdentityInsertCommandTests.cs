@@ -1126,7 +1126,7 @@ public sealed class SqlServerIdentityInsertCommandTests
             }
 
             if (_connection.IdentityOwner is not { } owner
-                || !CommandText.Contains("<> 0x" + owner + " RETURN;", StringComparison.Ordinal))
+                || !CommandText.Contains("<> 0x" + owner + "\nRETURN;", StringComparison.Ordinal))
             {
                 return 0;
             }

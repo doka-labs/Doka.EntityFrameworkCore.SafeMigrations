@@ -15,11 +15,13 @@ public sealed class PostgreSqlModelManagedDataCompositeKeysIntegrationTests : Po
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE model_composite_roles ("
-            + "tenant_id integer NOT NULL, id integer NOT NULL, name varchar(64) NOT NULL, "
-            + "PRIMARY KEY (tenant_id, id));"
-            + "INSERT INTO model_composite_roles (tenant_id, id, name) VALUES "
-            + "(1, 1, 'source'), (2, 1, 'removed');",
+            """
+            CREATE TABLE model_composite_roles (tenant_id integer NOT NULL, id integer
+            NOT NULL,
+            name varchar(64) NOT NULL, PRIMARY KEY (tenant_id, id));INSERT INTO model_composite_roles
+            (tenant_id,
+            id, name) VALUES (1, 1, 'source'), (2, 1, 'removed');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

@@ -87,9 +87,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await SeedSparseDropConcurrencyAsync(connectionString, cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE generated_sparse_control LIKE generated_sparse_drop; "
-            + "ALTER TABLE generated_sparse_control "
-            + "ADD COLUMN dependent int GENERATED ALWAYS AS (unrelated + 1) VIRTUAL;",
+            """
+            CREATE TABLE generated_sparse_control LIKE generated_sparse_drop; ALTER
+            TABLE generated_sparse_control ADD COLUMN dependent int GENERATED ALWAYS
+            AS (unrelated + 1) VIRTUAL;
+            """,
             cancellationToken: CancellationToken.None);
 
         var gateName = "sm-sparse-drop-"
@@ -199,11 +201,16 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         CancellationToken cancellationToken
     ) => ExecuteSqlAsync(
         connectionString,
-        "CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, source int NULL, "
-        + "unrelated int NULL, result int GENERATED ALWAYS AS (source + 1) VIRTUAL); "
-        + "INSERT INTO generated_sparse_drop (id, source, unrelated) VALUES (1, 3, 11), (2, 7, 13); "
-        + "CREATE TABLE generated_drop_checkpoint (id int NOT NULL PRIMARY KEY, reached int NOT NULL); "
-        + "INSERT INTO generated_drop_checkpoint VALUES (1, 0);",
+        """
+        CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, source
+        int NULL,
+        unrelated int NULL, result int GENERATED ALWAYS AS (source + 1) VIRTUAL);
+        INSERT INTO generated_sparse_drop (id,
+        source, unrelated) VALUES (1, 3, 11), (2, 7, 13); CREATE TABLE generated_drop_checkpoint
+        (id int NOT NULL PRIMARY KEY,
+        reached int NOT NULL); INSERT INTO generated_drop_checkpoint VALUES (1,
+        0);
+        """,
         cancellationToken: cancellationToken);
 
     /// <summary>Describes a committed dependency change without accepting arbitrary fixture SQL.</summary>
@@ -215,15 +222,20 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             + "ADD COLUMN dependent int GENERATED ALWAYS AS (unrelated + 1) VIRTUAL;",
         "change" => "ALTER TABLE generated_sparse_drop "
             + "MODIFY COLUMN result int GENERATED ALWAYS AS (unrelated + 1) VIRTUAL;",
-        "recreate" => "DROP TABLE generated_sparse_drop; "
-            + "CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, source int NULL, "
-            + "unrelated int NULL, result int GENERATED ALWAYS AS (unrelated + 1) VIRTUAL); "
-            + "INSERT INTO generated_sparse_drop (id, source, unrelated) VALUES (1, 3, 11), (2, 7, 13);",
-        "replace-target" => "ALTER TABLE generated_sparse_drop DROP COLUMN unrelated; "
-            + "ALTER TABLE generated_sparse_drop ADD COLUMN unrelated int NULL; "
-            + "UPDATE generated_sparse_drop SET unrelated = CASE id WHEN 1 THEN 11 ELSE 13 END; "
-            + "ALTER TABLE generated_sparse_drop ADD COLUMN dependent int "
-            + "GENERATED ALWAYS AS (unrelated + 1) VIRTUAL;",
+        "recreate" => """
+            DROP TABLE generated_sparse_drop; CREATE TABLE generated_sparse_drop (id
+            int NOT NULL PRIMARY KEY,
+            source int NULL, unrelated int NULL, result int GENERATED ALWAYS AS (unrelated
+            + 1) VIRTUAL); INSERT INTO generated_sparse_drop (id,
+            source, unrelated) VALUES (1, 3, 11), (2, 7, 13);
+            """,
+        "replace-target" => """
+            ALTER TABLE generated_sparse_drop DROP COLUMN unrelated; ALTER TABLE generated_sparse_drop
+            ADD COLUMN unrelated int NULL; UPDATE generated_sparse_drop SET unrelated
+            = CASE id
+            WHEN 1 THEN 11 ELSE 13 END; ALTER TABLE generated_sparse_drop ADD COLUMN
+            dependent int GENERATED ALWAYS AS (unrelated + 1) VIRTUAL;
+            """,
         _ => throw new ArgumentOutOfRangeException(nameof(mutation)),
     };
 
@@ -235,8 +247,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         CancellationToken cancellationToken
     ) => ScalarIntAsync(
         connectionString,
-        "SELECT COUNT(*) FROM generated_sparse_drop "
-        + "WHERE (id = 1 AND source = 3 AND unrelated = 11) OR (id = 2 AND source = 7 AND unrelated = 13);",
+        """
+        SELECT COUNT(*) FROM generated_sparse_drop
+        WHERE (id = 1 AND source = 3 AND unrelated = 11)
+        OR (id = 2 AND source = 7 AND unrelated = 13);
+        """,
         cancellationToken: cancellationToken);
 
     /// <summary>Waits for a database-visible marker rather than guessing command duration.</summary>
@@ -303,8 +318,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             {
                 // WHY: A named gate survives the writer's implicit DDL commits;
                 // a row-lock gate would release before the adversarial ALTER.
-                var barrier = "UPDATE generated_drop_checkpoint SET reached = 1 WHERE id = 1; "
-                    + $"DO GET_LOCK('{gateName}', 30); DO RELEASE_LOCK('{gateName}'); ";
+                var barrier = $"""
+                    UPDATE generated_drop_checkpoint SET reached = 1
+                    WHERE id = 1; DO GET_LOCK('{gateName}', 30); DO RELEASE_LOCK('{gateName}');{"\u0020"}
+                    """;
 
                 command.CommandText = command.CommandText.Insert(position, barrier);
             }

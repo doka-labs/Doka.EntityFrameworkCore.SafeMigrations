@@ -160,16 +160,25 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
     /// <param name="expression">The same explicitly structured expression rendered for DDL.</param>
     /// <param name="literal">The SQL literal encoder for candidate text.</param>
     /// <param name="relationOid">The native owning relation expression, or null without column type context.</param>
+    /// <param name="prettyIndexBooleanOperands">Whether this is the native index-only pretty candidate.</param>
+    /// <param name="retainTemporalPrecision">Whether temporal constant labels retain explicit type modifiers.</param>
     /// <returns>A native candidate, or null when the ordinary candidate already carries the relevant forms.</returns>
     public string? RenderCatalogNativeDeparsedCandidateSql(
         SafeMigrationSqlExpression expression,
         Func<string, string> literal,
-        string? relationOid = null
+        string? relationOid = null,
+        bool prettyIndexBooleanOperands = false,
+        bool retainTemporalPrecision = false
     )
     {
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentNullException.ThrowIfNull(literal);
-        if (!RequiresNativeDeparsedVariant(expression))
+        if (!(prettyIndexBooleanOperands
+                && expression is SafeMigrationSqlBinaryExpression
+                {
+                    Operator: SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or,
+                })
+            && !RequiresNativeDeparsedVariant(expression))
         {
             return null;
         }
@@ -178,7 +187,9 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             literal,
             parenthesizeCollations: false,
             nativeLiteralForms: true,
-            relationOid: relationOid);
+            relationOid: relationOid,
+            prettyIndexBooleanOperands: prettyIndexBooleanOperands,
+            retainTemporalPrecision: retainTemporalPrecision);
 
         // WHY: The normal deparser keeps parentheses around Boolean comparison
         // operands. The pretty arithmetic candidate deliberately flattens those;
@@ -186,6 +197,42 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         Append(writer, expression, catalogShape: true);
 
         return writer.BuildSqlExpression();
+    }
+
+    /// <summary>Includes only the extra native constant form whose explicit temporal precision is retained.</summary>
+    internal string? RenderCatalogTemporalPrecisionCandidateSql(
+        SafeMigrationSqlExpression expression,
+        Func<string, string> literal,
+        string? relationOid = null,
+        bool prettyIndexBooleanOperands = false
+    )
+    {
+        var traversal = new PostgreSqlSafeMigrationExpressionWalker(expression);
+        try
+        {
+            while (traversal.TryTake(out var node))
+            {
+                if (node is SafeMigrationSqlLiteralExpression
+                    {
+                        BorrowedValue: DateOnly or TimeOnly or DateTime or DateTimeOffset or TimeSpan,
+                        StoreType: { } storeType,
+                    }
+                    && storeType.Contains('('))
+                {
+                    return RenderCatalogNativeDeparsedCandidateSql(expression,
+                        literal,
+                        relationOid,
+                        prettyIndexBooleanOperands,
+                        retainTemporalPrecision: true);
+                }
+            }
+
+            return null;
+        }
+        finally
+        {
+            traversal.Dispose();
+        }
     }
 
     /// <summary>Retains native numeric token roles when matching validated captured provider SQL.</summary>
@@ -300,7 +347,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 }
 
                 if (writer.NativeLiteralForms
-                    && value.Value is bool boolean
+                    && value.BorrowedValue is bool boolean
                     && (value.StoreType is null || FindCanonicalStoreType(value.StoreType) == "boolean"))
                 {
                     writer.Append(
@@ -313,7 +360,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
                 if (writer.NativeLiteralForms
                     && value.StoreType is null
-                    && value.Value is long and (< int.MinValue or > int.MaxValue)
+                    && value.BorrowedValue is long and (< int.MinValue or > int.MaxValue)
                     && TryAppendNativeIntegerConstant(
                         writer,
                         new SafeMigrationSqlCastExpression(value, "bigint"),
@@ -323,12 +370,12 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 }
 
                 if (writer.NativeLiteralForms
-                    && value.Value is not null
+                    && value.BorrowedValue is not null
                     && value.StoreType is not null
                     && FindCanonicalStoreType(value.StoreType) is "smallint" or "integer" or "bigint")
                 {
                     var target = FindCanonicalStoreType(value.StoreType);
-                    var uncast = new SafeMigrationSqlLiteralExpression(value.Value);
+                    var uncast = new SafeMigrationSqlLiteralExpression(value.BorrowedValue);
                     if (!TryAppendNativeIntegerConstant(
                         writer,
                         new SafeMigrationSqlCastExpression(uncast, target),
@@ -345,9 +392,9 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
                 AppendLiteral(
                     writer,
-                    value.Value,
+                    value.BorrowedValue,
                     value.StoreType
-                    ?? (writer.NativeLiteralForms && value.Value is string
+                    ?? (writer.NativeLiteralForms && value.BorrowedValue is string
                         ? "text"
                         : null));
 
@@ -380,7 +427,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         SafeMigrationSqlExpression other,
         SafeMigrationSqlBinaryOperator operation
     ) => operand is SafeMigrationSqlIdentifierExpression column
-        && other is SafeMigrationSqlLiteralExpression { Value: string }
+        && other is SafeMigrationSqlLiteralExpression { BorrowedValue: string }
         && operation is >= SafeMigrationSqlBinaryOperator.Equal
             and <= SafeMigrationSqlBinaryOperator.GreaterThanOrEqual
         && writer.TryAppendNativeTextColumn(column, other as SafeMigrationSqlIdentifierExpression);
@@ -443,8 +490,12 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             {
                 var required = node switch
                 {
-                    SafeMigrationSqlLiteralExpression { Value: string } => true,
-                    SafeMigrationSqlLiteralExpression { StoreType: { } type, Value: not null }
+                    SafeMigrationSqlLiteralExpression { BorrowedValue: string } => true,
+                    SafeMigrationSqlLiteralExpression
+                    {
+                        BorrowedValue: DateOnly or TimeOnly or DateTime or DateTimeOffset or TimeSpan,
+                    } => true,
+                    SafeMigrationSqlLiteralExpression { StoreType: { } type, BorrowedValue: not null }
                         => TryGetIntegerLiteralSource(type, out var source) && source.Length > 0,
                     SafeMigrationSqlUnaryExpression { Operator: SafeMigrationSqlUnaryOperator.Negate } => true,
                     SafeMigrationSqlBinaryExpression value => HasFlattenedBooleanOperands(value),
@@ -533,7 +584,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             return false;
         }
 
-        if (expression.Operand is SafeMigrationSqlLiteralExpression { Value: not string })
+        if (expression.Operand is SafeMigrationSqlLiteralExpression { BorrowedValue: not string })
         {
             var source = integer is >= int.MinValue and <= int.MaxValue
                 ? "integer"
@@ -568,7 +619,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
     {
         integer = 0;
         if (target is not ("smallint" or "integer" or "bigint")
-            || expression.Operand is not SafeMigrationSqlLiteralExpression { Value: { } raw } literal
+            || expression.Operand is not SafeMigrationSqlLiteralExpression { BorrowedValue: { } raw } literal
             || !TryGetIntegerLiteralSource(literal.StoreType, out var source))
         {
             return false;
@@ -645,12 +696,46 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             return;
         }
 
-        var mapping = _typeMappingSource.FindMapping(value.GetType(), storeType)
+        var directMapping = _typeMappingSource.FindMapping(value.GetType(), storeType);
+        if (storeType is not null
+            && value is DateOnly or TimeOnly or DateTime or DateTimeOffset or TimeSpan
+            && (directMapping is null
+                || PostgreSqlTemporalLiteral.IsUncertifiedScalarArrayMapping(directMapping, value)))
+        {
+            throw new NotSupportedException("The temporal literal has no certified native CLR/store-type mapping.");
+        }
+
+        var mapping = directMapping
             ?? _typeMappingSource.FindMapping(value.GetType())
             ?? throw new NotSupportedException(
                 $"PostgreSQL has no type mapping for structured literal '{value.GetType().FullName}'.");
 
-        writer.Append(mapping.GenerateSqlLiteral(value));
+        var nativeLiteral = PostgreSqlTemporalLiteral.RenderMapped(mapping, value);
+        if (writer is CatalogExpressionTextWriter { NativeLiteralForms: true } catalog
+            && value is DateOnly or TimeOnly or DateTime or DateTimeOffset or TimeSpan
+            && PostgreSqlTemporalLiteral.IsNativeTemporalMapping(mapping))
+        {
+            var nativeType = FindCanonicalStoreType(storeType ?? mapping.StoreType);
+            var precisionStart = nativeType.IndexOf('(');
+            if (precisionStart >= 0
+                && !catalog.RetainTemporalPrecision)
+            {
+                // WHY: This is a validated built-in temporal type, not source
+                // SQL. A native constant label omits its input precision while
+                // the evaluated literal still retains every coerced value bit.
+                var precisionEnd = nativeType.IndexOf(')', precisionStart);
+                nativeType = string.Concat(nativeType.AsSpan(0, precisionStart), nativeType.AsSpan(precisionEnd + 1));
+            }
+
+            catalog.AppendNativeTemporalLiteral(castType is null || catalog.RetainTemporalPrecision
+                    ? nativeLiteral
+                    : "(" + nativeLiteral + ")::" + castType,
+                nativeType);
+
+            return;
+        }
+
+        writer.Append(nativeLiteral);
         if (castType is not null)
         {
             writer.Append("::");
@@ -668,14 +753,34 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             return "structured_cast_type";
         }
 
-        if (expression.Value is not null
-            && _typeMappingSource.FindMapping(expression.Value.GetType(), expression.StoreType) is null
-            && _typeMappingSource.FindMapping(expression.Value.GetType()) is null)
+        if (expression.BorrowedValue is null)
+        {
+            return null;
+        }
+
+        var directMapping = _typeMappingSource.FindMapping(expression.BorrowedValue.GetType(), expression.StoreType);
+        if (expression.StoreType is not null
+            && expression.BorrowedValue is DateOnly or TimeOnly or DateTime or DateTimeOffset or TimeSpan
+            && (directMapping is null
+                || PostgreSqlTemporalLiteral.IsUncertifiedScalarArrayMapping(directMapping,
+                    expression.BorrowedValue)))
+        {
+            // WHY: Literal(storeType) requests an actual provider mapping, not
+            // an arbitrary SQL CAST. Preserve composed converters when supplied,
+            // but never execute a natural-mapping literal cast to an unrelated
+            // type (or a scalar mapping merely cloned with an array type name).
+            return "temporal_literal_mapping";
+        }
+
+        var mapping = directMapping
+            ?? _typeMappingSource.FindMapping(expression.BorrowedValue.GetType());
+
+        if (mapping is null)
         {
             return "structured_literal_mapping";
         }
 
-        return null;
+        return PostgreSqlTemporalLiteral.GetUnsupportedFeature(mapping, expression.BorrowedValue);
     }
 
     private static string BinaryOperator(

@@ -13,11 +13,11 @@ internal static class SqlServerSafeMigrationIdentityInsertScope
     internal static string BuildBootstrapSql(
         string token,
         string? scopeInUseMessage = null
-    ) => $"IF SESSION_CONTEXT(N'{ContextKey}') IS NOT NULL "
-        + "THROW 51007, "
-        + ScopeInUseLiteral(scopeInUseMessage)
-        + ", 1; "
-        + $"EXEC sys.sp_set_session_context @key = N'{ContextKey}', @value = 0x00{token};";
+    ) => $"""
+        IF SESSION_CONTEXT(N'{ContextKey}') IS NOT NULL THROW 51007,
+        {ScopeInUseLiteral(scopeInUseMessage)}, 1; EXEC sys.sp_set_session_context @key = N'{ContextKey}',
+        @value = 0x00{token};
+        """;
 
     /// <summary>
     /// Recovers only the exact invocation, without requiring fresh metadata or ALTER on rejection.
@@ -38,21 +38,22 @@ internal static class SqlServerSafeMigrationIdentityInsertScope
             ? "IF SUBSTRING(@doka_identity_scope, 1, 1) = 0x02 BEGIN " + cleanupSql + " END ELSE "
             : string.Empty;
 
-        return $"DECLARE @doka_identity_owner sql_variant = SESSION_CONTEXT(N'{ContextKey}'); "
-            + "IF @doka_identity_owner IS NULL RETURN; "
-            + "IF SQL_VARIANT_PROPERTY(@doka_identity_owner, N'BaseType') <> N'varbinary' RETURN; "
-            + "IF DATALENGTH(CONVERT(varbinary(max), @doka_identity_owner)) <> 17 RETURN; "
-            + "DECLARE @doka_identity_scope varbinary(17) = CONVERT(varbinary(17), @doka_identity_owner); "
-            + $"IF SUBSTRING(@doka_identity_scope, 2, 16) <> 0x{token} RETURN; "
-            + acquiredCleanup
-            + "IF SUBSTRING(@doka_identity_scope, 1, 1) <> 0x00 "
-            + "THROW 51007, "
-            + SqlServerSafeMigrationRuntimeDiagnostic.FormatLiteral(
+        return $"""
+            DECLARE @doka_identity_owner sql_variant = SESSION_CONTEXT(N'{ContextKey}');
+            IF @doka_identity_owner IS NULL RETURN; IF SQL_VARIANT_PROPERTY(@doka_identity_owner,
+            N'BaseType') <> N'varbinary' RETURN; IF DATALENGTH(CONVERT(varbinary(max),
+            @doka_identity_owner)) <> 17 RETURN; DECLARE @doka_identity_scope varbinary(17)
+            = CONVERT(varbinary(17),
+            @doka_identity_owner); IF SUBSTRING(@doka_identity_scope, 2, 16) <> 0x{token}
+            RETURN; {acquiredCleanup}IF SUBSTRING(@doka_identity_scope,
+            1, 1) <> 0x00 THROW 51007, {SqlServerSafeMigrationRuntimeDiagnostic.FormatLiteral(
                 acquisitionUnprovenMessage
                 ?? "doka_sm_identity_acquisition_unproven: SafeMigrations cannot prove "
-                + "ownership of the attempted IDENTITY_INSERT state; next=Use a new context and connection.")
-            + ", 1; "
-            + $"EXEC sys.sp_set_session_context @key = N'{ContextKey}', @value = NULL;";
+                + "ownership of the attempted IDENTITY_INSERT state; next=Use a new context and connection."
+            )}, 1; EXEC sys.sp_set_session_context
+            @key = N'{ContextKey}',
+            @value = NULL;
+            """;
     }
 
     /// <summary>Captures attempted and confirmed ON states in the same session as the native seed mutation.</summary>
@@ -79,45 +80,45 @@ internal static class SqlServerSafeMigrationIdentityInsertScope
             ? "IF @doka_identity_owner IS NOT NULL THROW 51007, " + scopeInUseLiteral + ", 1; "
             : string.Empty;
 
-        return "DECLARE @doka_identity_scope varbinary(17); "
-            + "IF @doka_identity_insert = 1 BEGIN "
-            + $"DECLARE @doka_identity_owner sql_variant = SESSION_CONTEXT(N'{ContextKey}'); "
-            + existingScopeGuard
-            + "IF @doka_identity_owner IS NULL BEGIN "
-            + "SET @doka_identity_scope = 0x00 + CONVERT(binary(16), NEWID()); "
-            + $"EXEC sys.sp_set_session_context @key = N'{ContextKey}', @value = @doka_identity_scope; END "
-            + "ELSE BEGIN "
-            + "IF SQL_VARIANT_PROPERTY(@doka_identity_owner, N'BaseType') <> N'varbinary' "
-            + "OR DATALENGTH(CONVERT(varbinary(max), @doka_identity_owner)) <> 17 "
-            + "THROW 51007, "
-            + scopeInUseLiteral
-            + ", 1; "
-            + "SET @doka_identity_scope = CONVERT(varbinary(17), @doka_identity_owner); "
-            + "IF SUBSTRING(@doka_identity_scope, 1, 1) <> 0x00 "
-            + "THROW 51007, "
-            + scopeInUseLiteral
-            + ", 1; END; "
-            + "DECLARE @doka_identity_attempt varbinary(17) = 0x01 + SUBSTRING(@doka_identity_scope, 2, 16); "
-            + $"EXEC sys.sp_set_session_context @key = N'{ContextKey}', @value = @doka_identity_attempt; "
-            + $"BEGIN TRY SET IDENTITY_INSERT {table} ON; END TRY "
-            + $"BEGIN CATCH EXEC sys.sp_set_session_context @key = N'{ContextKey}', "
-            + "@value = @doka_identity_scope; THROW; END CATCH; "
-            + "DECLARE @doka_identity_acquired varbinary(17) = 0x02 + SUBSTRING(@doka_identity_scope, 2, 16); "
-            + $"EXEC sys.sp_set_session_context @key = N'{ContextKey}', @value = @doka_identity_acquired; "
-            + AcquiredMarkerComment
-            + " END; ";
+        return $"""
+            DECLARE @doka_identity_scope varbinary(17); IF @doka_identity_insert = 1
+            BEGIN DECLARE @doka_identity_owner sql_variant = SESSION_CONTEXT(N'{ContextKey}');
+            {existingScopeGuard}IF @doka_identity_owner IS NULL BEGIN SET @doka_identity_scope
+            = 0x00 + CONVERT(binary(16),
+            NEWID()); EXEC sys.sp_set_session_context @key = N'{ContextKey}',
+            @value = @doka_identity_scope; END
+            ELSE BEGIN IF SQL_VARIANT_PROPERTY(@doka_identity_owner, N'BaseType') <>
+            N'varbinary'
+            OR DATALENGTH(CONVERT(varbinary(max), @doka_identity_owner)) <> 17 THROW
+            51007,
+            {scopeInUseLiteral}, 1; SET @doka_identity_scope = CONVERT(varbinary(17),
+            @doka_identity_owner); IF SUBSTRING(@doka_identity_scope, 1, 1) <> 0x00
+            THROW 51007,
+            {scopeInUseLiteral}, 1; END; DECLARE @doka_identity_attempt varbinary(17)
+            = 0x01 + SUBSTRING(@doka_identity_scope,
+            2, 16); EXEC sys.sp_set_session_context @key = N'{ContextKey}',
+            @value = @doka_identity_attempt; BEGIN TRY SET IDENTITY_INSERT {table}
+            ON; END TRY BEGIN CATCH EXEC sys.sp_set_session_context @key = N'{ContextKey}',
+            @value = @doka_identity_scope; THROW; END CATCH; DECLARE @doka_identity_acquired
+            varbinary(17) = 0x02 + SUBSTRING(@doka_identity_scope,
+            2, 16); EXEC sys.sp_set_session_context @key = N'{ContextKey}',
+            @value = @doka_identity_acquired; {AcquiredMarkerComment} END;{"\u0020"}
+            """;
     }
 
     /// <summary>
     /// Clears the ready marker on successful NoOp/non-identity paths without touching other marker phases.
     /// </summary>
     /// <returns>A scalar control statement appended after the complete operation guard succeeds.</returns>
-    internal static string ReadyCompletionSql()
-        => $"DECLARE @doka_identity_completed sql_variant = SESSION_CONTEXT(N'{ContextKey}'); "
-            + "IF SQL_VARIANT_PROPERTY(@doka_identity_completed, N'BaseType') = N'varbinary' "
-            + "AND DATALENGTH(CONVERT(varbinary(max), @doka_identity_completed)) = 17 "
-            + "AND SUBSTRING(CONVERT(varbinary(17), @doka_identity_completed), 1, 1) = 0x00 "
-            + $"EXEC sys.sp_set_session_context @key = N'{ContextKey}', @value = NULL;";
+    internal static string ReadyCompletionSql() => $"""
+        DECLARE @doka_identity_completed sql_variant = SESSION_CONTEXT(N'{ContextKey}');
+        IF SQL_VARIANT_PROPERTY(@doka_identity_completed,
+        N'BaseType') = N'varbinary' AND DATALENGTH(CONVERT(varbinary(max), @doka_identity_completed))
+        = 17
+        AND SUBSTRING(CONVERT(varbinary(17), @doka_identity_completed), 1, 1) =
+        0x00 EXEC sys.sp_set_session_context @key = N'{ContextKey}',
+        @value = NULL;
+        """;
 
     /// <summary>Explains unknown session ownership without exposing its caller-supplied marker value.</summary>
     private static string ScopeInUseLiteral(

@@ -19,8 +19,11 @@ public sealed class SqlServerSafeMigrationModelManagedDataIntegrationTests : Sql
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.managed_settings (Id int NOT NULL CONSTRAINT PK_managed_settings PRIMARY KEY, "
-            + "Caption nvarchar(80) NOT NULL);",
+            """
+            CREATE TABLE dbo.managed_settings (Id int NOT NULL CONSTRAINT PK_managed_settings
+            PRIMARY KEY,
+            Caption nvarchar(80) NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -61,9 +64,13 @@ public sealed class SqlServerSafeMigrationModelManagedDataIntegrationTests : Sql
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.managed_drift (Id int NOT NULL CONSTRAINT PK_managed_drift PRIMARY KEY, "
-            + "Caption nvarchar(80) NOT NULL); "
-            + "INSERT INTO dbo.managed_drift (Id, Caption) VALUES (1, N'user-edited');",
+            """
+            CREATE TABLE dbo.managed_drift (Id int NOT NULL CONSTRAINT PK_managed_drift
+            PRIMARY KEY,
+            Caption nvarchar(80) NOT NULL); INSERT INTO dbo.managed_drift (Id, Caption)
+            VALUES (1,
+            N'user-edited');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

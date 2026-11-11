@@ -61,8 +61,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var indexes = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{Table}' AND INDEX_NAME = 'ix_generated_scope_result';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}'
+            AND INDEX_NAME = 'ix_generated_scope_result';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -119,8 +123,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var retainedSource = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'left_bound';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{Table}'
+            AND COLUMN_NAME = 'left_bound';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await CountExpectedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
@@ -164,10 +172,14 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (id int NOT NULL PRIMARY KEY, left_bound bigint NOT NULL, "
-            + "right_bound bigint NOT NULL, unrelated int NULL); "
-            + $"CREATE TABLE `{AnalysisScopeSource}` (id int NOT NULL PRIMARY KEY, value int NOT NULL); "
-            + $"INSERT INTO `{AnalysisScopeSource}` (id, value) VALUES (1, 7);",
+            $"""
+            CREATE TABLE `{Table}` (id int NOT NULL PRIMARY KEY,
+            left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL);
+            CREATE TABLE `{AnalysisScopeSource}` (id int NOT NULL PRIMARY KEY,
+            value int NOT NULL); INSERT INTO `{AnalysisScopeSource}` (id, value)
+            VALUES (1,
+            7);
+            """,
             cancellationToken: cancellationToken);
 
         await SeedCaseRowsAsync(connectionString, cancellationToken: cancellationToken);

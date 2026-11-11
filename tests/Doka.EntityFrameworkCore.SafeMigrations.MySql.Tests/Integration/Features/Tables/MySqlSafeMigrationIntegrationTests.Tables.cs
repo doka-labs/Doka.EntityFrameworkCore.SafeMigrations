@@ -93,18 +93,25 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'module_state' "
-                + "AND COLUMN_NAME = 'display_name';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'module_state'
+                AND COLUMN_NAME = 'display_name';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'module_state' "
-                + "AND INDEX_NAME = 'ix_module_state_display_name';",
+                """
+                SELECT COUNT(DISTINCT INDEX_NAME)
+                FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'module_state'
+                AND INDEX_NAME = 'ix_module_state_display_name';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -146,18 +153,25 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
             20,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'existence_shape' "
-                + "AND COLUMN_NAME = 'id';",
+                """
+                SELECT CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'existence_shape'
+                AND COLUMN_NAME = 'id';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'existence_shape' "
-                + "AND COLUMN_NAME = 'Payload';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'existence_shape'
+                AND COLUMN_NAME = 'Payload';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -232,8 +246,10 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
             {
                 await ExecuteSqlAsync(
                     connectionString,
-                    "CREATE TABLE `__LegacyMigrationsHistory` (`MigrationId` varchar(150) NOT NULL); "
-                    + "INSERT INTO `__LegacyMigrationsHistory` VALUES ('legacy-unchanged');",
+                    """
+                    CREATE TABLE `__LegacyMigrationsHistory` (`MigrationId` varchar(150) NOT
+                    NULL); INSERT INTO `__LegacyMigrationsHistory` VALUES ('legacy-unchanged');
+                    """,
                     cancellationToken: CancellationToken.None);
             }
 
@@ -254,9 +270,13 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
 
             var beforeColumnLength = await ScalarIntAsync(
                 connectionString,
-                "SELECT COALESCE(MAX(CHARACTER_MAXIMUM_LENGTH), 0) "
-                + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-                + $"AND TABLE_NAME = '{table}' AND COLUMN_NAME = 'payload';",
+                $"""
+                SELECT COALESCE(MAX(CHARACTER_MAXIMUM_LENGTH), 0)
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = '{table}'
+                AND COLUMN_NAME = 'payload';
+                """,
                 cancellationToken: CancellationToken.None);
 
             var report = await context
@@ -271,9 +291,13 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
                 beforeColumnLength,
                 await ScalarIntAsync(
                     connectionString,
-                    "SELECT COALESCE(MAX(CHARACTER_MAXIMUM_LENGTH), 0) "
-                    + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-                    + $"AND TABLE_NAME = '{table}' AND COLUMN_NAME = 'payload';",
+                    $"""
+                    SELECT COALESCE(MAX(CHARACTER_MAXIMUM_LENGTH), 0)
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME = '{table}'
+                    AND COLUMN_NAME = 'payload';
+                    """,
                     cancellationToken: CancellationToken.None));
 
             var shouldBlock = scenario.Values["column"] == "different" || scenario.Values["index"] == "different";
@@ -300,18 +324,26 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
                 40,
                 await ScalarIntAsync(
                     connectionString,
-                    "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
-                    + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{table}' "
-                    + "AND COLUMN_NAME = 'payload';",
+                    $"""
+                    SELECT CHARACTER_MAXIMUM_LENGTH
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME = '{table}'
+                    AND COLUMN_NAME = 'payload';
+                    """,
                     cancellationToken: CancellationToken.None));
 
             Assert.Equal(
                 1,
                 await ScalarIntAsync(
                     connectionString,
-                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                    + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{table}' "
-                    + $"AND INDEX_NAME = '{index}' AND COLUMN_NAME = 'id';",
+                    $"""
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME = '{table}'
+                    AND INDEX_NAME = '{index}'
+                    AND COLUMN_NAME = 'id';
+                    """,
                     cancellationToken: CancellationToken.None));
         }
     }
@@ -501,9 +533,11 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `strict_unique_substitution` ("
-            + "`id` int NOT NULL, `email` varchar(200) NULL, "
-            + "PRIMARY KEY (`id`), UNIQUE KEY `ux_unknown_shape` (`id`, `email`));",
+            """
+            CREATE TABLE `strict_unique_substitution` (`id` int NOT NULL, `email` varchar(200)
+            NULL,
+            PRIMARY KEY (`id`), UNIQUE KEY `ux_unknown_shape` (`id`, `email`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -556,9 +590,11 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `transition_parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
-            + "CREATE TABLE `transition_children` ("
-            + "`id` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`));",
+            """
+            CREATE TABLE `transition_parents` (`id` int NOT NULL, PRIMARY KEY (`id`));
+            CREATE TABLE `transition_children` (`id` int NOT NULL,
+            `parent_id` int NULL, PRIMARY KEY (`id`));
+            """,
             cancellationToken: CancellationToken.None);
 
         var options = new DbContextOptionsBuilder<StandaloneForeignKeyContext>()
@@ -622,10 +658,12 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
 
         await ExecuteSqlAsync(
             connectionString,
-            "ALTER TABLE `transition_children` DROP FOREIGN KEY `fk_transition_children_parent`; "
-            + "CREATE TABLE `transition_other_parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
-            + "ALTER TABLE `transition_children` ADD CONSTRAINT `fk_transition_children_unexpected` "
-            + "FOREIGN KEY (`parent_id`) REFERENCES `transition_other_parents` (`id`);",
+            """
+            ALTER TABLE `transition_children` DROP FOREIGN KEY `fk_transition_children_parent`;
+            CREATE TABLE `transition_other_parents` (`id` int NOT NULL,
+            PRIMARY KEY (`id`)); ALTER TABLE `transition_children` ADD CONSTRAINT `fk_transition_children_unexpected`
+            FOREIGN KEY (`parent_id`) REFERENCES `transition_other_parents` (`id`);
+            """,
             cancellationToken: CancellationToken.None);
 
         var drift = await runner.AnalyzeAsync(
@@ -645,9 +683,10 @@ public sealed class MySqlTablesIntegrationTests : MySqlSafeMigrationIntegrationT
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `non_unique_alias` ("
-            + "`id` int NOT NULL, `code` varchar(30) NULL, "
-            + "CONSTRAINT `ix_non_unique_alias_code` UNIQUE (`code`));",
+            """
+            CREATE TABLE `non_unique_alias` (`id` int NOT NULL, `code` varchar(30) NULL,
+            CONSTRAINT `ix_non_unique_alias_code` UNIQUE (`code`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

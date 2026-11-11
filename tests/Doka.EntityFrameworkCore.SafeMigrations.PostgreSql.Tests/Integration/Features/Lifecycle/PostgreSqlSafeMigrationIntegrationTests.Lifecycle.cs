@@ -74,9 +74,12 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state' "
-                + "AND column_name = 'payload';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'pipeline_state'
+                AND column_name = 'payload';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -158,9 +161,12 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state' "
-                + "AND column_name = 'payload';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'pipeline_state'
+                AND column_name = 'payload';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -199,9 +205,12 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
 
         var payloadColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM information_schema.columns "
-            + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state' "
-            + "AND column_name = 'payload';",
+            """
+            SELECT COUNT(*) FROM information_schema.columns
+            WHERE table_schema = current_schema()
+            AND table_name = 'pipeline_state'
+            AND column_name = 'payload';
+            """,
             cancellationToken: CancellationToken.None);
 
         var historyRows = await ScalarIntAsync(
@@ -252,17 +261,22 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.tables "
-                + "WHERE table_schema = current_schema() AND table_name = 'analysis_target';",
+                """
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema = current_schema()
+                AND table_name = 'analysis_target';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.tables "
-                + "WHERE table_schema = current_schema() "
-                + "AND table_name = '__ApplicationDbContextMigrationsHistory';",
+                """
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema = current_schema()
+                AND table_name = '__ApplicationDbContextMigrationsHistory';
+                """,
                 cancellationToken: CancellationToken.None));
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -292,9 +306,12 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
 
         var tables = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_class c "
-            + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-            + "WHERE n.nspname = current_schema() AND c.relname = 'pipeline_state';",
+            """
+            SELECT COUNT(*) FROM pg_catalog.pg_class c
+            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = current_schema()
+            AND c.relname = 'pipeline_state';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -325,10 +342,11 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE mixed_customers (id integer PRIMARY KEY);"
-            + "CREATE TABLE mixed_evolution (id integer PRIMARY KEY);"
-            + "INSERT INTO mixed_customers (id) VALUES (7);"
-            + "INSERT INTO mixed_evolution (id) VALUES (1);",
+            """
+            CREATE TABLE mixed_customers (id integer PRIMARY KEY);CREATE TABLE mixed_evolution
+            (id integer PRIMARY KEY);INSERT INTO mixed_customers (id) VALUES (7);INSERT
+            INTO mixed_evolution (id) VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -374,9 +392,12 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'mixed_evolution' "
-                + "AND column_name = 'customer_id';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'mixed_evolution'
+                AND column_name = 'customer_id';
+                """,
                 cancellationToken: CancellationToken.None));
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -402,26 +423,34 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_constraint "
-                + "WHERE conname = 'fk_mixed_evolution_customers_customer_id' AND contype = 'f';",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conname = 'fk_mixed_evolution_customers_customer_id'
+                AND contype = 'f';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'mixed_evolution' "
-                + "AND column_name = 'customer_id' AND column_default IS NULL;",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'mixed_evolution'
+                AND column_name = 'customer_id'
+                AND column_default IS NULL;
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_indexes "
-                + "WHERE schemaname = current_schema() AND tablename = 'mixed_evolution' "
-                + "AND indexname = 'ix_mixed_evolution_customer_id';",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE schemaname = current_schema()
+                AND tablename = 'mixed_evolution'
+                AND indexname = 'ix_mixed_evolution_customer_id';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -442,8 +471,10 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE lifecycle (id integer NOT NULL, old_name character varying(40) NULL); "
-            + "CREATE INDEX ix_lifecycle_old_name ON lifecycle (old_name);",
+            """
+            CREATE TABLE lifecycle (id integer NOT NULL, old_name character varying(40)
+            NULL); CREATE INDEX ix_lifecycle_old_name ON lifecycle (old_name);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -490,8 +521,11 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.tables "
-                + "WHERE table_schema = current_schema() AND table_name = 'renamed_lifecycle';",
+                """
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema = current_schema()
+                AND table_name = 'renamed_lifecycle';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -501,9 +535,11 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE inventory_target (id integer NOT NULL, legacy_column integer NULL); "
-            + "CREATE INDEX ix_inventory_legacy ON inventory_target (legacy_column); "
-            + "CREATE TABLE legacy_extra (id integer NOT NULL);",
+            """
+            CREATE TABLE inventory_target (id integer NOT NULL, legacy_column integer
+            NULL); CREATE INDEX ix_inventory_legacy ON inventory_target (legacy_column);
+            CREATE TABLE legacy_extra (id integer NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -563,10 +599,12 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_class c "
-                + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-                + "WHERE n.nspname = current_schema() "
-                + "AND c.relname IN ('missing_table', 'renamed_table');",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_class c
+                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = current_schema()
+                AND c.relname IN ('missing_table', 'renamed_table');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 }

@@ -215,10 +215,25 @@ All five suites use BenchmarkDotNet 0.15.8 with managed allocation diagnostics
 and native full JSON export. The commands above match CI and release
 qualification: `Dry` exercises every selected case and validates its evidence,
 but is not a statistically meaningful performance comparison. The default
-workloads retain 56 parameterized cases across the five isolated executables.
+workloads include prepared projection, evidence parsing, dependency reuse,
+provider generation and catalog assembly across the five isolated executables.
 Configuration, generated-build, execution, missing/failed case, and missing or
 invalid export failures remain fatal. Measured durations and allocation values
 never determine success; there are no custom benchmark budgets or strict mode.
+
+Functional tests must not assert sampled managed-allocation byte counts,
+including absolute caps, relative comparisons or zero-byte samples. Keep
+decision, SQL/value equality, reference-sharing and post-GC behavior assertions
+in tests; measure allocation performance with the existing BenchmarkDotNet
+executables. SQL payload limits, batch counts and other structural safety
+contracts remain blocking and are not performance measurements.
+
+Allocated-byte counters are diagnostics, not an object census. Background GC
+can retire an unused allocation context incorrectly on affected .NET runtimes,
+producing a positive thread-counter delta even in an allocation-free interval.
+See the [counter limitations and primary sources](docs/support-and-qualification.md#allocation-counter-limitations).
+Do not disable background GC, enter a no-GC region, subtract a guessed allowance
+or add retries to make a functional allocation assertion pass.
 
 The entry point rejects `--resume`: every selected case must execute and
 produce evidence in the current run, rather than reusing completion state.

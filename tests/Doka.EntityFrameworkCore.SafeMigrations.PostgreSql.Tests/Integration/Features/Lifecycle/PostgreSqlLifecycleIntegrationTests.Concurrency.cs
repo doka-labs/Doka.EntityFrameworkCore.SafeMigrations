@@ -12,8 +12,10 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
         var connectionString = await CreateDatabaseAsync(token);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE \"__LegacyMigrationsHistory\" (\"MigrationId\" text NOT NULL); "
-            + "INSERT INTO \"__LegacyMigrationsHistory\" VALUES ('legacy-unchanged');",
+            """
+            CREATE TABLE "__LegacyMigrationsHistory" ("MigrationId" text NOT NULL);
+            INSERT INTO "__LegacyMigrationsHistory" VALUES ('legacy-unchanged');
+            """,
             cancellationToken: token);
 
         var barrier = new MigrationAdmissionBarrier(expectedArrivals: 1);
@@ -142,10 +144,12 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_stat_activity "
-            + "WHERE datname = current_database() AND application_name = @application "
-            + "AND wait_event_type = 'Lock' "
-            + "AND query LIKE '%__ApplicationDbContextMigrationsHistory%');";
+        command.CommandText = """
+        SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_stat_activity WHERE datname =
+        current_database()
+        AND application_name = @application
+        AND wait_event_type = 'Lock' AND query LIKE '%__ApplicationDbContextMigrationsHistory%');
+        """;
 
         command.Parameters.AddWithValue("application", applicationName);
 

@@ -90,19 +90,25 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'module_state' "
-                + "AND column_name = 'display_name';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'module_state'
+                AND column_name = 'display_name';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_class c "
-                + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-                + "WHERE n.nspname = current_schema() "
-                + "AND c.relname = 'ix_module_state_display_name' AND c.relkind = 'i';",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_class c
+                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = current_schema()
+                AND c.relname = 'ix_module_state_display_name'
+                AND c.relkind = 'i';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -144,18 +150,25 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
             20,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT character_maximum_length FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'existence_shape' "
-                + "AND column_name = 'id';",
+                """
+                SELECT character_maximum_length
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'existence_shape'
+                AND column_name = 'id';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'existence_shape' "
-                + "AND column_name = 'Payload';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'existence_shape'
+                AND column_name = 'Payload';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -230,8 +243,10 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
             {
                 await ExecuteSqlAsync(
                     connectionString,
-                    "CREATE TABLE \"__LegacyMigrationsHistory\" (\"MigrationId\" text NOT NULL); "
-                    + "INSERT INTO \"__LegacyMigrationsHistory\" VALUES ('legacy-unchanged');",
+                    """
+                    CREATE TABLE "__LegacyMigrationsHistory" ("MigrationId" text NOT NULL);
+                    INSERT INTO "__LegacyMigrationsHistory" VALUES ('legacy-unchanged');
+                    """,
                     cancellationToken: CancellationToken.None);
             }
 
@@ -258,9 +273,13 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
 
             var beforeColumnLength = await ScalarIntAsync(
                 connectionString,
-                "SELECT COALESCE(MAX(character_maximum_length), 0) "
-                + "FROM information_schema.columns WHERE table_schema = current_schema() "
-                + $"AND table_name = '{table}' AND column_name = 'payload';",
+                $"""
+                SELECT COALESCE(MAX(character_maximum_length), 0)
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = '{table}'
+                AND column_name = 'payload';
+                """,
                 cancellationToken: CancellationToken.None);
 
             var report = await context
@@ -275,9 +294,13 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
                 beforeColumnLength,
                 await ScalarIntAsync(
                     connectionString,
-                    "SELECT COALESCE(MAX(character_maximum_length), 0) "
-                    + "FROM information_schema.columns WHERE table_schema = current_schema() "
-                    + $"AND table_name = '{table}' AND column_name = 'payload';",
+                    $"""
+                    SELECT COALESCE(MAX(character_maximum_length), 0)
+                    FROM information_schema.columns
+                    WHERE table_schema = current_schema()
+                    AND table_name = '{table}'
+                    AND column_name = 'payload';
+                    """,
                     cancellationToken: CancellationToken.None));
 
             var shouldBlock = scenario.Values["column"] == "different" || scenario.Values["index"] == "different";
@@ -304,20 +327,26 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
                 40,
                 await ScalarIntAsync(
                     connectionString,
-                    "SELECT character_maximum_length FROM information_schema.columns "
-                    + $"WHERE table_schema = current_schema() AND table_name = '{table}' "
-                    + "AND column_name = 'payload';",
+                    $"""
+                    SELECT character_maximum_length
+                    FROM information_schema.columns
+                    WHERE table_schema = current_schema()
+                    AND table_name = '{table}'
+                    AND column_name = 'payload';
+                    """,
                     cancellationToken: CancellationToken.None));
 
             Assert.Equal(
                 1,
                 await ScalarIntAsync(
                     connectionString,
-                    "SELECT COUNT(*) FROM pg_catalog.pg_index i "
-                    + "JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid "
-                    + "JOIN pg_catalog.pg_attribute a ON a.attrelid = i.indrelid "
-                    + "AND a.attnum = ANY(i.indkey) "
-                    + $"WHERE c.relname = '{index}' AND a.attname = 'id';",
+                    $"""
+                    SELECT COUNT(*) FROM pg_catalog.pg_index i
+                    JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
+                    JOIN pg_catalog.pg_attribute a ON a.attrelid = i.indrelid
+                    AND a.attnum = ANY(i.indkey) WHERE c.relname = '{index}'
+                    AND a.attname = 'id';
+                    """,
                     cancellationToken: CancellationToken.None));
         }
     }
@@ -394,10 +423,11 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE transition_parents (id integer NOT NULL, "
-            + "CONSTRAINT pk_transition_parents PRIMARY KEY (id)); "
-            + "CREATE TABLE transition_children (id integer NOT NULL, parent_id integer NULL, "
-            + "CONSTRAINT pk_transition_children PRIMARY KEY (id));",
+            """
+            CREATE TABLE transition_parents (id integer NOT NULL, CONSTRAINT pk_transition_parents PRIMARY
+            KEY (id)); CREATE TABLE transition_children (id integer NOT NULL,
+            parent_id integer NULL, CONSTRAINT pk_transition_children PRIMARY KEY (id));
+            """,
             cancellationToken: CancellationToken.None);
 
         var options = new DbContextOptionsBuilder<StandaloneForeignKeyContext>()
@@ -464,11 +494,13 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
 
         await ExecuteSqlAsync(
             connectionString,
-            "ALTER TABLE transition_children DROP CONSTRAINT fk_transition_children_parent; "
-            + "CREATE TABLE transition_other_parents (id integer NOT NULL, "
-            + "CONSTRAINT pk_transition_other_parents PRIMARY KEY (id)); "
-            + "ALTER TABLE transition_children ADD CONSTRAINT fk_transition_children_unexpected "
-            + "FOREIGN KEY (parent_id) REFERENCES transition_other_parents (id);",
+            """
+            ALTER TABLE transition_children DROP CONSTRAINT fk_transition_children_parent; CREATE TABLE
+            transition_other_parents (id integer NOT NULL,
+            CONSTRAINT pk_transition_other_parents PRIMARY KEY (id)); ALTER TABLE transition_children ADD
+            CONSTRAINT fk_transition_children_unexpected FOREIGN KEY (parent_id) REFERENCES
+            transition_other_parents (id);
+            """,
             cancellationToken: CancellationToken.None);
 
         var drift = await runner.AnalyzeAsync(

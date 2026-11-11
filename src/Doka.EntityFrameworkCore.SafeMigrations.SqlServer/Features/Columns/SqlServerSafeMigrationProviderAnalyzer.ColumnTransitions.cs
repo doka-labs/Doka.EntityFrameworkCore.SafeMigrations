@@ -304,17 +304,24 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     private static string BuildTransitionDropIdentitySql(
         int ordinal,
         TransitionDependency requested
-    ) => $"SELECT {ordinal},d.kind,s.name,t.name,d.name FROM sys.schemas s "
-        + "JOIN sys.tables t ON t.schema_id=s.schema_id CROSS APPLY ("
-        + "SELECT N'index' AS kind,i.name FROM sys.indexes i WHERE i.object_id=t.object_id AND i.index_id>0 "
-        + "AND NOT EXISTS(SELECT 1 FROM sys.key_constraints kc WHERE kc.parent_object_id=i.object_id "
-        + "AND kc.unique_index_id=i.index_id) UNION ALL SELECT CASE o.type WHEN N'PK' THEN N'primary' "
-        + "WHEN N'UQ' THEN N'unique' WHEN N'C' THEN N'check' ELSE N'foreign' END,o.name FROM sys.objects o "
-        + "WHERE o.parent_object_id=t.object_id AND o.type IN(N'PK',N'UQ',N'C',N'F')) d "
-        + $"WHERE s.name={KeyLiteral(requested.Schema)} COLLATE CATALOG_DEFAULT "
-        + $"AND t.name={KeyLiteral(requested.Table)} COLLATE CATALOG_DEFAULT "
-        + $"AND d.kind={KeyLiteral(requested.Kind)} COLLATE CATALOG_DEFAULT "
-        + $"AND d.name={KeyLiteral(requested.Name)} COLLATE CATALOG_DEFAULT";
+    ) => $"""
+        SELECT {ordinal},d.kind,s.name,t.name,d.name
+        FROM sys.schemas s JOIN sys.tables t ON t.schema_id=s.schema_id CROSS APPLY
+        (SELECT N'index' AS kind,i.name
+        FROM sys.indexes i WHERE i.object_id=t.object_id
+        AND i.index_id>0 AND NOT EXISTS(SELECT 1
+        FROM sys.key_constraints kc WHERE kc.parent_object_id=i.object_id
+        AND kc.unique_index_id=i.index_id) UNION ALL SELECT CASE o.type
+        WHEN N'PK' THEN N'primary'
+        WHEN N'UQ' THEN N'unique'
+        WHEN N'C' THEN N'check' ELSE N'foreign' END,o.name
+        FROM sys.objects o WHERE o.parent_object_id=t.object_id
+        AND o.type IN(N'PK',N'UQ',N'C',N'F')) d
+        WHERE s.name={KeyLiteral(requested.Schema)} COLLATE CATALOG_DEFAULT
+        AND t.name={KeyLiteral(requested.Table)} COLLATE CATALOG_DEFAULT
+        AND d.kind={KeyLiteral(requested.Kind)} COLLATE CATALOG_DEFAULT
+        AND d.name={KeyLiteral(requested.Name)} COLLATE CATALOG_DEFAULT
+        """;
 
     /// <summary>Publishes one source-bound candidate after classification and dependency capture succeed.</summary>
     /// <param name="operation">The immutable operation whose exact source was classified.</param>
@@ -333,25 +340,44 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     {
         var table = _sqlGenerationHelper.DelimitIdentifier(column.Table, column.Schema ?? "dbo");
         var id = $"OBJECT_ID({KeyLiteral(table)},N'U')";
-        var columnId = $"(SELECT c.column_id FROM sys.columns c WHERE c.object_id={id} "
-            + $"AND c.name={KeyLiteral(column.Definition.Name)})";
+        var columnId = $"""
+            (SELECT c.column_id FROM sys.columns c
+            WHERE c.object_id={id}
+            AND c.name={KeyLiteral(column.Definition.Name)})
+            """;
 
-        return $"SELECT {ordinal}, CASE WHEN kc.type=N'PK' THEN N'primary' WHEN kc.type=N'UQ' THEN N'unique' "
-            + "ELSE N'index' END, s.name,t.name,COALESCE(kc.name,i.name) FROM sys.index_columns ic "
-            + "JOIN sys.indexes i ON i.object_id=ic.object_id AND i.index_id=ic.index_id "
-            + "JOIN sys.tables t ON t.object_id=i.object_id JOIN sys.schemas s ON s.schema_id=t.schema_id "
-            + "LEFT JOIN sys.key_constraints kc ON kc.parent_object_id=i.object_id AND kc.unique_index_id=i.index_id "
-            + $"WHERE ic.object_id={id} AND ic.column_id={columnId} AND i.index_id>0 UNION ALL "
-            + $"SELECT {ordinal},N'check',s.name,t.name,cc.name FROM sys.check_constraints cc "
-            + "JOIN sys.tables t ON t.object_id=cc.parent_object_id JOIN sys.schemas s ON s.schema_id=t.schema_id "
-            + $"WHERE cc.parent_object_id={id} AND (cc.parent_column_id=0 OR cc.parent_column_id={columnId} "
-            + "OR EXISTS(SELECT 1 FROM sys.sql_expression_dependencies d WHERE d.referencing_id=cc.object_id "
-            + $"AND d.referenced_id={id} AND d.referenced_minor_id={columnId})) UNION ALL "
-            + $"SELECT {ordinal},N'foreign',s.name,t.name,fk.name FROM sys.foreign_keys fk "
-            + "JOIN sys.tables t ON t.object_id=fk.parent_object_id JOIN sys.schemas s ON s.schema_id=t.schema_id "
-            + "WHERE EXISTS(SELECT 1 FROM sys.foreign_key_columns fkc WHERE fkc.constraint_object_id=fk.object_id "
-            + $"AND ((fkc.parent_object_id={id} AND fkc.parent_column_id={columnId}) "
-            + $"OR (fkc.referenced_object_id={id} AND fkc.referenced_column_id={columnId})))";
+        return $"""
+            SELECT {ordinal}, CASE WHEN kc.type=N'PK'
+            THEN N'primary'
+            WHEN kc.type=N'UQ' THEN N'unique'
+            ELSE N'index' END, s.name,t.name,COALESCE(kc.name,i.name)
+            FROM sys.index_columns ic JOIN sys.indexes i ON i.object_id=ic.object_id
+            AND i.index_id=ic.index_id JOIN sys.tables t ON t.object_id=i.object_id
+            JOIN sys.schemas s ON s.schema_id=t.schema_id
+            LEFT JOIN sys.key_constraints kc ON kc.parent_object_id=i.object_id
+            AND kc.unique_index_id=i.index_id
+            WHERE ic.object_id={id}
+            AND ic.column_id={columnId}
+            AND i.index_id>0 UNION ALL SELECT {ordinal},N'check',s.name,t.name,cc.name
+            FROM sys.check_constraints cc
+            JOIN sys.tables t ON t.object_id=cc.parent_object_id
+            JOIN sys.schemas s ON s.schema_id=t.schema_id
+            WHERE cc.parent_object_id={id}
+            AND (cc.parent_column_id=0 OR cc.parent_column_id={columnId}
+            OR EXISTS(SELECT 1 FROM sys.sql_expression_dependencies d
+            WHERE d.referencing_id=cc.object_id
+            AND d.referenced_id={id}
+            AND d.referenced_minor_id={columnId})) UNION ALL SELECT
+            {ordinal},N'foreign',s.name,t.name,fk.name
+            FROM sys.foreign_keys fk JOIN sys.tables t ON t.object_id=fk.parent_object_id
+            JOIN sys.schemas s ON s.schema_id=t.schema_id
+            WHERE EXISTS(SELECT 1 FROM sys.foreign_key_columns fkc
+            WHERE fkc.constraint_object_id=fk.object_id
+            AND ((fkc.parent_object_id={id}
+            AND fkc.parent_column_id={columnId})
+            OR (fkc.referenced_object_id={id}
+            AND fkc.referenced_column_id={columnId})))
+            """;
     }
 
     private SafeMigrationProviderAnalysis QualifyProjectedIntegerWidening(

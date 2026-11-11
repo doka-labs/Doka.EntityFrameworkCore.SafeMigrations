@@ -36,8 +36,8 @@ public sealed class SqlServerProjectedSeedKeySqlTests
 
         // Assert
         Assert.NotNull(sql);
-        Assert.Contains("GROUP BY [k0] HAVING COUNT_BIG(*) > 1", sql);
-        Assert.Contains("WHERE (([f0] IS NOT NULL)) GROUP BY [u0] HAVING COUNT_BIG(*) > 1", sql);
+        Assert.Contains("GROUP BY [k0]\nHAVING COUNT_BIG(*) > 1", sql);
+        Assert.Contains("WHERE (([f0] IS NOT NULL)) GROUP\nBY [u0] HAVING COUNT_BIG(*) > 1", sql);
         Assert.DoesNotContain("WHERE (([Code] IS NOT NULL))", sql);
     }
 
@@ -104,8 +104,8 @@ public sealed class SqlServerProjectedSeedKeySqlTests
         Assert.Contains("CAST(2 AS int)", sql);
         Assert.Contains("COLLATE Latin1_General_100_CI_AS", sql);
         Assert.Contains("SELECT DISTINCT", sql);
-        Assert.Contains("GROUP BY [k0] HAVING COUNT_BIG(*) > 1", sql);
-        Assert.Contains("GROUP BY [u0] HAVING COUNT_BIG(*) > 1", sql);
+        Assert.Contains("GROUP BY [k0]\nHAVING COUNT_BIG(*) > 1", sql);
+        Assert.Contains("GROUP\nBY [u0] HAVING COUNT_BIG(*) > 1", sql);
         Assert.DoesNotContain("OBJECT_ID", sql);
     }
 

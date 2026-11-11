@@ -1,9 +1,11 @@
 # PostgreSQL behavior
 
-Version 10.7.1 retains the certified generated/CHECK contracts and native
-generated-source DROP guards introduced in 10.6.0. Review the
-[current upgrade notes](support-and-qualification.md#upgrade-to-1071) for required
-cancellation arguments and dependency floors, and the earlier
+Version 10.7.2 corrects temporal and relation-aware expression/index/collation
+identity while retaining certified generated/CHECK contracts and native
+generated-source DROP guards. Review the
+[current upgrade notes](support-and-qualification.md#upgrade-to-1072) for captured
+numeric-default approvals, required cancellation arguments and dependency floors,
+and the earlier
 [10.6.0 contract changes](support-and-qualification.md#upgrade-to-1060) for
 conditional fingerprint approvals and conservative boundaries.
 
@@ -335,7 +337,9 @@ can use table columns other than its index keys, so those predicate columns
 are independent prerequisites rather than implied by the key definition.
 
 Index keys with explicit collations retain their catalog name and schema
-checks independently of bundled plain-key comparisons. A column key without
+checks independently of bundled plain-key comparisons. An unqualified explicit
+collation must be the visible native binding of that name, not a same-named
+collation in another schema. A column key without
 an explicit collation must use that physical column's default collation,
 including keys with an explicit operator class. Matching compares
 [`pg_index.indcollation`](https://www.postgresql.org/docs/18/catalog-pg-index.html)
@@ -351,6 +355,62 @@ PostgreSQL's ordinary planner constant-folding rules still apply.
 Noncollatable expression keys retain the catalog's zero-collation identity.
 Top-level structured `COLLATE` nodes follow PostgreSQL's stored operand shape;
 nested collations remain part of the expression and use server-resolved names.
+
+Structured functional keys and partial-index predicates use the same bounded
+native deparser forms as CHECK and generated expressions. Owning-relation
+metadata retains PostgreSQL's source-type coercions, including varchar-to-text
+comparisons. Special forms such as `COALESCE` and flattened associative Boolean
+chains are recognized without rewriting arbitrary catalog SQL. Different
+literals, operators, casts, collations and group boundaries remain drift.
+
+## Temporal literal default identity
+
+Temporal defaults preserve the complete provider-rendered value. The comparator
+uses native typed output for the expected literal under the current
+`DateStyle`, `IntervalStyle` and `TimeZone`; it never executes catalog expression
+text or changes those settings. Native omission of zero fractions and interval
+day formatting do not lose literal identity. Nonzero fractions, duration days
+and negative signs cannot match a shorter default with a different value.
+Column precision does not authorize truncating the stored default expression.
+An actual default-only difference still requires explicit `RepairIfSafe`, and
+repair changes future default values rather than rewriting stored rows.
+
+Safe interval defaults use explicit, independently signed day and seconds fields
+at native microsecond precision. This preserves negative time components and
+the distinction between calendar days and elapsed seconds. The same rendering
+is used for Safe table creation, column addition, alteration and default-only
+repair, including generated scripts. Ordinary EF operations remain delegated
+unchanged to Npgsql.
+
+An explicitly mapped `TimeSpan` clock value keeps its native `TIME` source type,
+including PostgreSQL's valid `24:00:00` endpoint. Negative values and durations
+above 24 hours cannot be represented by that native type and are rejected as
+`time_literal_out_of_range` before DDL or model-managed data mutation. Typed
+catalog parameters use the native mapping's complete parameter configuration,
+so preflight does not infer `INTERVAL` for a requested `TIME` binding. Finite
+date endpoints also remain distinct from Npgsql's native infinity defaults.
+
+Generated expressions, CHECKs and expression-index keys share finite native
+output forms for typed temporal constants, including retained precision casts.
+Only a certified provider-owned scalar temporal literal is evaluated while
+constructing that comparison; catalog text and arbitrary outer casts are not.
+Explicit literal types require an actual CLR/store mapping. Genuine EF value
+converters remain supported, while invalid scalar/array mappings and native
+timestamp input errors fail closed before DDL or catalog expression evaluation.
+
+Generated-column, CHECK and expression-index comparisons share these finite
+native temporal constant forms, including retained explicit precision and native
+constant folding. Only provider-owned scalar literals are formatted; stored
+catalog SQL is never executed. Changed fractions, interval fields, offsets and
+infinity values remain different. Existing native DateTime and DateTimeOffset
+mapping rules are validated by Npgsql itself; unsupported values are reported as
+`temporal_literal_value` before a catalog query or DDL can fail unexpectedly.
+
+An explicit store type on `SafeMigrationSql.Literal` requires an actual native
+CLR/store mapping, including configured or automatically composed converters.
+An unrelated fallback cast, or a scalar mapping merely cloned with an array
+type name, is rejected as `temporal_literal_mapping`. This does not narrow the
+separately authored `SafeMigrationSql.Cast` expression contract.
 
 ## Automatic lossless column repair
 

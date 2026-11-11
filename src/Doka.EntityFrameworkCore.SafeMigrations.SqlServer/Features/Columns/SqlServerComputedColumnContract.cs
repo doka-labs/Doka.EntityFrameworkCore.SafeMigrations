@@ -111,7 +111,7 @@ internal static class SqlServerComputedColumnContract
 
         return expression switch
         {
-            SafeMigrationSqlLiteralExpression { Value: not null, StoreType: null } => true,
+            SafeMigrationSqlLiteralExpression { BorrowedValue: not null, StoreType: null } => true,
             SafeMigrationSqlLiteralExpression => IsFiniteBoolean(expression),
             SafeMigrationSqlCastExpression value => IsIntegralBooleanTarget(value.StoreType)
                 && IsFiniteBoolean(value.Operand),
@@ -140,14 +140,14 @@ internal static class SqlServerComputedColumnContract
             {
                 switch (current.Node)
                 {
-                    case SafeMigrationSqlLiteralExpression { Value: null, StoreType: null }
+                    case SafeMigrationSqlLiteralExpression { BorrowedValue: null, StoreType: null }
                         when current.AllowNull:
                     case SafeMigrationSqlNullTestExpression:
                         break;
 
                     case SafeMigrationSqlLiteralExpression literal:
                         if ((literal.StoreType is not null && !IsIntegralBooleanTarget(literal.StoreType))
-                            || literal.Value is not (false
+                            || literal.BorrowedValue is not (false
                                 or true
                                 or (byte)0
                                 or (byte)1
@@ -206,7 +206,10 @@ internal static class SqlServerComputedColumnContract
                         when function.Name.Equals("COALESCE", StringComparison.OrdinalIgnoreCase):
                         if (current.Index == 0
                             && !function.Arguments.Any(static argument
-                                => argument is not SafeMigrationSqlLiteralExpression { Value: null, StoreType: null }))
+                                => argument is not SafeMigrationSqlLiteralExpression
+                                {
+                                    BorrowedValue: null, StoreType: null,
+                                }))
                         {
                             return false;
                         }

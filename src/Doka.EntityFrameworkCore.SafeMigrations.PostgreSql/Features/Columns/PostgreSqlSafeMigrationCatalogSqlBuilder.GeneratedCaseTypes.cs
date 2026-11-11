@@ -227,15 +227,14 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 // proposed source types. Capture the actual builtin OID while
                 // the existing prerequisite fence proves those members exist.
                 predicates.Add(
-                    "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a WHERE a.attrelid "
-                    + "OPERATOR(pg_catalog.=) "
-                    + QualifiedRegclass(owner.Table!, owner.Schema)
-                    + " AND a.attnum OPERATOR(pg_catalog.>) 0 AND NOT a.attisdropped "
-                    + "AND a.attname OPERATOR(pg_catalog.=) "
-                    + Literal(name)
-                    + " AND a.atttypid OPERATOR(pg_catalog.=) ANY(ARRAY["
-                    + GeneratedCaseTypeOids(category)
-                    + "]::pg_catalog.oid[]))");
+                    $"""
+                    EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a
+                    WHERE a.attrelid OPERATOR(pg_catalog.=) {QualifiedRegclass(owner.Table!, owner.Schema)}
+                    AND a.attnum OPERATOR(pg_catalog.>) 0
+                    AND NOT a.attisdropped AND a.attname OPERATOR(pg_catalog.=) {Literal(name)}
+                    AND a.atttypid OPERATOR(pg_catalog.=)
+                    ANY(ARRAY[{GeneratedCaseTypeOids(category)}]::pg_catalog.oid[]))
+                    """);
 
                 if (intent is EnsureColumnIntent addedColumn
                     && RequiresCapturedOperandBinding(addedColumn.Definition)
@@ -246,14 +245,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     // assignment preserves width. Reuse the same exact builtin
                     // OID for live classification and accepted sparse bindings.
                     predicates.Add(
-                        "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a WHERE a.attrelid "
-                        + "OPERATOR(pg_catalog.=) "
-                        + QualifiedRegclass(owner.Table!, owner.Schema)
-                        + " AND a.attname OPERATOR(pg_catalog.=) "
-                        + Literal(name)
-                        + " AND a.atttypid OPERATOR(pg_catalog.=) "
-                        + assignment.ToString(CultureInfo.InvariantCulture)
-                        + ")");
+                        $"""
+                        EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a
+                        WHERE a.attrelid OPERATOR(pg_catalog.=) {QualifiedRegclass(owner.Table!, owner.Schema)}
+                        AND a.attname OPERATOR(pg_catalog.=) {Literal(name)}
+                        AND a.atttypid OPERATOR(pg_catalog.=) {assignment.ToString(CultureInfo.InvariantCulture)})
+                        """);
                 }
             }
 
@@ -265,24 +262,22 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                     // chooses an operator family. Prove the actual pair instead
                     // of independently accepting two unrelated builtin types.
                     predicates.Add(
-                        "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute l "
-                        + "JOIN pg_catalog.pg_attribute r ON r.attrelid OPERATOR(pg_catalog.=) l.attrelid "
-                        + "WHERE l.attrelid OPERATOR(pg_catalog.=) "
-                        + QualifiedRegclass(owner.Table!, owner.Schema)
-                        + " AND l.attnum OPERATOR(pg_catalog.>) 0 AND NOT l.attisdropped "
-                        + "AND r.attnum OPERATOR(pg_catalog.>) 0 AND NOT r.attisdropped "
-                        + "AND l.attname OPERATOR(pg_catalog.=) "
-                        + Literal(left)
-                        + " AND r.attname OPERATOR(pg_catalog.=) "
-                        + Literal(right)
-                        + " AND ((l.atttypid OPERATOR(pg_catalog.=) "
-                        + "ANY(ARRAY[20,21,23,700,701,1700]::pg_catalog.oid[]) "
-                        + "AND r.atttypid OPERATOR(pg_catalog.=) ANY(ARRAY[20,21,23,700,701,1700]::pg_catalog.oid[])) "
-                        + "OR (l.atttypid OPERATOR(pg_catalog.=) ANY(ARRAY[25,1042,1043]::pg_catalog.oid[]) "
-                        + "AND r.atttypid OPERATOR(pg_catalog.=) ANY(ARRAY[25,1042,1043]::pg_catalog.oid[]) "
-                        + "AND l.attcollation OPERATOR(pg_catalog.=) r.attcollation) "
-                        + "OR (l.atttypid OPERATOR(pg_catalog.=) r.atttypid "
-                        + "AND l.atttypid OPERATOR(pg_catalog.=) ANY(ARRAY[16,2950]::pg_catalog.oid[]))))");
+                        $"""
+                        EXISTS (SELECT 1 FROM pg_catalog.pg_attribute l
+                        JOIN pg_catalog.pg_attribute r ON r.attrelid OPERATOR(pg_catalog.=) l.attrelid
+                        WHERE l.attrelid OPERATOR(pg_catalog.=) {QualifiedRegclass(owner.Table!, owner.Schema)}
+                        AND l.attnum OPERATOR(pg_catalog.>) 0
+                        AND NOT l.attisdropped AND r.attnum OPERATOR(pg_catalog.>) 0
+                        AND NOT r.attisdropped AND l.attname OPERATOR(pg_catalog.=) {Literal(left)}
+                        AND r.attname OPERATOR(pg_catalog.=) {Literal(right)}
+                        AND ((l.atttypid OPERATOR(pg_catalog.=) ANY(ARRAY[20,21,23,700,701,1700]::pg_catalog.oid[])
+                        AND r.atttypid OPERATOR(pg_catalog.=) ANY(ARRAY[20,21,23,700,701,1700]::pg_catalog.oid[]))
+                        OR (l.atttypid OPERATOR(pg_catalog.=) ANY(ARRAY[25,1042,1043]::pg_catalog.oid[])
+                        AND r.atttypid OPERATOR(pg_catalog.=) ANY(ARRAY[25,1042,1043]::pg_catalog.oid[])
+                        AND l.attcollation OPERATOR(pg_catalog.=) r.attcollation)
+                        OR (l.atttypid OPERATOR(pg_catalog.=) r.atttypid
+                        AND l.atttypid OPERATOR(pg_catalog.=) ANY(ARRAY[16,2950]::pg_catalog.oid[]))))
+                        """);
                 }
             }
 
@@ -298,13 +293,15 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 // WHY: Equal TEXT OIDs do not resolve incompatible implicit
                 // collations of CASE result branches used by a comparison.
                 predicates.Add(
-                    "(SELECT pg_catalog.count(DISTINCT a.attcollation) FROM pg_catalog.pg_attribute a "
-                    + "WHERE a.attrelid OPERATOR(pg_catalog.=) "
-                    + QualifiedRegclass(owner.Table!, owner.Schema)
-                    + " AND a.attnum OPERATOR(pg_catalog.>) 0 AND NOT a.attisdropped "
-                    + "AND a.attname OPERATOR(pg_catalog.=) ANY(ARRAY["
-                    + string.Join(", ", textInputs.Select(Literal))
-                    + "]::pg_catalog.text[])) OPERATOR(pg_catalog.=) 1");
+                    $"""
+                    (SELECT pg_catalog.count(DISTINCT a.attcollation)
+                    FROM pg_catalog.pg_attribute a
+                    WHERE a.attrelid OPERATOR(pg_catalog.=) {QualifiedRegclass(owner.Table!, owner.Schema)}
+                    AND a.attnum OPERATOR(pg_catalog.>) 0
+                    AND NOT a.attisdropped AND a.attname OPERATOR(pg_catalog.=)
+                    ANY(ARRAY[{string.Join(", ", textInputs.Select(Literal))}]::pg_catalog.text[]))
+                    OPERATOR(pg_catalog.=) 1
+                    """);
             }
         }
 
@@ -325,12 +322,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 + ") AND ("
                 + string.Join(" AND ", predicates)
                 + ")",
-                StateEvaluationGuardFailureExpression = "CASE WHEN EXISTS (SELECT 1 "
-                + "FROM pg_catalog.pg_constraint co WHERE co.conrelid OPERATOR(pg_catalog.=) "
-                + QualifiedRegclass(checkIntent.Definition.Table, checkIntent.Definition.Schema)
-                + " AND co.conname OPERATOR(pg_catalog.=) "
-                + Literal(checkIntent.Definition.Name)
-                + ") THEN 'different' ELSE 'unsupported' END",
+                StateEvaluationGuardFailureExpression = $"""
+                CASE WHEN EXISTS (SELECT 1 FROM pg_catalog.pg_constraint co
+                WHERE co.conrelid OPERATOR(pg_catalog.=) {QualifiedRegclass(
+                    checkIntent.Definition.Table, checkIntent.Definition.Schema)}
+                AND co.conname OPERATOR(pg_catalog.=) {Literal(checkIntent.Definition.Name)})
+                THEN 'different' ELSE 'unsupported' END
+                """,
                 UnsupportedCode = "structured_check_operand_type",
             };
         }
@@ -558,7 +556,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 inputs.Columns.Add((name, expected));
 
                 return true;
-            case SafeMigrationSqlLiteralExpression { Value: null, StoreType: null }:
+            case SafeMigrationSqlLiteralExpression { BorrowedValue: null, StoreType: null }:
                 return true;
             case SafeMigrationSqlLiteralExpression literal:
                 return GeneratedCaseCategoryMatches(InferGeneratedCaseCategory(literal, declared), expected);
@@ -740,16 +738,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                             ? GeneratedCaseColumnCategory(column)
                             : GeneratedCaseCategory.Unknown,
                     SafeMigrationSqlLiteralExpression { StoreType: { } type } => GeneratedCaseStoreCategory(type),
-                    SafeMigrationSqlLiteralExpression { Value: bool } => GeneratedCaseCategory.Boolean,
+                    SafeMigrationSqlLiteralExpression { BorrowedValue: bool } => GeneratedCaseCategory.Boolean,
                     SafeMigrationSqlLiteralExpression
                         {
-                            Value: byte or sbyte or short or ushort or int or uint or long or ulong,
+                            BorrowedValue: byte or sbyte or short or ushort or int or uint or long or ulong,
                         }
                         => GeneratedCaseCategory.Integer,
-                    SafeMigrationSqlLiteralExpression { Value: decimal or float or double }
+                    SafeMigrationSqlLiteralExpression { BorrowedValue: decimal or float or double }
                         => GeneratedCaseCategory.Number,
-                    SafeMigrationSqlLiteralExpression { Value: string } => GeneratedCaseCategory.Text,
-                    SafeMigrationSqlLiteralExpression { Value: Guid } => GeneratedCaseCategory.Uuid,
+                    SafeMigrationSqlLiteralExpression { BorrowedValue: string } => GeneratedCaseCategory.Text,
+                    SafeMigrationSqlLiteralExpression { BorrowedValue: Guid } => GeneratedCaseCategory.Uuid,
                     SafeMigrationSqlNullTestExpression => GeneratedCaseCategory.Boolean,
                     SafeMigrationSqlUnaryExpression { Operator: SafeMigrationSqlUnaryOperator.Not }
                         => GeneratedCaseCategory.Boolean,

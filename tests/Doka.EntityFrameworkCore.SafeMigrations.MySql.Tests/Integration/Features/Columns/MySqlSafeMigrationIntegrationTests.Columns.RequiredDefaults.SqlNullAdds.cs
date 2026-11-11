@@ -90,14 +90,22 @@ public sealed partial class MySqlColumnsRequiredDefaultsSqlNullAddsIntegrationTe
 
         var targetColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'sql_null_add_items' AND COLUMN_NAME = 'value';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'sql_null_add_items'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var requiredColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'sql_null_add_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'sql_null_add_items'
+            AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -236,14 +244,22 @@ public sealed partial class MySqlColumnsRequiredDefaultsSqlNullAddsIntegrationTe
 
         var ownerExists = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'sql_null_add_items' AND TABLE_TYPE = 'BASE TABLE';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'sql_null_add_items'
+            AND TABLE_TYPE = 'BASE TABLE';
+            """,
             cancellationToken: CancellationToken.None);
 
         var targetColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'sql_null_add_items' AND COLUMN_NAME = 'value';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'sql_null_add_items'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -343,8 +359,12 @@ public sealed partial class MySqlColumnsRequiredDefaultsSqlNullAddsIntegrationTe
 
         var targetColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'sql_null_add_items' AND COLUMN_NAME = 'value';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'sql_null_add_items'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(

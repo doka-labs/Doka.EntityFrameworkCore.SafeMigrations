@@ -74,9 +74,9 @@ public sealed class SqlServerGuardScopeAllocationTests
         Assert.Equal(original, SqlServerGuardedSqlTestContract.DecodeScope(scoped));
     }
 
-    /// <summary>Allocates less than mutable buffer expansion while preserving the identical final SQL.</summary>
+    /// <summary>Preserves identical dense guard SQL while leaving every source buffer unchanged.</summary>
     [Fact]
-    public void ScopeBuffer_DenseGuardAllocatesLessThanExpandedMutableWrapper()
+    public void ScopeBuffer_DenseGuardMatchesExpandedMutableWrapper()
     {
         // Arrange
         const int operationCount = 64;
@@ -91,24 +91,18 @@ public sealed class SqlServerGuardScopeAllocationTests
             .Select(_ => new StringBuilder(body))
             .ToArray();
 
-        Func<int, string> renderImmutable = index =>
-            SqlServerSafeMigrationsSqlGenerator.BuildIsolatedGuardSql(immutableBuffers[index]);
-
-        Func<int, string> renderMutable = index => RenderExpandedMutableScope(mutableBuffers[index]);
-
-        // WHY: Warm the same paths before counting managed allocations. This
-        // compares deterministic buffer work, not machine-specific timings.
-        SqlServerSafeMigrationsSqlGenerator.BuildIsolatedGuardSql(new StringBuilder(body));
-        RenderExpandedMutableScope(new StringBuilder(body));
-
         // Act
-        var immutable = MeasureAllocations(renderImmutable, operationCount);
-        var mutable = MeasureAllocations(renderMutable, operationCount);
+        var immutable = immutableBuffers
+            .Select(SqlServerSafeMigrationsSqlGenerator.BuildIsolatedGuardSql)
+            .ToArray();
+
+        var mutable = mutableBuffers
+            .Select(RenderExpandedMutableScope)
+            .ToArray();
 
         // Assert
-        Assert.Equal(mutable.Sql, immutable.Sql);
-        Assert.Equal(ReferenceScope(body), immutable.Sql);
-        Assert.InRange(immutable.Bytes, 1, mutable.Bytes - 1);
+        Assert.Equal(mutable, immutable);
+        Assert.All(immutable, sql => Assert.Equal(ReferenceScope(body), sql));
         Assert.All(immutableBuffers, buffer => Assert.Equal(body, buffer.ToString()));
     }
 
@@ -147,7 +141,7 @@ public sealed class SqlServerGuardScopeAllocationTests
         return chunks.ToArray();
     }
 
-    /// <summary>Retains the former wrapper as the allocation comparison without modifying product budgets.</summary>
+    /// <summary>Retains the former wrapper as an independent SQL equivalence control.</summary>
     private static string RenderExpandedMutableScope(
         StringBuilder body
     ) => body
@@ -155,22 +149,4 @@ public sealed class SqlServerGuardScopeAllocationTests
         .Insert(0, "EXEC sys.sp_executesql N'")
         .Append("';\n")
         .ToString();
-
-    /// <summary>Counts only rendering allocations on the executing test thread.</summary>
-    private static (long Bytes, string Sql) MeasureAllocations(
-        Func<int, string> render,
-        int count
-    )
-    {
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        var sql = string.Empty;
-        for (var index = 0; index < count; index++)
-        {
-            sql = render(index);
-        }
-
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-
-        return (allocated, sql);
-    }
 }

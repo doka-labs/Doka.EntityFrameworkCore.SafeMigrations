@@ -15,20 +15,13 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE ROLE "
-            + role
-            + "; "
-            + "GRANT USAGE, CREATE ON SCHEMA public TO "
-            + role
-            + "; "
-            + "CREATE TABLE drop_lock_permissions(source integer, unrelated integer); "
-            + "INSERT INTO drop_lock_permissions VALUES(2,9); "
-            + "ALTER TABLE drop_lock_permissions OWNER TO "
-            + role
-            + "; "
-            + "REVOKE ALL ON drop_lock_permissions FROM "
-            + role
-            + ";",
+            $"""
+            CREATE ROLE {role}; GRANT USAGE, CREATE ON SCHEMA public TO {role}; CREATE TABLE
+            drop_lock_permissions(source integer,
+            unrelated integer); INSERT INTO drop_lock_permissions VALUES(2,9); ALTER TABLE
+            drop_lock_permissions OWNER TO {role}; REVOKE ALL ON drop_lock_permissions
+            FROM {role};
+            """,
             cancellationToken: CancellationToken.None);
 
         try
@@ -74,12 +67,11 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "ALTER TABLE drop_lock_permissions OWNER TO postgres; "
-                + "REVOKE USAGE, CREATE ON SCHEMA public FROM "
-                + role
-                + "; DROP ROLE "
-                + role
-                + ";",
+                $"""
+                ALTER TABLE drop_lock_permissions OWNER TO postgres; REVOKE USAGE, CREATE
+                ON SCHEMA public
+                FROM {role}; DROP ROLE {role};
+                """,
                 cancellationToken: CancellationToken.None);
         }
     }
@@ -97,19 +89,13 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE ROLE "
-            + role
-            + "; "
-            + "GRANT USAGE, CREATE ON SCHEMA public TO "
-            + role
-            + "; "
-            + "CREATE TABLE drop_lock_permissions(source integer, unrelated integer); "
-            + "ALTER TABLE drop_lock_permissions OWNER TO "
-            + role
-            + "; "
-            + "REVOKE ALL ON drop_lock_permissions FROM "
-            + role
-            + ";",
+            $"""
+            CREATE ROLE {role}; GRANT USAGE, CREATE ON SCHEMA public TO {role}; CREATE TABLE
+            drop_lock_permissions(source integer,
+            unrelated integer); ALTER TABLE drop_lock_permissions OWNER TO {role}; REVOKE ALL ON
+            drop_lock_permissions
+            FROM {role};
+            """,
             cancellationToken: CancellationToken.None);
 
         try
@@ -135,20 +121,21 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
                 1,
                 await ScalarIntAsync(
                     connectionString,
-                    "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='drop_lock_permissions'::regclass "
-                    + "AND attnum>0 AND NOT attisdropped;",
+                    """
+                    SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='drop_lock_permissions'::regclass
+                    AND attnum>0 AND NOT attisdropped;
+                    """,
                     cancellationToken: CancellationToken.None));
         }
         finally
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "ALTER TABLE drop_lock_permissions OWNER TO postgres; "
-                + "REVOKE USAGE, CREATE ON SCHEMA public FROM "
-                + role
-                + "; DROP ROLE "
-                + role
-                + ";",
+                $"""
+                ALTER TABLE drop_lock_permissions OWNER TO postgres; REVOKE USAGE, CREATE
+                ON SCHEMA public
+                FROM {role}; DROP ROLE {role};
+                """,
                 cancellationToken: CancellationToken.None);
         }
     }
@@ -177,8 +164,10 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
         // Act
         await using var transaction = await reader.BeginTransactionAsync(isolation);
         await using var count = reader.CreateCommand();
-        count.CommandText = "SELECT COUNT(*) FROM pg_catalog.pg_attribute "
-            + "WHERE attrelid='drop_snapshot'::regclass AND attgenerated<>'' AND NOT attisdropped;";
+        count.CommandText = """
+        SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='drop_snapshot'::regclass
+        AND attgenerated<>'' AND NOT attisdropped;
+        """;
 
         var initial = Convert.ToInt32(await count.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
         await ExecuteSqlAsync(
@@ -199,8 +188,10 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='drop_snapshot'::regclass "
-                + "AND attgenerated<>'' AND NOT attisdropped;",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='drop_snapshot'::regclass
+                AND attgenerated<>'' AND NOT attisdropped;
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -245,9 +236,11 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
 
         var exclusive = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_locks WHERE pid="
-            + processId.ToString(CultureInfo.InvariantCulture)
-            + " AND relation='drop_snapshot'::regclass AND mode='AccessExclusiveLock';",
+            $"""
+            SELECT COUNT(*) FROM pg_catalog.pg_locks WHERE pid={processId.ToString(CultureInfo.InvariantCulture)}
+            AND relation='drop_snapshot'::regclass
+            AND mode='AccessExclusiveLock';
+            """,
             cancellationToken: CancellationToken.None);
 
         await transaction.RollbackAsync();

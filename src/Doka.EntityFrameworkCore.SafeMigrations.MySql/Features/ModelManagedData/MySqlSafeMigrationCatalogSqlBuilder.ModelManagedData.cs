@@ -21,28 +21,46 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var uniqueCollision = UniqueCollision(intent, intent.UniqueKeys, relation, "t");
         var engineUnsupported = EngineUnsupported(intent.Table);
-        var state = "(SELECT CASE "
-            + $"WHEN {engineUnsupported} THEN 'unsupported' "
-            + $"WHEN COALESCE(SUM(({found}) AND NOT ({targetMatch})), 0) > 0 THEN 'different' "
-            + $"WHEN {uniqueCollision} THEN 'data_blocked' "
-            + $"WHEN COALESCE(SUM(NOT ({found})), 0) > 0 THEN 'missing' "
-            + "ELSE 'matching' END "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch})";
+        var state = $"""
+            (SELECT CASE WHEN {engineUnsupported}
+            THEN 'unsupported'
+            WHEN COALESCE(SUM(({found})
+            AND NOT ({targetMatch})), 0) > 0
+            THEN 'different'
+            WHEN {uniqueCollision}
+            THEN 'data_blocked'
+            WHEN COALESCE(SUM(NOT ({found})), 0) > 0
+            THEN 'missing' ELSE 'matching' END
+            FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
-        var postcondition = "NOT EXISTS (SELECT 1 "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch} "
-            + $"WHERE NOT ({found}) OR NOT ({targetMatch}))";
+        var postcondition = $"""
+            NOT EXISTS (SELECT 1 FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch}
+            WHERE NOT ({found})
+            OR NOT ({targetMatch}))
+            """;
 
         var insertColumns = string.Join(", ", intent.Columns.Select(Delimited));
         var insertValues = string.Join(", ", ColumnAliases(intent.Columns.Count, "doka_expected", "t"));
-        var mutation = $"INSERT INTO {table} ({insertColumns}) "
-            + $"SELECT {insertValues} FROM {relation} "
-            + $"WHERE NOT EXISTS (SELECT 1 FROM {table} AS doka_actual WHERE {keyMatch})";
+        var mutation = $"""
+            INSERT INTO {table} ({insertColumns}) SELECT
+            {insertValues}
+            FROM {relation}
+            WHERE NOT EXISTS (SELECT 1 FROM {table} AS doka_actual
+            WHERE {keyMatch})
+            """;
 
-        var rowEvidence = $"(SELECT GROUP_CONCAT(CASE WHEN NOT ({found}) THEN '0' "
-            + $"WHEN ({targetMatch}) THEN '2' ELSE '3' END "
-            + $"ORDER BY doka_expected.{Delimited("r")} SEPARATOR '') "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch})";
+        var rowEvidence = $"""
+            (SELECT GROUP_CONCAT(CASE WHEN NOT ({found})
+            THEN '0'
+            WHEN ({targetMatch})
+            THEN '2' ELSE '3' END ORDER BY doka_expected.{Delimited("r")}
+            SEPARATOR '')
+            FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
         return Plan(state, postcondition) with
         {
@@ -84,31 +102,52 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var uniqueCollision = UniqueCollision(intent, intent.UniqueKeys, relation, "n");
         var engineUnsupported = EngineUnsupported(intent.Table);
-        var state = "(SELECT CASE "
-            + $"WHEN {engineUnsupported} THEN 'unsupported' "
-            + $"WHEN COALESCE(SUM(NOT ({found})), 0) > 0 THEN 'prerequisite_missing' "
-            + $"WHEN COALESCE(SUM(NOT ({sourceMatch}) AND NOT ({targetMatch})), 0) > 0 THEN 'different' "
-            + $"WHEN {uniqueCollision} THEN 'data_blocked' "
-            + $"WHEN COALESCE(SUM(NOT ({targetMatch})), 0) = 0 THEN 'matching' "
-            + "ELSE 'transition_ready' END "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch})";
+        var state = $"""
+            (SELECT CASE WHEN {engineUnsupported}
+            THEN 'unsupported'
+            WHEN COALESCE(SUM(NOT ({found})), 0) > 0
+            THEN 'prerequisite_missing'
+            WHEN COALESCE(SUM(NOT ({sourceMatch})
+            AND NOT ({targetMatch})), 0) > 0
+            THEN 'different'
+            WHEN {uniqueCollision}
+            THEN 'data_blocked'
+            WHEN COALESCE(SUM(NOT ({targetMatch})), 0) = 0
+            THEN 'matching' ELSE 'transition_ready' END
+            FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
-        var postcondition = "NOT EXISTS (SELECT 1 "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch} "
-            + $"WHERE NOT ({found}) OR NOT ({targetMatch}))";
+        var postcondition = $"""
+            NOT EXISTS (SELECT 1 FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch}
+            WHERE NOT ({found})
+            OR NOT ({targetMatch}))
+            """;
 
         var assignments = string.Join(
             ", ",
             intent.Columns.Select((column, ordinal) =>
                 $"doka_actual.{Delimited(column)} = doka_expected.{Delimited($"n{ordinal}")}"));
 
-        var mutation = $"UPDATE {table} AS doka_actual JOIN {relation} ON {keyMatch} "
-            + $"SET {assignments} WHERE ({sourceMatch}) AND NOT ({targetMatch})";
+        var mutation = $"""
+            UPDATE {table} AS doka_actual
+            JOIN {relation} ON {keyMatch} SET {assignments}
+            WHERE ({sourceMatch})
+            AND NOT ({targetMatch})
+            """;
 
-        var rowEvidence = $"(SELECT GROUP_CONCAT(CASE WHEN NOT ({found}) THEN '0' "
-            + $"WHEN ({targetMatch}) THEN '2' WHEN ({sourceMatch}) THEN '1' ELSE '3' END "
-            + $"ORDER BY doka_expected.{Delimited("r")} SEPARATOR '') "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch})";
+        var rowEvidence = $"""
+            (SELECT GROUP_CONCAT(CASE WHEN NOT ({found})
+            THEN '0'
+            WHEN ({targetMatch})
+            THEN '2'
+            WHEN ({sourceMatch})
+            THEN '1' ELSE '3' END ORDER BY doka_expected.{Delimited("r")}
+            SEPARATOR '')
+            FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
         return Plan(state, postcondition) with
         {
@@ -139,25 +178,43 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var dependencyExists = DependencyExists(intent, relation);
         var unmodeledDependency = UnmodeledIncomingForeignKey(intent);
         var engineUnsupported = EngineUnsupported(intent.Table);
-        var state = "(SELECT CASE "
-            + $"WHEN {engineUnsupported} THEN 'unsupported' "
-            + $"WHEN {unmodeledDependency} THEN 'unsupported' "
-            + $"WHEN COALESCE(SUM(({found}) AND NOT ({sourceMatch})), 0) > 0 THEN 'different' "
-            + $"WHEN {dependencyExists} THEN 'data_blocked' "
-            + $"WHEN COALESCE(SUM({found}), 0) = 0 THEN 'missing' "
-            + "ELSE 'transition_ready' END "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch})";
+        var state = $"""
+            (SELECT CASE WHEN {engineUnsupported}
+            THEN 'unsupported'
+            WHEN {unmodeledDependency}
+            THEN 'unsupported'
+            WHEN COALESCE(SUM(({found})
+            AND NOT ({sourceMatch})), 0) > 0
+            THEN 'different'
+            WHEN {dependencyExists}
+            THEN 'data_blocked'
+            WHEN COALESCE(SUM({found}), 0) = 0
+            THEN 'missing' ELSE 'transition_ready' END
+            FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
-        var postcondition = "NOT EXISTS (SELECT 1 "
-            + $"FROM {relation} JOIN {table} AS doka_actual ON {keyMatch})";
+        var postcondition = $"""
+            NOT EXISTS (SELECT 1 FROM {relation}
+            JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
-        var mutation = $"DELETE doka_actual FROM {table} AS doka_actual "
-            + $"JOIN {relation} ON {keyMatch} WHERE ({sourceMatch}) AND NOT ({dependencyExists})";
+        var mutation = $"""
+            DELETE doka_actual FROM {table} AS doka_actual
+            JOIN {relation} ON {keyMatch}
+            WHERE ({sourceMatch})
+            AND NOT ({dependencyExists})
+            """;
 
-        var rowEvidence = $"(SELECT GROUP_CONCAT(CASE WHEN NOT ({found}) THEN '0' "
-            + $"WHEN ({sourceMatch}) THEN '1' ELSE '3' END "
-            + $"ORDER BY doka_expected.{Delimited("r")} SEPARATOR '') "
-            + $"FROM {relation} LEFT JOIN {table} AS doka_actual ON {keyMatch})";
+        var rowEvidence = $"""
+            (SELECT GROUP_CONCAT(CASE WHEN NOT ({found})
+            THEN '0'
+            WHEN ({sourceMatch})
+            THEN '1' ELSE '3' END ORDER BY doka_expected.{Delimited("r")}
+            SEPARATOR '')
+            FROM {relation}
+            LEFT JOIN {table} AS doka_actual ON {keyMatch})
+            """;
 
         return Plan(state, postcondition) with
         {
@@ -340,9 +397,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
             var sameKey = KeyMatch(intent, "doka_conflict", "doka_expected");
 
-            return $"EXISTS (SELECT 1 FROM {relation} "
-                + $"JOIN {Delimited(intent.Table, intent.Schema)} AS doka_conflict "
-                + $"ON {uniqueMatch} WHERE ({nonNullTarget}) AND NOT ({sameKey}))";
+            return $"""
+                EXISTS (SELECT 1 FROM {relation}
+                JOIN {Delimited(intent.Table, intent.Schema)} AS doka_conflict ON {uniqueMatch}
+                WHERE ({nonNullTarget})
+                AND NOT ({sameKey}))
+                """;
         });
 
         return $"({string.Join(" OR ", collisions)})";
@@ -370,9 +430,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                         + $"doka_expected.{Delimited($"o{principalOrdinal}")}";
                 }));
 
-            return $"EXISTS (SELECT 1 FROM {relation} "
-                + $"JOIN {Delimited(foreignKey.Table, foreignKey.Schema)} AS doka_dependent "
-                + $"ON {match})";
+            return $"""
+                EXISTS (SELECT 1 FROM {relation}
+                JOIN {Delimited(foreignKey.Table, foreignKey.Schema)} AS doka_dependent ON {match})
+                """;
         });
 
         return $"({string.Join(" OR ", dependencies)})";
@@ -400,8 +461,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                         + $"doka_expected.{Delimited($"o{principalOrdinal}")}";
                 }));
 
-            return $"CAST((SELECT COUNT(*) FROM {relation} "
-                + $"JOIN {Delimited(foreignKey.Table, foreignKey.Schema)} AS doka_dependent ON {match}) AS CHAR)";
+            return $"""
+                CAST((SELECT COUNT(*) FROM {relation}
+                JOIN {Delimited(foreignKey.Table, foreignKey.Schema)} AS doka_dependent ON {match})
+                AS CHAR)
+                """;
         });
 
         return $"CONCAT_WS(',', {string.Join(", ", counts)})";
@@ -440,19 +504,21 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // A live incoming FK outside the source-frozen model cannot be guarded
         // by a statically rendered delete. Reject the operation before its
         // referential action can cascade, null, or default dependent rows.
-        return "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu "
-            + $"WHERE kcu.REFERENCED_TABLE_SCHEMA = {principalSchema} "
-            + $"AND kcu.REFERENCED_TABLE_NAME = {Literal(intent.Table)} "
-            + "GROUP BY kcu.CONSTRAINT_SCHEMA, kcu.TABLE_SCHEMA, "
-            + "kcu.TABLE_NAME, kcu.CONSTRAINT_NAME "
-            + $"HAVING NOT ({modeled}))";
+        return $"""
+            EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+            WHERE kcu.REFERENCED_TABLE_SCHEMA = {principalSchema}
+            AND kcu.REFERENCED_TABLE_NAME = {Literal(intent.Table)} GROUP BY kcu.CONSTRAINT_SCHEMA,
+            kcu.TABLE_SCHEMA, kcu.TABLE_NAME, kcu.CONSTRAINT_NAME HAVING NOT ({modeled}))
+            """;
     }
 
     private string EngineUnsupported(
         string table
-    ) => "COALESCE((SELECT UPPER(t.ENGINE) FROM INFORMATION_SCHEMA.TABLES t "
-        + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(table)} "
-        + "AND t.TABLE_TYPE = 'BASE TABLE'), '') <> 'INNODB'";
+    ) => $"""
+        COALESCE((SELECT UPPER(t.ENGINE) FROM INFORMATION_SCHEMA.TABLES t
+        WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(table)}
+        AND t.TABLE_TYPE = 'BASE TABLE'), '') <> 'INNODB'
+        """;
 
     private static int ColumnOrdinal(
         IReadOnlyList<string> columns,

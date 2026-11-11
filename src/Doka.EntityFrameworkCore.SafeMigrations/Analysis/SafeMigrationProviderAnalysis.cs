@@ -48,19 +48,30 @@ public sealed class SafeMigrationProviderAnalysis
         IEnumerable<SafeMigrationFacetDifference>? differences
     )
     {
-        if (!Enum.IsDefined(observedState))
+        // WHY: Enum.IsDefined reloads weak runtime metadata after GC (752 bytes for these three
+        // enums in the constructor probe). Explicit membership keeps validation cache-independent;
+        // the exhaustive enum tests detect newly declared values without widening accepted integers.
+        if (observedState is not (SafeMigrationObservedState.Missing
+            or SafeMigrationObservedState.Matching
+            or SafeMigrationObservedState.Different
+            or SafeMigrationObservedState.Unsupported
+            or SafeMigrationObservedState.DataBlocked
+            or SafeMigrationObservedState.PrerequisiteMissing
+            or SafeMigrationObservedState.TransitionReady))
         {
             throw new ArgumentOutOfRangeException(nameof(observedState));
         }
 
-        if (!Enum.IsDefined(repairCapability))
+        if (repairCapability is not (SafeMigrationRepairCapability.None or SafeMigrationRepairCapability.Safe))
         {
             throw new ArgumentOutOfRangeException(nameof(repairCapability));
         }
 
         ArgumentException.ThrowIfNullOrWhiteSpace(code);
 
-        if (!Enum.IsDefined(operationalImpact))
+        if (operationalImpact is not (SafeMigrationOperationalImpact.NotApplicable
+            or SafeMigrationOperationalImpact.TableRewritePossible
+            or SafeMigrationOperationalImpact.Unknown))
         {
             throw new ArgumentOutOfRangeException(nameof(operationalImpact));
         }
@@ -92,6 +103,9 @@ public sealed class SafeMigrationProviderAnalysis
     public IReadOnlyList<SafeMigrationFacetDifference> Differences { get; private set; }
 
     /// <summary>Gets whether accepted projection still requires a live row-safety proof.</summary>
+
+    // WHY: Diagnostic enrichment updates the cloned backing field without widening the init-only contract.
+    // ReSharper disable once ConvertToAutoPropertyWhenPossible
     internal bool RequiresLiveDataProof
     {
         get => _requiresLiveDataProof;
@@ -242,7 +256,9 @@ public sealed class SafeMigrationProviderAnalysis
     }
 
     /// <summary>Retains exact native endpoint and key layout after bounded nullable-only qualification.</summary>
-    /// <returns>A separate analysis retaining all source evidence and both physical preservation certificates.</returns>
+    /// <returns>
+    /// A separate analysis retaining all source evidence and both physical preservation certificates.
+    /// </returns>
     internal SafeMigrationProviderAnalysis WithRepairPreservesIntrinsicColumnLayout()
     {
         var copy = (SafeMigrationProviderAnalysis)MemberwiseClone();

@@ -3,6 +3,44 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// <summary>Verifies native source roles independently from the portable SQL Server Boolean renderer.</summary>
 public sealed class SqlServerSourceExpressionRoleTests
 {
+    /// <summary>Captured function delimiters cannot silently become an unquoted builtin default.</summary>
+    /// <param name="sql">The authored default function spelling.</param>
+    /// <param name="unsupported">Whether native function identity is outside the supported capture contract.</param>
+    [Theory]
+    [InlineData("COALESCE(1,2)", false)]
+    [InlineData("[COALESCE](1,2)", true)]
+    [InlineData("\"COALESCE\"(1,2)", true)]
+    [InlineData("`COALESCE`(1,2)", true)]
+    public void CapturedDefaultDoesNotEraseFunctionQuoteRoles(
+        string sql,
+        bool unsupported
+    )
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(
+            "Server=localhost;Database=default_roles;Integrated Security=true;");
+
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
+
+        var definition = SafeMigrationExpectedDefinitionFactory.From(new AddColumnOperation
+        {
+            Name = "value",
+            Table = "default_roles",
+            ClrType = typeof(int),
+            ColumnType = "int",
+            IsNullable = false,
+            DefaultValueSql = sql,
+        });
+
+        // Act
+        var plan = catalog.Build(new SafeMigrationOperation(new EnsureColumnIntent("default_roles", definition),
+            SafeMigrationPolicy.ThrowIfDifferent));
+
+        // Assert
+        Assert.Equal(unsupported, plan.IsStaticallyUnsupported);
+    }
+
     /// <summary>Explicit raw empty-only CHECKs do not reinterpret unknown function type arguments as columns.</summary>
     [Fact]
     public void ExplicitRawCheckKeepsUnknownTypeArgumentsOutsideColumnProofs()

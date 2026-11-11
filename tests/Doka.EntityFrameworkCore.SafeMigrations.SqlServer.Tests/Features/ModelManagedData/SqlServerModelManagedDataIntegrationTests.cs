@@ -22,10 +22,12 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.identity_roles (Id int IDENTITY(1,1) NOT NULL "
-            + "CONSTRAINT PK_identity_roles PRIMARY KEY, Caption nvarchar(80) NOT NULL); "
-            + "CREATE TABLE dbo.identity_probe (Id int IDENTITY(1,1) NOT NULL "
-            + "CONSTRAINT PK_identity_probe PRIMARY KEY);",
+            """
+            CREATE TABLE dbo.identity_roles (Id int IDENTITY(1,1) NOT NULL CONSTRAINT
+            PK_identity_roles PRIMARY KEY,
+            Caption nvarchar(80) NOT NULL); CREATE TABLE dbo.identity_probe (Id int
+            IDENTITY(1,1) NOT NULL CONSTRAINT PK_identity_probe PRIMARY KEY);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -44,9 +46,10 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync(
-            "SET IDENTITY_INSERT dbo.identity_probe ON; "
-            + "INSERT INTO dbo.identity_probe (Id) VALUES (11); "
-            + "SET IDENTITY_INSERT dbo.identity_probe OFF;");
+            """
+            SET IDENTITY_INSERT dbo.identity_probe ON; INSERT INTO dbo.identity_probe
+            (Id) VALUES (11); SET IDENTITY_INSERT dbo.identity_probe OFF;
+            """);
 
         var count = await ScalarIntAsync(
             connectionString,
@@ -75,11 +78,13 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.identity_reject (Id int IDENTITY(1,1) NOT NULL "
-            + "CONSTRAINT PK_identity_reject PRIMARY KEY, Caption nvarchar(80) NOT NULL "
-            + "CONSTRAINT CK_identity_reject_Caption CHECK (Caption <> N'bad')); "
-            + "CREATE TABLE dbo.identity_probe (Id int IDENTITY(1,1) NOT NULL "
-            + "CONSTRAINT PK_identity_probe PRIMARY KEY);",
+            """
+            CREATE TABLE dbo.identity_reject (Id int IDENTITY(1,1) NOT NULL CONSTRAINT
+            PK_identity_reject PRIMARY KEY,
+            Caption nvarchar(80) NOT NULL CONSTRAINT CK_identity_reject_Caption CHECK
+            (Caption <> N'bad')); CREATE TABLE dbo.identity_probe (Id int IDENTITY(1,1)
+            NOT NULL CONSTRAINT PK_identity_probe PRIMARY KEY);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -101,9 +106,10 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
             cancellationToken: CancellationToken.None));
 
         await context.Database.ExecuteSqlRawAsync(
-            "SET IDENTITY_INSERT dbo.identity_probe ON; "
-            + "INSERT INTO dbo.identity_probe (Id) VALUES (11); "
-            + "SET IDENTITY_INSERT dbo.identity_probe OFF;");
+            """
+            SET IDENTITY_INSERT dbo.identity_probe ON; INSERT INTO dbo.identity_probe
+            (Id) VALUES (11); SET IDENTITY_INSERT dbo.identity_probe OFF;
+            """);
 
         var rejectedCount = await ScalarIntAsync(
             connectionString,
@@ -133,9 +139,13 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.collated_roles (Id int NOT NULL CONSTRAINT PK_collated_roles PRIMARY KEY, "
-            + "Caption nvarchar(80) COLLATE Latin1_General_100_CI_AS NOT NULL); "
-            + "INSERT INTO dbo.collated_roles (Id, Caption) VALUES (1, N'administrator');",
+            """
+            CREATE TABLE dbo.collated_roles (Id int NOT NULL CONSTRAINT PK_collated_roles
+            PRIMARY KEY,
+            Caption nvarchar(80) COLLATE Latin1_General_100_CI_AS NOT NULL); INSERT
+            INTO dbo.collated_roles (Id,
+            Caption) VALUES (1, N'administrator');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -159,8 +169,11 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
 
         var unchanged = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM dbo.collated_roles "
-            + "WHERE Id = 1 AND CONVERT(varbinary(max), Caption) = CONVERT(varbinary(max), N'administrator');",
+            """
+            SELECT COUNT(*) FROM dbo.collated_roles
+            WHERE Id = 1 AND CONVERT(varbinary(max), Caption) = CONVERT(varbinary(max),
+            N'administrator');
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -182,9 +195,13 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.unique_roles (Id int NOT NULL CONSTRAINT PK_unique_roles PRIMARY KEY, "
-            + "Code nvarchar(40) NULL CONSTRAINT UQ_unique_roles_Code UNIQUE); "
-            + "INSERT INTO dbo.unique_roles (Id, Code) VALUES (1, NULL);",
+            """
+            CREATE TABLE dbo.unique_roles (Id int NOT NULL CONSTRAINT PK_unique_roles
+            PRIMARY KEY,
+            Code nvarchar(40) NULL CONSTRAINT UQ_unique_roles_Code UNIQUE); INSERT INTO
+            dbo.unique_roles (Id,
+            Code) VALUES (1, NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -278,9 +295,10 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.explicit_collation_keys (Code nvarchar(40) "
-            + "COLLATE Latin1_General_100_BIN2 NOT NULL "
-            + "CONSTRAINT PK_explicit_collation_keys PRIMARY KEY);",
+            """
+            CREATE TABLE dbo.explicit_collation_keys (Code nvarchar(40) COLLATE Latin1_General_100_BIN2
+            NOT NULL CONSTRAINT PK_explicit_collation_keys PRIMARY KEY);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -327,9 +345,13 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.update_roles (Id int NOT NULL CONSTRAINT PK_update_roles PRIMARY KEY, "
-            + "Caption nvarchar(80) NOT NULL); "
-            + "INSERT INTO dbo.update_roles (Id, Caption) VALUES (1, N'old');",
+            """
+            CREATE TABLE dbo.update_roles (Id int NOT NULL CONSTRAINT PK_update_roles
+            PRIMARY KEY,
+            Caption nvarchar(80) NOT NULL); INSERT INTO dbo.update_roles (Id, Caption)
+            VALUES (1,
+            N'old');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -366,9 +388,13 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.update_drift (Id int NOT NULL CONSTRAINT PK_update_drift PRIMARY KEY, "
-            + "Caption nvarchar(80) NOT NULL); "
-            + "INSERT INTO dbo.update_drift (Id, Caption) VALUES (1, N'user-edited');",
+            """
+            CREATE TABLE dbo.update_drift (Id int NOT NULL CONSTRAINT PK_update_drift
+            PRIMARY KEY,
+            Caption nvarchar(80) NOT NULL); INSERT INTO dbo.update_drift (Id, Caption)
+            VALUES (1,
+            N'user-edited');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -416,9 +442,13 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.delete_roles (Id int NOT NULL CONSTRAINT PK_delete_roles PRIMARY KEY, "
-            + "Caption nvarchar(80) NOT NULL); "
-            + "INSERT INTO dbo.delete_roles (Id, Caption) VALUES (1, N'old');",
+            """
+            CREATE TABLE dbo.delete_roles (Id int NOT NULL CONSTRAINT PK_delete_roles
+            PRIMARY KEY,
+            Caption nvarchar(80) NOT NULL); INSERT INTO dbo.delete_roles (Id, Caption)
+            VALUES (1,
+            N'old');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -454,13 +484,17 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.delete_principals (Id int NOT NULL "
-            + "CONSTRAINT PK_delete_principals PRIMARY KEY, Caption nvarchar(80) NOT NULL); "
-            + "CREATE TABLE dbo.delete_children (Id int NOT NULL CONSTRAINT PK_delete_children PRIMARY KEY, "
-            + "PrincipalId int NOT NULL CONSTRAINT FK_delete_children_principals "
-            + "REFERENCES dbo.delete_principals(Id)); "
-            + "INSERT INTO dbo.delete_principals (Id, Caption) VALUES (1, N'old'); "
-            + "INSERT INTO dbo.delete_children (Id, PrincipalId) VALUES (7, 1);",
+            """
+            CREATE TABLE dbo.delete_principals (Id int NOT NULL CONSTRAINT PK_delete_principals
+            PRIMARY KEY,
+            Caption nvarchar(80) NOT NULL); CREATE TABLE dbo.delete_children (Id int
+            NOT NULL CONSTRAINT PK_delete_children PRIMARY KEY,
+            PrincipalId int NOT NULL CONSTRAINT FK_delete_children_principals REFERENCES
+            dbo.delete_principals(Id)); INSERT INTO dbo.delete_principals (Id,
+            Caption) VALUES (1, N'old'); INSERT INTO dbo.delete_children (Id, PrincipalId)
+            VALUES (7,
+            1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -514,13 +548,14 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.unmodeled_principals (Id int NOT NULL "
-            + "CONSTRAINT PK_unmodeled_principals PRIMARY KEY); "
-            + "CREATE TABLE dbo.unmodeled_children (Id int NOT NULL "
-            + "CONSTRAINT PK_unmodeled_children PRIMARY KEY, PrincipalId int NOT NULL "
-            + "CONSTRAINT FK_unmodeled_children_principals "
-            + "REFERENCES dbo.unmodeled_principals(Id)); "
-            + "INSERT INTO dbo.unmodeled_principals (Id) VALUES (1);",
+            """
+            CREATE TABLE dbo.unmodeled_principals (Id int NOT NULL CONSTRAINT PK_unmodeled_principals
+            PRIMARY KEY); CREATE TABLE dbo.unmodeled_children (Id int NOT NULL CONSTRAINT
+            PK_unmodeled_children PRIMARY KEY,
+            PrincipalId int NOT NULL CONSTRAINT FK_unmodeled_children_principals REFERENCES
+            dbo.unmodeled_principals(Id)); INSERT INTO dbo.unmodeled_principals (Id)
+            VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -568,9 +603,13 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.typed_roles (Id int NOT NULL CONSTRAINT PK_typed_roles PRIMARY KEY, "
-            + "Caption nvarchar(20) NOT NULL); "
-            + "INSERT INTO dbo.typed_roles (Id, Caption) VALUES (1, N'Old');",
+            """
+            CREATE TABLE dbo.typed_roles (Id int NOT NULL CONSTRAINT PK_typed_roles
+            PRIMARY KEY,
+            Caption nvarchar(20) NOT NULL); INSERT INTO dbo.typed_roles (Id, Caption)
+            VALUES (1,
+            N'Old');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -672,9 +711,11 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.computed_roles (Id int NOT NULL "
-            + "CONSTRAINT PK_computed_roles PRIMARY KEY, Code int NOT NULL, "
-            + "Doubled AS (Code * 2));",
+            """
+            CREATE TABLE dbo.computed_roles (Id int NOT NULL CONSTRAINT PK_computed_roles
+            PRIMARY KEY,
+            Code int NOT NULL, Doubled AS (Code * 2));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -721,9 +762,11 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.identity_update (Id int IDENTITY(1,1) NOT NULL "
-            + "CONSTRAINT PK_identity_update PRIMARY KEY); "
-            + "INSERT INTO dbo.identity_update DEFAULT VALUES;",
+            """
+            CREATE TABLE dbo.identity_update (Id int IDENTITY(1,1) NOT NULL CONSTRAINT
+            PK_identity_update PRIMARY KEY); INSERT INTO dbo.identity_update DEFAULT
+            VALUES;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

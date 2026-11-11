@@ -422,8 +422,13 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE shape_parents (Id INTEGER NOT NULL, CONSTRAINT pk_shape_parents PRIMARY KEY (Id)); "
-            + "INSERT INTO shape_parents (Id) VALUES (1);",
+            """
+            CREATE TABLE shape_parents (
+                Id INTEGER NOT NULL,
+                CONSTRAINT pk_shape_parents PRIMARY KEY (Id)
+            );
+            INSERT INTO shape_parents (Id) VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateConstraintShapeContext(connection, kind);
@@ -492,16 +497,17 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
 
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE shape_parents (Id INTEGER NOT NULL, CONSTRAINT pk_shape_parents PRIMARY KEY (Id)); "
-            + "CREATE TABLE shape_items (Id INTEGER NOT NULL, Code INTEGER NOT NULL, ParentId INTEGER NOT NULL, "
-            + "CONSTRAINT pk_shape_items PRIMARY KEY (Id), "
-            + constraints
-            + "); "
-            + (kind == SafeMigrationOperationKind.EnsureForeignKey
+            $"""
+            CREATE TABLE shape_parents (Id INTEGER NOT NULL, CONSTRAINT pk_shape_parents
+            PRIMARY KEY (Id)); CREATE TABLE shape_items (Id INTEGER NOT NULL,
+            Code INTEGER NOT NULL, ParentId INTEGER NOT NULL, CONSTRAINT pk_shape_items
+            PRIMARY KEY (Id),
+            {constraints}); {(kind == SafeMigrationOperationKind.EnsureForeignKey
                 ? "CREATE INDEX ix_shape_items_parent ON shape_items (ParentId); "
-                : string.Empty)
-            + "INSERT INTO shape_parents (Id) VALUES (1); "
-            + "INSERT INTO shape_items (Id, Code, ParentId) VALUES (1, 5, 1);",
+                : string.Empty)}INSERT INTO shape_parents
+            (Id) VALUES (1); INSERT INTO shape_items (Id,
+            Code, ParentId) VALUES (1, 5, 1);
+            """,
             cancellationToken: cancellationToken);
     }
 

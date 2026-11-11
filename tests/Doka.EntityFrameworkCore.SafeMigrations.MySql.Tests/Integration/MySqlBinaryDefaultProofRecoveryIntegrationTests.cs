@@ -3,12 +3,18 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 /// <summary>Verifies cancellation after a native default proof has acquired real session-local state.</summary>
 public sealed class MySqlBinaryDefaultProofRecoveryIntegrationTests : MySqlIntegrationTestBase
 {
-    private const string ClearedVariables = "SELECT @doka_sm_binary_default_0 IS NULL "
-        + "AND @doka_sm_state IS NULL AND @doka_sm_action IS NULL AND @doka_sm_repair_ok IS NULL "
-        + "AND @doka_sm_prerequisite_ok IS NULL AND @doka_sm_sql IS NULL AND @doka_sm_post_ok IS NULL "
-        + "AND @doka_sm_data_probe_required IS NULL AND @doka_sm_data_blocked IS NULL "
-        + "AND @doka_sm_transition_eligible IS NULL AND @doka_sm_nullability_blocked IS NULL "
-        + "AND @doka_sm_column_repair_eligible IS NULL;";
+    private const string ClearedVariables = """
+        SELECT @doka_sm_binary_default_0 IS NULL
+        AND @doka_sm_state IS NULL AND @doka_sm_action IS NULL
+        AND @doka_sm_repair_ok IS NULL
+        AND @doka_sm_prerequisite_ok IS NULL
+        AND @doka_sm_sql IS NULL AND @doka_sm_post_ok IS NULL
+        AND @doka_sm_data_probe_required IS NULL
+        AND @doka_sm_data_blocked IS NULL
+        AND @doka_sm_transition_eligible IS NULL
+        AND @doka_sm_nullability_blocked IS NULL
+        AND @doka_sm_column_repair_eligible IS NULL;
+        """;
 
     /// <summary>Shares only the native engine and retains per-test database cleanup ownership.</summary>
     /// <param name="fixture">The lazily activated assembly-owned native engine.</param>
@@ -26,9 +32,12 @@ public sealed class MySqlBinaryDefaultProofRecoveryIntegrationTests : MySqlInteg
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `binary_default_recovery` (`id` int NOT NULL, "
-            + "`value` varbinary(4) NOT NULL DEFAULT X'A0B1'); "
-            + "INSERT INTO `binary_default_recovery` VALUES (1, X'1020');",
+            """
+            CREATE TABLE `binary_default_recovery` (`id` int NOT NULL, `value` varbinary(4)
+            NOT NULL DEFAULT X'A0B1'); INSERT INTO `binary_default_recovery` VALUES
+            (1,
+            X'1020');
+            """,
             cancellationToken: CancellationToken.None);
 
         using var cancellation = new CancellationTokenSource();

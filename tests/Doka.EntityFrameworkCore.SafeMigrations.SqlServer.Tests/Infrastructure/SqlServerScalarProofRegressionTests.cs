@@ -99,9 +99,9 @@ public sealed class SqlServerScalarProofRegressionTests
                 ? "nvarchar(128)"
                 : "int";
 
-            var declaration = "DECLARE " + variable + " " + type + "; EXEC sys.sp_executesql N'SELECT @doka_proof";
+            var declaration = "DECLARE " + variable + " " + type + "; EXEC sys.sp_executesql\nN'SELECT @doka_proof";
             var declarationIndex = template.IndexOf(declaration, StringComparison.Ordinal);
-            var outputIndex = template.IndexOf("@doka_proof = " + variable + " OUTPUT;", StringComparison.Ordinal);
+            var outputIndex = template.IndexOf("@doka_proof =\n" + variable + " OUTPUT;", StringComparison.Ordinal);
             var gate = variable switch
             {
                 "@doka_layout" => "IF @doka_layout IS NOT NULL",
@@ -120,7 +120,7 @@ public sealed class SqlServerScalarProofRegressionTests
         Assert.Equal(6, Occurrences(template, "SELECT @doka_proof ="));
         Assert.Equal(5, Occurrences(template, "@doka_proof int OUTPUT'"));
         Assert.Equal(1, Occurrences(template, "@doka_proof nvarchar(128) OUTPUT'"));
-        Assert.Equal(5, Occurrences(template, "; ELSE BEGIN "));
+        Assert.Equal(5, Occurrences(template, "ELSE BEGIN "));
         Assert.EndsWith(" END; END; END; END; END;", template, StringComparison.Ordinal);
         Assert.DoesNotContain("INSERT EXEC", template, StringComparison.Ordinal);
         Assert.DoesNotContain("DECLARE @doka_physical int =", template, StringComparison.Ordinal);
@@ -138,7 +138,7 @@ public sealed class SqlServerScalarProofRegressionTests
             PrerequisiteFailureCodeExpression = "N'outer_guard_rejected'",
         };
 
-        const string evidence = "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
+        const string evidence = "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL),\n"
             + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL)";
 
         string[] codes =
@@ -156,22 +156,28 @@ public sealed class SqlServerScalarProofRegressionTests
         foreach (var code in codes)
         {
             Assert.Contains(
-                "SELECT @doka_ordinal, N'unsupported', 0, 0, N'" + code + "', " + evidence,
+                "SELECT @doka_ordinal,\nN'unsupported', 0, 0, N'" + code + "',\n" + evidence,
                 template,
                 StringComparison.Ordinal);
         }
 
         Assert.Contains(
-            "SELECT @doka_ordinal, N'unsupported', 0, 0, @doka_layout, " + evidence,
+            """
+            SELECT @doka_ordinal, N'unsupported',
+            0, 0, @doka_layout, CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max),
+            NULL), CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL);
+            """,
             template,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "ELSE EXEC sys.sp_executesql N'SELECT @doka_ordinal, "
-            + "CASE WHEN COALESCE((1), 0) = 1 THEN (N''different'') ELSE N''prerequisite_missing'' END, "
-            + "0, 0, N''outer_guard_rejected'', "
-            + evidence
-            + ";'",
+            """
+            ELSE EXEC sys.sp_executesql N'SELECT @doka_ordinal, CASE WHEN COALESCE((1), 0) = 1
+            THEN (N''different'')
+            ELSE N''prerequisite_missing'' END, 0, 0, N''outer_guard_rejected'',
+            CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max),
+            NULL), CONVERT(nvarchar(128), NULL);'
+            """,
             template,
             StringComparison.Ordinal);
 
@@ -543,10 +549,13 @@ public sealed class SqlServerScalarProofRegressionTests
 
         var plan = Plan() with
         {
-            PhysicalTableSupportExpression = "(SELECT CASE WHEN SUM(CONVERT(bigint, "
-            + "CHECKSUM(a.object_id, b.object_id, c.object_id, d.object_id, e.object_id))) = 0 THEN 1 ELSE 0 END "
-            + "FROM sys.all_objects a CROSS JOIN sys.all_objects b CROSS JOIN sys.all_objects c "
-            + "CROSS JOIN sys.all_objects d CROSS JOIN sys.all_objects e)",
+            PhysicalTableSupportExpression = """
+            (SELECT CASE WHEN SUM(CONVERT(bigint, CHECKSUM(a.object_id, b.object_id,
+            c.object_id, d.object_id, e.object_id))) = 0
+            THEN 1 ELSE 0 END FROM sys.all_objects a CROSS
+            JOIN sys.all_objects b CROSS JOIN sys.all_objects c CROSS
+            JOIN sys.all_objects d CROSS JOIN sys.all_objects e)
+            """,
         };
 
         using var cancellation = CreateScalarCancellationSource(cancellationToken);

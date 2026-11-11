@@ -22,14 +22,15 @@ public sealed class MySqlColumnsForeignKeyNullabilityIntegrationTests : MySqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            ForeignKeyNullabilityFixture(alreadyNullable: false)
-            + " ALTER TABLE `proof_child` ADD `second_owner_id` char(36) "
-            + (matchingSibling
+            $"""
+            {ForeignKeyNullabilityFixture(alreadyNullable: false)} ALTER TABLE `proof_child` ADD `second_owner_id`
+            char(36) {(matchingSibling
                 ? "NULL;"
-                : "NOT NULL;")
-            + " UPDATE `proof_child` SET `second_owner_id` = `owner_id`;"
-            + " ALTER TABLE `proof_child` ADD CONSTRAINT `fk_proof_second_parent` "
-            + "FOREIGN KEY (`second_owner_id`) REFERENCES `proof_parent` (`id`) ON DELETE CASCADE;",
+                : "NOT NULL;")} UPDATE `proof_child` SET `second_owner_id`
+            = `owner_id`; ALTER TABLE `proof_child` ADD CONSTRAINT `fk_proof_second_parent`
+            FOREIGN KEY (`second_owner_id`) REFERENCES `proof_parent` (`id`) ON DELETE
+            CASCADE;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -274,8 +275,12 @@ public sealed class MySqlColumnsForeignKeyNullabilityIntegrationTests : MySqlSaf
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         var count = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'backfill_items' AND COLUMN_NAME = 'id' AND IS_NULLABLE = 'NO';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'backfill_items'
+            AND COLUMN_NAME = 'id' AND IS_NULLABLE = 'NO';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -348,15 +353,17 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     /// <returns>The isolated test schema and sentinel rows.</returns>
     protected static string ForeignKeyNullabilityFixture(
         bool alreadyNullable
-    ) => "CREATE TABLE `proof_parent` (`id` char(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB "
-        + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-        + "CREATE TABLE `proof_child` (`id` int NOT NULL PRIMARY KEY, `owner_id` char(36) "
-        + (alreadyNullable
+    ) => $"""
+        CREATE TABLE `proof_parent` (`id` char(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB
+        DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; CREATE TABLE `proof_child`
+        (`id` int NOT NULL PRIMARY KEY,
+        `owner_id` char(36) {(alreadyNullable
             ? "NULL"
-            : "NOT NULL")
-        + ", CONSTRAINT `fk_proof_child_parent` FOREIGN KEY (`owner_id`) "
-        + "REFERENCES `proof_parent` (`id`) ON DELETE CASCADE) ENGINE=InnoDB "
-        + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-        + "INSERT INTO `proof_parent` VALUES ('00000000-0000-0000-0000-000000000001'); "
-        + "INSERT INTO `proof_child` VALUES (1, '00000000-0000-0000-0000-000000000001');";
+            : "NOT NULL")}, CONSTRAINT `fk_proof_child_parent`
+        FOREIGN KEY (`owner_id`) REFERENCES `proof_parent` (`id`) ON DELETE CASCADE)
+        ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT
+        INTO `proof_parent` VALUES ('00000000-0000-0000-0000-000000000001'); INSERT
+        INTO `proof_child` VALUES (1,
+        '00000000-0000-0000-0000-000000000001');
+        """;
 }

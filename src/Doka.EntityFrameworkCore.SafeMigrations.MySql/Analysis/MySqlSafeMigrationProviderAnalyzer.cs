@@ -568,15 +568,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
                                     : plan.RenderMatchedObjectNameExpression(parameterizer.Add);
 
                                 var resultOrdinal = operationOffset + ordinal;
-                                var selection = $"SELECT {resultOrdinal.ToString(CultureInfo.InvariantCulture)}, "
-                                    + $"({stateExpression}), "
-                                    + $"COALESCE(({postcondition}), FALSE), "
-                                    + $"COALESCE(({repairPrecondition}), FALSE), "
-                                    + $"({classificationCode}), "
-                                    + $"({rowEvidence}), "
-                                    + $"({dependencyCounts}), "
-                                    + $"({diagnosticEvidence}), "
-                                    + $"({matchedObjectName})";
+                                var selection = $"""
+                                    SELECT {resultOrdinal.ToString(
+                                        CultureInfo.InvariantCulture)}, ({stateExpression}), COALESCE(({postcondition}),
+                                    FALSE), COALESCE(({repairPrecondition}), FALSE), ({classificationCode}),
+                                    ({rowEvidence}), ({dependencyCounts}), ({diagnosticEvidence}),
+                                    ({matchedObjectName})
+                                    """;
 
                                 if (captureDropCompleteness)
                                 {

@@ -283,9 +283,11 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTest
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            PrimaryKeyRemovalFixture(supportingIndexExists: true)
-            + " ALTER TABLE `key_items` DROP FOREIGN KEY `fk_key_items_user`; "
-            + "CREATE TABLE `other_key_items` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;",
+            $"""
+            {PrimaryKeyRemovalFixture(
+                supportingIndexExists: true)} ALTER TABLE `key_items` DROP FOREIGN KEY `fk_key_items_user`;
+            CREATE TABLE `other_key_items` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -322,8 +324,12 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTest
 
         var unrelatedPrimary = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE CONSTRAINT_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'other_key_items' AND CONSTRAINT_NAME = 'PRIMARY';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'other_key_items'
+            AND CONSTRAINT_NAME = 'PRIMARY';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -423,9 +429,13 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTest
         CancellationToken cancellationToken
     ) => ScalarStringAsync(
         connectionString,
-        "SELECT CONCAT(COLUMN_TYPE, '|', IS_NULLABLE, '|', COALESCE(COLUMN_DEFAULT, '<none>'), '|', "
-        + "COLUMN_COMMENT) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-        + "AND TABLE_NAME = 'key_items' AND COLUMN_NAME = 'user_id';",
+        """
+        SELECT CONCAT(COLUMN_TYPE, '|', IS_NULLABLE, '|', COALESCE(COLUMN_DEFAULT,
+        '<none>'), '|', COLUMN_COMMENT)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'key_items' AND COLUMN_NAME = 'user_id';
+        """,
         cancellationToken: cancellationToken);
 }
 
@@ -440,9 +450,12 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         CancellationToken cancellationToken
     ) => ScalarIntAsync(
         connectionString,
-        "SELECT COUNT(*) FROM `key_items` WHERE `question_id` = "
-        + "'00000000-0000-0000-0000-000000000001' AND `user_id` = "
-        + "'00000000-0000-0000-0000-000000000002' AND `payload` = 'retained';",
+        """
+        SELECT COUNT(*) FROM `key_items`
+        WHERE `question_id` = '00000000-0000-0000-0000-000000000001'
+        AND `user_id` = '00000000-0000-0000-0000-000000000002'
+        AND `payload` = 'retained';
+        """,
         cancellationToken: cancellationToken);
 }
 
@@ -457,7 +470,11 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTest
         CancellationToken cancellationToken
     ) => ScalarIntAsync(
         connectionString,
-        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE CONSTRAINT_SCHEMA = DATABASE() "
-        + "AND TABLE_NAME = 'key_items' AND CONSTRAINT_NAME = 'PRIMARY' AND COLUMN_NAME = 'user_id';",
+        """
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+        WHERE CONSTRAINT_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'key_items' AND CONSTRAINT_NAME = 'PRIMARY'
+        AND COLUMN_NAME = 'user_id';
+        """,
         cancellationToken: cancellationToken);
 }

@@ -40,9 +40,11 @@ public sealed class
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE mixed_columns (id integer NOT NULL); CREATE TABLE callback_audit (id integer); "
-            + $"CREATE FUNCTION metadata_many({signature}) RETURNS boolean LANGUAGE plpgsql AS "
-            + "'BEGIN INSERT INTO callback_audit VALUES (1); RETURN TRUE; END';",
+            $"""
+            CREATE TABLE mixed_columns (id integer NOT NULL); CREATE TABLE callback_audit
+            (id integer); CREATE FUNCTION metadata_many({signature})
+            RETURNS boolean LANGUAGE plpgsql AS 'BEGIN INSERT INTO callback_audit VALUES (1); RETURN TRUE; END';
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

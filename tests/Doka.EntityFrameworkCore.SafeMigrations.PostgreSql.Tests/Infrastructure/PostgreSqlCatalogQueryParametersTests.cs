@@ -2,6 +2,132 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
 public sealed class PostgreSqlCatalogQueryParametersTests
 {
+    /// <summary>Typed bindings retain provider-specific identity, facets, converters and typed nulls.</summary>
+    /// <param name="native">Whether the parameter belongs to a native batch rather than a sequential command.</param>
+    /// <param name="kind">The independently selected provider mapping family.</param>
+    [Theory]
+    [InlineData(false, "clock")]
+    [InlineData(true, "clock")]
+    [InlineData(false, "json")]
+    [InlineData(true, "json")]
+    [InlineData(false, "varchar")]
+    [InlineData(true, "varchar")]
+    [InlineData(false, "typed-null")]
+    [InlineData(true, "typed-null")]
+    [InlineData(false, "converted")]
+    [InlineData(true, "converted")]
+    public async Task TypedBindingsRetainAuthoritativeNativeMapping(
+        bool native,
+        string kind
+    )
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(
+            "Host=127.0.0.1;Port=1;Database=parameter_test;Username=test;Password=test",
+            registerSafeMigrations: false);
+
+        await using var connection = new NpgsqlConnection();
+        await using var batch = new SafeMigrationCatalogBatch(connection, commandTimeout: null);
+        using var command = new NpgsqlCommand();
+        using var expectedFactory = new NpgsqlCommand();
+        var batchCommand = batch.CreateCommand();
+        var (value, storeType) = kind switch
+        {
+            "clock" => ((object?)TimeSpan.FromDays(1), "time(6) without time zone"),
+            "json" => ("{}", "jsonb"),
+            "varchar" => ("retained", "varchar(40)"),
+            "typed-null" => (null, "date"),
+            "converted" => (ParameterState.Active, "text"),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        };
+
+        var mappingSource = context.GetService<IRelationalTypeMappingSource>();
+        var mapping = value is null
+            ? mappingSource.FindMapping(storeType)!
+            : mappingSource.FindMapping(value.GetType(), storeType)!;
+
+        var expected = Assert.IsType<NpgsqlParameter>(mapping.CreateParameter(expectedFactory, "expected", value));
+        using var parameters = native
+            ? new PostgreSqlCatalogQueryParameters(batchCommand, mappingSource)
+            : new PostgreSqlCatalogQueryParameters(command, mappingSource);
+
+        var collection = native
+            ? batchCommand.Parameters
+            : command.Parameters;
+
+        // Act
+        var marker = parameters.Add(value, storeType);
+        var actual = Assert.IsType<NpgsqlParameter>(collection[marker]);
+
+        // Assert
+        Assert.Equal(expected.NpgsqlDbType, actual.NpgsqlDbType);
+        Assert.Equal(expected.DbType, actual.DbType);
+        Assert.Equal(expected.DataTypeName, actual.DataTypeName);
+        Assert.Equal(expected.Value, actual.Value);
+        Assert.Equal(expected.Size, actual.Size);
+        Assert.Equal(expected.Precision, actual.Precision);
+        Assert.Equal(expected.Scale, actual.Scale);
+        Assert.Equal(expected.IsNullable, actual.IsNullable);
+        Assert.Single(collection);
+        Assert.Empty(expectedFactory.Parameters);
+    }
+
+    /// <summary>Disposal owns only the private factory and cannot remove or rebind command-owned parameters.</summary>
+    /// <param name="native">Whether a private factory is needed for a native batch.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DisposalRetainsOwnerBindingsAndRejectsFurtherMutation(
+        bool native
+    )
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(
+            "Host=127.0.0.1;Port=1;Database=parameter_test;Username=test;Password=test",
+            registerSafeMigrations: false);
+
+        await using var connection = new NpgsqlConnection();
+        await using var batch = new SafeMigrationCatalogBatch(connection, commandTimeout: null);
+        using var command = new NpgsqlCommand();
+        using var disposedControl = new NpgsqlCommand();
+        var batchCommand = batch.CreateCommand();
+        var mappingSource = context.GetService<IRelationalTypeMappingSource>();
+        using var parameters = native
+            ? new PostgreSqlCatalogQueryParameters(batchCommand, mappingSource)
+            : new PostgreSqlCatalogQueryParameters(command, mappingSource);
+
+        var marker = parameters.Add(TimeSpan.FromDays(1), "time(6) without time zone");
+        var checkpoint = parameters.Capture();
+        var collection = native
+            ? batchCommand.Parameters
+            : command.Parameters;
+
+        var original = collection[marker];
+
+        // Act
+        parameters.Dispose();
+        parameters.Dispose();
+        var retained = collection[marker];
+        var addFailure = Record.Exception(() => parameters.Add(TimeSpan.FromDays(1), "time(6) without time zone"));
+        var stringFailure = Record.Exception(() => parameters.AddString("after-disposal"));
+        var captureFailure = Record.Exception(() => parameters.Capture());
+        var rollbackFailure = Record.Exception(() => parameters.Rollback(checkpoint));
+        var borrowedCommandFailure = Record.Exception(() => command.CommandText = "SELECT 1");
+        disposedControl.Dispose();
+        var disposedCommandFailure = Record.Exception(() => disposedControl.CommandText = "SELECT 1");
+
+        // Assert
+        Assert.Same(original, retained);
+        Assert.Equal(TimeSpan.FromDays(1), retained.Value);
+        Assert.Single(collection);
+        Assert.Null(borrowedCommandFailure);
+        Assert.IsType<ObjectDisposedException>(disposedCommandFailure);
+        Assert.IsType<ObjectDisposedException>(addFailure);
+        Assert.IsType<ObjectDisposedException>(stringFailure);
+        Assert.IsType<ObjectDisposedException>(captureFailure);
+        Assert.IsType<ObjectDisposedException>(rollbackFailure);
+    }
+
     /// <summary>
     /// Rollback and subsequent growth retain every physical parameter's named binding and type mapping.
     /// </summary>
@@ -31,7 +157,7 @@ public sealed class PostgreSqlCatalogQueryParametersTests
         using var command = new NpgsqlCommand();
         var batchCommand = batch.CreateCommand();
         var mappingSource = context.GetService<IRelationalTypeMappingSource>();
-        var parameters = native
+        using var parameters = native
             ? new PostgreSqlCatalogQueryParameters(batchCommand, mappingSource)
             : new PostgreSqlCatalogQueryParameters(command, mappingSource);
 
@@ -112,7 +238,7 @@ public sealed class PostgreSqlCatalogQueryParametersTests
     public void AddString_InternsValuesAndTracksUtf8Payload()
     {
         using var command = new NpgsqlCommand();
-        var parameters = new PostgreSqlCatalogQueryParameters(command);
+        using var parameters = new PostgreSqlCatalogQueryParameters(command);
 
         var first = parameters.AddString("schema");
         var duplicate = parameters.AddString("schema");
@@ -132,7 +258,7 @@ public sealed class PostgreSqlCatalogQueryParametersTests
     public void Rollback_RestoresParameterAndPayloadState()
     {
         using var command = new NpgsqlCommand();
-        var parameters = new PostgreSqlCatalogQueryParameters(command);
+        using var parameters = new PostgreSqlCatalogQueryParameters(command);
         _ = parameters.AddString("retained");
         var checkpoint = parameters.Capture();
         _ = parameters.AddString("discarded");
@@ -160,7 +286,7 @@ public sealed class PostgreSqlCatalogQueryParametersTests
     {
         // Arrange
         using var command = new NpgsqlCommand();
-        var parameters = new PostgreSqlCatalogQueryParameters(command);
+        using var parameters = new PostgreSqlCatalogQueryParameters(command);
 
         // Act
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -170,5 +296,11 @@ public sealed class PostgreSqlCatalogQueryParametersTests
         Assert.Equal(0, parameters.Count);
         Assert.Equal(0, parameters.Utf8PayloadBytes);
         Assert.Empty(command.Parameters);
+    }
+
+    /// <summary>Exercises the mapping source's native enum-to-text converter.</summary>
+    private enum ParameterState
+    {
+        Active,
     }
 }

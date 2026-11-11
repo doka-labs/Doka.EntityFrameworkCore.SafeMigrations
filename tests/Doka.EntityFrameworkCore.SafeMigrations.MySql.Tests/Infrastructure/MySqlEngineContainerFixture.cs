@@ -194,9 +194,12 @@ public sealed class MySqlEngineContainerFixture : IAsyncLifetime, IDisposable
             _createdUsers[database]
                 .Add(user);
 
-            command.CommandText = $"CREATE USER `{user}`@'%' IDENTIFIED BY '{password}'; "
-                + "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES, "
-                + $"DROP, CREATE TEMPORARY TABLES ON `{database}`.* TO `{user}`@'%';";
+            command.CommandText = $"""
+                CREATE USER `{user}`@'%' IDENTIFIED BY '{password}';
+                GRANT SELECT,
+                INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES, DROP, CREATE TEMPORARY
+                TABLES ON `{database}`.* TO `{user}`@'%';
+                """;
 
             await command.ExecuteNonQueryAsync(cancellationToken);
 

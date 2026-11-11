@@ -182,13 +182,18 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         // WHY: Ordinary name equality keeps the catalog filter index-eligible;
         // the native binary cast then excludes collation aliases and
         // preserves mode 0/1/2 semantics. Inventory size cannot enlarge this SQL.
-        return "SELECT source_owner.ordinal, CASE WHEN COUNT(physical_owner.TABLE_NAME) = 1 "
-            + "THEN MIN(physical_owner.TABLE_NAME) ELSE NULL END, COUNT(physical_owner.TABLE_NAME) FROM ("
-            + authoredOwners
-            + ") source_owner LEFT JOIN INFORMATION_SCHEMA.TABLES physical_owner "
-            + "ON physical_owner.TABLE_SCHEMA = DATABASE() AND physical_owner.TABLE_TYPE = 'BASE TABLE' "
-            + "AND physical_owner.TABLE_NAME = source_owner.owner "
-            + $"AND {nativeMatches} GROUP BY source_owner.ordinal ORDER BY 1;";
+        return $"""
+            SELECT source_owner.ordinal, CASE WHEN COUNT(physical_owner.TABLE_NAME)
+            = 1
+            THEN MIN(physical_owner.TABLE_NAME)
+            ELSE NULL END, COUNT(physical_owner.TABLE_NAME)
+            FROM ({authoredOwners}) source_owner
+            LEFT JOIN INFORMATION_SCHEMA.TABLES physical_owner ON physical_owner.TABLE_SCHEMA
+            = DATABASE()
+            AND physical_owner.TABLE_TYPE = 'BASE TABLE'
+            AND physical_owner.TABLE_NAME = source_owner.owner
+            AND {nativeMatches} GROUP BY source_owner.ordinal ORDER BY 1;
+            """;
     }
 
     /// <summary>Finds exact guard-name potential and pending owners that could alias its physical columns.</summary>

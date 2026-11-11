@@ -111,6 +111,107 @@ public sealed class MySqlGeneratedExpressionDisplayTests
         Assert.Equal("case when `When And` is null then 'CASE and END' else 'Else Then' end", result);
     }
 
+    /// <summary>Functional-key display safely encodes typed values before native catalog serialization.</summary>
+    /// <param name="value">The exact structured string or character value.</param>
+    /// <param name="literal">The independently expected native-display value token.</param>
+    [Theory]
+    [InlineData("tail\\", "'tail\\\\'")]
+    [InlineData("before\\'after", "'before\\\\''after'")]
+    [InlineData("line\nbreak", "'line\\nbreak'")]
+    [InlineData("line\rbreak", "'line\\rbreak'")]
+    [InlineData("nul\0byte", "'nul\\0byte'")]
+    [InlineData("tab\tvalue", "'tab\tvalue'")]
+    [InlineData("back\bspace", "'back\bspace'")]
+    [InlineData("ctrl\u001avalue", "'ctrl\\Zvalue'")]
+    [InlineData("ctrl\u0001value", "'ctrl\u0001value'")]
+    [InlineData("A'B", "'A''B'")]
+    [InlineData('\\', "'\\\\'")]
+    [InlineData('\'', "''''")]
+    public void FunctionalKeyDisplayRetainsOrdinaryProviderLiteralEncoding(
+        object value,
+        string literal
+    )
+    {
+        // Arrange
+        using var context = CreateContext();
+        var expression = SafeMigrationSql.Function("CONCAT",
+            SafeMigrationSql.Identifier("value"),
+            SafeMigrationSql.Literal(value));
+
+        // Act
+        var display = MySqlGeneratedExpressionDisplay.Render(expression,
+            Renderer(context),
+            isMariaDb: false,
+            nativeIndexStringLiterals: true);
+
+        var candidates = MySqlExpressionCanonicalizer.BuildComparisonCandidates(display,
+            includeMySqlEncodedDisplay: true);
+
+        // Assert
+        Assert.Equal($"concat(`value`,{literal})", display);
+        Assert.NotEmpty(candidates);
+        Assert.DoesNotContain("convert(", display, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Ordinary index encoding must not replace the captured or stable CHECK spelling contracts.</summary>
+    [Fact]
+    public void FunctionalKeyEncodingDoesNotChangeCheckDisplayModes()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var expression = SafeMigrationSql.Function("CONCAT",
+            SafeMigrationSql.Identifier("value"),
+            SafeMigrationSql.Literal("A'B"));
+
+        // Act
+        var captured = MySqlGeneratedExpressionDisplay.Render(expression,
+            Renderer(context),
+            isMariaDb: false,
+            preserveCapturedStringLiterals: true);
+
+        var stable = MySqlGeneratedExpressionDisplay.Render(expression, Renderer(context), isMariaDb: false);
+
+        // Assert
+        Assert.Equal("concat(`value`,'A''B')", captured);
+        Assert.Equal("concat(`value`,convert(0x412742 using utf8mb4))", stable);
+    }
+
+    /// <summary>Catalog encoding preserves independently captured MySQL value bytes, including escape layers.</summary>
+    /// <param name="value">The exact structured value before native serialization.</param>
+    /// <param name="nativeHex">The independently observed HEX(EXPRESSION) from MySQL 8.4.13.</param>
+    [Theory]
+    [InlineData("tail\\", "636F6E636174286076616C7565602C5F757466386D62345C277461696C5C5C5C5C5C2729")]
+    [InlineData("before\\'after",
+        "636F6E636174286076616C7565602C5F757466386D62345C27"
+        + "6265666F72655C5C5C5C5C5C5C2761667465725C2729")]
+    [InlineData("line\nbreak", "636F6E636174286076616C7565602C5F757466386D62345C276C696E655C5C6E627265616B5C2729")]
+    [InlineData("nul\0byte", "636F6E636174286076616C7565602C5F757466386D62345C276E756C5C5C30627974655C2729")]
+    [InlineData("tab\tvalue", "636F6E636174286076616C7565602C5F757466386D62345C277461620976616C75655C2729")]
+    public void FunctionalKeyCatalogCandidatesRetainNativeValueBytes(
+        string value,
+        string nativeHex
+    )
+    {
+        // Arrange
+        using var context = CreateContext();
+        var expression = SafeMigrationSql.Function("CONCAT",
+            SafeMigrationSql.Identifier("value"),
+            SafeMigrationSql.Literal(value));
+
+        // Act
+        var display = MySqlGeneratedExpressionDisplay.Render(expression,
+            Renderer(context),
+            isMariaDb: false,
+            nativeIndexStringLiterals: true);
+
+        var candidates = MySqlExpressionCanonicalizer.BuildComparisonCandidates(display,
+            includeMySqlEncodedDisplay: true);
+
+        // Assert
+        Assert.Contains(candidates,
+            candidate => Convert.ToHexString(Encoding.UTF8.GetBytes(candidate.Text)) == nativeHex);
+    }
+
     /// <summary>Builds expression operands without passing source SQL through a normalizer.</summary>
     private static SafeMigrationSqlExpression Binary(
         SafeMigrationSqlExpression left,

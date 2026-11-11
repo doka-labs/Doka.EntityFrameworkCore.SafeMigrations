@@ -70,8 +70,12 @@ public sealed partial class
 
         var physicalType = await ScalarStringAsync(
             connectionString,
-            "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'required_projected_items' AND COLUMN_NAME = 'value';",
+            """
+            SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'required_projected_items'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -167,8 +171,11 @@ public sealed partial class
 
         var actualEngine = await ScalarStringAsync(
             connectionString,
-            "SELECT ENGINE FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'required_projected_items';",
+            """
+            SELECT ENGINE FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'required_projected_items';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -220,8 +227,10 @@ public sealed partial class
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await AtomicRequiredAddSessionSqlAsync(
             context,
-            "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; SET SESSION default_storage_engine = InnoDB; "
-            + "SET SESSION check_constraint_checks = OFF;",
+            """
+            SET SESSION sql_mode = 'STRICT_ALL_TABLES'; SET SESSION default_storage_engine
+            = InnoDB; SET SESSION check_constraint_checks = OFF;
+            """,
             cancellationToken: CancellationToken.None);
 
         var column = AtomicRequiredAddOperation(useGuidStorage: false, table: "required_projected_items");
@@ -276,10 +285,14 @@ public sealed partial class
         // an implicit CURRENT_TIMESTAMP default impersonating the no-default target.
         await AtomicRequiredAddSessionSqlAsync(
             context,
-            "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; SET SESSION explicit_defaults_for_timestamp = ON; "
-            + "CREATE TABLE `required_projected_time_items` (`key` int NOT NULL PRIMARY KEY, "
-            + "`value` timestamp(6) NOT NULL) ENGINE=InnoDB; "
-            + "INSERT INTO `required_projected_time_items` VALUES (1, '2000-01-02 03:04:05');",
+            """
+            SET SESSION sql_mode = 'STRICT_ALL_TABLES'; SET SESSION explicit_defaults_for_timestamp
+            = ON; CREATE TABLE `required_projected_time_items` (`key` int NOT NULL PRIMARY
+            KEY,
+            `value` timestamp(6) NOT NULL) ENGINE=InnoDB; INSERT INTO `required_projected_time_items`
+            VALUES (1,
+            '2000-01-02 03:04:05');
+            """,
             cancellationToken: CancellationToken.None);
 
         var ensure = new SafeMigrationOperation(
@@ -295,9 +308,13 @@ public sealed partial class
         // Act
         var originalContract = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'required_projected_time_items' AND COLUMN_NAME = 'value' "
-            + "AND IS_NULLABLE = 'NO' AND COLUMN_DEFAULT IS NULL;",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'required_projected_time_items'
+            AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO'
+            AND COLUMN_DEFAULT IS NULL;
+            """,
             cancellationToken: CancellationToken.None);
 
         var report = await context
@@ -313,8 +330,12 @@ public sealed partial class
 
         var targetColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'required_projected_time_items' AND COLUMN_NAME = 'value';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'required_projected_time_items'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var retainedKeys = await ScalarIntAsync(

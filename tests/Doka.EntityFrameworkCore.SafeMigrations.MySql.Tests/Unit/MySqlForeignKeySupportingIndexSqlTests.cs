@@ -111,22 +111,22 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
 
         // Assert
         Assert.Contains(
-            "CAST(supporting_index.TABLE_NAME AS BINARY) = CAST(@bound_child AS BINARY)",
+            "CAST(supporting_index.TABLE_NAME AS BINARY) = CAST(@bound_child\nAS BINARY)",
             coverage,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CAST(supporting_index.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            "CAST(supporting_index.TABLE_SCHEMA AS BINARY) = CAST(DATABASE()\nAS BINARY)",
             coverage,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CAST(automatic_index_name.TABLE_NAME AS BINARY) = CAST(@bound_child AS BINARY)",
+            "CAST(automatic_index_name.TABLE_NAME AS BINARY) = CAST(@bound_child\nAS BINARY)",
             occupation,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CAST(automatic_index_name.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            "CAST(automatic_index_name.TABLE_SCHEMA AS BINARY) = CAST(DATABASE()\nAS BINARY)",
             occupation,
             StringComparison.Ordinal);
     }
@@ -160,7 +160,7 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "GROUP BY supporting_index.INDEX_NAME, CAST(supporting_index.INDEX_NAME AS BINARY)",
+            "GROUP BY supporting_index.INDEX_NAME,\nCAST(supporting_index.INDEX_NAME AS BINARY)",
             coverage,
             StringComparison.Ordinal);
 
@@ -218,12 +218,12 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
 
         // Assert
         Assert.StartsWith(
-            "EXISTS (SELECT supporting_index.INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS ",
+            "EXISTS (SELECT supporting_index.INDEX_NAME\nFROM INFORMATION_SCHEMA.STATISTICS ",
             sql,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CAST(supporting_index.TABLE_NAME AS BINARY) = CAST(@child AS BINARY)",
+            "CAST(supporting_index.TABLE_NAME AS BINARY) = CAST(@child\nAS BINARY)",
             sql,
             StringComparison.Ordinal);
 
@@ -240,12 +240,12 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
         Assert.Contains("supporting_index.SUB_PART IS NULL", sql, StringComparison.Ordinal);
         Assert.Contains("supporting_index.EXPRESSION IS NOT NULL", sql, StringComparison.Ordinal);
         Assert.Contains(
-            "CAST(LEFT(supporting_index.EXPRESSION, 5) AS BINARY) = CAST('cast(' AS BINARY)",
+            "CAST(LEFT(supporting_index.EXPRESSION, 5) AS BINARY) = CAST('cast('\nAS BINARY)",
             sql,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CAST(RIGHT(supporting_index.EXPRESSION, 7) AS BINARY) = CAST(' array)' AS BINARY)",
+            "CAST(RIGHT(supporting_index.EXPRESSION, 7) AS BINARY) = CAST(' array)'\nAS BINARY)",
             sql,
             StringComparison.Ordinal);
 
@@ -301,7 +301,7 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
         {
             Assert.StartsWith("SELECT supporting_index.INDEX_NAME", query, StringComparison.Ordinal);
             Assert.Contains(
-                "GROUP BY supporting_index.INDEX_NAME, "
+                "GROUP BY supporting_index.INDEX_NAME,\n"
                 + "CAST(supporting_index.INDEX_NAME AS BINARY) HAVING COUNT(*) >= 1",
                 query,
                 StringComparison.Ordinal);
@@ -337,9 +337,9 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
             new[] { coverage, occupation, unsafeQuery },
             sql =>
             {
-                Assert.Contains("CASE WHEN @@lower_case_table_names = 0 THEN", sql, StringComparison.Ordinal);
-                Assert.Contains("WHEN @@lower_case_table_names IN (1, 2) THEN", sql, StringComparison.Ordinal);
-                Assert.Contains("CAST(LOWER(@child) AS BINARY) ELSE FALSE END)", sql, StringComparison.Ordinal);
+                Assert.Contains("CASE WHEN @@lower_case_table_names = 0\nTHEN", sql, StringComparison.Ordinal);
+                Assert.Contains("WHEN @@lower_case_table_names IN (1, 2)\nTHEN", sql, StringComparison.Ordinal);
+                Assert.Contains("CAST(LOWER(@child)\nAS BINARY)\nELSE FALSE END)", sql, StringComparison.Ordinal);
                 Assert.DoesNotContain(" COLLATE ", sql, StringComparison.Ordinal);
             });
     }
@@ -465,7 +465,7 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
 
         // Assert
         Assert.StartsWith(
-            "SELECT DISTINCT dependent_fk.CONSTRAINT_NAME "
+            "SELECT DISTINCT dependent_fk.CONSTRAINT_NAME\n"
             + "FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE ",
             query,
             StringComparison.Ordinal);
@@ -478,24 +478,24 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
         Assert.Contains("bound_index.INDEX_TYPE = 'BTREE'", query, StringComparison.Ordinal);
         Assert.Contains("dependent_fk.REFERENCED_TABLE_NAME IS NOT NULL", query, StringComparison.Ordinal);
         Assert.Contains(
-            "GROUP BY dependent_fk.CONSTRAINT_NAME, CAST(dependent_fk.CONSTRAINT_NAME AS BINARY), "
-            + "unsafe_index.INDEX_NAME, CAST(unsafe_index.INDEX_NAME AS BINARY) "
+            "GROUP BY dependent_fk.CONSTRAINT_NAME,\nCAST(dependent_fk.CONSTRAINT_NAME AS BINARY), "
+            + "unsafe_index.INDEX_NAME,\nCAST(unsafe_index.INDEX_NAME AS BINARY) "
             + "HAVING COUNT(*) = COUNT(bound_index.SEQ_IN_INDEX)",
             query,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CAST(LEFT(array_part.EXPRESSION, 5) AS BINARY) = CAST('cast(' AS BINARY)",
+            "CAST(LEFT(array_part.EXPRESSION, 5) AS BINARY) = CAST('cast('\nAS BINARY)",
             query,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CAST(RIGHT(array_part.EXPRESSION, 7) AS BINARY) = CAST(' array)' AS BINARY)",
+            "CAST(RIGHT(array_part.EXPRESSION, 7) AS BINARY) = CAST(' array)'\nAS BINARY)",
             query,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "array_part.TABLE_SCHEMA = DATABASE() AND array_part.TABLE_NAME = @child",
+            "array_part.TABLE_SCHEMA = DATABASE()\nAND array_part.TABLE_NAME = @child",
             query,
             StringComparison.Ordinal);
 
@@ -549,7 +549,7 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
         Assert.Contains("unsafe_prefix.SUB_PART IS NULL", query, StringComparison.Ordinal);
         Assert.Contains("unsafe_prefix.INDEX_TYPE = 'BTREE'", query, StringComparison.Ordinal);
         Assert.Contains(
-            "HAVING COUNT(*) = COUNT(bound_index.SEQ_IN_INDEX) "
+            "HAVING COUNT(*) = COUNT(bound_index.SEQ_IN_INDEX)\n"
             + "AND COUNT(*) = COUNT(unsafe_prefix.SEQ_IN_INDEX)",
             query,
             StringComparison.Ordinal);
@@ -575,8 +575,8 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
         // Assert
         Assert.StartsWith("SELECT DISTINCT dependent_fk.CONSTRAINT_NAME", query, StringComparison.Ordinal);
         Assert.Contains(
-            "GROUP BY dependent_fk.CONSTRAINT_NAME, CAST(dependent_fk.CONSTRAINT_NAME AS BINARY), "
-            + "unsafe_index.INDEX_NAME, CAST(unsafe_index.INDEX_NAME AS BINARY)",
+            "GROUP BY dependent_fk.CONSTRAINT_NAME,\nCAST(dependent_fk.CONSTRAINT_NAME AS BINARY), "
+            + "unsafe_index.INDEX_NAME,\nCAST(unsafe_index.INDEX_NAME AS BINARY)",
             query,
             StringComparison.Ordinal);
 
@@ -607,9 +607,9 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
                 Assert.Contains("CAST(" + alias + ".TABLE_SCHEMA AS BINARY)", query, StringComparison.Ordinal);
             });
 
-        Assert.Contains("CASE WHEN @@lower_case_table_names = 0 THEN", query, StringComparison.Ordinal);
-        Assert.Contains("WHEN @@lower_case_table_names IN (1, 2) THEN", query, StringComparison.Ordinal);
-        Assert.Contains("CAST(LOWER(@child) AS BINARY) ELSE FALSE END)", query, StringComparison.Ordinal);
+        Assert.Contains("CASE WHEN @@lower_case_table_names = 0\nTHEN", query, StringComparison.Ordinal);
+        Assert.Contains("WHEN @@lower_case_table_names IN (1, 2)\nTHEN", query, StringComparison.Ordinal);
+        Assert.Contains("CAST(LOWER(@child)\nAS BINARY)\nELSE FALSE END)", query, StringComparison.Ordinal);
         Assert.DoesNotContain(" COLLATE ", query, StringComparison.Ordinal);
     }
 
@@ -696,23 +696,23 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
 
         // Assert
         Assert.StartsWith(
-            "SELECT supporting_index.INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS ",
+            "SELECT supporting_index.INDEX_NAME\nFROM INFORMATION_SCHEMA.STATISTICS ",
             sql,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CAST(supporting_index.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            "CAST(supporting_index.TABLE_SCHEMA AS BINARY) = CAST(DATABASE()\nAS BINARY)",
             sql,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CAST(supporting_index.TABLE_NAME AS BINARY) = CAST(@child AS BINARY)",
+            "CAST(supporting_index.TABLE_NAME AS BINARY) = CAST(@child\nAS BINARY)",
             sql,
             StringComparison.Ordinal);
 
         Assert.Contains("supporting_index.INDEX_TYPE = 'BTREE'", sql, StringComparison.Ordinal);
         Assert.Contains(
-            "GROUP BY supporting_index.INDEX_NAME, CAST(supporting_index.INDEX_NAME AS BINARY) "
+            "GROUP BY supporting_index.INDEX_NAME,\nCAST(supporting_index.INDEX_NAME AS BINARY) "
             + "HAVING COUNT(*) >= "
             + columnCount.ToString(CultureInfo.InvariantCulture),
             sql,
@@ -759,25 +759,18 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
 
         // Assert
         Assert.Equal(
-            "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS automatic_index_name "
-            + "WHERE automatic_index_name.TABLE_SCHEMA = DATABASE() AND automatic_index_name.TABLE_NAME = "
-            + table
-            + " AND "
-            + MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
-                "automatic_index_name.TABLE_SCHEMA",
-                "DATABASE()")
-            + " AND "
-            + MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
-                "automatic_index_name.TABLE_NAME",
-                table)
-            + " "
-            + "AND automatic_index_name.INDEX_NAME = "
-            + symbol
-            + " AND "
-            + MySqlSafeMigrationCatalogSqlBuilder.BuildNativeCaseInsensitiveIdentifierMatches(
-                "automatic_index_name.INDEX_NAME",
-                symbol)
-            + ")",
+            $"""
+            EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS automatic_index_name
+            WHERE automatic_index_name.TABLE_SCHEMA = DATABASE()
+            AND automatic_index_name.TABLE_NAME = {table}
+            AND {MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
+                "automatic_index_name.TABLE_SCHEMA", "DATABASE()")}
+            AND {MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
+                "automatic_index_name.TABLE_NAME", table)}
+            AND automatic_index_name.INDEX_NAME = {symbol}
+            AND {MySqlSafeMigrationCatalogSqlBuilder.BuildNativeCaseInsensitiveIdentifierMatches(
+                "automatic_index_name.INDEX_NAME", symbol)})
+            """,
             sql);
 
         Assert.DoesNotContain("INDEX_TYPE", sql, StringComparison.Ordinal);
@@ -831,12 +824,12 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
         Assert.Equal("database_qualifier_mismatch", plan.CurrentDatabaseQualificationFailureCode);
         Assert.Contains("DATABASE()", plan.CurrentDatabaseQualificationExpression, StringComparison.Ordinal);
         Assert.Contains(
-            "CAST(automatic_index_name.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            "CAST(automatic_index_name.TABLE_SCHEMA AS BINARY) = CAST(DATABASE()\nAS BINARY)",
             plan.StateExpression,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CAST(supporting_index.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            "CAST(supporting_index.TABLE_SCHEMA AS BINARY) = CAST(DATABASE()\nAS BINARY)",
             plan.StateExpression,
             StringComparison.Ordinal);
 

@@ -92,7 +92,7 @@ public sealed class SqlServerColumnLayoutSqlTests
         var selection = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan);
         var layoutGuard = selection.IndexOf("IF @doka_layout IS NOT NULL", StringComparison.Ordinal);
         var rowBinding = selection.IndexOf(
-            "IF @doka_prerequisite = 1 EXEC sys.sp_executesql",
+            "IF @doka_prerequisite = 1\nEXEC sys.sp_executesql",
             StringComparison.Ordinal);
 
         // Assert
@@ -135,7 +135,7 @@ public sealed class SqlServerColumnLayoutSqlTests
         Assert.Contains("AS variable_columns", query, StringComparison.Ordinal);
         Assert.Contains("AS clustered_variable_extra", query, StringComparison.Ordinal);
         Assert.Contains("JOIN sys.indexes", query, StringComparison.Ordinal);
-        Assert.Contains("AS clustered_key ", query, StringComparison.Ordinal);
+        Assert.Contains("AS clustered_key\n", query, StringComparison.Ordinal);
         Assert.DoesNotContain("AS clustered ", query, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("system_internals", query, StringComparison.Ordinal);
         Assert.DoesNotContain("sys.dm_db", query, StringComparison.Ordinal);

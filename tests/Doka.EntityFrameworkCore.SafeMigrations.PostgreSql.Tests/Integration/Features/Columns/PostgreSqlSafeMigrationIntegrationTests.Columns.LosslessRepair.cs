@@ -15,13 +15,13 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE varchar_widening ("
-            + "id integer NOT NULL PRIMARY KEY, "
-            + "value character varying(10) NULL DEFAULT 'legacy'); "
-            + "COMMENT ON COLUMN varchar_widening.value IS 'legacy'; "
-            + "CREATE INDEX ix_varchar_widening_value ON varchar_widening (value); "
-            + "CREATE INDEX ix_varchar_widening_value_id ON varchar_widening (value, id); "
-            + "INSERT INTO varchar_widening (id, value) VALUES (1, 'preserved');",
+            """
+            CREATE TABLE varchar_widening (id integer NOT NULL PRIMARY KEY, value character varying(10) NULL
+            DEFAULT 'legacy'); COMMENT ON COLUMN varchar_widening.value IS 'legacy'; CREATE INDEX
+            ix_varchar_widening_value ON varchar_widening (value); CREATE INDEX ix_varchar_widening_value_id
+            ON varchar_widening (value,
+            id); INSERT INTO varchar_widening (id, value) VALUES (1, 'preserved');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -99,9 +99,11 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_indexes "
-                + "WHERE schemaname = current_schema() AND tablename = 'varchar_widening' "
-                + "AND indexname IN ('ix_varchar_widening_value', 'ix_varchar_widening_value_id');",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE schemaname = current_schema()
+                AND tablename = 'varchar_widening'
+                AND indexname IN ('ix_varchar_widening_value', 'ix_varchar_widening_value_id');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -115,14 +117,14 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE varchar_fk_parent ("
-            + "code character varying(10) NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE varchar_fk_child ("
-            + "id integer NOT NULL PRIMARY KEY, parent_code character varying(10) NOT NULL, "
-            + "CONSTRAINT fk_varchar_fk_child_parent FOREIGN KEY (parent_code) "
-            + "REFERENCES varchar_fk_parent (code)); "
-            + "INSERT INTO varchar_fk_parent (code) VALUES ('core'); "
-            + "INSERT INTO varchar_fk_child (id, parent_code) VALUES (1, 'core');",
+            """
+            CREATE TABLE varchar_fk_parent (code character varying(10) NOT NULL PRIMARY KEY); CREATE TABLE
+            varchar_fk_child (id integer NOT NULL PRIMARY KEY,
+            parent_code character varying(10) NOT NULL, CONSTRAINT fk_varchar_fk_child_parent FOREIGN KEY
+            (parent_code) REFERENCES varchar_fk_parent (code)); INSERT INTO varchar_fk_parent (code) VALUES
+            ('core'); INSERT INTO varchar_fk_child (id,
+            parent_code) VALUES (1, 'core');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -177,11 +179,13 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() "
-                + "AND table_name IN ('varchar_fk_parent', 'varchar_fk_child') "
-                + "AND column_name IN ('code', 'parent_code') "
-                + $"AND character_maximum_length = {targetLength};",
+                $"""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name IN ('varchar_fk_parent', 'varchar_fk_child')
+                AND column_name IN ('code', 'parent_code')
+                AND character_maximum_length = {targetLength};
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -196,9 +200,11 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM varchar_fk_child child "
-                + "JOIN varchar_fk_parent parent ON parent.code = child.parent_code "
-                + "WHERE child.id = 1 AND child.parent_code = 'core';",
+                """
+                SELECT COUNT(*) FROM varchar_fk_child child
+                JOIN varchar_fk_parent parent ON parent.code = child.parent_code
+                WHERE child.id = 1 AND child.parent_code = 'core';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -274,19 +280,18 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE varchar_narrowing ("
-            + "id integer NOT NULL PRIMARY KEY, "
-            + "unicode_value character varying(40) NULL, "
-            + "trailing_value character varying(40) NULL, "
-            + "empty_value character varying(40) NULL, "
-            + "required_value character varying(40) NOT NULL); "
-            + "CREATE TABLE varchar_narrowing_single ("
-            + "id integer NOT NULL PRIMARY KEY, value character varying(40) NULL); "
-            + "INSERT INTO varchar_narrowing "
-            + "(id, unicode_value, trailing_value, empty_value, required_value) "
-            + "VALUES (1, repeat(convert_from(decode('F09F9880', 'hex'), 'UTF8'), 5), "
-            + "'a' || repeat(' ', 3), NULL, 'exact'); "
-            + "INSERT INTO varchar_narrowing_single (id, value) VALUES (1, 'fits');",
+            """
+            CREATE TABLE varchar_narrowing (id integer NOT NULL PRIMARY KEY, unicode_value character
+            varying(40) NULL,
+            trailing_value character varying(40) NULL, empty_value character varying(40) NULL,
+            required_value character varying(40) NOT NULL); CREATE TABLE varchar_narrowing_single (id
+            integer NOT NULL PRIMARY KEY,
+            value character varying(40) NULL); INSERT INTO varchar_narrowing (id,
+            unicode_value, trailing_value, empty_value, required_value) VALUES (1,
+            repeat(convert_from(decode('F09F9880', 'hex'), 'UTF8'), 5), 'a' || repeat(' ',
+            3), NULL, 'exact'); INSERT INTO varchar_narrowing_single (id, value) VALUES (1,
+            'fits');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -412,9 +417,11 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE varchar_unbounded_repair ("
-            + "id integer NOT NULL PRIMARY KEY, value character varying NULL); "
-            + "INSERT INTO varchar_unbounded_repair (id, value) VALUES (1, 'fits');",
+            """
+            CREATE TABLE varchar_unbounded_repair (id integer NOT NULL PRIMARY KEY,
+            value character varying NULL); INSERT INTO varchar_unbounded_repair (id,
+            value) VALUES (1, 'fits');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -478,9 +485,13 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             5,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT character_maximum_length FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'varchar_unbounded_repair' "
-                + "AND column_name = 'value';",
+                """
+                SELECT character_maximum_length
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'varchar_unbounded_repair'
+                AND column_name = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -499,10 +510,11 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE varchar_unbounded_blocked ("
-            + "id integer NOT NULL PRIMARY KEY, value character varying NULL); "
-            + "INSERT INTO varchar_unbounded_blocked (id, value) "
-            + $"VALUES (1, 'fits'), (2, '{privateValue}');",
+            $"""
+            CREATE TABLE varchar_unbounded_blocked (id integer NOT NULL PRIMARY KEY,
+            value character varying NULL); INSERT INTO varchar_unbounded_blocked (id,
+            value) VALUES (1, 'fits'), (2, '{privateValue}');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -535,9 +547,13 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             "unbounded",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT COALESCE(character_maximum_length::text, 'unbounded') "
-                + "FROM information_schema.columns WHERE table_schema = current_schema() "
-                + "AND table_name = 'varchar_unbounded_blocked' AND column_name = 'value';",
+                """
+                SELECT COALESCE(character_maximum_length::text, 'unbounded')
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'varchar_unbounded_blocked'
+                AND column_name = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -549,10 +565,12 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE varchar_narrowing_blocked ("
-            + "id integer NOT NULL PRIMARY KEY, value character varying(40) NULL); "
-            + "INSERT INTO varchar_narrowing_blocked (id, value) "
-            + $"VALUES (1, 'fits'), (2, 'exact'), (3, '{privateValue}');",
+            $"""
+            CREATE TABLE varchar_narrowing_blocked (id integer NOT NULL PRIMARY KEY,
+            value character varying(40) NULL); INSERT INTO varchar_narrowing_blocked
+            (id,
+            value) VALUES (1, 'fits'), (2, 'exact'), (3, '{privateValue}');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -593,9 +611,13 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             40,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT character_maximum_length FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'varchar_narrowing_blocked' "
-                + "AND column_name = 'value';",
+                """
+                SELECT character_maximum_length
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'varchar_narrowing_blocked'
+                AND column_name = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -607,9 +629,11 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE varchar_narrowing_race ("
-            + "id integer NOT NULL PRIMARY KEY, value character varying(40) NULL); "
-            + "INSERT INTO varchar_narrowing_race (id, value) VALUES (1, 'fits');",
+            """
+            CREATE TABLE varchar_narrowing_race (id integer NOT NULL PRIMARY KEY,
+            value character varying(40) NULL); INSERT INTO varchar_narrowing_race (id,
+            value) VALUES (1, 'fits');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -648,9 +672,13 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             40,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT character_maximum_length FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'varchar_narrowing_race' "
-                + "AND column_name = 'value';",
+                """
+                SELECT character_maximum_length
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'varchar_narrowing_race'
+                AND column_name = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -671,9 +699,13 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
         var connectionString = await CreateDatabaseAsync(testCancellation.Token);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE varchar_narrowing_locked_recheck ("
-            + "id integer NOT NULL PRIMARY KEY, value character varying(40) NULL); "
-            + "INSERT INTO varchar_narrowing_locked_recheck (id, value) VALUES (1, 'fits');",
+            """
+            CREATE TABLE varchar_narrowing_locked_recheck (id integer NOT NULL PRIMARY
+            KEY,
+            value character varying(40) NULL); INSERT INTO varchar_narrowing_locked_recheck
+            (id,
+            value) VALUES (1, 'fits');
+            """,
             cancellationToken: testCancellation.Token);
 
         await using var context = CreateContext(connectionString);
@@ -725,9 +757,13 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             40,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT character_maximum_length FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'varchar_narrowing_locked_recheck' "
-                + "AND column_name = 'value';",
+                """
+                SELECT character_maximum_length
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'varchar_narrowing_locked_recheck'
+                AND column_name = 'value';
+                """,
                 cancellationToken: testCancellation.Token));
 
         Assert.Equal(
@@ -745,9 +781,12 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE varchar_narrowing_timeout ("
-            + "id integer NOT NULL PRIMARY KEY, value character varying(40) NULL); "
-            + "INSERT INTO varchar_narrowing_timeout (id, value) VALUES (1, 'fits');",
+            """
+            CREATE TABLE varchar_narrowing_timeout (id integer NOT NULL PRIMARY KEY,
+            value character varying(40) NULL); INSERT INTO varchar_narrowing_timeout
+            (id,
+            value) VALUES (1, 'fits');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var blocker = new NpgsqlConnection(connectionString);
@@ -779,9 +818,13 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             40,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT character_maximum_length FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'varchar_narrowing_timeout' "
-                + "AND column_name = 'value';",
+                """
+                SELECT character_maximum_length
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'varchar_narrowing_timeout'
+                AND column_name = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -793,9 +836,13 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE varchar_narrowing_cancellation ("
-            + "id integer NOT NULL PRIMARY KEY, value character varying(40) NULL); "
-            + "INSERT INTO varchar_narrowing_cancellation (id, value) VALUES (1, 'fits');",
+            """
+            CREATE TABLE varchar_narrowing_cancellation (id integer NOT NULL PRIMARY
+            KEY,
+            value character varying(40) NULL); INSERT INTO varchar_narrowing_cancellation
+            (id,
+            value) VALUES (1, 'fits');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var blocker = new NpgsqlConnection(connectionString);
@@ -841,9 +888,13 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             40,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT character_maximum_length FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'varchar_narrowing_cancellation' "
-                + "AND column_name = 'value';",
+                """
+                SELECT character_maximum_length
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'varchar_narrowing_cancellation'
+                AND column_name = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -885,10 +936,13 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             "bit(1)",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT pg_catalog.format_type(a.atttypid, a.atttypmod) "
-                + "FROM pg_catalog.pg_attribute a "
-                + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
-                + "WHERE c.relname = 'boolean_transition' AND a.attname = 'value';",
+                """
+                SELECT pg_catalog.format_type(a.atttypid, a.atttypmod)
+                FROM pg_catalog.pg_attribute a
+                JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+                WHERE c.relname = 'boolean_transition'
+                AND a.attname = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 

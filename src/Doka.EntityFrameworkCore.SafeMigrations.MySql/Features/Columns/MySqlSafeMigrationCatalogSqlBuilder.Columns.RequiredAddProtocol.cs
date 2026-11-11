@@ -233,12 +233,23 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // WHY: Materialize complete catalog facts once per operation. State,
         // repair, NULL eligibility and diagnostics consume only this closed
         // status, not repeated copies of the full ownership predicate.
-        var statusExpression = $"CASE WHEN ({terminalMatching}) THEN 'complete' "
-            + $"WHEN NOT ({columnExists}) THEN CASE WHEN ({guardExists}) THEN 'conflict' "
-            + $"WHEN NOT ({environment}) THEN 'unavailable' ELSE 'fresh' END "
-            + $"WHEN ({guardExists}) THEN CASE WHEN NOT ({ownership}) THEN 'conflict' "
-            + $"WHEN NOT ({environment}) THEN 'unavailable' "
-            + $"WHEN NOT ({noSetNullDependency}) THEN 'set_null' ELSE 'staged' END ELSE 'ordinary' END";
+        var statusExpression = $"""
+            CASE WHEN ({terminalMatching})
+            THEN 'complete'
+            WHEN NOT ({columnExists})
+            THEN CASE WHEN ({guardExists})
+            THEN 'conflict'
+            WHEN NOT ({environment})
+            THEN 'unavailable' ELSE 'fresh' END
+            WHEN ({guardExists})
+            THEN CASE WHEN NOT ({ownership})
+            THEN 'conflict'
+            WHEN NOT ({environment})
+            THEN 'unavailable'
+            WHEN NOT ({noSetNullDependency})
+            THEN 'set_null' ELSE 'staged' END
+            ELSE 'ordinary' END
+            """;
 
         // WHY: A certified stage may contain explicit writer values. Its
         // Missing/Apply classification is recovery, not evidence of an empty
@@ -265,19 +276,35 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             ExecutionPostcondition = terminalMatching,
             PrerequisiteExpression = tableExists,
             StateExpression =
-            $"CASE WHEN NOT {tableExists} THEN 'prerequisite_missing' "
-            + $"WHEN ({status}) = 'complete' THEN 'matching' "
-            + $"WHEN ({status}) = 'conflict' THEN CASE WHEN ({columnExists}) "
-            + "THEN 'different' ELSE 'unsupported' END "
-            + $"WHEN ({status}) IN ('unavailable', 'set_null') THEN 'unsupported' "
-            + $"WHEN ({resume}) THEN CASE WHEN {MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder} "
-            + $"THEN 'data_blocked' ELSE 'missing' END ELSE ({plan.StateExpression}) END",
+            $"""
+            CASE WHEN NOT {tableExists}
+            THEN 'prerequisite_missing'
+            WHEN ({status}) = 'complete'
+            THEN 'matching'
+            WHEN ({status}) = 'conflict'
+            THEN CASE WHEN ({columnExists})
+            THEN 'different' ELSE 'unsupported' END
+            WHEN ({status}) IN ('unavailable', 'set_null')
+            THEN 'unsupported'
+            WHEN ({resume})
+            THEN CASE WHEN {MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder}
+            THEN 'data_blocked' ELSE 'missing' END
+            ELSE ({plan.StateExpression}) END
+            """,
             RepairPrecondition = $"({status}) = 'ordinary' AND ({plan.RepairPrecondition})",
-            ClassificationCodeExpression = $"CASE WHEN ({status}) = 'complete' THEN NULL "
-            + $"WHEN ({status}) = 'conflict' THEN 'column_atomic_add_guard_conflict' "
-            + $"WHEN ({status}) = 'unavailable' THEN 'column_atomic_add_unavailable' "
-            + $"WHEN ({status}) = 'set_null' THEN 'column_set_null_dependency' "
-            + $"WHEN ({resume}) THEN 'column_atomic_add_resume' ELSE ({oldCode}) END",
+            ClassificationCodeExpression = $"""
+            CASE WHEN ({status}) = 'complete'
+            THEN NULL
+            WHEN ({status}) = 'conflict'
+            THEN 'column_atomic_add_guard_conflict'
+            WHEN ({status}) = 'unavailable'
+            THEN 'column_atomic_add_unavailable'
+            WHEN ({status}) = 'set_null'
+            THEN 'column_set_null_dependency'
+            WHEN ({resume})
+            THEN 'column_atomic_add_resume'
+            ELSE ({oldCode}) END
+            """,
             NullabilityDataProbe = nullProbe,
             MayRequireNullabilityDataProof = true,
             StateEvaluationGuardExpression = columnExists,
@@ -285,8 +312,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             // WHY: The lazy missing-column branch runs before StateExpression.
             // Qualification must live here as well or an empty table could
             // bypass engine, session and ownership checks entirely.
-            StateEvaluationGuardFailureExpression = $"CASE WHEN ({status}) <> 'fresh' THEN 'unsupported' "
-            + $"WHEN {missingRows} THEN 'data_blocked' ELSE 'missing' END",
+            StateEvaluationGuardFailureExpression = $"""
+            CASE WHEN ({status}) <> 'fresh'
+            THEN 'unsupported'
+            WHEN {missingRows}
+            THEN 'data_blocked' ELSE 'missing' END
+            """,
         };
     }
 
@@ -303,35 +334,38 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         bool backslashEscapes,
         bool doubleQuotes,
         bool requiresNoBackslashEscapes
-    ) => "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES atomic_table "
-        + $"WHERE atomic_table.TABLE_SCHEMA = DATABASE() AND atomic_table.TABLE_NAME = {Literal(table)} "
-        + $"AND {BuildRequiredColumnAddOwnerMatches("atomic_table.TABLE_SCHEMA", "DATABASE()")} "
-        + $"AND {BuildRequiredColumnAddOwnerMatches("atomic_table.TABLE_NAME", Literal(table))} "
-        + "AND atomic_table.TABLE_TYPE = 'BASE TABLE' AND UPPER(atomic_table.ENGINE) = 'INNODB') "
-        + $"AND ({StrictSqlModeExpression}) "
-        + (isMariaDb
+    ) => $"""
+        EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES atomic_table
+        WHERE atomic_table.TABLE_SCHEMA = DATABASE()
+        AND atomic_table.TABLE_NAME = {Literal(table)}
+        AND {BuildRequiredColumnAddOwnerMatches("atomic_table.TABLE_SCHEMA", "DATABASE()")}
+        AND {BuildRequiredColumnAddOwnerMatches("atomic_table.TABLE_NAME", Literal(table))}
+        AND atomic_table.TABLE_TYPE = 'BASE TABLE'
+        AND UPPER(atomic_table.ENGINE) = 'INNODB')
+        AND ({StrictSqlModeExpression}) {(isMariaDb
             ? "AND @@SESSION.check_constraint_checks = 1 "
-            : string.Empty)
-        + (backslashEscapes
+            : string.Empty)}{(backslashEscapes
             ? "AND FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) = 0 "
-            : string.Empty)
-        + (doubleQuotes
+            : string.Empty)}{(doubleQuotes
             ? "AND FIND_IN_SET('ANSI_QUOTES', @@SESSION.sql_mode) = 0 "
-            : string.Empty)
-        + (requiresNoBackslashEscapes
+            : string.Empty)}{(requiresNoBackslashEscapes
             ? $"AND ({NativeEnumNoBackslashEscapesExpression})"
-            : string.Empty);
+            : string.Empty)}
+        """;
 
     /// <summary>Proves the requested protocol table exists without borrowing a case-distinct catalog shadow.</summary>
     /// <param name="table">The raw authored owner bound to the protocol name.</param>
     /// <returns>A native-mode-qualified base-table presence predicate.</returns>
     private string BuildRequiredColumnAddBaseTableExists(
         string table
-    ) => "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES t "
-        + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(table)} "
-        + $"AND {BuildRequiredColumnAddOwnerMatches("t.TABLE_SCHEMA", "DATABASE()")} "
-        + $"AND {BuildRequiredColumnAddOwnerMatches("t.TABLE_NAME", Literal(table))} "
-        + "AND t.TABLE_TYPE = 'BASE TABLE')";
+    ) => $"""
+        EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES t
+        WHERE t.TABLE_SCHEMA = DATABASE()
+        AND t.TABLE_NAME = {Literal(table)}
+        AND {BuildRequiredColumnAddOwnerMatches("t.TABLE_SCHEMA", "DATABASE()")}
+        AND {BuildRequiredColumnAddOwnerMatches("t.TABLE_NAME", Literal(table))}
+        AND t.TABLE_TYPE = 'BASE TABLE')
+        """;
 
     /// <summary>Proves column presence for the native owner with native column-name case semantics.</summary>
     /// <param name="table">The raw authored owner bound to the protocol name.</param>
@@ -342,15 +376,16 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string table,
         string column,
         string? invariant = null
-    ) => "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c "
-        + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(table)} "
-        + $"AND c.COLUMN_NAME = {Literal(column)} "
-        + $"AND {BuildRequiredColumnAddOwnerMatches("c.TABLE_SCHEMA", "DATABASE()")} "
-        + $"AND {BuildRequiredColumnAddOwnerMatches("c.TABLE_NAME", Literal(table))}"
-        + (invariant is not null
+    ) => $"""
+        EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c
+        WHERE c.TABLE_SCHEMA = DATABASE()
+        AND c.TABLE_NAME = {Literal(table)}
+        AND c.COLUMN_NAME = {Literal(column)}
+        AND {BuildRequiredColumnAddOwnerMatches("c.TABLE_SCHEMA", "DATABASE()")}
+        AND {BuildRequiredColumnAddOwnerMatches("c.TABLE_NAME", Literal(table))}{(invariant is not null
             ? $" AND ({invariant})"
-            : string.Empty)
-        + ")";
+            : string.Empty)})
+        """;
 
     /// <summary>Qualifies a protocol owner using the server's native table and schema case rules.</summary>
     /// <param name="catalogExpression">The trusted SQL expression for the catalog table or schema identity.</param>
@@ -359,10 +394,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     internal static string BuildRequiredColumnAddOwnerMatches(
         string catalogExpression,
         string expectedExpression
-    ) => "(CASE WHEN @@lower_case_table_names = 0 THEN "
-        + $"CAST({catalogExpression} AS BINARY) = CAST({expectedExpression} AS BINARY) "
-        + "WHEN @@lower_case_table_names IN (1, 2) THEN "
-        + $"CAST(LOWER({catalogExpression}) AS BINARY) = CAST(LOWER({expectedExpression}) AS BINARY) ELSE FALSE END)";
+    ) => $"""
+        (CASE WHEN @@lower_case_table_names = 0
+        THEN CAST({catalogExpression} AS BINARY) = CAST({expectedExpression}
+        AS BINARY)
+        WHEN @@lower_case_table_names IN (1, 2)
+        THEN CAST(LOWER({catalogExpression}) AS BINARY) = CAST(LOWER({expectedExpression})
+        AS BINARY)
+        ELSE FALSE END)
+        """;
 
     /// <summary>Changes only nullability when comparing a staged column against the full authored target.</summary>
     /// <param name="definition">The immutable final target and provider metadata.</param>

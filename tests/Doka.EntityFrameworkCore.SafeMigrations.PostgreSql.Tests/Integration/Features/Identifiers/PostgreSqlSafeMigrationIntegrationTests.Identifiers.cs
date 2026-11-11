@@ -96,10 +96,12 @@ public sealed class PostgreSqlIdentifiersIntegrationTests : PostgreSqlSafeMigrat
 
         var indexCatalog = await ScalarStringAsync(
             connectionString,
-            "SELECT pg_catalog.pg_get_indexdef(i.indexrelid, 1, TRUE) || ' | ' || "
-            + "pg_catalog.pg_get_expr(i.indpred, i.indrelid) "
-            + "FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid "
-            + "WHERE c.relname = 'ix_expression_identifiers';",
+            """
+            SELECT pg_catalog.pg_get_indexdef(i.indexrelid, 1, TRUE) || ' | ' || pg_catalog.pg_get_expr(i.indpred,
+            i.indrelid) FROM pg_catalog.pg_index i
+            JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
+            WHERE c.relname = 'ix_expression_identifiers';
+            """,
             cancellationToken: CancellationToken.None);
 
         Assert.True(

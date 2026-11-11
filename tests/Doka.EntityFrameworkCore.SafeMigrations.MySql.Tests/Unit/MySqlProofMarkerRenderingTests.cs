@@ -55,16 +55,18 @@ public sealed partial class MySqlProofMarkerRenderingTests
         {
             "required-resume" => "(" + expected + ") = 'staged'",
             "prepared-required-resume" => "((" + expected + ")) = 'staged'",
-            "prepared-data-blocked" => "EXISTS(SELECT 1 FROM `proof_items` WHERE "
-                + expected
-                + " IS NOT NULL AND CHAR_LENGTH("
-                + expected
-                + ") > 8 LIMIT 1)",
-            "index-identity" => "CASE WHEN ("
-                + expected
-                + ") THEN 'matching' WHEN ("
-                + expected
-                + ") THEN 'different' ELSE 'missing' END",
+            "prepared-data-blocked" => $"""
+                EXISTS(SELECT 1 FROM `proof_items`
+                WHERE {expected} IS NOT NULL
+                AND CHAR_LENGTH({expected}) > 8
+                LIMIT 1)
+                """,
+            "index-identity" => $"""
+                CASE WHEN ({expected})
+                THEN 'matching'
+                WHEN ({expected})
+                THEN 'different' ELSE 'missing' END
+                """,
             _ => expected,
         };
 
@@ -419,11 +421,11 @@ public sealed partial class MySqlProofMarkerRenderingTests
     {
         // Arrange
         var parameter = MySqlCatalogSqlTemplate.Marker(0);
-        var eligibility = "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE COLUMN_NAME = "
-            + parameter
-            + " AND COLUMN_COMMENT = '"
-            + BinaryMarker
-            + "')";
+        var eligibility = $"""
+            EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE COLUMN_NAME = {parameter}
+            AND COLUMN_COMMENT = '{BinaryMarker}')
+            """;
 
         var proof = new MySqlSafeMigrationBinaryDefaultProof(BinaryMarker, eligibility, "SELECT TRUE", "TRUE");
         var plan = CreatePlan("TRUE", "TRUE") with

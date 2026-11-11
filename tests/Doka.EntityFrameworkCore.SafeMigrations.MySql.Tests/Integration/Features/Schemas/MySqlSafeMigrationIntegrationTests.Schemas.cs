@@ -152,8 +152,11 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `qualified_inventory` (`Id` int NOT NULL, PRIMARY KEY (`Id`)) ENGINE=InnoDB; "
-            + "CREATE INDEX `IX_qualified_inventory_Id` ON `qualified_inventory` (`Id`);",
+            """
+            CREATE TABLE `qualified_inventory` (`Id` int NOT NULL, PRIMARY KEY (`Id`))
+            ENGINE=InnoDB; CREATE INDEX `IX_qualified_inventory_Id` ON `qualified_inventory`
+            (`Id`);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -238,9 +241,13 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'qualified_index' "
-                + "AND INDEX_NAME = 'ix_qualified_index_value' AND SUB_PART = 191;",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'qualified_index'
+                AND INDEX_NAME = 'ix_qualified_index_value'
+                AND SUB_PART = 191;
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -251,10 +258,13 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `qualified_index_lifecycle` ("
-            + "`id` int NOT NULL, `value` varchar(800) NOT NULL, `other` varchar(800) NOT NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB; "
-            + "INSERT INTO `qualified_index_lifecycle` VALUES (1, 'value', 'other');",
+            """
+            CREATE TABLE `qualified_index_lifecycle` (`id` int NOT NULL, `value` varchar(800)
+            NOT NULL,
+            `other` varchar(800) NOT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB; INSERT
+            INTO `qualified_index_lifecycle` VALUES (1,
+            'value', 'other');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -358,9 +368,12 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'qualified_index_lifecycle' "
-                + "AND INDEX_NAME LIKE 'ix_qualified_index_lifecycle%';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'qualified_index_lifecycle'
+                AND INDEX_NAME LIKE 'ix_qualified_index_lifecycle%';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -380,8 +393,11 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `qualified_postflight` (`id` int NOT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB; "
-            + "CREATE INDEX `ix_qualified_postflight_id` ON `qualified_postflight` (`id`);",
+            """
+            CREATE TABLE `qualified_postflight` (`id` int NOT NULL, PRIMARY KEY (`id`))
+            ENGINE=InnoDB; CREATE INDEX `ix_qualified_postflight_id` ON `qualified_postflight`
+            (`id`);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -489,11 +505,13 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE DATABASE `{foreignDatabase}`; "
-            + "CREATE TABLE `qualified_isolation` (`id` int NOT NULL, `value` varchar(800) NOT NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB; "
-            + $"CREATE TABLE `{foreignDatabase}`.`qualified_isolation` ("
-            + "`id` int NOT NULL, `value` varchar(800) NOT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB;",
+            $"""
+            CREATE DATABASE `{foreignDatabase}`; CREATE TABLE `qualified_isolation`
+            (`id` int NOT NULL,
+            `value` varchar(800) NOT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB; CREATE
+            TABLE `{foreignDatabase}`.`qualified_isolation` (`id` int NOT NULL,
+            `value` varchar(800) NOT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB;
+            """,
             cancellationToken: CancellationToken.None);
 
         try
@@ -556,18 +574,22 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
                 0,
                 await ScalarIntAsync(
                     connectionString,
-                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                    + $"WHERE TABLE_SCHEMA IN (DATABASE(), '{foreignDatabase}') "
-                    + "AND TABLE_NAME = 'qualified_isolation' "
-                    + "AND INDEX_NAME = 'ix_qualified_isolation_value';",
+                    $"""
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                    WHERE TABLE_SCHEMA IN (DATABASE(), '{foreignDatabase}')
+                    AND TABLE_NAME = 'qualified_isolation'
+                    AND INDEX_NAME = 'ix_qualified_isolation_value';
+                    """,
                     cancellationToken: CancellationToken.None));
 
             Assert.Equal(
                 0,
                 await ScalarIntAsync(
                     connectionString,
-                    "SELECT (SELECT COUNT(*) FROM `qualified_isolation`) "
-                    + $"+ (SELECT COUNT(*) FROM `{foreignDatabase}`.`qualified_isolation`);",
+                    $"""
+                    SELECT (SELECT COUNT(*) FROM `qualified_isolation`) + (SELECT COUNT(*)
+                    FROM `{foreignDatabase}`.`qualified_isolation`);
+                    """,
                     cancellationToken: CancellationToken.None));
         }
         finally
@@ -723,10 +745,12 @@ public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `legacy` (`id` int NOT NULL, `extra` int NULL); "
-            + "CREATE INDEX `ix_legacy_extra` ON `legacy` (`extra`); "
-            + "CREATE TABLE `managed` (`id` int NOT NULL, `extra` int NULL); "
-            + "CREATE INDEX `ix_managed_extra` ON `managed` (`extra`);",
+            """
+            CREATE TABLE `legacy` (`id` int NOT NULL, `extra` int NULL); CREATE INDEX
+            `ix_legacy_extra` ON `legacy` (`extra`); CREATE TABLE `managed` (`id` int
+            NOT NULL,
+            `extra` int NULL); CREATE INDEX `ix_managed_extra` ON `managed` (`extra`);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

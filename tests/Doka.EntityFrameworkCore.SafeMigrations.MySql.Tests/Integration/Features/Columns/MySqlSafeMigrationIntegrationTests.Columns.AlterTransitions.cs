@@ -30,10 +30,12 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `alter_rows` (`id` int PRIMARY KEY, `value` {sourceType} NULL) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `alter_rows` VALUES (1, REPEAT(CONVERT(0xF09F9880 USING utf8mb4), 5)), "
-            + "(2, 'a   '), (3, NULL);",
+            $"""
+            CREATE TABLE `alter_rows` (`id` int PRIMARY KEY, `value` {sourceType}
+            NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            INSERT INTO `alter_rows` VALUES (1,
+            REPEAT(CONVERT(0xF09F9880 USING utf8mb4), 5)), (2, 'a   '), (3, NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         var operation = AlterTransitionOperation(sourceType, targetType);
@@ -109,9 +111,11 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `alter_rows` (`value` {sourceType} NULL) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `alter_rows` VALUES ('a     ');",
+            $"""
+            CREATE TABLE `alter_rows` (`value` {sourceType} NULL) ENGINE=InnoDB
+            DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT INTO `alter_rows`
+            VALUES ('a     ');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -204,21 +208,24 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `alter_rows` (`id` int PRIMARY KEY{column}) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
-            + (blocker == "missing"
+            $"""
+            CREATE TABLE `alter_rows` (`id` int PRIMARY KEY{column})
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;{(blocker == "missing"
                 ? string.Empty
-                : "INSERT INTO `alter_rows` (`id`, `value`) VALUES (1, 'kept');"),
+                : "INSERT INTO `alter_rows` (`id`, `value`) VALUES (1, 'kept');")}
+            """,
             cancellationToken: CancellationToken.None);
 
         if (blocker == "foreign_key")
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "ALTER TABLE `alter_rows` ADD UNIQUE KEY `uq_value` (`value`); "
-                + "CREATE TABLE `alter_children` (`value` varchar(20) NULL, "
-                + "CONSTRAINT `fk_value` FOREIGN KEY (`value`) REFERENCES `alter_rows` (`value`)) "
-                + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
+                """
+                ALTER TABLE `alter_rows` ADD UNIQUE KEY `uq_value` (`value`); CREATE TABLE
+                `alter_children` (`value` varchar(20) NULL,
+                CONSTRAINT `fk_value` FOREIGN KEY (`value`) REFERENCES `alter_rows` (`value`))
+                ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -314,8 +321,12 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
         var visits = await ReadRuntimeMatchingVisitsAsync(context, cancellationToken: CancellationToken.None);
         var columns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value' AND CHARACTER_MAXIMUM_LENGTH = 20;",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'alter_rows'
+            AND COLUMN_NAME = 'value' AND CHARACTER_MAXIMUM_LENGTH = 20;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -349,9 +360,11 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `alter_rows` (`value` varchar(20) NULL) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + $"INSERT INTO `alter_rows` VALUES ('{(overlength ? "too-long" : "kept")}');",
+            $"""
+            CREATE TABLE `alter_rows` (`value` varchar(20) NULL) ENGINE=InnoDB DEFAULT
+            CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT INTO `alter_rows` VALUES
+            ('{(overlength ? "too-long" : "kept")}');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -432,9 +445,11 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `alter_rows` (`value` varchar(20) NULL) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `alter_rows` VALUES ('kept');",
+            """
+            CREATE TABLE `alter_rows` (`value` varchar(20) NULL) ENGINE=InnoDB DEFAULT
+            CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT INTO `alter_rows` VALUES
+            ('kept');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -504,9 +519,12 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `alter_rows` (`value` varchar(20) NULL) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + $"INSERT INTO `alter_rows` VALUES ({(containsNull ? "NULL" : "'short'")}), ('kept');",
+            $"""
+            CREATE TABLE `alter_rows` (`value` varchar(20) NULL) ENGINE=InnoDB DEFAULT
+            CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT INTO `alter_rows` VALUES
+            ({(containsNull ? "NULL" : "'short'")}),
+            ('kept');
+            """,
             cancellationToken: CancellationToken.None);
 
         var observer = new RuntimeMatchingProbeInterceptor();
@@ -599,9 +617,11 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `alter_rows` (`value` varchar(20) NULL) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `alter_rows` VALUES ('kept');",
+            """
+            CREATE TABLE `alter_rows` (`value` varchar(20) NULL) ENGINE=InnoDB DEFAULT
+            CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT INTO `alter_rows` VALUES
+            ('kept');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -625,8 +645,13 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
 
         var length = await ScalarIntAsync(
             connectionString,
-            "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';",
+            """
+            SELECT CHARACTER_MAXIMUM_LENGTH
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'alter_rows'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -677,9 +702,12 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `alter_rows` (`value` {sourceType} NULL) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `alter_rows` VALUES (NULL), ('kept');",
+            $"""
+            CREATE TABLE `alter_rows` (`value` {sourceType} NULL) ENGINE=InnoDB
+            DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT INTO `alter_rows`
+            VALUES (NULL),
+            ('kept');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -755,12 +783,13 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `alter_rows` (`value` varchar(10) NULL, {constraint}) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + $"INSERT INTO `alter_rows` VALUES ('{(unique ? "x" : "kept")}')"
-            + (containsNull
+            $"""
+            CREATE TABLE `alter_rows` (`value` varchar(10) NULL, {constraint})
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT
+            INTO `alter_rows` VALUES ('{(unique ? "x" : "kept")}'){(containsNull
                 ? ", (NULL);"
-                : ";"),
+                : ";")}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -793,8 +822,13 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
 
         var length = await ScalarIntAsync(
             connectionString,
-            "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';",
+            """
+            SELECT CHARACTER_MAXIMUM_LENGTH
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'alter_rows'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -862,12 +896,13 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
         var check = constraintKind == "check";
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `alter_rows` (`value` varchar(10) NULL) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + $"INSERT INTO `alter_rows` VALUES ('{(check ? "kept" : "x")}')"
-            + (containsNull
+            $"""
+            CREATE TABLE `alter_rows` (`value` varchar(10) NULL) ENGINE=InnoDB DEFAULT
+            CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT INTO `alter_rows` VALUES
+            ('{(check ? "kept" : "x")}'){(containsNull
                 ? ", (NULL);"
-                : ";"),
+                : ";")}
+            """,
             cancellationToken: CancellationToken.None);
 
         SafeMigrationIntent constraint = constraintKind switch
@@ -935,8 +970,13 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
 
         var length = await ScalarIntAsync(
             connectionString,
-            "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';",
+            """
+            SELECT CHARACTER_MAXIMUM_LENGTH
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'alter_rows'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -991,12 +1031,13 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `alter_rows` (`value` varchar(10) NULL) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `alter_rows` VALUES ('x')"
-            + (containsNull
+            $"""
+            CREATE TABLE `alter_rows` (`value` varchar(10) NULL) ENGINE=InnoDB DEFAULT
+            CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT INTO `alter_rows` VALUES
+            ('x'){(containsNull
                 ? ", (NULL);"
-                : ";"),
+                : ";")}
+            """,
             cancellationToken: CancellationToken.None);
 
         SafeMigrationOperation[] operations =
@@ -1050,8 +1091,13 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
 
         var length = await ScalarIntAsync(
             connectionString,
-            "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'renamed_rows' AND COLUMN_NAME = 'value';",
+            """
+            SELECT CHARACTER_MAXIMUM_LENGTH
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'renamed_rows'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1116,9 +1162,11 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `alter_rows` (`value` {sourceType} NULL) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `alter_rows` VALUES (NULL);",
+            $"""
+            CREATE TABLE `alter_rows` (`value` {sourceType} NULL) ENGINE=InnoDB
+            DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT INTO `alter_rows`
+            VALUES (NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1154,15 +1202,23 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
 
         var catalogType = await ScalarStringAsync(
             connectionString,
-            "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';",
+            """
+            SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'alter_rows'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var defaultCatalog = await ScalarStringAsync(
             connectionString,
-            "SELECT CONCAT(COALESCE(COLUMN_DEFAULT, '<null>'), '|', HEX(COALESCE(COLUMN_DEFAULT, '')), '|', EXTRA) "
-            + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';",
+            """
+            SELECT CONCAT(COALESCE(COLUMN_DEFAULT, '<null>'), '|', HEX(COALESCE(COLUMN_DEFAULT,
+            '')), '|', EXTRA) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'alter_rows'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         if (!supplementary)
@@ -1235,8 +1291,10 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `alter_rows` (`value` varchar(20) NULL) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=ascii COLLATE=ascii_bin; INSERT INTO `alter_rows` VALUES (NULL);",
+            """
+            CREATE TABLE `alter_rows` (`value` varchar(20) NULL) ENGINE=InnoDB DEFAULT
+            CHARSET=ascii COLLATE=ascii_bin; INSERT INTO `alter_rows` VALUES (NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1356,9 +1414,11 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `alter_rows` (`value` varchar(20) NULL) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `alter_rows` VALUES (NULL);",
+            """
+            CREATE TABLE `alter_rows` (`value` varchar(20) NULL) ENGINE=InnoDB DEFAULT
+            CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT INTO `alter_rows` VALUES
+            (NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         var contextConnection = new MySqlConnectionStringBuilder(connectionString)
@@ -1426,9 +1486,13 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
 
         var defaultCatalog = await ScalarStringAsync(
             connectionString,
-            "SELECT CONCAT(COALESCE(COLUMN_DEFAULT, '<null>'), '|', HEX(COALESCE(COLUMN_DEFAULT, '')), '|', EXTRA) "
-            + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';",
+            """
+            SELECT CONCAT(COALESCE(COLUMN_DEFAULT, '<null>'), '|', HEX(COALESCE(COLUMN_DEFAULT,
+            '')), '|', EXTRA) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'alter_rows'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var unchanged = await ScalarIntAsync(
@@ -1443,8 +1507,13 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
 
         var length = await ScalarIntAsync(
             connectionString,
-            "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';",
+            """
+            SELECT CHARACTER_MAXIMUM_LENGTH
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'alter_rows'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1494,12 +1563,13 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `alter_rows` (`value` varchar(20) NULL"
-            + (sourceDefault
+            $"""
+            CREATE TABLE `alter_rows` (`value` varchar(20) NULL{(sourceDefault
                 ? " DEFAULT 'a''b'"
-                : string.Empty)
-            + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `alter_rows` VALUES (NULL);",
+                : string.Empty)})
+            ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT
+            INTO `alter_rows` VALUES (NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         var configuredConnection = new MySqlConnectionStringBuilder(connectionString) { NoBackslashEscapes = true };
@@ -1561,15 +1631,23 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
 
         var oldColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value' AND CHARACTER_MAXIMUM_LENGTH = 20;",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'alter_rows'
+            AND COLUMN_NAME = 'value' AND CHARACTER_MAXIMUM_LENGTH = 20;
+            """,
             cancellationToken: CancellationToken.None);
 
         var catalog = await ScalarStringAsync(
             connectionString,
-            "SELECT CONCAT(COALESCE(COLUMN_DEFAULT, '<null>'), '|', HEX(COALESCE(COLUMN_DEFAULT, '')), '|', EXTRA) "
-            + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';",
+            """
+            SELECT CONCAT(COALESCE(COLUMN_DEFAULT, '<null>'), '|', HEX(COALESCE(COLUMN_DEFAULT,
+            '')), '|', EXTRA) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'alter_rows'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var valueHex = await ScalarStringAsync(
@@ -1629,8 +1707,10 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `alter_rows` (`value` varchar(200) NULL, {additionalColumns}) "
-            + "ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=latin1 COLLATE=latin1_bin;",
+            $"""
+            CREATE TABLE `alter_rows` (`value` varchar(200) NULL, {additionalColumns})
+            ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=latin1 COLLATE=latin1_bin;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1650,8 +1730,13 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
 
         var length = await ScalarIntAsync(
             connectionString,
-            "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';",
+            """
+            SELECT CHARACTER_MAXIMUM_LENGTH
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'alter_rows'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -1682,9 +1767,11 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `alter_rows` (`value` varchar(100) NOT NULL, {additionalColumns}, "
-            + "UNIQUE KEY `uq_value` (`value`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC "
-            + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
+            $"""
+            CREATE TABLE `alter_rows` (`value` varchar(100) NOT NULL, {additionalColumns},
+            UNIQUE KEY `uq_value` (`value`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT
+            CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1708,8 +1795,13 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
 
         var length = await ScalarIntAsync(
             connectionString,
-            "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';",
+            """
+            SELECT CHARACTER_MAXIMUM_LENGTH
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'alter_rows'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
@@ -1756,8 +1848,11 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `alter_rows` (`id` int PRIMARY KEY, `value` bit(1) NULL) ENGINE=InnoDB; "
-            + "INSERT INTO `alter_rows` VALUES (1, b'0'), (2, b'1'), (3, NULL);",
+            """
+            CREATE TABLE `alter_rows` (`id` int PRIMARY KEY, `value` bit(1) NULL) ENGINE=InnoDB;
+            INSERT INTO `alter_rows` VALUES (1,
+            b'0'), (2, b'1'), (3, NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1781,8 +1876,12 @@ public sealed class MySqlColumnsAlterTransitionsIntegrationTests : MySqlSafeMigr
         var afterResults = await analyzer.AnalyzeAsync(context, [operation], CancellationToken.None);
         var preserved = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM `alter_rows` WHERE (`id` = 1 AND `value` = 0) "
-            + "OR (`id` = 2 AND `value` = 1) OR (`id` = 3 AND `value` IS NULL);",
+            """
+            SELECT COUNT(*) FROM `alter_rows`
+            WHERE (`id` = 1 AND `value` = 0)
+            OR (`id` = 2 AND `value` = 1)
+            OR (`id` = 3 AND `value` IS NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert

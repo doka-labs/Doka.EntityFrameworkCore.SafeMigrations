@@ -47,8 +47,10 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='generated_drop'::regclass "
-                + "AND attnum>0 AND NOT attisdropped;",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='generated_drop'::regclass
+                AND attnum>0 AND NOT attisdropped;
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -92,8 +94,10 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='generated_drop'::regclass "
-                + "AND attnum>0 AND NOT attisdropped;",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='generated_drop'::regclass
+                AND attnum>0 AND NOT attisdropped;
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -107,12 +111,12 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA other_owner; "
-            + "CREATE TABLE public.generated_drop(source integer, unrelated integer); "
-            + "CREATE TABLE other_owner.generated_drop(source integer, "
-            + "derived integer GENERATED ALWAYS AS(source+1) STORED); "
-            + "INSERT INTO public.generated_drop VALUES(2,9); "
-            + "INSERT INTO other_owner.generated_drop(source) VALUES(2);",
+            """
+            CREATE SCHEMA other_owner; CREATE TABLE public.generated_drop(source integer,
+            unrelated integer); CREATE TABLE other_owner.generated_drop(source integer,
+            derived integer GENERATED ALWAYS AS(source+1) STORED); INSERT INTO public.generated_drop
+            VALUES(2,9); INSERT INTO other_owner.generated_drop(source) VALUES(2);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -204,12 +208,13 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE generated_drop(source integer, unrelated integer"
-            + (generated
+            $"""
+            CREATE TABLE generated_drop(source integer, unrelated integer{(generated
                 ? ", derived integer GENERATED ALWAYS AS(source+1) STORED"
-                : "")
-            + "); CREATE INDEX ix_drop_source ON generated_drop(source); "
-            + "INSERT INTO generated_drop(source,unrelated) VALUES(2,9);",
+                : "")});
+            CREATE INDEX ix_drop_source ON generated_drop(source); INSERT INTO generated_drop(source,unrelated)
+            VALUES(2,9);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

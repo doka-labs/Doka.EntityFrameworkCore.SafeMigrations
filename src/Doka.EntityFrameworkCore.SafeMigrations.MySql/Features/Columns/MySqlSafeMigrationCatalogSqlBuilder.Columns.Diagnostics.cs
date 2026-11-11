@@ -67,8 +67,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 $"NOT ({defaultKindMatches})",
                 "column_default_kind",
                 Literal(DefaultKind(definition.DefaultValue, definition.IsNullable, temporalRowVersion)),
-                "CASE WHEN c.COLUMN_DEFAULT IS NULL THEN 'none' "
-                + "WHEN UPPER(TRIM(c.COLUMN_DEFAULT)) = 'NULL' THEN 'null' ELSE 'present' END"),
+                """
+                CASE WHEN c.COLUMN_DEFAULT IS NULL THEN 'none'
+                WHEN UPPER(TRIM(c.COLUMN_DEFAULT)) = 'NULL' THEN 'null' ELSE 'present' END
+                """),
             DiagnosticRecord(
                 $"NOT ({defaultMatches})",
                 "column_default_digest",
@@ -78,10 +80,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 $"NOT ({BuildValueGenerationMatches(definition, temporalRowVersion)})",
                 "column_value_generation",
                 Literal(ValueGenerationKind(definition, temporalRowVersion)),
-                "CASE WHEN LOCATE('auto_increment', LOWER(COALESCE(c.EXTRA, ''))) > 0 THEN 'identity' "
-                + "WHEN LOCATE('on update', LOWER(COALESCE(c.EXTRA, ''))) > 0 THEN 'row_version' "
-                + "WHEN LOCATE('generated', LOWER(COALESCE(c.EXTRA, ''))) > 0 THEN 'generated' "
-                + "ELSE 'none' END"),
+                """
+                CASE WHEN LOCATE('auto_increment', LOWER(COALESCE(c.EXTRA, ''))) > 0 THEN 'identity'
+                WHEN LOCATE('on update', LOWER(COALESCE(c.EXTRA, ''))) > 0 THEN 'row_version'
+                WHEN LOCATE('generated', LOWER(COALESCE(c.EXTRA, ''))) > 0 THEN 'generated'
+                ELSE 'none' END
+                """),
             DiagnosticRecord(
                 $"NOT ({ColumnCommentMatches(definition.Comment)})",
                 "column_comment_digest",
@@ -100,11 +104,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     "COALESCE(CAST(c.CHARACTER_MAXIMUM_LENGTH AS CHAR), 'none')"));
         }
 
-        return "(SELECT NULLIF(CONCAT_WS(CHAR(30), "
-            + string.Join(", ", records)
-            + "), '') FROM INFORMATION_SCHEMA.COLUMNS c "
-            + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(table)} "
-            + $"AND c.COLUMN_NAME = {Literal(definition.Name)} LIMIT 1)";
+        return $"""
+            (SELECT NULLIF(CONCAT_WS(CHAR(30), {string.Join(", ", records)}), '')
+            FROM INFORMATION_SCHEMA.COLUMNS c
+            WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(table)}
+            AND c.COLUMN_NAME = {Literal(definition.Name)} LIMIT 1)
+            """;
     }
 
     private static string DiagnosticRecord(
@@ -112,7 +117,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string facet,
         string expected,
         string actual
-    ) => $"CASE WHEN {mismatch} THEN CONCAT_WS(CHAR(31), '{facet}', {expected}, {actual}) END";
+    ) => $"""
+        CASE WHEN {mismatch} THEN CONCAT_WS(CHAR(31), '{facet}', {expected}, {actual}) END
+        """;
 
     private static string ValueGenerationKind(
         ExpectedColumnDefinition definition,

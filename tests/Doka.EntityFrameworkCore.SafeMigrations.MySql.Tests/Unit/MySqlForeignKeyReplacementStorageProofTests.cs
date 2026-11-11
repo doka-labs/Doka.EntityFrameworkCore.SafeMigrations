@@ -34,18 +34,26 @@ public sealed class MySqlForeignKeyReplacementStorageProofTests
 
         // Assert
         Assert.Contains(
-            "CASE WHEN dependent_column.DATA_TYPE IN ('enum', 'set') "
-            + "OR principal_column.DATA_TYPE IN ('enum', 'set')",
+            """
+            CASE WHEN dependent_column.DATA_TYPE IN ('enum', 'set')
+            OR principal_column.DATA_TYPE IN ('enum', 'set')
+            """,
             certificate,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "THEN CAST(dependent_column.COLUMN_TYPE AS BINARY) = CAST(principal_column.COLUMN_TYPE AS BINARY)",
+            """
+            THEN CAST(dependent_column.COLUMN_TYPE AS BINARY) = CAST(principal_column.COLUMN_TYPE
+            AS BINARY)
+            """,
             certificate,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "ELSE LOWER(dependent_column.COLUMN_TYPE) = LOWER(principal_column.COLUMN_TYPE) END",
+            """
+            ELSE LOWER(dependent_column.COLUMN_TYPE) = LOWER(principal_column.COLUMN_TYPE)
+            END
+            """,
             certificate,
             StringComparison.Ordinal);
 
@@ -100,7 +108,7 @@ public sealed class MySqlForeignKeyReplacementStorageProofTests
             StringComparison.Ordinal);
 
         Assert.Contains("principal_key.NON_UNIQUE = 0", certificate, StringComparison.Ordinal);
-        Assert.Contains("HAVING COUNT(*) = 2", certificate, StringComparison.Ordinal);
+        Assert.Contains("HAVING\nCOUNT(*) = 2", certificate, StringComparison.Ordinal);
         Assert.Contains("principal_key.SEQ_IN_INDEX = 1", certificate, StringComparison.Ordinal);
         Assert.Contains("principal_key.SEQ_IN_INDEX = 2", certificate, StringComparison.Ordinal);
         Assert.Contains("principal_key.SUB_PART IS NULL", certificate, StringComparison.Ordinal);

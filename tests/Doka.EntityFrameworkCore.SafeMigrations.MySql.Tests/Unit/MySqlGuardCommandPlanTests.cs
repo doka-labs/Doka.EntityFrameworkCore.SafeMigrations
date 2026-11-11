@@ -135,12 +135,15 @@ public sealed class MySqlGuardCommandPlanTests
         Assert.DoesNotContain("LEFT JOIN INFORMATION_SCHEMA.COLUMNS", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("JOIN INFORMATION_SCHEMA.COLUMNS c ON", sql, StringComparison.Ordinal);
         Assert.Contains(
-            "(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c WHERE c.TABLE_SCHEMA = DATABASE() "
-            + "AND c.TABLE_NAME = 'items' AND c.ORDINAL_POSITION <= 3 "
-            + "AND (c.COLLATION_NAME IS NULL OR c.COLLATION_NAME <=> "
-            + "(SELECT t.TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES t "
-            + "WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = 'items')) "
-            + "AND (CASE c.ORDINAL_POSITION WHEN 1 THEN",
+            """
+            (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c
+            WHERE c.TABLE_SCHEMA = DATABASE()
+            AND c.TABLE_NAME = 'items'
+            AND c.ORDINAL_POSITION <= 3 AND (c.COLLATION_NAME IS NULL OR c.COLLATION_NAME <=>
+            (SELECT t.TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES t
+            WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = 'items')) AND
+            (CASE c.ORDINAL_POSITION WHEN 1 THEN
+            """,
             sql,
             StringComparison.Ordinal);
 
@@ -193,12 +196,15 @@ public sealed class MySqlGuardCommandPlanTests
 
         // Assert
         Assert.Contains(
-            "(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c WHERE c.TABLE_SCHEMA = DATABASE() "
-            + $"AND c.TABLE_NAME = {tableParameter.ParameterName} AND c.ORDINAL_POSITION <= 3 "
-            + "AND (c.COLLATION_NAME IS NULL OR c.COLLATION_NAME <=> "
-            + "(SELECT t.TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES t "
-            + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {tableParameter.ParameterName})) "
-            + "AND (CASE c.ORDINAL_POSITION WHEN 1 THEN",
+            $"""
+            (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c
+            WHERE c.TABLE_SCHEMA = DATABASE()
+            AND c.TABLE_NAME = {tableParameter.ParameterName}
+            AND c.ORDINAL_POSITION <= 3 AND (c.COLLATION_NAME IS NULL OR c.COLLATION_NAME <=>
+            (SELECT t.TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES t
+            WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {tableParameter.ParameterName})) AND
+            (CASE c.ORDINAL_POSITION WHEN 1 THEN
+            """,
             sql,
             StringComparison.Ordinal);
 
@@ -568,7 +574,7 @@ public sealed class MySqlGuardCommandPlanTests
         Assert.Contains(
             payloads,
             payload => payload.Contains(
-                "THEN ('missing') ELSE NULL END INTO @doka_sm_state",
+                "THEN ('missing')\nELSE NULL END INTO @doka_sm_state",
                 StringComparison.Ordinal));
 
         Assert.Contains(
@@ -700,7 +706,7 @@ public sealed class MySqlGuardCommandPlanTests
         Assert.Contains("WHEN 'transition_ready' THEN 'apply'", command.CommandText, StringComparison.Ordinal);
         Assert.Contains(
             payloads,
-            payload => payload.StartsWith("UPDATE `roles` AS doka_actual JOIN", StringComparison.Ordinal)
+            payload => payload.StartsWith("UPDATE `roles` AS doka_actual\nJOIN", StringComparison.Ordinal)
                 && payload.Contains("SET doka_actual.`name` = doka_expected.`n0`", StringComparison.Ordinal)
                 && payload.Contains("doka_actual.`name` <=> doka_expected.`o0`", StringComparison.Ordinal)
                 && payload.Contains("NOT (doka_actual.`name` <=> doka_expected.`n0`)", StringComparison.Ordinal));

@@ -190,8 +190,8 @@ public sealed class SqlServerRenameDestinationEvidenceTests
         var identifiers = SqlServerIdentifierContract.Collect([operation]);
 
         // Assert
-        const string intermediate = "o.schema_id = SCHEMA_ID(N'dbo') AND o.name = N'destination'";
-        const string finalTarget = "o.schema_id = SCHEMA_ID(N'target') AND o.name = N'destination'";
+        const string intermediate = "o.schema_id = SCHEMA_ID(N'dbo')\nAND o.name = N'destination'";
+        const string finalTarget = "o.schema_id = SCHEMA_ID(N'target')\nAND o.name = N'destination'";
         Assert.Contains(intermediate, plan.StateExpression, StringComparison.Ordinal);
         Assert.Contains(finalTarget, plan.StateExpression, StringComparison.Ordinal);
         var rename = runtime.IndexOf("sp_rename", StringComparison.Ordinal);

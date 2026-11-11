@@ -3,6 +3,96 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 /// <summary>Protects exact guard SQL while eliminating operation-local rendering intermediates.</summary>
 public sealed class PostgreSqlGuardRenderingAllocationTests
 {
+    /// <summary>Idempotent transport escaping preserves the complete raw SQL body and native VALUE payload.</summary>
+    [Fact]
+    public void IdempotentGuardCarrierPreservesRawLinesAndNativeValues()
+    {
+        // Arrange
+        using var context = CreateOfflineContext();
+        const string payload = "quote' {braces} $doka_safe_migration$ \\ \\044 \u20ac\r\nvalue\nline";
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn("proof_rows",
+            new ExpectedColumnDefinition("value",
+                typeof(string),
+                true,
+                storeType: "text",
+                defaultValue: SafeMigrationDefaultValue.Literal(payload)),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        var mapping = context
+            .GetService<IRelationalTypeMappingSource>()
+            .FindMapping(typeof(string))!;
+
+        // Act
+        var ordinary = Assert
+            .Single(generator.Generate(builder.Operations, context.Model))
+            .CommandText
+            .TrimEnd();
+
+        var escaped = Assert
+            .Single(generator.Generate(builder.Operations,
+                context.Model,
+                MigrationsSqlGenerationOptions.Idempotent))
+            .CommandText
+            .TrimEnd();
+
+        var headerEnd = ordinary.IndexOf('\n');
+        var tag = ordinary[3..headerEnd];
+        var body = ordinary[headerEnd..ordinary.LastIndexOf(tag, StringComparison.Ordinal)];
+        var decoded = DecodeEscapedAnonymousBody(escaped);
+
+        // Assert
+        Assert.StartsWith("DO $doka_safe_migration", ordinary, StringComparison.Ordinal);
+        Assert.StartsWith("DO E'", escaped, StringComparison.Ordinal);
+        Assert.DoesNotContain('\n', escaped);
+        Assert.DoesNotContain('\r', escaped);
+        Assert.Equal(body, decoded);
+        Assert.Contains(mapping.GenerateSqlLiteral(payload), decoded, StringComparison.Ordinal);
+        Assert.Contains("\r\nvalue\nline", decoded, StringComparison.Ordinal);
+        Assert.True(Encoding.UTF8.GetByteCount(escaped) > Encoding.UTF8.GetByteCount(body));
+    }
+
+    /// <summary>Independently decodes the finite E-literal transport emitted by the real guard generator.</summary>
+    private static string DecodeEscapedAnonymousBody(
+        string command
+    )
+    {
+        Assert.StartsWith("DO E'", command, StringComparison.Ordinal);
+        Assert.EndsWith("';", command, StringComparison.Ordinal);
+        var body = new StringBuilder();
+        for (var offset = 5; offset < command.Length - 2; offset++)
+        {
+            var character = command[offset];
+            if (character == '\'')
+            {
+                Assert.Equal('\'', command[++offset]);
+                body.Append('\'');
+            }
+            else if (character == '\\')
+            {
+                var escape = command[++offset];
+                if (escape == '0')
+                {
+                    Assert.Equal("44", command.Substring(offset + 1, 2));
+                    offset += 2;
+                    body.Append('$');
+                }
+                else
+                {
+                    Assert.True(escape is 'n' or 'r' or '\\');
+                    body.Append(escape switch { 'n' => '\n', 'r' => '\r', _ => '\\' });
+                }
+            }
+            else
+            {
+                body.Append(character);
+            }
+        }
+
+        return body.ToString();
+    }
+
     /// <summary>Preserves legacy baseline bytes and chooses a tag absent from both action branches.</summary>
     /// <param name="scenario">The baseline termination, whitespace, or dollar-tag boundary.</param>
     [Theory]
@@ -104,13 +194,11 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
         Assert.Contains("MESSAGE = E'doka_sm_postcondition:", guarded, StringComparison.Ordinal);
     }
 
-    /// <summary>Measures only prepared rendering work and rejects reintroduced legacy SQL copies.</summary>
+    /// <summary>Prepared direct components preserve the complete independently copied legacy output.</summary>
     [Fact]
-    public void PreparedGuardComponents_DirectAppendsAllocateLessThanLegacyCopies()
+    public void PreparedGuardComponents_DirectAppendsPreserveLegacyOutput()
     {
         // Arrange
-        const int sampleCount = 5;
-        const int iterations = 100;
         using var context = CreateOfflineContext();
         var operation = CreateOperation(varchar: true, policy: SafeMigrationPolicy.RepairIfSafe);
         var plan = CreatePlan(context, operation);
@@ -138,7 +226,7 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
         var appendDataProbe = BindPrivateRenderer<
             Action<StringBuilder, PostgreSqlSafeMigrationDataProbe, string, string>>("AppendDataProbeEvaluationSql");
 
-        var direct = () => RenderPreparedComponents(
+        string Direct() => RenderPreparedComponents(
             operation,
             plan,
             baseline,
@@ -148,7 +236,7 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
             appendDataProbe,
             legacyCopies: false);
 
-        var legacy = () => RenderPreparedComponents(
+        string Legacy() => RenderPreparedComponents(
             operation,
             plan,
             baseline,
@@ -158,45 +246,12 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
             appendDataProbe,
             legacyCopies: true);
 
-        var directSamples = new long[sampleCount];
-        var legacySamples = new long[sampleCount];
-
         // Act
-        var directSql = direct();
-        var legacySql = legacy();
-        for (var warmup = 0; warmup < 10; warmup++)
-        {
-            _ = direct();
-            _ = legacy();
-        }
-
-        var directChecksum = 0L;
-        var legacyChecksum = 0L;
-        for (var sample = 0; sample < sampleCount; sample++)
-        {
-            var measuredDirect = MeasurePreparedRendering(direct, iterations);
-            var measuredLegacy = MeasurePreparedRendering(legacy, iterations);
-            directSamples[sample] = measuredDirect.Bytes;
-            legacySamples[sample] = measuredLegacy.Bytes;
-            directChecksum += measuredDirect.Checksum;
-            legacyChecksum += measuredLegacy.Checksum;
-        }
-
-        Array.Sort(directSamples);
-        Array.Sort(legacySamples);
-        var directMedian = directSamples[sampleCount / 2];
-        var legacyMedian = legacySamples[sampleCount / 2];
+        var directSql = Direct();
+        var legacySql = Legacy();
 
         // Assert
         Assert.Equal(legacySql, directSql);
-        Assert.Equal((long)directSql.Length * iterations * sampleCount, directChecksum);
-        Assert.Equal((long)legacySql.Length * iterations * sampleCount, legacyChecksum);
-        Assert.True(
-            directMedian < legacyMedian,
-            "Prepared direct samples: "
-            + string.Join(",", directSamples)
-            + "; legacy copy samples: "
-            + string.Join(",", legacySamples));
     }
 
     /// <summary>Exercises the expression-only delimiter caller through actual custom-index generation.</summary>
@@ -386,7 +441,7 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
                 .ToArray(),
             context.Model);
 
-    /// <summary>Binds a typed private renderer before allocation measurement begins.</summary>
+    /// <summary>Binds a typed private renderer without changing the production API boundary.</summary>
     private static TDelegate BindPrivateRenderer<TDelegate>(
         string methodName
     )
@@ -414,7 +469,7 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
     {
         const string indentation = "            ";
         var probe = plan.DataProbe
-            ?? throw new InvalidOperationException("The prepared allocation fixture requires a narrowing probe.");
+            ?? throw new InvalidOperationException("The prepared rendering fixture requires a narrowing probe.");
 
         var probeForTag = probe.BuildBlockedExpression();
         var tag = probeForTag.Contains("$doka_safe_migration$", StringComparison.Ordinal)
@@ -487,7 +542,7 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
     )
     {
         // WHY: Production keeps this small branch inlined. Its existing byte
-        // comparison covers the real guard; this fixture isolates allocation.
+        // comparison covers the real guard; this fixture preserves component equivalence.
         if (plan.StateEvaluationGuardFailureExpression is null)
         {
             return;
@@ -501,7 +556,7 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
             .Append(");\n            doka_repair_ok := FALSE;\n");
     }
 
-    /// <summary>Recreates former baseline copies without adding unrelated formatting allocations.</summary>
+    /// <summary>Recreates former baseline copies as an independent output reference.</summary>
     private static void AppendLegacyCopiedBaseline(
         StringBuilder builder,
         IReadOnlyList<MigrationCommand> commands,
@@ -559,25 +614,6 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
 
             start = newline + 1;
         }
-    }
-
-    /// <summary>Measures current-thread allocations with prepared delegates and a consumed output checksum.</summary>
-    private static (long Bytes, long Checksum) MeasurePreparedRendering(
-        Func<string> render,
-        int iterations
-    )
-    {
-        var checksum = 0L;
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var iteration = 0; iteration < iterations; iteration++)
-        {
-            checksum += render()
-                .Length;
-        }
-
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-
-        return (allocated, checksum);
     }
 
     /// <summary>Invokes the operation-local renderer without adding a production testing API.</summary>
@@ -711,6 +747,8 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
                     SafeMigrationAction.RejectUnsupported => "reject_unsupported",
                     SafeMigrationAction.RejectDataBlocked => "reject_data_blocked",
                     SafeMigrationAction.RejectPrerequisiteMissing => "reject_prerequisite_missing",
+                    SafeMigrationAction.Repair or SafeMigrationAction.ValidateAtRuntime =>
+                        throw new InvalidOperationException("The legacy oracle encountered an unexpected action."),
                     _ => throw new InvalidOperationException("The legacy oracle encountered an unexpected action."),
                 };
 

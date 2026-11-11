@@ -26,9 +26,11 @@ public sealed class PostgreSqlIndexesSimpleFilterDataSafetyIntegrationTests : Po
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters "
-            + "(id integer NOT NULL, parent integer NULL);"
-            + $"INSERT INTO hierarchy.simple_filters VALUES {rows};",
+            $"""
+            CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer
+            NOT NULL,
+            parent integer NULL);INSERT INTO hierarchy.simple_filters VALUES {rows};
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -55,8 +57,12 @@ public sealed class PostgreSqlIndexesSimpleFilterDataSafetyIntegrationTests : Po
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT count(*) FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid "
-                + "WHERE c.relname = 'simple_filter_lookup' AND i.indisunique AND i.indpred IS NOT NULL;",
+                """
+                SELECT count(*) FROM pg_catalog.pg_index i
+                JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
+                WHERE c.relname = 'simple_filter_lookup'
+                AND i.indisunique AND i.indpred IS NOT NULL;
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -77,9 +83,11 @@ public sealed class PostgreSqlIndexesSimpleFilterDataSafetyIntegrationTests : Po
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters "
-            + "(id integer NOT NULL, parent integer NULL);"
-            + $"INSERT INTO hierarchy.simple_filters VALUES {rows};",
+            $"""
+            CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer
+            NOT NULL,
+            parent integer NULL);INSERT INTO hierarchy.simple_filters VALUES {rows};
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -124,9 +132,11 @@ public sealed class PostgreSqlIndexesSimpleFilterDataSafetyIntegrationTests : Po
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters "
-            + "(id integer NOT NULL, parent integer NULL);"
-            + $"INSERT INTO hierarchy.simple_filters VALUES {rows};",
+            $"""
+            CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer
+            NOT NULL,
+            parent integer NULL);INSERT INTO hierarchy.simple_filters VALUES {rows};
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -211,8 +221,10 @@ public sealed class PostgreSqlIndexesSimpleFilterDataSafetyIntegrationTests : Po
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'hierarchy' "
-                + "AND indexname IN ('simple_filter_lookup', 'simple_filter_legacy');",
+                """
+                SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'hierarchy'
+                AND indexname IN ('simple_filter_lookup', 'simple_filter_legacy');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 

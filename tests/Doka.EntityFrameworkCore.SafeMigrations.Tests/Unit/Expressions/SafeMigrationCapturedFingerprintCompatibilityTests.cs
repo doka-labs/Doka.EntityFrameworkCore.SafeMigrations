@@ -3,11 +3,11 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 /// <summary>Separates the captured-source upgrade from unchanged legacy fingerprint contracts.</summary>
 public sealed class SafeMigrationCapturedFingerprintCompatibilityTests
 {
-    /// <summary>Contracts outside generated-source capture retain independently recorded legacy fingerprints.</summary>
+    /// <summary>Contracts outside source capture retain independently recorded legacy fingerprints.</summary>
     /// <param name="contract">The unaffected authoring path.</param>
     /// <param name="expected">The fingerprint recorded from the committed pre-capture implementation.</param>
     [Theory]
-    [InlineData("numeric_default", "1563b72abb506330e8f4a09fbc1acb3646eb4f7af1760b7669d5f747bb15eb2b")]
+    [InlineData("structured_default", "1563b72abb506330e8f4a09fbc1acb3646eb4f7af1760b7669d5f747bb15eb2b")]
     [InlineData("opaque_computed", "9ae2c22e721ccb68c74641635143a8acdceb819f12842d71ce5d377dd0491344")]
     [InlineData("opaque_check", "688db76cb2a1ee0f6147aa5d3e5d5082644408aa2cd8d5b199c10bac24388d2a")]
     [InlineData("raw_computed", "9cc40fba45696e4d539e7eec35558a2085b3cb3c9a68f7c1463300b4de5e38f6")]
@@ -31,13 +31,14 @@ public sealed class SafeMigrationCapturedFingerprintCompatibilityTests
         Assert.Equal(expected, actual);
     }
 
-    /// <summary>Captured generated definitions require a new approval instead of reusing an old hash.</summary>
-    /// <param name="contract">The parsed generated-source authoring path.</param>
-    /// <param name="legacy">The fingerprint recorded before generated-source capture.</param>
+    /// <summary>Captured native source requires a new approval instead of its former parsed-value hash.</summary>
+    /// <param name="contract">The parsed native-source authoring path.</param>
+    /// <param name="legacy">The fingerprint recorded before this authoring path preserved native source roles.</param>
     [Theory]
+    [InlineData("numeric_default", "1563b72abb506330e8f4a09fbc1acb3646eb4f7af1760b7669d5f747bb15eb2b")]
     [InlineData("captured_computed", "3a84e6837d4c26437d08d45492db1f6d4da7336a4d64e806c16018a810d74e01")]
     [InlineData("captured_check", "dbb80c391210d9142e921a9eaa919d42ceb6ac786788a7c2d39a885997210570")]
-    public void CapturedGeneratedContractsDoNotReuseLegacyFingerprint(
+    public void CapturedSourceContractsDoNotReuseLegacyFingerprint(
         string contract,
         string legacy
     )
@@ -126,6 +127,12 @@ public sealed class SafeMigrationCapturedFingerprintCompatibilityTests
         SafeMigrationIntent intent = contract switch
         {
             "numeric_default" => new EnsureColumnIntent("items", CaptureColumn(defaultSql: "00001")),
+            "structured_default" => new EnsureColumnIntent(
+                "items",
+                new ExpectedColumnDefinition("computed_value",
+                    typeof(long),
+                    true,
+                    defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(1)))),
             "opaque_computed" => new EnsureColumnIntent("items", CaptureColumn(computedSql: "source_value; SELECT 1")),
             "opaque_check" => new EnsureCheckConstraintIntent(CaptureCheck("source_value; SELECT 1")),
             "raw_computed" => new EnsureColumnIntent("items", RawComputed("source_value + 1")),

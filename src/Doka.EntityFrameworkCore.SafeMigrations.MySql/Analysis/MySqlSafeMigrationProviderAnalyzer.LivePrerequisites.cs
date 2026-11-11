@@ -805,35 +805,33 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(offset, requests.Length);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumPayloadBytes);
 
-        var basePrefix = "SELECT requested.ordinal, t.TABLE_TYPE, t.ENGINE, t.TABLE_COLLATION, "
-            + "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.PARTITIONS p WHERE p.TABLE_SCHEMA = DATABASE() "
-            + "AND "
-            + MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
+        var basePrefix = $"""
+            SELECT requested.ordinal, t.TABLE_TYPE, t.ENGINE, t.TABLE_COLLATION, EXISTS
+            (SELECT 1
+            FROM INFORMATION_SCHEMA.PARTITIONS p
+            WHERE p.TABLE_SCHEMA = DATABASE()
+            AND {MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
                 "p.TABLE_NAME",
-                "requested.table_name")
-            + " "
-            + "AND p.PARTITION_NAME IS NOT NULL), "
-            + "c.COLUMN_TYPE, c.COLLATION_NAME, c.IS_NULLABLE, c.GENERATION_EXPRESSION";
+                "requested.table_name")}
+            AND p.PARTITION_NAME IS NOT NULL), c.COLUMN_TYPE, c.COLLATION_NAME, c.IS_NULLABLE,
+            c.GENERATION_EXPRESSION
+            """;
 
         var prefix = includeCreationDefaults
             ? basePrefix + ", @@SESSION.default_storage_engine, @@collation_database FROM ("
             : basePrefix + " FROM (";
 
-        var suffix = ") requested LEFT JOIN INFORMATION_SCHEMA.TABLES t ON t.TABLE_SCHEMA = DATABASE() "
-            + "AND "
-            + MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
-                "t.TABLE_NAME",
-                "requested.table_name")
-            + " "
-            + "LEFT JOIN INFORMATION_SCHEMA.COLUMNS c "
-            + "ON c.TABLE_SCHEMA = t.TABLE_SCHEMA AND c.TABLE_NAME = t.TABLE_NAME "
-            + "AND CAST(c.TABLE_SCHEMA AS BINARY) = CAST(t.TABLE_SCHEMA AS BINARY) "
-            + "AND CAST(c.TABLE_NAME AS BINARY) = CAST(t.TABLE_NAME AS BINARY) "
-            + "AND c.COLUMN_NAME = requested.column_name AND "
-            + MySqlSafeMigrationCatalogSqlBuilder.BuildNativeCaseInsensitiveIdentifierMatches(
-                "c.COLUMN_NAME",
-                "requested.column_name")
-            + " ORDER BY requested.ordinal;";
+        var suffix = $"""
+            ) requested LEFT JOIN INFORMATION_SCHEMA.TABLES t ON t.TABLE_SCHEMA = DATABASE()
+            AND {MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
+                "t.TABLE_NAME", "requested.table_name")}
+            LEFT JOIN INFORMATION_SCHEMA.COLUMNS c ON c.TABLE_SCHEMA = t.TABLE_SCHEMA AND c.TABLE_NAME = t.TABLE_NAME
+            AND CAST(c.TABLE_SCHEMA AS BINARY) = CAST(t.TABLE_SCHEMA AS BINARY)
+            AND CAST(c.TABLE_NAME AS BINARY) = CAST(t.TABLE_NAME AS BINARY)
+            AND c.COLUMN_NAME = requested.column_name AND {
+                MySqlSafeMigrationCatalogSqlBuilder.BuildNativeCaseInsensitiveIdentifierMatches(
+                    "c.COLUMN_NAME", "requested.column_name")} ORDER BY requested.ordinal;
+            """;
 
         const string separator = " UNION ALL ";
         var capacity = Math.Min(
@@ -860,13 +858,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
             var column =
                 MySqlSafeMigrationCatalogSqlBuilder.AddLivePrerequisiteParameter(command, request.Name, ref valueBytes);
 
-            var selection = "SELECT "
-                + (offset + index).ToString(CultureInfo.InvariantCulture)
-                + " AS ordinal, "
-                + table
-                + " AS table_name, "
-                + column
-                + " AS column_name";
+            var selection = $"""
+                SELECT {(offset + index).ToString(CultureInfo.InvariantCulture)} AS ordinal, {table}
+                AS table_name,
+                {column} AS column_name
+                """;
 
             var prospectiveSqlBytes = checked(sqlBytes
                 + Encoding.UTF8.GetByteCount(selection)

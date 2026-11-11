@@ -1,6 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
-/// <summary>Compares prepared guards with independent interpolation-based rendering and allocation work.</summary>
+/// <summary>Compares prepared guards with independent interpolation-based rendering.</summary>
 public sealed partial class SqlServerGuardRenderingAllocationTests
 {
     private const string ConnectionString = "Server=127.0.0.1,1433;Database=guard_rendering;"

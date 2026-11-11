@@ -138,6 +138,13 @@ to apply certified annotations before immutable capture. No public factory
 overload, constructor parameter or configuration option is added. See the
 [10.7.1 upgrade notes](support-and-qualification.md#upgrade-to-1071).
 
+Version 10.7.2 retains those public declarations and dependency floors. Native
+expression/catalog corrections use existing contracts; binary literal values
+are defensive snapshots, not mutation handles. Corrected captured numeric SQL
+defaults can produce different contract fingerprints without changing their
+format. Review and renew affected approvals using the
+[10.7.2 upgrade notes](support-and-qualification.md#upgrade-to-1072).
+
 The current MySQL/MariaDB adapter requires Doka `[10.6.5,10.7.0)` and
 MySqlConnector minimum 2.6.2; EF Core and dependency-injection minimums are
 10.0.14. SQL Server requires SqlClient minimum 6.1.8 and PKCS minimum 9.0.22.

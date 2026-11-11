@@ -340,18 +340,19 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             ? string.Empty
             : $"WHERE ({_expressionRenderer.Render(boundFilter)}) ";
 
-        var body = "WITH doka_seed_rows AS (SELECT DISTINCT * FROM (VALUES "
-            + string.Join(", ", rows)
-            + $") AS doka_values({declared})) "
-            + "SELECT CASE WHEN NOT ("
-            + (valueGuards.Count == 0
+        var body = $"""
+            WITH doka_seed_rows AS (SELECT DISTINCT *
+            FROM (VALUES {string.Join(", ", rows)}) AS doka_values({declared}))
+            SELECT CASE WHEN NOT ({(valueGuards.Count == 0
                 ? "1 = 1"
-                : string.Join(" AND ", valueGuards.Select(static guard => $"({guard})")))
-            + ") THEN -1 WHEN EXISTS (SELECT 1 FROM doka_seed_rows "
-            + $"GROUP BY {primary} HAVING COUNT_BIG(*) > 1) "
-            + "OR EXISTS (SELECT 1 FROM doka_seed_rows "
-            + filterSql
-            + $"GROUP BY {unique} HAVING COUNT_BIG(*) > 1) THEN 0 ELSE 1 END;";
+                : string.Join(" AND ", valueGuards.Select(static guard => $"({guard})")))})
+            THEN -1
+            WHEN EXISTS (SELECT 1 FROM doka_seed_rows GROUP BY {primary}
+            HAVING COUNT_BIG(*) > 1)
+            OR EXISTS (SELECT 1 FROM doka_seed_rows {filterSql}GROUP
+            BY {unique} HAVING COUNT_BIG(*) > 1)
+            THEN 0 ELSE 1 END;
+            """;
 
         var collationGuard = collations.Count == 0
             ? "1 = 1"
@@ -371,10 +372,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             "@doka_projected_key_sql",
             out var declaration);
 
-        var sql = declaration
-            + $"IF {guard} BEGIN TRY EXEC sys.sp_executesql {argument}; "
-            + "END TRY BEGIN CATCH IF ERROR_NUMBER() IN (241, 242, 245, 248, 529, 8114, 8115) "
-            + "SELECT -1; ELSE THROW; END CATCH ELSE SELECT -1;";
+        var sql = $"""
+            {declaration}IF {guard} BEGIN TRY EXEC sys.sp_executesql
+            {argument}; END TRY BEGIN CATCH IF ERROR_NUMBER() IN (241,
+            242, 245, 248, 529, 8114, 8115) SELECT -1;
+            ELSE THROW; END CATCH ELSE SELECT -1;
+            """;
 
         return Encoding.UTF8.GetByteCount(sql) <= SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes
             ? sql

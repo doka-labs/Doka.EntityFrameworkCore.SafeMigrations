@@ -11,12 +11,17 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, source int NULL, "
-            + "unrelated int NULL, result int GENERATED ALWAYS AS (source + 1) VIRTUAL); "
-            + "CREATE TABLE generated_sparse_control LIKE generated_sparse_drop; "
-            + "INSERT INTO generated_sparse_drop (id, source, unrelated) VALUES (1, 3, 11), (2, 7, 13); "
-            + "INSERT INTO generated_sparse_control (id, source, unrelated) "
-            + "SELECT id, source, unrelated FROM generated_sparse_drop;",
+            """
+            CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, source
+            int NULL,
+            unrelated int NULL, result int GENERATED ALWAYS AS (source + 1) VIRTUAL);
+            CREATE TABLE generated_sparse_control LIKE generated_sparse_drop; INSERT
+            INTO generated_sparse_drop (id,
+            source, unrelated) VALUES (1, 3, 11), (2, 7, 13); INSERT INTO generated_sparse_control
+            (id,
+            source, unrelated) SELECT id, source, unrelated
+            FROM generated_sparse_drop;
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -58,8 +63,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var retained = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM generated_sparse_drop "
-            + "WHERE (id = 1 AND source = 3 AND result = 4) OR (id = 2 AND source = 7 AND result = 8);",
+            """
+            SELECT COUNT(*) FROM generated_sparse_drop
+            WHERE (id = 1 AND source = 3 AND result = 4)
+            OR (id = 2 AND source = 7 AND result = 8);
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -94,9 +102,15 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, source int NULL, "
-            + "unrelated int NULL, result int GENERATED ALWAYS AS (IF(source > 0, source + 1, 0)) VIRTUAL); "
-            + "INSERT INTO generated_sparse_drop (id, source, unrelated) VALUES (1, 3, 11), (2, 7, 13);",
+            """
+            CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, source
+            int NULL,
+            unrelated int NULL, result int GENERATED ALWAYS AS (IF(source > 0, source
+            + 1,
+            0)) VIRTUAL); INSERT INTO generated_sparse_drop (id, source, unrelated)
+            VALUES (1,
+            3, 11), (2, 7, 13);
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -134,8 +148,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var retained = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM generated_sparse_drop "
-            + "WHERE (id = 1 AND source = 3 AND result = 4) OR (id = 2 AND source = 7 AND result = 8);",
+            """
+            SELECT COUNT(*) FROM generated_sparse_drop
+            WHERE (id = 1 AND source = 3 AND result = 4)
+            OR (id = 2 AND source = 7 AND result = 8);
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -165,14 +182,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var identifier = "`" + physicalName.Replace("`", "``", StringComparison.Ordinal) + "`";
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, "
-            + identifier
-            + " int NULL, unrelated int NULL, result int GENERATED ALWAYS AS ("
-            + identifier
-            + " + 1) VIRTUAL); "
-            + "INSERT INTO generated_sparse_drop (id, "
-            + identifier
-            + ", unrelated) VALUES (1, 3, 11);",
+            $"""
+            CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, {identifier}
+            int NULL,
+            unrelated int NULL, result int GENERATED ALWAYS AS ({identifier}
+            + 1) VIRTUAL); INSERT INTO generated_sparse_drop (id,
+            {identifier}, unrelated) VALUES (1, 3, 11);
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -226,14 +242,15 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, source int NULL, "
-            + "unrelated int NULL"
-            + extraColumn
-            + ", result int GENERATED ALWAYS AS ("
-            + expression
-            + ") VIRTUAL); "
-            + "INSERT INTO generated_sparse_drop (id, source, unrelated) VALUES (1, 3, 11); "
-            + "CREATE TABLE generated_sparse_control LIKE generated_sparse_drop;",
+            $"""
+            CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, source
+            int NULL,
+            unrelated int NULL{extraColumn}, result int GENERATED ALWAYS
+            AS ({expression}) VIRTUAL); INSERT INTO generated_sparse_drop
+            (id,
+            source, unrelated) VALUES (1, 3, 11); CREATE TABLE generated_sparse_control
+            LIKE generated_sparse_drop;
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -286,8 +303,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE generated_sparse_drop (source int NULL, unrelated int NULL, "
-            + "result int GENERATED ALWAYS AS (source + 1) VIRTUAL);",
+            """
+            CREATE TABLE generated_sparse_drop (source int NULL, unrelated int NULL,
+            result int GENERATED ALWAYS AS (source + 1) VIRTUAL);
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -341,9 +360,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         sessionMode.Parameters.Add(modeParameter);
         await sessionMode.ExecuteNonQueryAsync(CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync(
-            "CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, `quote\"source` int NULL, "
-            + "unrelated int NULL, result int GENERATED ALWAYS AS (`quote\"source` + 1) VIRTUAL); "
-            + "INSERT INTO generated_sparse_drop (id, `quote\"source`, unrelated) VALUES (1, 3, 11);");
+            """
+            CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, `quote"source`
+            int NULL,
+            unrelated int NULL, result int GENERATED ALWAYS AS (`quote"source` + 1)
+            VIRTUAL); INSERT INTO generated_sparse_drop (id,
+            `quote"source`, unrelated) VALUES (1, 3, 11);
+            """);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists(
@@ -426,11 +449,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var literal = "'" + text.Replace("'", "''", StringComparison.Ordinal) + "'";
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, source int NULL, "
-            + "unrelated int NULL, result int GENERATED ALWAYS AS (CHAR_LENGTH("
-            + literal
-            + ") + source) VIRTUAL); "
-            + "INSERT INTO generated_sparse_drop (id, source, unrelated) VALUES (1, 3, 11);",
+            $"""
+            CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, source
+            int NULL,
+            unrelated int NULL, result int GENERATED ALWAYS AS (CHAR_LENGTH({literal})
+            + source) VIRTUAL); INSERT INTO generated_sparse_drop (id,
+            source, unrelated) VALUES (1, 3, 11);
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -461,8 +486,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var displayLength = await ScalarIntAsync(
             connectionString,
-            "SELECT CHAR_LENGTH(GENERATION_EXPRESSION) FROM INFORMATION_SCHEMA.COLUMNS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'generated_sparse_drop' AND COLUMN_NAME = 'result';",
+            """
+            SELECT CHAR_LENGTH(GENERATION_EXPRESSION)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'generated_sparse_drop'
+            AND COLUMN_NAME = 'result';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -503,9 +533,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, "
-                + "result int GENERATED ALWAYS AS (CHAR_LENGTH('unrelated')) VIRTUAL); "
-                + "INSERT INTO generated_sparse_drop (id) VALUES (1);",
+                """
+                CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, result
+                int GENERATED ALWAYS AS (CHAR_LENGTH('unrelated')) VIRTUAL); INSERT INTO
+                generated_sparse_drop (id) VALUES (1);
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -528,8 +560,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var owners = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'generated_sparse_drop';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'generated_sparse_drop';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -555,9 +590,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, a int NULL, "
-            + "`\u00E1` int GENERATED ALWAYS AS (a + 1) VIRTUAL); "
-            + "INSERT INTO generated_sparse_drop (id, a) VALUES (1, 3);",
+            $"""
+            CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, a int NULL,
+            `{"\u00E1"}` int GENERATED ALWAYS AS (a + 1) VIRTUAL); INSERT
+            INTO generated_sparse_drop (id,
+            a) VALUES (1, 3);
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -623,17 +661,14 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var physical = "`" + physicalName + "`";
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, "
-            + physical
-            + " int NULL"
-            + (generated
+            $"""
+            CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, {physical}
+            int NULL{(generated
                 ? ", result int GENERATED ALWAYS AS (1) VIRTUAL"
-                : string.Empty)
-            + "); "
-            + "INSERT INTO generated_sparse_drop (id, "
-            + physical
-            + ") VALUES (1, 3); "
-            + "CREATE TABLE generated_sparse_control LIKE generated_sparse_drop;",
+                : string.Empty)}); INSERT INTO generated_sparse_drop (id,
+            {physical}) VALUES (1, 3); CREATE TABLE generated_sparse_control
+            LIKE generated_sparse_drop;
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -677,10 +712,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var physicalBytes = Convert.ToHexString(Encoding.UTF8.GetBytes(physicalName));
         var retainedMember = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'generated_sparse_drop' AND CAST(COLUMN_NAME AS BINARY) = 0x"
-            + physicalBytes
-            + ";",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'generated_sparse_drop'
+            AND CAST(COLUMN_NAME AS BINARY) = 0x{physicalBytes};
+            """,
             cancellationToken: CancellationToken.None);
 
         var retainedRows = await ScalarIntAsync(
@@ -749,7 +786,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         CancellationToken cancellationToken
     ) => ScalarIntAsync(
         connectionString,
-        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-        + $"AND TABLE_NAME = 'generated_sparse_drop' AND COLUMN_NAME = '{name}';",
+        $"""
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'generated_sparse_drop'
+        AND COLUMN_NAME = '{name}';
+        """,
         cancellationToken: cancellationToken);
 }

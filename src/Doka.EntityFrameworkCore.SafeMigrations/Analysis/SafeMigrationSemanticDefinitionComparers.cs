@@ -23,12 +23,12 @@ internal static class SafeMigrationSemanticDefinitionComparers
             SafeMigrationDefinitionEquivalence.ForeignKeySemantics,
             ForeignKeyHash);
 
-    public static IEqualityComparer<ExpectedIndexDefinition> Index { get; } =
+    private static IEqualityComparer<ExpectedIndexDefinition> Index { get; } =
         new SemanticComparer<ExpectedIndexDefinition>(
             SafeMigrationDefinitionEquivalence.IndexSemantics,
             IndexHash);
 
-    public static IEqualityComparer<ExpectedUniqueConstraintDefinition> UniqueConstraint { get; } =
+    private static IEqualityComparer<ExpectedUniqueConstraintDefinition> UniqueConstraint { get; } =
         new SemanticComparer<ExpectedUniqueConstraintDefinition>(
             SafeMigrationDefinitionEquivalence.UniqueConstraintSemantics,
             UniqueConstraintHash);
@@ -195,7 +195,7 @@ internal static class SafeMigrationSemanticDefinitionComparers
                         }
 
                         hash.Add(value.StoreType, StringComparer.Ordinal);
-                        AddLiteral(ref hash, value.Value);
+                        AddLiteral(ref hash, value.BorrowedValue);
                         break;
                     case SafeMigrationSqlUnaryExpression value:
                         hash.Add(3);

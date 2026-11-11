@@ -37,18 +37,25 @@ public sealed class SqlServerSafeMigrationIncludedIndexesIntegrationTests : SqlS
 
         var includedColumnCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes AS i "
-            + "JOIN sys.index_columns AS ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id "
-            + "JOIN sys.columns AS c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
-            + "WHERE i.object_id = OBJECT_ID(N'dbo.covering_users', N'U') "
-            + "AND i.name = N'IX_covering_users_Email' "
-            + "AND ic.is_included_column = 1 AND c.name = N'DisplayName';",
+            """
+            SELECT COUNT(*) FROM sys.indexes AS i
+            JOIN sys.index_columns AS ic ON ic.object_id = i.object_id
+            AND ic.index_id = i.index_id JOIN sys.columns AS c ON c.object_id = ic.object_id
+            AND c.column_id = ic.column_id
+            WHERE i.object_id = OBJECT_ID(N'dbo.covering_users', N'U')
+            AND i.name = N'IX_covering_users_Email'
+            AND ic.is_included_column = 1
+            AND c.name = N'DisplayName';
+            """,
             cancellationToken: CancellationToken.None);
 
         var indexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.covering_users', N'U') "
-            + "AND name = N'IX_covering_users_Email';",
+            """
+            SELECT COUNT(*) FROM sys.indexes
+            WHERE object_id = OBJECT_ID(N'dbo.covering_users', N'U')
+            AND name = N'IX_covering_users_Email';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -66,9 +73,12 @@ public sealed class SqlServerSafeMigrationIncludedIndexesIntegrationTests : SqlS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.covering_users (Id int NOT NULL, Email nvarchar(320) NOT NULL, "
-            + "DisplayName nvarchar(120) NOT NULL); "
-            + "CREATE INDEX IX_covering_users_Email ON dbo.covering_users (Email);",
+            """
+            CREATE TABLE dbo.covering_users (Id int NOT NULL, Email nvarchar(320) NOT
+            NULL,
+            DisplayName nvarchar(120) NOT NULL); CREATE INDEX IX_covering_users_Email
+            ON dbo.covering_users (Email);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -90,10 +100,13 @@ public sealed class SqlServerSafeMigrationIncludedIndexesIntegrationTests : SqlS
 
         var includedColumnCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes AS i "
-            + "JOIN sys.index_columns AS ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id "
-            + "WHERE i.object_id = OBJECT_ID(N'dbo.covering_users', N'U') "
-            + "AND i.name = N'IX_covering_users_Email' AND ic.is_included_column = 1;",
+            """
+            SELECT COUNT(*) FROM sys.indexes AS i
+            JOIN sys.index_columns AS ic ON ic.object_id = i.object_id
+            AND ic.index_id = i.index_id WHERE i.object_id = OBJECT_ID(N'dbo.covering_users',
+            N'U') AND i.name = N'IX_covering_users_Email'
+            AND ic.is_included_column = 1;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert

@@ -142,9 +142,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                             "The PostgreSQL transition build returned no data-probe plan.");
 
                     selections.Add(
-                        $"SELECT {candidates[offset + index].Ordinal.ToString(CultureInfo.InvariantCulture)}, "
-                        + $"COALESCE(({probe.TransitionInvariantExpression}), FALSE), "
-                        + $"COALESCE(({probe.NarrowingExpression}), FALSE)");
+                        $"""
+                        SELECT {candidates[offset + index].Ordinal.ToString(CultureInfo.InvariantCulture)},
+                        COALESCE(({probe.TransitionInvariantExpression}),
+                        FALSE), COALESCE(({probe.NarrowingExpression}), FALSE)
+                        """);
                 }
 
                 command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
@@ -234,9 +236,12 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 if (candidates.Length == 1)
                 {
                     var column = _sqlGenerationHelper.DelimitIdentifier(identity.Column);
-                    command.CommandText = "SELECT EXISTS(SELECT 1 FROM "
-                        + $"{table} WHERE {column} IS NOT NULL AND char_length({column}) "
-                        + $"> {identity.TargetLength.ToString(CultureInfo.InvariantCulture)} LIMIT 1);";
+                    command.CommandText = $"""
+                        SELECT EXISTS(SELECT 1 FROM {table}
+                        WHERE {column} IS NOT NULL
+                        AND char_length({column}) > {identity.TargetLength.ToString(CultureInfo.InvariantCulture)}
+                        LIMIT 1);
+                        """;
                 }
                 else
                 {

@@ -162,9 +162,12 @@ public sealed class MySqlLifecycleEdgeCasesIntegrationTests : MySqlSafeMigration
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'missing_legacy_table' "
-                + "AND IS_NULLABLE = 'NO';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'missing_legacy_table'
+                AND IS_NULLABLE = 'NO';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -174,8 +177,10 @@ public sealed class MySqlLifecycleEdgeCasesIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `column_prerequisite_child` (`id` int NOT NULL); "
-            + "CREATE TABLE `column_prerequisite_parent` (`id` int NOT NULL);",
+            """
+            CREATE TABLE `column_prerequisite_child` (`id` int NOT NULL); CREATE TABLE
+            `column_prerequisite_parent` (`id` int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -284,9 +289,12 @@ public sealed class MySqlLifecycleEdgeCasesIntegrationTests : MySqlSafeMigration
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'legacy_unique_users' "
-                + "AND INDEX_NAME = 'ux_legacy_unique_users_email';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'legacy_unique_users'
+                AND INDEX_NAME = 'ux_legacy_unique_users_email';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -336,9 +344,12 @@ public sealed class MySqlLifecycleEdgeCasesIntegrationTests : MySqlSafeMigration
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'legacy_default_users' "
-                + "AND COLUMN_NAME = 'tenant_id';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'legacy_default_users'
+                AND COLUMN_NAME = 'tenant_id';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -414,9 +425,12 @@ public sealed class MySqlLifecycleEdgeCasesIntegrationTests : MySqlSafeMigration
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'oversized_analysis' "
-                + "AND COLUMN_NAME = 'payload';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'oversized_analysis'
+                AND COLUMN_NAME = 'payload';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -456,8 +470,11 @@ public sealed class MySqlLifecycleEdgeCasesIntegrationTests : MySqlSafeMigration
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = 'ck_opaque_expression';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND CONSTRAINT_NAME = 'ck_opaque_expression';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -541,9 +558,11 @@ public sealed class MySqlLifecycleEdgeCasesIntegrationTests : MySqlSafeMigration
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                + "WHERE TABLE_SCHEMA = DATABASE() "
-                + "AND TABLE_NAME = '__ApplicationDbContextMigrationsHistory';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = '__ApplicationDbContextMigrationsHistory';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -596,8 +615,10 @@ public sealed class MySqlLifecycleEdgeCasesIntegrationTests : MySqlSafeMigration
 
         await ExecuteSqlAsync(
             connectionString,
-            "INSERT INTO `__ApplicationDbContextMigrationsHistory` (`MigrationId`, `ProductVersion`) "
-            + "VALUES ('209901010000_Future', '10.0.0');",
+            """
+            INSERT INTO `__ApplicationDbContextMigrationsHistory` (`MigrationId`,
+            `ProductVersion`) VALUES ('209901010000_Future', '10.0.0');
+            """,
             cancellationToken: CancellationToken.None);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => runner.AnalyzePendingMigrationsAsync(
@@ -622,10 +643,12 @@ public sealed class MySqlLifecycleEdgeCasesIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `rename_source` (`source_column` int NULL, `target_column` int NULL); "
-            + "CREATE TABLE `rename_target` (`id` int NOT NULL); "
-            + "CREATE INDEX `rename_source_index` ON `rename_source` (`source_column`); "
-            + "CREATE INDEX `rename_target_index` ON `rename_source` (`target_column`);",
+            """
+            CREATE TABLE `rename_source` (`source_column` int NULL, `target_column`
+            int NULL); CREATE TABLE `rename_target` (`id` int NOT NULL); CREATE INDEX
+            `rename_source_index` ON `rename_source` (`source_column`); CREATE INDEX
+            `rename_target_index` ON `rename_source` (`target_column`);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -668,26 +691,36 @@ public sealed class MySqlLifecycleEdgeCasesIntegrationTests : MySqlSafeMigration
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('rename_source', 'rename_target');",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME IN ('rename_source', 'rename_target');
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'rename_source' "
-                + "AND COLUMN_NAME IN ('source_column', 'target_column');",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'rename_source'
+                AND COLUMN_NAME IN ('source_column', 'target_column');
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'rename_source' "
-                + "AND INDEX_NAME IN ('rename_source_index', 'rename_target_index');",
+                """
+                SELECT COUNT(DISTINCT INDEX_NAME)
+                FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'rename_source'
+                AND INDEX_NAME IN ('rename_source_index', 'rename_target_index');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -697,13 +730,15 @@ public sealed class MySqlLifecycleEdgeCasesIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `inventory_parent` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
-            + "CREATE TABLE `inventory_constraints` ("
-            + "`id` int NOT NULL, `parent_id` int NULL, `code` varchar(30) NULL, `quantity` int NOT NULL, "
-            + "PRIMARY KEY (`id`), "
-            + "CONSTRAINT `uq_inventory_code` UNIQUE (`code`), "
-            + "CONSTRAINT `ck_inventory_quantity` CHECK (`quantity` >= 0), "
-            + "CONSTRAINT `fk_inventory_parent` FOREIGN KEY (`parent_id`) REFERENCES `inventory_parent` (`id`));",
+            """
+            CREATE TABLE `inventory_parent` (`id` int NOT NULL, PRIMARY KEY (`id`));
+            CREATE TABLE `inventory_constraints` (`id` int NOT NULL,
+            `parent_id` int NULL, `code` varchar(30) NULL, `quantity` int NOT NULL,
+            PRIMARY KEY (`id`), CONSTRAINT `uq_inventory_code` UNIQUE (`code`), CONSTRAINT
+            `ck_inventory_quantity` CHECK (`quantity` >= 0),
+            CONSTRAINT `fk_inventory_parent` FOREIGN KEY (`parent_id`) REFERENCES `inventory_parent`
+            (`id`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -754,8 +789,11 @@ public sealed class MySqlLifecycleEdgeCasesIntegrationTests : MySqlSafeMigration
             4,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'inventory_constraints';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'inventory_constraints';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -793,9 +831,12 @@ public sealed class MySqlLifecycleEdgeCasesIntegrationTests : MySqlSafeMigration
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pipeline_state' "
-                + "AND COLUMN_NAME = 'payload';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'pipeline_state'
+                AND COLUMN_NAME = 'payload';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 }

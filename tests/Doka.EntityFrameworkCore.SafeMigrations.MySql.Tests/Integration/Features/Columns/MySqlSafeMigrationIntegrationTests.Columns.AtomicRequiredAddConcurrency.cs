@@ -266,9 +266,12 @@ public sealed partial class
             await ExecuteAtomicAddWriterSqlAsync(
                 writer,
                 gate,
-                "SET SESSION check_constraint_checks = OFF; "
-                + "INSERT INTO `atomic_required_items` (`key`, `required_value`) VALUES (1, NULL); "
-                + "SET SESSION check_constraint_checks = ON;",
+                """
+                SET SESSION check_constraint_checks = OFF; INSERT INTO `atomic_required_items`
+                (`key`,
+                `required_value`) VALUES (1, NULL); SET SESSION check_constraint_checks
+                = ON;
+                """,
                 cancellationToken);
 
             await gate.CommitAsync(cancellationToken);
@@ -339,12 +342,14 @@ public sealed partial class
     // WHY: The marker and the gate are separate tables. The migration commits
     // its reached marker before waiting on the writer's independent row lock.
     private const string AtomicAddConcurrencyFixtureSql =
-        "CREATE TABLE `atomic_required_items` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-        + "CREATE TABLE `atomic_add_checkpoint` "
-        + "(`key` int NOT NULL PRIMARY KEY, `reached` int NOT NULL) ENGINE=InnoDB; "
-        + "INSERT INTO `atomic_add_checkpoint` VALUES (1, 0); "
-        + "CREATE TABLE `atomic_add_gate` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-        + "INSERT INTO `atomic_add_gate` VALUES (1);";
+        """
+        CREATE TABLE `atomic_required_items` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+        CREATE TABLE `atomic_add_checkpoint` (`key` int NOT NULL PRIMARY KEY,
+        `reached` int NOT NULL) ENGINE=InnoDB; INSERT INTO `atomic_add_checkpoint`
+        VALUES (1,
+        0); CREATE TABLE `atomic_add_gate` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+        INSERT INTO `atomic_add_gate` VALUES (1);
+        """;
 
     /// <summary>
     /// Cancellation at a proven staged barrier preserves a writer's supplied value and permits retry.
@@ -596,8 +601,11 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
         private const string StageEnd = "DEALLOCATE PREPARE doka_sm_statement;";
 
-        private const string CheckpointSql = "UPDATE `atomic_add_checkpoint` SET `reached` = 1 WHERE `key` = 1; "
-            + "SELECT `key` FROM `atomic_add_gate` WHERE `key` = 1 FOR UPDATE; ";
+        private const string CheckpointSql = $"""
+            UPDATE `atomic_add_checkpoint` SET `reached` = 1
+            WHERE `key` = 1; SELECT `key`
+            FROM `atomic_add_gate` WHERE `key` = 1 FOR UPDATE;{"\u0020"}
+            """;
 
         private readonly bool _betweenStages;
         private readonly string _guardHex;

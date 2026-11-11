@@ -6,6 +6,7 @@ public class SafeMigrationDbContext : DbContext
     private readonly bool _excludeModelManagedDataForExcludedTables;
     private readonly bool _registerSafeMigrations;
     private readonly MySqlServerVersion? _serverVersion;
+    private ServiceProvider? _ownedServices;
 
     public SafeMigrationDbContext(
         DbContextOptions<SafeMigrationDbContext> options
@@ -25,6 +26,15 @@ public class SafeMigrationDbContext : DbContext
         _serverVersion = serverVersion;
         _registerSafeMigrations = registerSafeMigrations;
         _excludeModelManagedDataForExcludedTables = excludeModelManagedDataForExcludedTables;
+
+        if (!registerSafeMigrations)
+        {
+            // WHY: Missing-handler probes require an intentionally different native-only profile.
+            // Own that rare root rather than adding it to EF's process-wide provider cache.
+            _ownedServices = new ServiceCollection()
+                .AddEntityFrameworkDokaMySql()
+                .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        }
     }
 
     protected override void OnConfiguring(
@@ -53,5 +63,46 @@ public class SafeMigrationDbContext : DbContext
                 }
             });
         }
+
+        if (_ownedServices is not null)
+        {
+            optionsBuilder.UseInternalServiceProvider(_ownedServices);
+        }
+    }
+
+    /// <inheritdoc />
+    public override void Dispose()
+    {
+        try
+        {
+            base.Dispose();
+        }
+        finally
+        {
+            // WHY: EF's scoped services retain their root until context cleanup finishes.
+            Interlocked
+                .Exchange(ref _ownedServices, null)
+                ?.Dispose();
+        }
+
+        GC.SuppressFinalize(this);
+    }
+
+    /// <inheritdoc />
+    public override async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await base.DisposeAsync();
+        }
+        finally
+        {
+            if (Interlocked.Exchange(ref _ownedServices, null) is { } services)
+            {
+                await services.DisposeAsync();
+            }
+        }
+
+        GC.SuppressFinalize(this);
     }
 }

@@ -160,7 +160,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         int offset
     )
     {
-        var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
+        using var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
         var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
             _typeMappingSource,
             _sqlGenerationHelper,

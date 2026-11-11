@@ -2,11 +2,14 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 {
-    private const string UnsupportedPhysicalTablePredicate = "physical.is_memory_optimized = 1 "
-        + "OR physical.is_filetable = 1 OR physical.temporal_type <> 0 "
-        + "OR physical.is_node = 1 OR physical.is_edge = 1 "
-        + "OR EXISTS (SELECT 1 FROM sys.columns ledger_column WHERE ledger_column.object_id = physical.object_id "
-        + "AND ledger_column.generated_always_type IN (5, 6, 7, 8))";
+    private const string UnsupportedPhysicalTablePredicate = """
+        physical.is_memory_optimized = 1
+        OR physical.is_filetable = 1 OR physical.temporal_type <> 0
+        OR physical.is_node = 1 OR physical.is_edge = 1
+        OR EXISTS (SELECT 1 FROM sys.columns ledger_column
+        WHERE ledger_column.object_id = physical.object_id
+        AND ledger_column.generated_always_type IN (5, 6, 7, 8))
+        """;
 
     /// <summary>Proves an existing table uses the ordinary authored engine contract, allowing absence.</summary>
     /// <param name="table">The requested physical table name.</param>
@@ -16,9 +19,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string table,
         string? schema
     ) => Bit(
-        "NOT EXISTS (SELECT 1 FROM sys.tables physical "
-        + $"WHERE physical.object_id = {TableId(table, schema)} "
-        + $"AND ({UnsupportedPhysicalTablePredicate}))");
+        $"""
+        NOT EXISTS (SELECT 1 FROM sys.tables physical
+        WHERE physical.object_id = {TableId(table, schema)}
+        AND ({UnsupportedPhysicalTablePredicate}))
+        """);
 
     private string? BuildPhysicalTableSupportExpression(
         SafeMigrationIntent intent
@@ -115,10 +120,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             // WHY: Drop captures only the dependent identity. The current
             // catalog still supplies its principal's engine contract.
             predicates.Add(
-                "NOT EXISTS (SELECT 1 FROM sys.foreign_keys fk "
-                + "JOIN sys.tables physical ON physical.object_id = fk.referenced_object_id "
-                + $"WHERE fk.parent_object_id = {TableId(dropForeignKey.Table, dropForeignKey.Schema)} "
-                + $"AND fk.name = {Literal(dropForeignKey.Name)} AND ({UnsupportedPhysicalTablePredicate}))");
+                $"""
+                NOT EXISTS (SELECT 1 FROM sys.foreign_keys fk
+                JOIN sys.tables physical ON physical.object_id = fk.referenced_object_id
+                WHERE fk.parent_object_id = {TableId(dropForeignKey.Table, dropForeignKey.Schema)}
+                AND fk.name = {Literal(dropForeignKey.Name)}
+                AND ({UnsupportedPhysicalTablePredicate}))
+                """);
         }
 
         return predicates.Count == 0

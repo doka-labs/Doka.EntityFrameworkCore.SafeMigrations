@@ -91,8 +91,10 @@ public sealed class SqlServerSafeMigrationOrdinaryDropIntegrationTests : SqlServ
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.ordinary_drop_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL);"
-            + "INSERT dbo.ordinary_drop_nodes VALUES(1,1,4);",
+            """
+            CREATE TABLE dbo.ordinary_drop_nodes(Id int NOT NULL,L bigint NOT NULL,R
+            bigint NOT NULL);INSERT dbo.ordinary_drop_nodes VALUES(1,1,4);
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
@@ -121,17 +123,24 @@ public sealed class SqlServerSafeMigrationOrdinaryDropIntegrationTests : SqlServ
 
         var objectReferences = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.sql_expression_dependencies "
-            + "WHERE referencing_id=OBJECT_ID(N'dbo.ordinary_R_view') "
-            + "AND referenced_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') AND referenced_minor_id=0;",
+            """
+            SELECT COUNT(*) FROM sys.sql_expression_dependencies
+            WHERE referencing_id=OBJECT_ID(N'dbo.ordinary_R_view')
+            AND referenced_id=OBJECT_ID(N'dbo.ordinary_drop_nodes')
+            AND referenced_minor_id=0;
+            """,
             cancellationToken: CancellationToken.None);
 
         var columnReferences = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.sql_expression_dependencies d JOIN sys.columns c "
-            + "ON c.object_id=d.referenced_id AND c.column_id=d.referenced_minor_id "
-            + "WHERE d.referencing_id=OBJECT_ID(N'dbo.ordinary_R_view') "
-            + "AND c.object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') AND c.name=N'R';",
+            """
+            SELECT COUNT(*) FROM sys.sql_expression_dependencies d
+            JOIN sys.columns c ON c.object_id=d.referenced_id
+            AND c.column_id=d.referenced_minor_id
+            WHERE d.referencing_id=OBJECT_ID(N'dbo.ordinary_R_view')
+            AND c.object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes')
+            AND c.name=N'R';
+            """,
             cancellationToken: CancellationToken.None);
 
         var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
@@ -194,11 +203,14 @@ public sealed class SqlServerSafeMigrationOrdinaryDropIntegrationTests : SqlServ
 
         var statisticsId = await ScalarIntAsync(
             connectionString,
-            "SELECT s.stats_id FROM sys.stats s JOIN sys.stats_columns sc "
-            + "ON sc.object_id=s.object_id AND sc.stats_id=s.stats_id JOIN sys.columns c "
-            + "ON c.object_id=sc.object_id AND c.column_id=sc.column_id "
-            + "WHERE s.object_id=OBJECT_ID(N'dbo.StatsNodes') AND s.auto_created=1 AND s.user_created=0 "
-            + "AND c.name=N'L';",
+            """
+            SELECT s.stats_id FROM sys.stats s
+            JOIN sys.stats_columns sc ON sc.object_id=s.object_id
+            AND sc.stats_id=s.stats_id JOIN sys.columns c ON c.object_id=sc.object_id
+            AND c.column_id=sc.column_id WHERE s.object_id=OBJECT_ID(N'dbo.StatsNodes')
+            AND s.auto_created=1 AND s.user_created=0
+            AND c.name=N'L';
+            """,
             cancellationToken: CancellationToken.None);
 
         var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
@@ -380,9 +392,11 @@ public sealed class SqlServerSafeMigrationOrdinaryDropIntegrationTests : SqlServ
         // WHY: The old failure must be attributable to CHECK lineage, not accidentally masked by native statistics.
         await ExecuteSqlAsync(
             connectionString,
-            "ALTER DATABASE CURRENT SET AUTO_CREATE_STATISTICS OFF;"
-            + "CREATE TABLE dbo.ordinary_drop_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL);"
-            + "INSERT dbo.ordinary_drop_nodes VALUES(1,1,4);",
+            """
+            ALTER DATABASE CURRENT SET AUTO_CREATE_STATISTICS OFF;CREATE TABLE dbo.ordinary_drop_nodes(Id
+            int NOT NULL,L bigint NOT NULL,R bigint NOT NULL);INSERT dbo.ordinary_drop_nodes
+            VALUES(1,1,4);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -568,8 +582,12 @@ public sealed class SqlServerSafeMigrationOrdinaryDropIntegrationTests : SqlServ
             {
                 2 => "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') "
                     + "AND name=N'IX_retained_L';",
-                3 => "SELECT COUNT(*) FROM sys.stats WHERE object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') "
-                    + "AND name=N'ST_retained_L' AND user_created=1 AND auto_created=0;",
+                3 => """
+                    SELECT COUNT(*) FROM sys.stats
+                    WHERE object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes')
+                    AND name=N'ST_retained_L' AND user_created=1
+                    AND auto_created=0;
+                    """,
                 4 => BlockerCountSql(2),
                 _ => BlockerCountSql(0),
             },
@@ -729,14 +747,14 @@ public sealed class SqlServerSafeMigrationOrdinaryDropIntegrationTests : SqlServ
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "ALTER DATABASE CURRENT SET AUTO_CREATE_STATISTICS OFF;"
-            + "CREATE TABLE dbo.ordinary_drop_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL);"
-            + "INSERT dbo.ordinary_drop_nodes VALUES(1,1,4);"
-            + "ALTER TABLE dbo.ordinary_drop_nodes ADD CONSTRAINT CK_ordinary_source CHECK("
-            + (nativeDependent
+            $"""
+            ALTER DATABASE CURRENT SET AUTO_CREATE_STATISTICS OFF;CREATE TABLE dbo.ordinary_drop_nodes(Id
+            int NOT NULL,L bigint NOT NULL,R bigint NOT NULL);INSERT dbo.ordinary_drop_nodes
+            VALUES(1,1,4);ALTER TABLE dbo.ordinary_drop_nodes ADD CONSTRAINT CK_ordinary_source
+            CHECK({(nativeDependent
                 ? "L"
-                : "R")
-            + ">0);",
+                : "R")}>0);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -774,14 +792,17 @@ public sealed class SqlServerSafeMigrationOrdinaryDropIntegrationTests : SqlServ
         var remaining = await SourceCountAsync(connectionString, cancellationToken: CancellationToken.None);
         var references = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.sql_expression_dependencies d JOIN sys.check_constraints cc "
-            + "ON cc.object_id=d.referencing_id JOIN sys.columns c ON c.object_id=d.referenced_id "
-            + "AND c.column_id=d.referenced_minor_id WHERE cc.parent_object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') "
-            + "AND cc.name=N'CK_ordinary_source' AND c.name=N'"
-            + (nativeDependent
+            $"""
+            SELECT COUNT(*) FROM sys.sql_expression_dependencies d
+            JOIN sys.check_constraints cc ON cc.object_id=d.referencing_id
+            JOIN sys.columns c ON c.object_id=d.referenced_id
+            AND c.column_id=d.referenced_minor_id
+            WHERE cc.parent_object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes')
+            AND cc.name=N'CK_ordinary_source'
+            AND c.name=N'{(nativeDependent
                 ? "L"
-                : "R")
-            + "';",
+                : "R")}';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -1101,8 +1122,10 @@ public sealed class SqlServerSafeMigrationOrdinaryDropIntegrationTests : SqlServ
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE TABLE dbo.ordinary_drop_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL);"
-                + "INSERT dbo.ordinary_drop_nodes VALUES(1,1,4);",
+                """
+                CREATE TABLE dbo.ordinary_drop_nodes(Id int NOT NULL,L bigint NOT NULL,R
+                bigint NOT NULL);INSERT dbo.ordinary_drop_nodes VALUES(1,1,4);
+                """,
                 cancellationToken: cancellationToken);
 
             if (kind == 7)
@@ -1124,12 +1147,16 @@ public sealed class SqlServerSafeMigrationOrdinaryDropIntegrationTests : SqlServ
                         1 => "ALTER TABLE dbo.ordinary_drop_nodes ADD CONSTRAINT CK_ordinary_L CHECK(L>0);",
                         2 => "ALTER TABLE dbo.ordinary_drop_nodes ADD CONSTRAINT PK_ordinary_L PRIMARY KEY(L);",
                         3 => "ALTER TABLE dbo.ordinary_drop_nodes ADD CONSTRAINT UQ_ordinary_L UNIQUE(L);",
-                        4 => "CREATE TABLE dbo.ordinary_parent(Id bigint NOT NULL PRIMARY KEY);"
-                            + "INSERT dbo.ordinary_parent VALUES(1);ALTER TABLE dbo.ordinary_drop_nodes "
-                            + "ADD CONSTRAINT FK_ordinary_L FOREIGN KEY(L) REFERENCES dbo.ordinary_parent(Id);",
-                        5 => "ALTER TABLE dbo.ordinary_drop_nodes ADD CONSTRAINT UQ_ordinary_L UNIQUE(L);"
-                            + "CREATE TABLE dbo.ordinary_child(L bigint NOT NULL CONSTRAINT FK_child_L "
-                            + "REFERENCES dbo.ordinary_drop_nodes(L));INSERT dbo.ordinary_child VALUES(1);",
+                        4 => """
+                            CREATE TABLE dbo.ordinary_parent(Id bigint NOT NULL PRIMARY KEY);INSERT
+                            dbo.ordinary_parent VALUES(1);ALTER TABLE dbo.ordinary_drop_nodes ADD CONSTRAINT
+                            FK_ordinary_L FOREIGN KEY(L) REFERENCES dbo.ordinary_parent(Id);
+                            """,
+                        5 => """
+                            ALTER TABLE dbo.ordinary_drop_nodes ADD CONSTRAINT UQ_ordinary_L UNIQUE(L);CREATE
+                            TABLE dbo.ordinary_child(L bigint NOT NULL CONSTRAINT FK_child_L REFERENCES
+                            dbo.ordinary_drop_nodes(L));INSERT dbo.ordinary_child VALUES(1);
+                            """,
                         6 => RetainedStatisticsSql("ST_ordinary_L"),
                         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
                     },
@@ -1181,14 +1208,18 @@ public sealed class SqlServerSafeMigrationOrdinaryDropIntegrationTests : SqlServ
     {
         0 => "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') "
             + "AND name=N'IX_ordinary_L';",
-        1 => "SELECT COUNT(*) FROM sys.check_constraints "
-            + "WHERE parent_object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') AND name=N'CK_ordinary_L';",
-        2 or 3 => "SELECT COUNT(*) FROM sys.key_constraints "
-            + "WHERE parent_object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') AND name=N'"
-            + (kind == 2
+        1 => """
+            SELECT COUNT(*) FROM sys.check_constraints
+            WHERE parent_object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes')
+            AND name=N'CK_ordinary_L';
+            """,
+        2 or 3 => $"""
+            SELECT COUNT(*) FROM sys.key_constraints
+            WHERE parent_object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes')
+            AND name=N'{(kind == 2
                 ? "PK_ordinary_L"
-                : "UQ_ordinary_L")
-            + "';",
+                : "UQ_ordinary_L")}';
+            """,
         4 or 5 => "SELECT COUNT(*) FROM sys.foreign_keys WHERE name=N'"
             + (kind == 4
                 ? "FK_ordinary_L"
@@ -1196,11 +1227,16 @@ public sealed class SqlServerSafeMigrationOrdinaryDropIntegrationTests : SqlServ
             + "';",
         6 => "SELECT COUNT(*) FROM sys.stats WHERE object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') "
             + "AND name=N'ST_ordinary_L';",
-        7 => "SELECT COUNT(*) FROM sys.views WHERE object_id=OBJECT_ID(N'dbo.ordinary_L_view') "
-            + "AND OBJECTPROPERTY(object_id,'IsSchemaBound')=1;",
-        8 => "SELECT COUNT(*) FROM sys.default_constraints "
-            + "WHERE parent_object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes') "
-            + "AND parent_column_id=COLUMNPROPERTY(parent_object_id,N'L','ColumnId');",
+        7 => """
+            SELECT COUNT(*) FROM sys.views
+            WHERE object_id=OBJECT_ID(N'dbo.ordinary_L_view')
+            AND OBJECTPROPERTY(object_id,'IsSchemaBound')=1;
+            """,
+        8 => """
+            SELECT COUNT(*) FROM sys.default_constraints
+            WHERE parent_object_id=OBJECT_ID(N'dbo.ordinary_drop_nodes')
+            AND parent_column_id=COLUMNPROPERTY(parent_object_id,N'L','ColumnId');
+            """,
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
@@ -1218,11 +1254,10 @@ public sealed class SqlServerSafeMigrationOrdinaryDropIntegrationTests : SqlServ
 
         // WHY: SQL Server 2022+ defaults to auto-droppable user statistics. The negative fixture must really block
         // native DROP; dynamic SQL keeps the new option invisible to the SQL Server 2019 parser.
-        => "IF CONVERT(int,SERVERPROPERTY('ProductMajorVersion'))>=16 "
-            + "EXEC(N'CREATE STATISTICS "
-            + name
-            + " ON dbo.ordinary_drop_nodes(L) WITH AUTO_DROP=OFF;');"
-            + "ELSE CREATE STATISTICS "
-            + name
-            + " ON dbo.ordinary_drop_nodes(L);";
+        // Constant chunks retain its quoted payload byte-for-byte when wrapping C# source.
+        => $"""
+            IF CONVERT(int,SERVERPROPERTY('ProductMajorVersion'))>=16 EXEC(N'CREATE STATISTICS {name}{
+                " ON dbo.ordinary_drop_nodes(L) WITH AUTO_DROP=OFF;');ELSE"}
+            CREATE STATISTICS {name} ON dbo.ordinary_drop_nodes(L);
+            """;
 }

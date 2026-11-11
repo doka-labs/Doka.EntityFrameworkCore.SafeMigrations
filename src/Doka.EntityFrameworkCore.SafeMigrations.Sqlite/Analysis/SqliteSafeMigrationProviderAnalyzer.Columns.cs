@@ -127,12 +127,8 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         DropColumnIntent intent
     )
     {
-        if (!snapshot.Tables.TryGetValue(intent.Table, out var table))
-        {
-            return Missing(postconditionSatisfied: true);
-        }
-
-        if (!table.Columns.ContainsKey(intent.Name))
+        if (!snapshot.Tables.TryGetValue(intent.Table, out var table)
+            || !table.Columns.ContainsKey(intent.Name))
         {
             return Missing(postconditionSatisfied: true);
         }
@@ -256,7 +252,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
                 NormalizeStoreType(actual.StoreType),
                 NormalizeStoreType(expectedStoreType))
             && actual.IsNullable == expected.IsNullable
-            && SqlEquivalent(actual.DefaultSql, expectedDefault)
+            && SqliteSqlNormalizer.EquivalentDefault(actual.DefaultSql, expectedDefault)
             && ExpressionMatches(actual.GeneratedSql, expectedComputed, expected.ComputedExpression)
             && (expectedComputed is null || actual.IsStored == (expected.IsStored ?? false))
             && CollationMatches(actual.Collation, expected.Collation)
@@ -305,7 +301,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         string? expectedDefault
     )
     {
-        if (SqlEquivalent(actual.DefaultSql, expectedDefault))
+        if (SqliteSqlNormalizer.EquivalentDefault(actual.DefaultSql, expectedDefault))
         {
             return true;
         }
@@ -322,7 +318,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         // column is added to a populated SQLite table. The model intentionally
         // omits that default, and a later rebuild is the point where EF removes it.
 
-        return SqlEquivalent(actual.DefaultSql, backfillDefault);
+        return SqliteSqlNormalizer.EquivalentDefault(actual.DefaultSql, backfillDefault);
     }
 
     /// <summary>Obtains only EF's supported implicit backfill literal for a required model column.</summary>
@@ -467,7 +463,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         }
 
         var expectedDefault = ExpectedDefaultSql(expected);
-        if (!SqlEquivalent(actual.DefaultSql, expectedDefault))
+        if (!SqliteSqlNormalizer.EquivalentDefault(actual.DefaultSql, expectedDefault))
         {
             result.Add(
                 new SafeMigrationFacetDifference(

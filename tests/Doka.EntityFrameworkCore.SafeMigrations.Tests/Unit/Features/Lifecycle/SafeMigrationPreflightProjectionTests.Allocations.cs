@@ -1,69 +1,58 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
-/// <summary>Measures projection allocations using prepared operations independently of provider latency.</summary>
-/// <param name="output">The diagnostic output retaining the observed allocation count.</param>
-public sealed class SafeMigrationProjectionAllocationTests(ITestOutputHelper output)
+/// <summary>Verifies prepared projection behavior independently of measured allocation performance.</summary>
+public sealed class SafeMigrationProjectionAllocationTests
 {
-    /// <summary>Accepted column streams retain exact evidence with bounded per-column storage.</summary>
-    [Fact]
-    public void AcceptedColumnsKeepPreparedProjectionAllocationsBounded()
+    /// <summary>Accepted column streams retain exact evidence across independent invocations.</summary>
+    /// <param name="count">The prepared stream size, including the original thousand-column workload.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(1_000)]
+    public void AcceptedColumnsProjectToMatchingDefinitions(
+        int count
+    )
     {
         // Arrange
-        const int count = 1_000;
-        var operations = Enumerable
-            .Range(0, count)
-            .Select(index => new SafeMigrationOperation(
-                new EnsureColumnIntent(
-                    "items",
-                    new ExpectedColumnDefinition($"value_{index}", typeof(int), true, "int")),
-                SafeMigrationPolicy.ThrowIfDifferent))
-            .ToArray();
+        var workload = new PreparedColumnProjectionWorkload(count);
+
+        // Act
+        var matching = workload.ProjectAcceptedColumns();
+        var replay = workload.ProjectAcceptedColumns();
+
+        // Assert
+        Assert.Equal(count, matching);
+        Assert.Equal(count, replay);
+    }
+
+    /// <summary>Rejected convergence cannot invent a matching physical column definition.</summary>
+    [Fact]
+    public void RejectedColumnDoesNotBecomeAProjectedMatch()
+    {
+        // Arrange
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", new ExpectedColumnDefinition("value", typeof(int), true, "int")),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         var live = new SafeMigrationProviderAnalysis(
-            SafeMigrationObservedState.Missing,
+            SafeMigrationObservedState.Different,
             SafeMigrationRepairCapability.None,
             false,
-            "live_missing");
+            "live_different");
 
         var decision = SafeMigrationDecisionPlanner.Plan(
             SafeMigrationOperationKind.EnsureColumn,
             live.ObservedState,
-            SafeMigrationPolicy.ThrowIfDifferent);
+            operation.Policy);
 
-        _ = ProjectColumns(operations, live, decision);
+        var projection = new SafeMigrationPreflightProjection();
 
         // Act
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        var matching = ProjectColumns(operations, live, decision);
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        projection.Observe(operation, live, live, decision);
+        var observed = projection.Project(operation, live);
 
         // Assert
-        output.WriteLine($"Prepared column projection: {allocated} bytes for {count} accepted/matching columns.");
-        Assert.Equal(count, matching);
-
-        // WHY: Leave headroom for runtime bookkeeping, but detect the previous
-        // per-column object, closure, iterator and result-code allocations.
-        Assert.InRange(allocated, 0, 450_000);
-    }
-
-    private static int ProjectColumns(
-        IReadOnlyList<SafeMigrationOperation> operations,
-        SafeMigrationProviderAnalysis live,
-        SafeMigrationDecision decision
-    )
-    {
-        var projection = new SafeMigrationPreflightProjection();
-        var matching = 0;
-        foreach (var operation in operations)
-        {
-            projection.Observe(operation, live, live, decision);
-            matching += projection.Project(operation, live)
-                    .ObservedState
-                == SafeMigrationObservedState.Matching
-                    ? 1
-                    : 0;
-        }
-
-        return matching;
+        Assert.Equal(SafeMigrationAction.RejectDifferent, decision.Action);
+        Assert.Equal(SafeMigrationObservedState.Different, observed.ObservedState);
     }
 }

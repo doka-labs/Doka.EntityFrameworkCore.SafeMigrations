@@ -113,9 +113,13 @@ public sealed class SqlServerSafeMigrationGraphPhysicalBoundaryIntegrationTests 
 
         var connections = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM dbo.graph_sources source_node, dbo.graph_links graph_edge, "
-            + "dbo.graph_targets target_node WHERE MATCH(source_node-(graph_edge)->target_node) "
-            + "AND source_node.Id = 1 AND graph_edge.Id = 3 AND target_node.Id = 2;",
+            """
+            SELECT COUNT(*) FROM dbo.graph_sources source_node, dbo.graph_links graph_edge,
+            dbo.graph_targets target_node
+            WHERE MATCH(source_node-(graph_edge)->target_node)
+            AND source_node.Id = 1 AND graph_edge.Id = 3
+            AND target_node.Id = 2;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -143,18 +147,20 @@ public sealed class SqlServerSafeMigrationGraphPhysicalBoundaryIntegrationTests 
 
     private static string GraphPhysicalBoundarySetupSql(
         bool cascade
-    ) => "CREATE TABLE dbo.graph_sources (Id int NOT NULL PRIMARY KEY, Value int NOT NULL) AS NODE; "
-        + "CREATE TABLE dbo.graph_targets (Id int NOT NULL PRIMARY KEY, Value int NOT NULL) AS NODE; "
-        + "CREATE TABLE dbo.graph_links (Id int NOT NULL PRIMARY KEY, Value int NOT NULL, "
-        + "CONSTRAINT EC_graph_links CONNECTION (dbo.graph_sources TO dbo.graph_targets) ON DELETE "
-        + (cascade
+    ) => $"""
+        CREATE TABLE dbo.graph_sources (Id int NOT NULL PRIMARY KEY, Value int NOT
+        NULL) AS NODE; CREATE TABLE dbo.graph_targets (Id int NOT NULL PRIMARY KEY,
+        Value int NOT NULL) AS NODE; CREATE TABLE dbo.graph_links (Id int NOT NULL
+        PRIMARY KEY,
+        Value int NOT NULL, CONSTRAINT EC_graph_links CONNECTION (dbo.graph_sources
+        TO dbo.graph_targets) ON DELETE {(cascade
             ? "CASCADE"
-            : "NO ACTION")
-        + ") AS EDGE; "
-        + "INSERT dbo.graph_sources (Id, Value) VALUES (1, 11); "
-        + "INSERT dbo.graph_targets (Id, Value) VALUES (2, 22); "
-        + "INSERT dbo.graph_links ($from_id, $to_id, Id, Value) "
-        + "SELECT source_node.$node_id, target_node.$node_id, 3, 33 "
-        + "FROM dbo.graph_sources source_node CROSS JOIN dbo.graph_targets target_node "
-        + "WHERE source_node.Id = 1 AND target_node.Id = 2;";
+            : "NO ACTION")}) AS EDGE; INSERT
+        dbo.graph_sources (Id,
+        Value) VALUES (1, 11); INSERT dbo.graph_targets (Id, Value) VALUES (2,
+        22); INSERT dbo.graph_links ($from_id, $to_id, Id, Value) SELECT source_node.$node_id,
+        target_node.$node_id, 3, 33 FROM dbo.graph_sources source_node CROSS
+        JOIN dbo.graph_targets target_node
+        WHERE source_node.Id = 1 AND target_node.Id = 2;
+        """;
 }

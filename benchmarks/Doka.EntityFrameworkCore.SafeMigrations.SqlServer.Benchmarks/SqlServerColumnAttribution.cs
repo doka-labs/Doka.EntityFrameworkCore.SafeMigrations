@@ -287,8 +287,10 @@ public partial class SqlServerColumnAttribution : IDisposable
                 // WHY: Only this generated database is eligible; caller databases are never reset.
                 Execute(
                     _root,
-                    $"ALTER DATABASE [{_database}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; "
-                    + $"DROP DATABASE [{_database}];");
+                    $"""
+                    ALTER DATABASE [{_database}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+                    DROP DATABASE [{_database}];
+                    """);
 
                 _database = null;
             }
@@ -430,12 +432,15 @@ public partial class SqlServerColumnAttribution : IDisposable
     {
         using var command = connection.CreateCommand();
         command.CommandTimeout = CommandTimeoutSeconds;
-        command.CommandText = "SELECT TOP (128) cp.usecounts, cp.objtype, st.text "
-            + "FROM sys.dm_exec_cached_plans cp CROSS APPLY sys.dm_exec_sql_text(cp.plan_handle) st "
-            + "CROSS APPLY sys.dm_exec_plan_attributes(cp.plan_handle) pa "
-            + "WHERE pa.attribute = N'dbid' AND CONVERT(int, pa.value) = DB_ID() "
-            + "AND st.text LIKE N'%@doka_ordinal%' AND st.text NOT LIKE N'%sys.dm_exec_cached_plans%' "
-            + "ORDER BY cp.usecounts DESC;";
+        command.CommandText = """
+        SELECT TOP (128) cp.usecounts, cp.objtype, st.text
+        FROM sys.dm_exec_cached_plans cp CROSS APPLY sys.dm_exec_sql_text(cp.plan_handle)
+        st CROSS APPLY sys.dm_exec_plan_attributes(cp.plan_handle) pa
+        WHERE pa.attribute = N'dbid' AND CONVERT(int, pa.value) = DB_ID()
+        AND st.text LIKE N'%@doka_ordinal%'
+        AND st.text NOT LIKE N'%sys.dm_exec_cached_plans%' ORDER BY cp.usecounts
+        DESC;
+        """;
 
         using var reader = command.ExecuteReader();
         var entries = new List<object[]>();
@@ -457,8 +462,10 @@ public partial class SqlServerColumnAttribution : IDisposable
     )
     {
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT @@VERSION, CONVERT(nvarchar(128), SERVERPROPERTY('Edition')), "
-            + "cpu_count, physical_memory_kb FROM sys.dm_os_sys_info;";
+        command.CommandText = """
+        SELECT @@VERSION, CONVERT(nvarchar(128), SERVERPROPERTY('Edition')), cpu_count,
+        physical_memory_kb FROM sys.dm_os_sys_info;
+        """;
 
         command.CommandTimeout = CommandTimeoutSeconds;
         using var reader = command.ExecuteReader();

@@ -15,14 +15,15 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `varchar_widening` ("
-            + "`id` int NOT NULL, "
-            + "`value` varchar(10) NULL DEFAULT 'legacy' COMMENT 'legacy', "
-            + "PRIMARY KEY (`id`), "
-            + "INDEX `ix_varchar_widening_value` (`value`), "
-            + "INDEX `ix_varchar_widening_value_id` (`value`, `id`)) "
-            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `varchar_widening` (`id`, `value`) VALUES (1, 'preserved');",
+            """
+            CREATE TABLE `varchar_widening` (`id` int NOT NULL, `value` varchar(10)
+            NULL DEFAULT 'legacy' COMMENT 'legacy',
+            PRIMARY KEY (`id`), INDEX `ix_varchar_widening_value` (`value`), INDEX `ix_varchar_widening_value_id`
+            (`value`,
+            `id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+            INSERT INTO `varchar_widening` (`id`,
+            `value`) VALUES (1, 'preserved');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -101,10 +102,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'varchar_widening' "
-                + "AND INDEX_NAME IN ('ix_varchar_widening_value', 'ix_varchar_widening_value_id') "
-                + "AND SEQ_IN_INDEX = 1 AND COLUMN_NAME = 'value';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'varchar_widening'
+                AND INDEX_NAME IN ('ix_varchar_widening_value', 'ix_varchar_widening_value_id')
+                AND SEQ_IN_INDEX = 1 AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -137,10 +141,12 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `text_family_widening` ("
-            + $"`id` int NOT NULL, `value` {liveStoreType} {nullability}, PRIMARY KEY (`id`)) "
-            + $"ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE {collation}; "
-            + seedSql,
+            $"""
+            CREATE TABLE `text_family_widening` (`id` int NOT NULL, `value` {liveStoreType}
+            {nullability},
+            PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE
+            {collation}; {seedSql}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -195,9 +201,12 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             targetStoreType,
             await ScalarStringAsync(
                 connectionString,
-                "SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_family_widening' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'text_family_widening'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -226,11 +235,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `text_to_varchar` ("
-            + "`id` int NOT NULL, `value` text NULL, PRIMARY KEY (`id`)) "
-            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `text_to_varchar` (`id`, `value`) VALUES "
-            + "(1, REPEAT(CONVERT(0xF09F9880 USING utf8mb4), 5)), (2, CONCAT('a', REPEAT(' ', 3))); ",
+            $"""
+            CREATE TABLE `text_to_varchar` (`id` int NOT NULL, `value` text NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE
+            utf8mb4_unicode_ci; INSERT INTO `text_to_varchar` (`id`,
+            `value`) VALUES (1, REPEAT(CONVERT(0xF09F9880 USING utf8mb4), 5)), (2,
+            CONCAT('a', REPEAT(' ', 3)));{"\u0020"}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -276,9 +287,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             5,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_to_varchar' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'text_to_varchar'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -295,10 +310,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `text_to_varchar_blocked` ("
-            + "`id` int NOT NULL, `value` text NULL, PRIMARY KEY (`id`)) "
-            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `text_to_varchar_blocked` (`id`, `value`) VALUES (1, 'too-long');",
+            """
+            CREATE TABLE `text_to_varchar_blocked` (`id` int NOT NULL, `value` text
+            NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE
+            utf8mb4_unicode_ci; INSERT INTO `text_to_varchar_blocked` (`id`,
+            `value`) VALUES (1, 'too-long');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -331,9 +349,12 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             "text",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_to_varchar_blocked' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'text_to_varchar_blocked'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -343,11 +364,12 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `text_to_varchar_spaces` ("
-            + "`id` int NOT NULL, `value` text NULL, PRIMARY KEY (`id`)) "
-            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `text_to_varchar_spaces` (`id`, `value`) "
-            + "VALUES (1, CONCAT('abc', REPEAT(' ', 3))); ",
+            $"""
+            CREATE TABLE `text_to_varchar_spaces` (`id` int NOT NULL, `value` text NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE
+            utf8mb4_unicode_ci; INSERT INTO `text_to_varchar_spaces` (`id`,
+            `value`) VALUES (1, CONCAT('abc', REPEAT(' ', 3)));{"\u0020"}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -387,9 +409,12 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             "text",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_to_varchar_spaces' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'text_to_varchar_spaces'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -405,10 +430,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `varchar_to_tinytext` ("
-            + $"`id` int NOT NULL, `value` varchar({sourceLength}) NULL, PRIMARY KEY (`id`)) "
-            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `varchar_to_tinytext` (`id`, `value`) VALUES (1, 'fits');",
+            $"""
+            CREATE TABLE `varchar_to_tinytext` (`id` int NOT NULL, `value` varchar({sourceLength})
+            NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE
+            utf8mb4_unicode_ci; INSERT INTO `varchar_to_tinytext` (`id`,
+            `value`) VALUES (1, 'fits');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -446,9 +474,12 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 : "varchar",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'varchar_to_tinytext' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'varchar_to_tinytext'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -465,11 +496,14 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `text_transition_index` ("
-            + "`id` int NOT NULL, `value` varchar(100) NULL, PRIMARY KEY (`id`), "
-            + $"{indexDefinition}) ENGINE=InnoDB "
-            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `text_transition_index` (`id`, `value`) VALUES (1, 'preserved');",
+            $"""
+            CREATE TABLE `text_transition_index` (`id` int NOT NULL, `value` varchar(100)
+            NULL,
+            PRIMARY KEY (`id`), {indexDefinition}) ENGINE=InnoDB DEFAULT CHARACTER
+            SET utf8mb4 COLLATE utf8mb4_unicode_ci; INSERT INTO `text_transition_index`
+            (`id`,
+            `value`) VALUES (1, 'preserved');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -516,18 +550,25 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
                 : "varchar",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_transition_index' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT LOWER(DATA_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'text_transition_index'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             expectedPrefixLength,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COALESCE(MAX(SUB_PART), 0) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'text_transition_index' "
-                + "AND INDEX_NAME = 'ix_text_transition_value';",
+                """
+                SELECT COALESCE(MAX(SUB_PART), 0)
+                FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'text_transition_index'
+                AND INDEX_NAME = 'ix_text_transition_value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -541,15 +582,16 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `varchar_fk_parent` ("
-            + "`code` varchar(10) NOT NULL, PRIMARY KEY (`code`)) ENGINE=InnoDB; "
-            + "CREATE TABLE `varchar_fk_child` ("
-            + "`id` int NOT NULL, `parent_code` varchar(10) NOT NULL, PRIMARY KEY (`id`), "
-            + "INDEX `ix_varchar_fk_child_parent` (`parent_code`), "
-            + "CONSTRAINT `fk_varchar_fk_child_parent` FOREIGN KEY (`parent_code`) "
-            + "REFERENCES `varchar_fk_parent` (`code`)) ENGINE=InnoDB; "
-            + "INSERT INTO `varchar_fk_parent` (`code`) VALUES ('core'); "
-            + "INSERT INTO `varchar_fk_child` (`id`, `parent_code`) VALUES (1, 'core');",
+            """
+            CREATE TABLE `varchar_fk_parent` (`code` varchar(10) NOT NULL, PRIMARY KEY
+            (`code`)) ENGINE=InnoDB; CREATE TABLE `varchar_fk_child` (`id` int NOT NULL,
+            `parent_code` varchar(10) NOT NULL, PRIMARY KEY (`id`), INDEX `ix_varchar_fk_child_parent`
+            (`parent_code`),
+            CONSTRAINT `fk_varchar_fk_child_parent` FOREIGN KEY (`parent_code`) REFERENCES
+            `varchar_fk_parent` (`code`)) ENGINE=InnoDB; INSERT INTO `varchar_fk_parent`
+            (`code`) VALUES ('core'); INSERT INTO `varchar_fk_child` (`id`,
+            `parent_code`) VALUES (1, 'core');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -596,20 +638,24 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() "
-                + "AND TABLE_NAME IN ('varchar_fk_parent', 'varchar_fk_child') "
-                + "AND COLUMN_NAME IN ('code', 'parent_code') "
-                + "AND CHARACTER_MAXIMUM_LENGTH = 10;",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME IN ('varchar_fk_parent', 'varchar_fk_child')
+                AND COLUMN_NAME IN ('code', 'parent_code')
+                AND CHARACTER_MAXIMUM_LENGTH = 10;
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() "
-                + "AND CONSTRAINT_NAME = 'fk_varchar_fk_child_parent';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND CONSTRAINT_NAME = 'fk_varchar_fk_child_parent';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -620,22 +666,24 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `varchar_narrowing` ("
-            + "`id` int NOT NULL, "
-            + "`unicode_value` varchar(40) NULL, "
-            + "`trailing_value` varchar(40) NULL, "
-            + "`empty_value` varchar(40) NULL, "
-            + "`required_value` varchar(40) NOT NULL, "
-            + "PRIMARY KEY (`id`)) "
-            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "CREATE TABLE `varchar_narrowing_single` ("
-            + "`id` int NOT NULL, `value` varchar(40) NULL, PRIMARY KEY (`id`)) "
-            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `varchar_narrowing` "
-            + "(`id`, `unicode_value`, `trailing_value`, `empty_value`, `required_value`) "
-            + "VALUES (1, REPEAT(CONVERT(0xF09F9880 USING utf8mb4), 5), "
-            + "CONCAT('a', REPEAT(' ', 3)), NULL, 'exact'); "
-            + "INSERT INTO `varchar_narrowing_single` (`id`, `value`) VALUES (1, 'fits');",
+            """
+            CREATE TABLE `varchar_narrowing` (`id` int NOT NULL, `unicode_value` varchar(40)
+            NULL,
+            `trailing_value` varchar(40) NULL, `empty_value` varchar(40) NULL, `required_value`
+            varchar(40) NOT NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE
+            utf8mb4_unicode_ci; CREATE TABLE `varchar_narrowing_single` (`id` int NOT
+            NULL,
+            `value` varchar(40) NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER
+            SET utf8mb4 COLLATE utf8mb4_unicode_ci; INSERT INTO `varchar_narrowing`
+            (`id`,
+            `unicode_value`, `trailing_value`, `empty_value`, `required_value`) VALUES
+            (1,
+            REPEAT(CONVERT(0xF09F9880 USING utf8mb4), 5), CONCAT('a', REPEAT(' ',
+            3)), NULL, 'exact'); INSERT INTO `varchar_narrowing_single` (`id`, `value`)
+            VALUES (1,
+            'fits');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -837,11 +885,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `varchar_narrowing_blocked` ("
-            + "`id` int NOT NULL, `value` varchar(40) NULL, PRIMARY KEY (`id`)) "
-            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `varchar_narrowing_blocked` (`id`, `value`) "
-            + $"VALUES (1, 'fits'), (2, 'exact'), (3, '{privateValue}');",
+            $"""
+            CREATE TABLE `varchar_narrowing_blocked` (`id` int NOT NULL, `value` varchar(40)
+            NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE
+            utf8mb4_unicode_ci; INSERT INTO `varchar_narrowing_blocked` (`id`,
+            `value`) VALUES (1, 'fits'), (2, 'exact'), (3, '{privateValue}');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -882,9 +932,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             40,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'varchar_narrowing_blocked' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'varchar_narrowing_blocked'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -896,10 +950,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `varchar_narrowing_race` ("
-            + "`id` int NOT NULL, `value` varchar(40) NULL, PRIMARY KEY (`id`)) "
-            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `varchar_narrowing_race` (`id`, `value`) VALUES (1, 'fits');",
+            """
+            CREATE TABLE `varchar_narrowing_race` (`id` int NOT NULL, `value` varchar(40)
+            NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE
+            utf8mb4_unicode_ci; INSERT INTO `varchar_narrowing_race` (`id`,
+            `value`) VALUES (1, 'fits');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -939,9 +996,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             40,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'varchar_narrowing_race' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'varchar_narrowing_race'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -958,10 +1019,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `varchar_narrowing_timeout` ("
-            + "`id` int NOT NULL, `value` varchar(40) NULL, PRIMARY KEY (`id`)) "
-            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `varchar_narrowing_timeout` (`id`, `value`) VALUES (1, 'fits');",
+            """
+            CREATE TABLE `varchar_narrowing_timeout` (`id` int NOT NULL, `value` varchar(40)
+            NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE
+            utf8mb4_unicode_ci; INSERT INTO `varchar_narrowing_timeout` (`id`,
+            `value`) VALUES (1, 'fits');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var blocker = new MySqlConnection(connectionString);
@@ -991,9 +1055,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             40,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'varchar_narrowing_timeout' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'varchar_narrowing_timeout'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -1003,10 +1071,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `varchar_narrowing_cancellation` ("
-            + "`id` int NOT NULL, `value` varchar(40) NULL, PRIMARY KEY (`id`)) "
-            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `varchar_narrowing_cancellation` (`id`, `value`) VALUES (1, 'fits');",
+            """
+            CREATE TABLE `varchar_narrowing_cancellation` (`id` int NOT NULL, `value`
+            varchar(40) NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE
+            utf8mb4_unicode_ci; INSERT INTO `varchar_narrowing_cancellation` (`id`,
+            `value`) VALUES (1, 'fits');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var blocker = new MySqlConnection(connectionString);
@@ -1045,9 +1116,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             40,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'varchar_narrowing_cancellation' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'varchar_narrowing_cancellation'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -1057,10 +1132,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `varchar_narrowing_non_strict` ("
-            + "`id` int NOT NULL, `value` varchar(40) NULL, PRIMARY KEY (`id`)) "
-            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `varchar_narrowing_non_strict` (`id`, `value`) VALUES (1, 'fits');",
+            """
+            CREATE TABLE `varchar_narrowing_non_strict` (`id` int NOT NULL, `value`
+            varchar(40) NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE
+            utf8mb4_unicode_ci; INSERT INTO `varchar_narrowing_non_strict` (`id`,
+            `value`) VALUES (1, 'fits');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1104,9 +1182,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             40,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'varchar_narrowing_non_strict' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'varchar_narrowing_non_strict'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -1116,13 +1198,16 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `boolean_repairs` ("
-            + "`id` int NOT NULL, `required_value` bit(1) NOT NULL DEFAULT b'0', "
-            + "`true_value` bit(1) NOT NULL DEFAULT b'1', "
-            + "`nullable_value` bit(1) NULL DEFAULT NULL, PRIMARY KEY (`id`), "
-            + "INDEX `ix_boolean_repairs_required` (`required_value`)) ENGINE=InnoDB; "
-            + "INSERT INTO `boolean_repairs` (`id`, `required_value`, `true_value`, `nullable_value`) "
-            + "VALUES (1, b'0', b'1', NULL), (2, b'1', b'1', b'0'), (3, b'1', b'1', b'1');",
+            """
+            CREATE TABLE `boolean_repairs` (`id` int NOT NULL, `required_value` bit(1)
+            NOT NULL DEFAULT b'0',
+            `true_value` bit(1) NOT NULL DEFAULT b'1', `nullable_value` bit(1) NULL
+            DEFAULT NULL,
+            PRIMARY KEY (`id`), INDEX `ix_boolean_repairs_required` (`required_value`))
+            ENGINE=InnoDB; INSERT INTO `boolean_repairs` (`id`,
+            `required_value`, `true_value`, `nullable_value`) VALUES (1, b'0', b'1',
+            NULL), (2, b'1', b'1', b'0'), (3, b'1', b'1', b'1');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1193,22 +1278,27 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             3,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM `boolean_repairs` "
-                + "WHERE (`id` = 1 AND `required_value` = 0 AND `true_value` = 1 "
-                + "AND `nullable_value` IS NULL) "
-                + "OR (`id` = 2 AND `required_value` = 1 AND `true_value` = 1 "
-                + "AND `nullable_value` = 0) "
-                + "OR (`id` = 3 AND `required_value` = 1 AND `true_value` = 1 "
-                + "AND `nullable_value` = 1);",
+                """
+                SELECT COUNT(*) FROM `boolean_repairs`
+                WHERE (`id` = 1 AND `required_value` = 0
+                AND `true_value` = 1 AND `nullable_value` IS NULL)
+                OR (`id` = 2 AND `required_value` = 1
+                AND `true_value` = 1 AND `nullable_value` = 0)
+                OR (`id` = 3 AND `required_value` = 1
+                AND `true_value` = 1 AND `nullable_value` = 1);
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'boolean_repairs' "
-                + "AND INDEX_NAME = 'ix_boolean_repairs_required';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'boolean_repairs'
+                AND INDEX_NAME = 'ix_boolean_repairs_required';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -1218,12 +1308,16 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `boolean_default_blocked` (`value` bit(1) NULL DEFAULT (0 + 0)) ENGINE=InnoDB; "
-            + "CREATE TABLE `boolean_parent` (`value` bit(1) NOT NULL, PRIMARY KEY (`value`)) ENGINE=InnoDB; "
-            + "CREATE TABLE `boolean_child` (`id` int NOT NULL, `parent_value` bit(1) NOT NULL, "
-            + "PRIMARY KEY (`id`), INDEX `ix_boolean_child_parent` (`parent_value`), "
-            + "CONSTRAINT `fk_boolean_child_parent` FOREIGN KEY (`parent_value`) "
-            + "REFERENCES `boolean_parent` (`value`)) ENGINE=InnoDB;",
+            """
+            CREATE TABLE `boolean_default_blocked` (`value` bit(1) NULL DEFAULT (0 +
+            0)) ENGINE=InnoDB; CREATE TABLE `boolean_parent` (`value` bit(1) NOT NULL,
+            PRIMARY KEY (`value`)) ENGINE=InnoDB; CREATE TABLE `boolean_child` (`id`
+            int NOT NULL,
+            `parent_value` bit(1) NOT NULL, PRIMARY KEY (`id`), INDEX `ix_boolean_child_parent`
+            (`parent_value`),
+            CONSTRAINT `fk_boolean_child_parent` FOREIGN KEY (`parent_value`) REFERENCES
+            `boolean_parent` (`value`)) ENGINE=InnoDB;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1268,18 +1362,24 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             "bit(1)",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'boolean_default_blocked' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'boolean_default_blocked'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             "bit(1)",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'boolean_parent' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'boolean_parent'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -1303,9 +1403,12 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
 
         var originalStoreType = await ScalarStringAsync(
             connectionString,
-            "SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'boolean_repair_blocked' "
-            + "AND COLUMN_NAME = 'value';",
+            """
+            SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'boolean_repair_blocked'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1337,9 +1440,12 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             originalStoreType,
             await ScalarStringAsync(
                 connectionString,
-                "SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'boolean_repair_blocked' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'boolean_repair_blocked'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -1368,9 +1474,12 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
 
         var originalStoreType = await ScalarStringAsync(
             connectionString,
-            "SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'string_family_blocked' "
-            + "AND COLUMN_NAME = 'value';",
+            """
+            SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'string_family_blocked'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1408,9 +1517,12 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             originalStoreType,
             await ScalarStringAsync(
                 connectionString,
-                "SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'string_family_blocked' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'string_family_blocked'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -1420,10 +1532,12 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `varchar_engine_blocked` (`value` varchar(10) NULL) "
-            + "ENGINE=MyISAM DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "CREATE TABLE `varchar_collation_blocked` (`value` varchar(10) NULL) "
-            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;",
+            """
+            CREATE TABLE `varchar_engine_blocked` (`value` varchar(10) NULL) ENGINE=MyISAM
+            DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE TABLE `varchar_collation_blocked`
+            (`value` varchar(10) NULL) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE
+            utf8mb4_general_ci;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1482,8 +1596,11 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `varchar_row_size_blocked` ({fillerColumns}, `value` varchar(10) NULL) "
-            + "ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARACTER SET latin1;",
+            $"""
+            CREATE TABLE `varchar_row_size_blocked` ({fillerColumns}, `value`
+            varchar(10) NULL) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARACTER SET
+            latin1;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1516,9 +1633,13 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             10,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'varchar_row_size_blocked' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'varchar_row_size_blocked'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -1528,9 +1649,11 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `boolean_repair_race` ("
-            + "`id` int NOT NULL PRIMARY KEY, `value` bit(1) NULL); "
-            + "INSERT INTO `boolean_repair_race` (`id`, `value`) VALUES (1, NULL);",
+            """
+            CREATE TABLE `boolean_repair_race` (`id` int NOT NULL PRIMARY KEY, `value`
+            bit(1) NULL); INSERT INTO `boolean_repair_race` (`id`,
+            `value`) VALUES (1, NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1584,9 +1707,12 @@ public sealed partial class MySqlColumnsLosslessRepairIntegrationTests : MySqlSa
             "bit(2)",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'boolean_repair_race' "
-                + "AND COLUMN_NAME = 'value';",
+                """
+                SELECT LOWER(COLUMN_TYPE) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'boolean_repair_race'
+                AND COLUMN_NAME = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 

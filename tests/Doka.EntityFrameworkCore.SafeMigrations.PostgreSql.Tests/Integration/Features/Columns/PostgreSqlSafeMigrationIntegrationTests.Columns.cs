@@ -82,9 +82,11 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'orders' "
-                + "AND column_name = 'sequence';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'orders' AND column_name = 'sequence';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -125,12 +127,14 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
             "approved repair",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT pg_catalog.col_description(c.oid, a.attnum) "
-                + "FROM pg_catalog.pg_class c "
-                + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-                + "JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid "
-                + "WHERE n.nspname = current_schema() AND c.relname = 'repair_guard' "
-                + "AND a.attname = 'safe_value';",
+                """
+                SELECT pg_catalog.col_description(c.oid, a.attnum)
+                FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
+                WHERE n.nspname = current_schema()
+                AND c.relname = 'repair_guard'
+                AND a.attname = 'safe_value';
+                """,
                 cancellationToken: CancellationToken.None));
 
         var driftedOld = new ExpectedColumnDefinition(
@@ -178,9 +182,13 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
             30,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT character_maximum_length FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'repair_guard' "
-                + "AND column_name = 'drifted_value';",
+                """
+                SELECT character_maximum_length
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'repair_guard'
+                AND column_name = 'drifted_value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -190,9 +198,11 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE legacy_repair (value character varying(40) NULL DEFAULT 'legacy'); "
-            + "COMMENT ON COLUMN legacy_repair.value IS 'legacy'; "
-            + "INSERT INTO legacy_repair (value) VALUES ('existing');",
+            """
+            CREATE TABLE legacy_repair (value character varying(40) NULL DEFAULT 'legacy');
+            COMMENT ON COLUMN legacy_repair.value IS 'legacy'; INSERT INTO legacy_repair
+            (value) VALUES ('existing');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -261,21 +271,26 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'legacy_repair' "
-                + "AND column_name = 'value' AND is_nullable = 'NO';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'legacy_repair'
+                AND column_name = 'value' AND is_nullable = 'NO';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             "canonical",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT pg_catalog.col_description(c.oid, a.attnum) "
-                + "FROM pg_catalog.pg_class c "
-                + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-                + "JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid "
-                + "WHERE n.nspname = current_schema() AND c.relname = 'legacy_repair' "
-                + "AND a.attname = 'value';",
+                """
+                SELECT pg_catalog.col_description(c.oid, a.attnum)
+                FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
+                WHERE n.nspname = current_schema()
+                AND c.relname = 'legacy_repair'
+                AND a.attname = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -292,9 +307,11 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE legacy_nulls (value character varying(40) NULL); "
-            + "COMMENT ON COLUMN legacy_nulls.value IS 'legacy'; "
-            + "INSERT INTO legacy_nulls (value) VALUES (NULL);",
+            """
+            CREATE TABLE legacy_nulls (value character varying(40) NULL); COMMENT ON
+            COLUMN legacy_nulls.value IS 'legacy'; INSERT INTO legacy_nulls (value)
+            VALUES (NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -344,21 +361,26 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'legacy_nulls' "
-                + "AND column_name = 'value' AND is_nullable = 'YES';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'legacy_nulls'
+                AND column_name = 'value' AND is_nullable = 'YES';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             "legacy",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT pg_catalog.col_description(c.oid, a.attnum) "
-                + "FROM pg_catalog.pg_class c "
-                + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-                + "JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid "
-                + "WHERE n.nspname = current_schema() AND c.relname = 'legacy_nulls' "
-                + "AND a.attname = 'value';",
+                """
+                SELECT pg_catalog.col_description(c.oid, a.attnum)
+                FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
+                WHERE n.nspname = current_schema()
+                AND c.relname = 'legacy_nulls'
+                AND a.attname = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -405,22 +427,27 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'legacy_type_drift' "
-                + "AND column_name = 'value' AND data_type = 'character' "
-                + "AND character_maximum_length = 30;",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'legacy_type_drift'
+                AND column_name = 'value' AND data_type = 'character'
+                AND character_maximum_length = 30;
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             "legacy",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT pg_catalog.col_description(c.oid, a.attnum) "
-                + "FROM pg_catalog.pg_class c "
-                + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-                + "JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid "
-                + "WHERE n.nspname = current_schema() AND c.relname = 'legacy_type_drift' "
-                + "AND a.attname = 'value';",
+                """
+                SELECT pg_catalog.col_description(c.oid, a.attnum)
+                FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
+                WHERE n.nspname = current_schema()
+                AND c.relname = 'legacy_type_drift'
+                AND a.attname = 'value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -458,9 +485,12 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'unsupported_values' "
-                + "AND column_name = 'unmapped_value';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'unsupported_values'
+                AND column_name = 'unmapped_value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -568,9 +598,12 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'virtual_values' "
-                + "AND column_name = 'computed_value';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'virtual_values'
+                AND column_name = 'computed_value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -814,8 +847,11 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
             definitions.Length + 1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'default_values';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'default_values';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -835,14 +871,17 @@ public sealed class PostgreSqlColumnsIntegrationTests : PostgreSqlSafeMigrationI
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT pg_catalog.format_type(a.atttypid, a.atttypmod), "
-            + "pg_catalog.pg_get_expr(d.adbin, d.adrelid), a.attnotnull, a.attgenerated "
-            + "FROM pg_catalog.pg_attribute a "
-            + "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
-            + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-            + "LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum "
-            + "WHERE n.nspname = current_schema() AND c.relname = 'default_values' "
-            + "AND a.attname = @column;";
+        command.CommandText = """
+        SELECT pg_catalog.format_type(a.atttypid, a.atttypmod), pg_catalog.pg_get_expr(d.adbin,
+        d.adrelid), a.attnotnull, a.attgenerated
+        FROM pg_catalog.pg_attribute a
+        JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = c.oid
+        AND d.adnum = a.attnum WHERE n.nspname = current_schema()
+        AND c.relname = 'default_values'
+        AND a.attname = @column;
+        """;
 
         command.Parameters.AddWithValue("column", column);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);

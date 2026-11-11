@@ -34,12 +34,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         // WHY: A real index or occupied native identity retains its independent
         // Matching/Different classification. This branch inspects type/opclass
         // catalogs only when a CREATE would otherwise become executable.
-        return "CASE WHEN "
-            + independent
-            + " THEN NULL::text ELSE CASE ("
-            + supported
-            + ") WHEN FALSE THEN 'index_input_operator_class' WHEN TRUE THEN NULL::text "
-            + "ELSE 'index_input_binding_unproven' END END";
+        return $"""
+            CASE WHEN {independent}
+            THEN NULL::text ELSE CASE ({supported})
+            WHEN FALSE THEN 'index_input_operator_class'
+            WHEN TRUE THEN NULL::text ELSE 'index_input_binding_unproven' END END
+            """;
     }
 
     /// <summary>Creates one deduplicatable native binding request for an actual ordered key input.</summary>
@@ -155,18 +155,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             }
 
             var owner = IndexMemberOwnerPredicate(definition, member);
-            var nativeType = "(SELECT a.atttypid FROM pg_catalog.pg_attribute a "
-                + "JOIN pg_catalog.pg_class t ON t.oid = a.attrelid "
-                + "JOIN pg_catalog.pg_namespace n ON n.oid = t.relnamespace "
-                + "WHERE n.nspname = "
-                + SchemaExpression(definition.Schema)
-                + " AND t.relname = "
-                + Literal(definition.Table)
-                + " AND a.attname = "
-                + Literal(member.Name)
-                + " AND a.attnum > 0 AND NOT a.attisdropped AND ("
-                + owner
-                + "))";
+            var nativeType = $"""
+                (SELECT a.atttypid FROM pg_catalog.pg_attribute a
+                JOIN pg_catalog.pg_class t ON t.oid = a.attrelid
+                JOIN pg_catalog.pg_namespace n ON n.oid = t.relnamespace
+                WHERE n.nspname = {SchemaExpression(definition.Schema)}
+                AND t.relname = {Literal(definition.Table)}
+                AND a.attname = {Literal(member.Name)}
+                AND a.attnum > 0 AND NOT a.attisdropped
+                AND ({owner}))
+                """;
 
             inputs.Add(BuildIndexInputProof(nativeType, definition, key));
         }
@@ -216,14 +214,14 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + ") AND COALESCE(("
             + eligible
             + "), FALSE)",
-            StateEvaluationGuardFailureExpression = "CASE WHEN "
-            + satisfied
-            + " THEN 'matching' "
-            + "WHEN "
-            + independentConflict
-            + " THEN 'different' WHEN ("
-            + eligible
-            + ") IS FALSE THEN 'unsupported' ELSE 'prerequisite_missing' END",
+            StateEvaluationGuardFailureExpression = $"""
+            CASE WHEN {satisfied}
+            THEN 'matching'
+            WHEN {independentConflict}
+            THEN 'different'
+            WHEN ({eligible}) IS FALSE
+            THEN 'unsupported' ELSE 'prerequisite_missing' END
+            """,
         };
     }
 }

@@ -4,8 +4,11 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
     private const string SnapshotFreeCatalogCountSql =
-        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = current_schema() "
-        + "AND table_name IN ('snapshotless_items', '__EFMigrationsHistory');";
+        """
+        SELECT COUNT(*) FROM information_schema.tables
+        WHERE table_schema = current_schema()
+        AND table_name IN ('snapshotless_items', '__EFMigrationsHistory');
+        """;
 
     /// <summary>Uses the assembly-owned container for this feature.</summary>
     /// <param name="fixture">The shared PostgreSQL container fixture.</param>

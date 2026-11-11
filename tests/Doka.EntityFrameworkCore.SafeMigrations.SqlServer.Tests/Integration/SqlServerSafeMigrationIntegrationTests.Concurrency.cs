@@ -47,22 +47,33 @@ public sealed class SqlServerSafeMigrationConcurrencyIntegrationTests : SqlServe
 
         var requiredCaptionCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.safe_history_probe', N'U') "
-            + "AND name = N'Caption' AND system_type_id = 231 AND max_length = 160 "
-            + "AND is_nullable = 0 AND default_object_id <> 0;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id = OBJECT_ID(N'dbo.safe_history_probe', N'U')
+            AND name = N'Caption' AND system_type_id = 231
+            AND max_length = 160 AND is_nullable = 0
+            AND default_object_id <> 0;
+            """,
             cancellationToken: CancellationToken.None);
 
         var primaryKeyCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.key_constraints WHERE parent_object_id = "
-            + "OBJECT_ID(N'dbo.safe_history_probe', N'U') AND name = N'PK_safe_history_probe' AND type = N'PK';",
+            """
+            SELECT COUNT(*) FROM sys.key_constraints
+            WHERE parent_object_id = OBJECT_ID(N'dbo.safe_history_probe', N'U')
+            AND name = N'PK_safe_history_probe'
+            AND type = N'PK';
+            """,
             cancellationToken: CancellationToken.None);
 
         var checkCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.check_constraints WHERE parent_object_id = "
-            + "OBJECT_ID(N'dbo.safe_history_probe', N'U') AND name = N'CK_safe_history_probe_Id' "
-            + "AND is_disabled = 0 AND is_not_trusted = 0;",
+            """
+            SELECT COUNT(*) FROM sys.check_constraints
+            WHERE parent_object_id = OBJECT_ID(N'dbo.safe_history_probe', N'U')
+            AND name = N'CK_safe_history_probe_Id'
+            AND is_disabled = 0 AND is_not_trusted = 0;
+            """,
             cancellationToken: CancellationToken.None);
 
         var safeRows = await ScalarIntAsync(
@@ -132,8 +143,12 @@ public sealed class SqlServerSafeMigrationConcurrencyIntegrationTests : SqlServe
 
         var originalIdColumnCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.safe_history_probe', N'U') "
-            + "AND name = N'Id' AND system_type_id = 127 AND is_nullable = 0;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id = OBJECT_ID(N'dbo.safe_history_probe', N'U')
+            AND name = N'Id' AND system_type_id = 127
+            AND is_nullable = 0;
+            """,
             cancellationToken: CancellationToken.None);
 
         var newCaptionCount = await ScalarIntAsync(
@@ -144,8 +159,11 @@ public sealed class SqlServerSafeMigrationConcurrencyIntegrationTests : SqlServe
 
         var newConstraintCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.objects WHERE parent_object_id = OBJECT_ID(N'dbo.safe_history_probe', N'U') "
-            + "AND type IN (N'PK', N'C');",
+            """
+            SELECT COUNT(*) FROM sys.objects
+            WHERE parent_object_id = OBJECT_ID(N'dbo.safe_history_probe', N'U')
+            AND type IN (N'PK', N'C');
+            """,
             cancellationToken: CancellationToken.None);
 
         var remainingRowCount = await ScalarIntAsync(

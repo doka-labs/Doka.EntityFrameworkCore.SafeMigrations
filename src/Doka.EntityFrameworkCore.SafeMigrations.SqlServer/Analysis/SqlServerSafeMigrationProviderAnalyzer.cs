@@ -15,12 +15,16 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     IDisposable,
     IAsyncDisposable
 {
-    private const string ScopeSql = "EXEC @result = sys.sp_getapplock "
-        + "@Resource = N'doka-sm-catalog-analysis', @LockMode = N'Exclusive', "
-        + "@LockOwner = N'Transaction', @LockTimeout = 30000; SELECT @result;";
+    private const string ScopeSql = """
+        EXEC @result = sys.sp_getapplock
+        @Resource = N'doka-sm-catalog-analysis', @LockMode = N'Exclusive',
+        @LockOwner = N'Transaction', @LockTimeout = 30000; SELECT @result;
+        """;
 
-    private const string ReleaseScopeSql = "DECLARE @result int; EXEC @result = sys.sp_releaseapplock "
-        + "@Resource = N'doka-sm-catalog-analysis', @LockOwner = N'Transaction'; SELECT @result;";
+    private const string ReleaseScopeSql = """
+        DECLARE @result int; EXEC @result = sys.sp_releaseapplock @Resource = N'doka-sm-catalog-analysis',
+        @LockOwner = N'Transaction'; SELECT @result;
+        """;
 
     private readonly SqlServerSafeMigrationCatalogSqlBuilder _catalogSqlBuilder;
     private readonly ISqlGenerationHelper _sqlGenerationHelper;

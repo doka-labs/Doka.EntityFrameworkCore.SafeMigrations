@@ -7,9 +7,11 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 public abstract class PostgreSqlSafeMigrationIntegrationTests : PostgreSqlIntegrationTestBase
 {
     /// <summary>Provides the NullProofSentinelSql contract shared by PostgreSQL feature tests.</summary>
-    protected const string NullProofSentinelSql = "CREATE FUNCTION null_proof_sentinel() RETURNS boolean "
-        + "LANGUAGE plpgsql AS $null_proof$ BEGIN RAISE EXCEPTION USING ERRCODE = 'P1901', "
-        + "MESSAGE = 'null_proof_branch_executed'; END $null_proof$;";
+    protected const string NullProofSentinelSql = $"""
+        CREATE FUNCTION null_proof_sentinel() RETURNS boolean LANGUAGE plpgsql AS
+        {"$null_proof$ BEGIN RAISE EXCEPTION USING ERRCODE = 'P1901', "
+            + "MESSAGE = 'null_proof_branch_executed'; END $null_proof$;"}
+        """;
 
     /// <summary>Bounds setup commands for the large performance fixtures.</summary>
     protected const int PerformanceFixtureCommandTimeoutSeconds = 180;
@@ -40,8 +42,10 @@ public abstract class PostgreSqlSafeMigrationIntegrationTests : PostgreSqlIntegr
         while (!pending.IsCompleted)
         {
             await using var command = connection.CreateCommand();
-            command.CommandText = "SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_stat_activity "
-                + "WHERE pid <> pg_backend_pid() AND query LIKE @probe AND wait_event_type = 'Lock');";
+            command.CommandText = """
+            SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_stat_activity WHERE pid <> pg_backend_pid()
+            AND query LIKE @probe AND wait_event_type = 'Lock');
+            """;
 
             // WHY: PostgreSQL truncates the recorded query text to
             // track_activity_query_size. The target table occurs at the start
@@ -103,9 +107,13 @@ public abstract class PostgreSqlSafeMigrationIntegrationTests : PostgreSqlIntegr
         string column = "parent"
     ) => ExecuteSqlAsync(
         connectionString,
-        "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters "
-        + $"(id integer NOT NULL, {PostgreSqlIdentifier(column)} integer NULL);"
-        + "INSERT INTO hierarchy.simple_filters VALUES (1, NULL), (2, 1), (3, 2);",
+        $"""
+        CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer
+        NOT NULL,
+        {PostgreSqlIdentifier(column)} integer NULL);INSERT INTO hierarchy.simple_filters
+        VALUES (1,
+        NULL), (2, 1), (3, 2);
+        """,
         cancellationToken: cancellationToken);
 
     /// <summary>Counts the independently managed filtered index in the exact test-owned schema.</summary>

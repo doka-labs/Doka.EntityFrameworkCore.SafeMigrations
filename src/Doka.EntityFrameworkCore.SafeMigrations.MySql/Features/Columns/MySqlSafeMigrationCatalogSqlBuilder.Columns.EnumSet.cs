@@ -93,8 +93,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         string QualifyState(
             string expression
-        ) => $"CASE WHEN NOT ({prerequisite}) THEN 'prerequisite_missing' "
-            + $"WHEN ({matching}) THEN 'matching' WHEN NOT ({mode}) THEN 'unsupported' ELSE ({expression}) END";
+        ) => $"""
+            CASE WHEN NOT ({prerequisite})
+            THEN 'prerequisite_missing'
+            WHEN ({matching})
+            THEN 'matching'
+            WHEN NOT ({mode})
+            THEN 'unsupported' ELSE ({expression}) END
+            """;
 
         // WHY: Native comment setup enables NO_BACKSLASH_ESCAPES. A different
         // original mode can create another member domain and falsely satisfy
@@ -107,8 +113,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 ? QualifyState(failure)
                 : null,
             RepairPrecondition = $"({mode}) AND ({plan.RepairPrecondition})",
-            ClassificationCodeExpression = $"CASE WHEN NOT ({matching}) AND NOT ({mode}) "
-            + $"THEN 'column_native_enum_mode_conflict' ELSE ({ordinaryCode}) END",
+            ClassificationCodeExpression = $"""
+            CASE WHEN NOT ({matching})
+            AND NOT ({mode})
+            THEN 'column_native_enum_mode_conflict'
+            ELSE ({ordinaryCode}) END
+            """,
             NullabilityDataProbe = plan.NullabilityDataProbe is { } nullability
                 ? nullability with
                 {
@@ -157,8 +167,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return escapedMatch;
         }
 
-        return "(CASE WHEN FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) > 0 "
-            + $"THEN ({Match(literal, literalDoubleQuotes)}) ELSE ({escapedMatch}) END)";
+        return $"""
+            (CASE WHEN FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) > 0
+            THEN ({Match(literal, literalDoubleQuotes)})
+            ELSE ({escapedMatch}) END)
+            """;
     }
 
     /// <summary>Serializes only a quoted ENUM/SET member list using the native catalog display rules.</summary>

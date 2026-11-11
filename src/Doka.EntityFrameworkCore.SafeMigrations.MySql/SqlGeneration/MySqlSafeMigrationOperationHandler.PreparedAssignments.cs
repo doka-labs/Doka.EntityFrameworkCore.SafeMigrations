@@ -26,11 +26,10 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         var canRepair = runtimePlan.RepairCapability == SafeMigrationRepairCapability.Safe;
         var statement = canRepair
             ? "SELECT (" + stateExpression + ") INTO @doka_sm_state"
-            : "SELECT ("
-            + stateExpression
-            + "), COALESCE(("
-            + repairPrecondition
-            + "), FALSE) INTO @doka_sm_state, @doka_sm_repair_ok";
+            : $"""
+            SELECT ({stateExpression}), COALESCE(({repairPrecondition}),
+            FALSE) INTO @doka_sm_state, @doka_sm_repair_ok
+            """;
 
         // WHY: Only Different consumes repair eligibility. A separate SET uses the completed
         // classification without undefined same-statement variable ordering. Runtime repair
@@ -128,11 +127,12 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         IReadOnlyList<string> renderedParameterValues
     )
     {
-        var statement = "SELECT CASE WHEN NOT COALESCE(("
-            + runtimePlan.RenderPreparedStateEvaluationGuardExpression(renderedParameterValues)
-            + "), FALSE) THEN ("
-            + runtimePlan.RenderPreparedStateEvaluationGuardFailureExpression(renderedParameterValues)
-            + ") ELSE NULL END INTO @doka_sm_state";
+        var statement = $"""
+            SELECT CASE WHEN NOT COALESCE(({runtimePlan.RenderPreparedStateEvaluationGuardExpression(
+                renderedParameterValues)}), FALSE)
+            THEN ({runtimePlan.RenderPreparedStateEvaluationGuardFailureExpression(renderedParameterValues)})
+            ELSE NULL END INTO @doka_sm_state
+            """;
 
         // PREPARE performs identifier resolution. Materialize the data-reading
         // guard only after the catalog-only prerequisite has succeeded.
@@ -145,11 +145,16 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
     private static string BuildInitialLazyStateAssignment(
         bool preserveExistingState
     ) => preserveExistingState
-        ? "SET @doka_sm_state = CASE WHEN @doka_sm_state IS NOT NULL THEN @doka_sm_state "
-        + "WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing' "
-        + "ELSE NULL END, @doka_sm_repair_ok = FALSE;"
-        : "SET @doka_sm_state = CASE WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing' "
-        + "ELSE NULL END, @doka_sm_repair_ok = FALSE;";
+        ? """
+        SET @doka_sm_state = CASE WHEN @doka_sm_state IS NOT NULL
+        THEN @doka_sm_state
+        WHEN NOT @doka_sm_prerequisite_ok
+        THEN 'prerequisite_missing' ELSE NULL END, @doka_sm_repair_ok = FALSE;
+        """
+        : """
+        SET @doka_sm_state = CASE WHEN NOT @doka_sm_prerequisite_ok
+        THEN 'prerequisite_missing' ELSE NULL END, @doka_sm_repair_ok = FALSE;
+        """;
 
     /// <summary>Defers body encoding until the final setup group is written.</summary>
     /// <param name="applyDdl">The provider-rendered apply statement.</param>

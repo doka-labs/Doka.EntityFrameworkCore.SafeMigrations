@@ -494,24 +494,24 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
             query.Split("INFORMATION_SCHEMA.TABLES")
                 .Length);
 
-        Assert.Contains("physical_owner.TABLE_SCHEMA = DATABASE()", query, StringComparison.Ordinal);
+        Assert.Contains("physical_owner.TABLE_SCHEMA\n= DATABASE()", query, StringComparison.Ordinal);
         Assert.Contains("physical_owner.TABLE_TYPE = 'BASE TABLE'", query, StringComparison.Ordinal);
         Assert.Contains("physical_owner.TABLE_NAME = source_owner.owner", query, StringComparison.Ordinal);
         Assert.Contains("@@lower_case_table_names = 0", query, StringComparison.Ordinal);
         Assert.Contains("@@lower_case_table_names IN (1, 2)", query, StringComparison.Ordinal);
         Assert.Contains(
-            "CAST(physical_owner.TABLE_NAME AS BINARY) = CAST(source_owner.owner AS BINARY)",
+            "CAST(physical_owner.TABLE_NAME AS BINARY) = CAST(source_owner.owner\nAS BINARY)",
             query,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "CAST(LOWER(physical_owner.TABLE_NAME) AS BINARY) = CAST(LOWER(source_owner.owner) AS BINARY)",
+            "CAST(LOWER(physical_owner.TABLE_NAME) AS BINARY) = CAST(LOWER(source_owner.owner)\nAS BINARY)",
             query,
             StringComparison.Ordinal);
 
-        Assert.Contains("COUNT(physical_owner.TABLE_NAME) = 1", query, StringComparison.Ordinal);
-        Assert.Contains("THEN MIN(physical_owner.TABLE_NAME) ELSE NULL", query, StringComparison.Ordinal);
-        Assert.Contains("ELSE NULL END, COUNT(physical_owner.TABLE_NAME) FROM", query, StringComparison.Ordinal);
+        Assert.Contains("COUNT(physical_owner.TABLE_NAME)\n= 1", query, StringComparison.Ordinal);
+        Assert.Contains("THEN MIN(physical_owner.TABLE_NAME)\nELSE NULL", query, StringComparison.Ordinal);
+        Assert.Contains("ELSE NULL END, COUNT(physical_owner.TABLE_NAME)\nFROM", query, StringComparison.Ordinal);
         Assert.DoesNotContain("physical_owner.owner", query, StringComparison.Ordinal);
         Assert.EndsWith("GROUP BY source_owner.ordinal ORDER BY 1;", query, StringComparison.Ordinal);
     }

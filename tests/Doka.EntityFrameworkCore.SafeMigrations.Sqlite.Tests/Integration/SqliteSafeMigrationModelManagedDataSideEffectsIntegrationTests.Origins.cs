@@ -12,9 +12,13 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
 
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE side_effect_writes (id INTEGER NOT NULL PRIMARY KEY, managed_value TEXT NOT NULL); "
-            + "CREATE TABLE side_effect_rows (id INTEGER NOT NULL PRIMARY KEY, managed_value TEXT NOT NULL); "
-            + "INSERT INTO side_effect_rows VALUES (1, 'expected');",
+            """
+            CREATE TABLE side_effect_writes (id INTEGER NOT NULL PRIMARY KEY, managed_value
+            TEXT NOT NULL); CREATE TABLE side_effect_rows (id INTEGER NOT NULL PRIMARY
+            KEY,
+            managed_value TEXT NOT NULL); INSERT INTO side_effect_rows VALUES (1,
+            'expected');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -88,11 +92,15 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
 
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE side_effect_writes (id INTEGER NOT NULL PRIMARY KEY, managed_value TEXT NOT NULL); "
-            + "CREATE TABLE side_effect_rows (id INTEGER NOT NULL PRIMARY KEY, managed_value TEXT NOT NULL); "
-            + "CREATE TABLE other_rows (id INTEGER NOT NULL PRIMARY KEY, managed_value TEXT NOT NULL); "
-            + "INSERT INTO side_effect_rows VALUES (1, 'expected'); "
-            + "INSERT INTO other_rows VALUES (1, 'expected');",
+            """
+            CREATE TABLE side_effect_writes (id INTEGER NOT NULL PRIMARY KEY, managed_value
+            TEXT NOT NULL); CREATE TABLE side_effect_rows (id INTEGER NOT NULL PRIMARY
+            KEY,
+            managed_value TEXT NOT NULL); CREATE TABLE other_rows (id INTEGER NOT NULL
+            PRIMARY KEY,
+            managed_value TEXT NOT NULL); INSERT INTO side_effect_rows VALUES (1,
+            'expected'); INSERT INTO other_rows VALUES (1, 'expected');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -147,11 +155,13 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
 
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE side_effect_parents (id INTEGER NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE side_effect_children (id INTEGER NOT NULL PRIMARY KEY, "
-            + "parent_id INTEGER NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY (parent_id) "
-            + "REFERENCES side_effect_parents (id) ON DELETE CASCADE); "
-            + "INSERT INTO side_effect_parents (id) VALUES (1);",
+            """
+            CREATE TABLE side_effect_parents (id INTEGER NOT NULL PRIMARY KEY); CREATE
+            TABLE side_effect_children (id INTEGER NOT NULL PRIMARY KEY,
+            parent_id INTEGER NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY
+            (parent_id) REFERENCES side_effect_parents (id) ON DELETE CASCADE); INSERT
+            INTO side_effect_parents (id) VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);

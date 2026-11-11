@@ -270,9 +270,26 @@ and [PostgreSQL lexical contract](https://www.postgresql.org/docs/current/sql-sy
 The same bounded parser captures SQL defaults exposed by EF through
 `ColumnOperation.DefaultValueSql`. A generated value such as
 `CURRENT_TIMESTAMP(6)` is stored as a structured expression and compared
-semantically with the live catalog. SQL outside the grammar remains opaque and
-fails closed with `opaque_sql_expression`; SafeMigrations never executes an
-unknown expression merely to infer equivalence.
+semantically with the live catalog. Capture preserves numeric source tokens and
+refuses to grant portable meaning to unproven quoted function/type names or
+overloadable operator roles. It never silently turns a quoted native function
+into an unquoted built-in. Such source remains opaque: the provider's existing
+opaque-source contract either retains exact native SQL or rejects it with
+`opaque_sql_expression`. SafeMigrations never executes an unknown expression
+merely to infer equivalence.
+
+Corrected numeric-default capture can change an affected operation-contract
+fingerprint because the preserved source tokens now participate in identity,
+as they already do for captured CHECK/generated source. The fingerprint format,
+public API and migration history are unchanged. Regenerate and review affected
+fingerprint-bound approvals; do not substitute an old digest to bypass the
+corrected contract. Explicitly authored typed-expression contracts retain their
+existing identity.
+
+Binary expression literals own their input bytes. `SafeMigrationSqlLiteralExpression.Value`
+returns a defensive copy for a `byte[]`; changing either the original input or
+that returned array does not mutate the expression, its containing definition,
+or its contract fingerprint.
 
 ## Generated columns
 

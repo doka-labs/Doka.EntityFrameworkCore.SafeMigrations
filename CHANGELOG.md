@@ -6,8 +6,76 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [10.7.2] - 2026-11-11
+
+Version 10.7.2 corrects native expression identity, temporal values and catalog
+comparison across the existing five packages. Public APIs, dependency floors,
+.NET/EF Core 10, report schemas and fingerprint formats remain unchanged from
+10.7.1. Corrected captured numeric-default identities can change affected
+contract fingerprints; review and renew those approvals as described in the
+[upgrade notes](docs/support-and-qualification.md#upgrade-to-1072).
+Updating packages alone requires no additional database migration or history rewrite.
+
+### Changed
+
+- Render larger SQL templates as readable C# raw strings across providers,
+  tests, benchmarks and engineering consumers. Preserve literal contents,
+  interpolation order, parameter ownership, native markers and transport limits;
+  update intentional command-layout expectations without normalizing SQL values.
+  Keep C# checkouts on LF and apply scoped source cleanup. This refactor claims
+  no measured performance improvement and adds no public API or runtime dependency.
+
 ### Fixed
 
+- Validate provider-analysis enum inputs without rebuilding weak runtime metadata
+  after garbage collection. Preserve every declared value, invalid-input rejection,
+  validation order and independent result ownership; measure the post-GC constructor
+  through informational BenchmarkDotNet diagnostics rather than a functional budget.
+- Move prepared projection and related allocation measurements into the existing
+  BenchmarkDotNet suites. Remove sampled heap-byte pass/fail budgets from
+  functional tests while retaining exact results, SQL, reference ownership,
+  post-GC behavior and structural safety limits. Allocation and timing values
+  remain informational; invalid execution or evidence still fails qualification.
+- Recognize SQL Server cancellation-test acquisition statements and operation
+  guards independently of SQL layout, without treating quoted values or names
+  as executable markers. Cover real generated runtime, script and idempotent
+  commands while retaining the existing native cancellation and recovery checks.
+- Recognize native MySQL parentheses for nested associative AND/OR chains in
+  CHECK constraints, strict table completeness and generated-column comparisons.
+  Preserve equivalent MariaDB Boolean-group spellings and required OR-group
+  parentheses under AND so a genuinely different CHECK cannot match. Retain
+  exact predicate order, identifier/literal roles and existing drift policies.
+- Preserve native function, type, operator and numeric-token roles when
+  capturing EF SQL defaults instead of silently reinterpreting quoted names.
+  Unsupported source stays opaque at the existing provider boundary. Captured
+  numeric-default contracts now bind their preserved source tokens; fingerprint
+  format and report schemas are unchanged, but affected approvals must be
+  regenerated and reviewed rather than reusing the former digest.
+- Snapshot binary expression literals on input and public value access, while
+  internal read-only consumers reuse the owned snapshot. Caller mutation can no
+  longer change an already constructed definition, equivalence or fingerprint.
+- Compare complete temporal default values without losing duration days/signs
+  or fractional seconds, including MySQL typed TIME expression defaults.
+  Preserve native display settings, default-only safe repair and target precision;
+  DateTime target conversion follows the engine's current SQL mode. Exact
+  zero-fraction MySQL-family temporal types recognize their native spelling.
+  PostgreSQL clock-time bindings retain the valid 24:00 endpoint and reject
+  out-of-domain values; finite date endpoints cannot impersonate infinities.
+  Generated temporal constants, CHECKs and index keys recognize finite native
+  output and precision-cast forms. Invalid literal mappings fail closed before
+  native evaluation; genuine provider value converters retain their mappings.
+- Match PostgreSQL expression keys and partial predicates using native,
+  relation-aware spellings and require the resolved visible collation identity.
+  MySQL functional-key comparison now shares native display and byte-exact
+  literal-role matching without admitting unproven functional-key creation.
+- Read SQLite index owners, key lists, declared collations and constraint names
+  at their actual quoted/depth-aware grammar positions. Preserve double-quoted
+  default values, recognize proven structural index equivalence and retain real
+  literal, operator and collation drift, including during rebuild and replay.
+- Render SQL Server predicates correctly in scalar computed/default consumers
+  while preserving UNKNOWN and CHECK predicate roles. CHECK dependency parsing
+  no longer treats string contents as unsupported identifier quoting. Retain
+  provenance, native dependency refusal and required x64 qualification.
 - Complete an already admitted release from its original qualification and
   package bytes through an explicit protected completion-only workflow mode.
   Preserve original tag, run, artifact and admission identities; recheck current
@@ -2491,7 +2559,9 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.0...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.2...HEAD
+[10.7.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.1...v10.7.2
+[10.7.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.0...v10.7.1
 [10.7.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.6.1...v10.7.0
 [10.6.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.6.0...v10.6.1
 [10.6.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.5.0...v10.6.0

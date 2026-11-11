@@ -80,10 +80,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             ? string.Empty
             : $"WHEN NOT ({engineMatches}) THEN 'unsupported' ";
 
-        var state = $"CASE WHEN NOT {exists} THEN 'missing' "
-            + $"WHEN NOT {baseTable} THEN 'unsupported' "
-            + engineGuard
-            + $"WHEN {matching} THEN 'matching' ELSE 'different' END";
+        var state = $"""
+            CASE WHEN NOT {exists}
+            THEN 'missing'
+            WHEN NOT {baseTable}
+            THEN 'unsupported' {engineGuard}WHEN {matching}
+            THEN 'matching' ELSE 'different' END
+            """;
 
         if (nativeAlternative is { IsValid: false })
         {
@@ -98,8 +101,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             ExecutionPostcondition = executionPostcondition,
             ClassificationCodeExpression = engineMatches is null
                 ? null
-                : $"CASE WHEN {baseTable} AND NOT ({engineMatches}) "
-                + "THEN 'table_storage_engine_different' ELSE NULL END",
+                : $"""
+                CASE WHEN {baseTable}
+                AND NOT ({engineMatches})
+                THEN 'table_storage_engine_different'
+                ELSE NULL END
+                """,
             DiagnosticEvidenceExpression = engineMatches is null
                 ? null
                 : BuildEngineDiagnosticEvidence(definition.Table),
@@ -110,14 +117,23 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private static string SelectNativeTableContract(
         string ordinal,
         string folded
-    ) => $"(CASE WHEN @@lower_case_table_names = 0 THEN ({ordinal}) "
-        + $"WHEN @@lower_case_table_names IN (1, 2) THEN ({folded}) ELSE FALSE END)";
+    ) => $"""
+        (CASE WHEN @@lower_case_table_names = 0
+        THEN ({ordinal})
+        WHEN @@lower_case_table_names IN (1, 2)
+        THEN ({folded})
+        ELSE FALSE END)
+        """;
 
     private MySqlSafeMigrationRuntimePlan BuildDropTable(
         DropTableIntent intent
     ) => Plan(
-        $"CASE WHEN NOT {TableExists(intent.Table)} THEN 'missing' "
-        + $"WHEN {BaseTableExists(intent.Table)} THEN 'matching' ELSE 'different' END",
+        $"""
+        CASE WHEN NOT {TableExists(intent.Table)}
+        THEN 'missing'
+        WHEN {BaseTableExists(intent.Table)}
+        THEN 'matching' ELSE 'different' END
+        """,
         $"NOT {TableExists(intent.Table)}");
 
     private MySqlSafeMigrationRuntimePlan BuildRenameTable(
@@ -130,9 +146,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var targetExists = TableExists(target);
 
         return Plan(
-            $"CASE WHEN NOT {sourceObjectExists} THEN 'missing' "
-            + $"WHEN NOT {sourceExists} THEN 'different' "
-            + $"WHEN {targetExists} THEN 'different' ELSE 'matching' END",
+            $"""
+            CASE WHEN NOT {sourceObjectExists}
+            THEN 'missing'
+            WHEN NOT {sourceExists}
+            THEN 'different'
+            WHEN {targetExists}
+            THEN 'different' ELSE 'matching' END
+            """,
             $"NOT {TableExists(intent.Name)}");
     }
 
@@ -164,9 +185,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var conditions = new List<string>
         {
             BaseTableExists(definition.Table),
-            $"(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c "
-            + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(definition.Table)}) "
-            + $"= {definition.Columns.Count.ToString(CultureInfo.InvariantCulture)}",
+            $"""
+            (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c
+            WHERE c.TABLE_SCHEMA = DATABASE()
+            AND c.TABLE_NAME = {Literal(definition.Table)}) = {definition.Columns.Count.ToString(
+                CultureInfo.InvariantCulture)}
+            """,
             BuildAllUniqueKeysModeled(
                 definition.Table,
                 allowedUniqueConstraints,
@@ -178,9 +202,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 allowedCheckConstraints,
                 isMariaDb),
             BuildAllForeignKeysModeled(definition.Table, allowedForeignKeys),
-            $"COALESCE((SELECT t.TABLE_COMMENT FROM INFORMATION_SCHEMA.TABLES t "
-            + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(definition.Table)}), '') "
-            + $"= {Literal(definition.Comment ?? string.Empty)}",
+            $"""
+            COALESCE((SELECT t.TABLE_COMMENT FROM INFORMATION_SCHEMA.TABLES t
+            WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(definition.Table)}), '')
+            = {Literal(definition.Comment ?? string.Empty)}
+            """,
         };
 
         if (MySqlSafeMigrationTableMetadata.IsExplicitInnoDb(definition))
@@ -208,22 +234,26 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <summary>Verifies the explicit engine in the same catalog statement as table classification.</summary>
     private string InnoDbEngineMatches(
         string table
-    ) => "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES engine_table "
-        + "WHERE engine_table.TABLE_SCHEMA = DATABASE() "
-        + $"AND engine_table.TABLE_NAME = {Literal(table)} "
-        + "AND LOWER(engine_table.ENGINE) = 'innodb')";
+    ) => $"""
+        EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES engine_table
+        WHERE engine_table.TABLE_SCHEMA = DATABASE()
+        AND engine_table.TABLE_NAME = {Literal(table)}
+        AND LOWER(engine_table.ENGINE) = 'innodb')
+        """;
 
     /// <summary>Captures only the bounded physical engine name in the existing classification query.</summary>
     private string BuildEngineDiagnosticEvidence(
         string table
-    ) => "(SELECT "
-        + DiagnosticRecord("LOWER(COALESCE(engine_table.ENGINE, '')) <> 'innodb'",
+    ) => $"""
+        (SELECT {DiagnosticRecord("LOWER(COALESCE(engine_table.ENGINE, '')) <> 'innodb'",
             "table_storage_engine",
             "'InnoDB'",
-            "LEFT(COALESCE(engine_table.ENGINE, 'unknown'), 64)")
-        + " FROM INFORMATION_SCHEMA.TABLES engine_table "
-        + $"WHERE engine_table.TABLE_SCHEMA = DATABASE() AND engine_table.TABLE_NAME = {Literal(table)} "
-        + "AND engine_table.TABLE_TYPE = 'BASE TABLE' LIMIT 1)";
+            "LEFT(COALESCE(engine_table.ENGINE, 'unknown'), 64)")}
+        FROM INFORMATION_SCHEMA.TABLES engine_table
+        WHERE engine_table.TABLE_SCHEMA = DATABASE()
+        AND engine_table.TABLE_NAME = {Literal(table)}
+        AND engine_table.TABLE_TYPE = 'BASE TABLE' LIMIT 1)
+        """;
 
     private string BuildPrimaryKeyTransitionMatches(
         ExpectedTableDefinition definition,
@@ -288,13 +318,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // physical index catalog. Check each live object against the complete
         // target definitions: a later EnsureIndex may still be absent here,
         // while any number of semantically equivalent aliases is legitimate.
-        return "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS candidate_unique "
-            + "WHERE candidate_unique.TABLE_SCHEMA = DATABASE() "
-            + $"AND candidate_unique.TABLE_NAME = {Literal(table)} "
-            + "AND candidate_unique.NON_UNIQUE = 0 "
-            + "AND candidate_unique.INDEX_NAME <> 'PRIMARY' "
-            + "AND candidate_unique.SEQ_IN_INDEX = 1 "
-            + $"AND NOT ({modeled}))";
+        return $"""
+            NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS candidate_unique
+            WHERE candidate_unique.TABLE_SCHEMA = DATABASE()
+            AND candidate_unique.TABLE_NAME = {Literal(table)}
+            AND candidate_unique.NON_UNIQUE = 0
+            AND candidate_unique.INDEX_NAME <> 'PRIMARY'
+            AND candidate_unique.SEQ_IN_INDEX = 1
+            AND NOT ({modeled}))
+            """;
     }
 
     private string BuildUniqueConstraintIndexCandidateMatches(
@@ -304,10 +336,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         var conditions = new List<string>
         {
-            $"(SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS s "
-            + $"WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = {Literal(definition.Table)} "
-            + $"AND s.INDEX_NAME = {candidate}.INDEX_NAME) "
-            + $"= {definition.Columns.Count.ToString(CultureInfo.InvariantCulture)}",
+            $"""
+            (SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS s
+            WHERE s.TABLE_SCHEMA = DATABASE()
+            AND s.TABLE_NAME = {Literal(definition.Table)}
+            AND s.INDEX_NAME = {candidate}.INDEX_NAME) = {definition.Columns.Count.ToString(
+                CultureInfo.InvariantCulture)}
+            """,
         };
 
         // WHY: Match declared key members to their one-based native catalog positions.
@@ -318,12 +353,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             var position = (ordinal + 1).ToString(CultureInfo.InvariantCulture);
 
             conditions.Add(
-                "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s "
-                + $"WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = {Literal(definition.Table)} "
-                + $"AND s.INDEX_NAME = {candidate}.INDEX_NAME "
-                + $"AND s.SEQ_IN_INDEX = {position} "
-                + $"AND s.COLUMN_NAME = {Literal(definition.Columns[ordinal])} "
-                + "AND s.SUB_PART IS NULL)");
+                $"""
+                EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
+                WHERE s.TABLE_SCHEMA = DATABASE()
+                AND s.TABLE_NAME = {Literal(definition.Table)}
+                AND s.INDEX_NAME = {candidate}.INDEX_NAME
+                AND s.SEQ_IN_INDEX = {position}
+                AND s.COLUMN_NAME = {Literal(definition.Columns[ordinal])}
+                AND s.SUB_PART IS NULL)
+                """);
         }
 
         return $"({string.Join(" AND ", conditions)})";
@@ -358,18 +396,18 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             ? "FALSE"
             : $"({string.Join(" OR ", expectedMatches)})";
 
-        return "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS candidate_tc "
-            + (implicitJsonChecks.Length == 0
+        return $"""
+            NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS candidate_tc {(implicitJsonChecks.Length == 0
                 ? string.Empty
-                : "JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc "
-                + "ON cc.CONSTRAINT_SCHEMA = candidate_tc.CONSTRAINT_SCHEMA "
-                + "AND cc.TABLE_NAME = candidate_tc.TABLE_NAME "
-                + "AND cc.CONSTRAINT_NAME = candidate_tc.CONSTRAINT_NAME ")
-            + "WHERE candidate_tc.CONSTRAINT_SCHEMA = DATABASE() "
-            + $"AND candidate_tc.TABLE_NAME = {Literal(table)} "
-            + "AND candidate_tc.CONSTRAINT_TYPE = 'CHECK' "
-            + providerGeneratedFilter
-            + $"AND NOT ({modeled}))";
+                : """
+                JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc
+                ON cc.CONSTRAINT_SCHEMA = candidate_tc.CONSTRAINT_SCHEMA
+                AND cc.TABLE_NAME = candidate_tc.TABLE_NAME
+                AND cc.CONSTRAINT_NAME = candidate_tc.CONSTRAINT_NAME
+                """ + " ")}WHERE candidate_tc.CONSTRAINT_SCHEMA = DATABASE()
+            AND candidate_tc.TABLE_NAME = {Literal(table)}
+            AND candidate_tc.CONSTRAINT_TYPE = 'CHECK' {providerGeneratedFilter}AND NOT ({modeled}))
+            """;
     }
 
     private string BuildAllForeignKeysModeled(
@@ -387,10 +425,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             ? "FALSE"
             : $"({string.Join(" OR ", expectedMatches)})";
 
-        return "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS candidate_rc "
-            + "WHERE candidate_rc.CONSTRAINT_SCHEMA = DATABASE() "
-            + $"AND candidate_rc.TABLE_NAME = {Literal(table)} "
-            + $"AND NOT ({modeled}))";
+        return $"""
+            NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS candidate_rc
+            WHERE candidate_rc.CONSTRAINT_SCHEMA = DATABASE()
+            AND candidate_rc.TABLE_NAME = {Literal(table)}
+            AND NOT ({modeled}))
+            """;
     }
 
     private string MariaDbImplicitJsonCheckMatches(
@@ -408,12 +448,18 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
     private string TableExists(
         string table
-    ) => $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES t "
-        + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(table)})";
+    ) => $"""
+        EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES t
+        WHERE t.TABLE_SCHEMA = DATABASE()
+        AND t.TABLE_NAME = {Literal(table)})
+        """;
 
     private string BaseTableExists(
         string table
-    ) => $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES t "
-        + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(table)} "
-        + "AND t.TABLE_TYPE = 'BASE TABLE')";
+    ) => $"""
+        EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES t
+        WHERE t.TABLE_SCHEMA = DATABASE()
+        AND t.TABLE_NAME = {Literal(table)}
+        AND t.TABLE_TYPE = 'BASE TABLE')
+        """;
 }

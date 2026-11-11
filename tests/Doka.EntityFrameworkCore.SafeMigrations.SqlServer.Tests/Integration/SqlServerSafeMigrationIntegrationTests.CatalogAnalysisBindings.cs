@@ -76,9 +76,10 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.binding_rows (Id int NOT NULL PRIMARY KEY, "
-            + "Caption nvarchar(80) NOT NULL); INSERT dbo.binding_rows VALUES "
-            + "(1,N'source'),(2,N'target'),(3,N'edited');",
+            """
+            CREATE TABLE dbo.binding_rows (Id int NOT NULL PRIMARY KEY, Caption nvarchar(80)
+            NOT NULL); INSERT dbo.binding_rows VALUES (1,N'source'),(2,N'target'),(3,N'edited');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -109,8 +110,12 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
 
         var unchanged = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM dbo.binding_rows "
-            + "WHERE (Id=1 AND Caption=N'source') OR (Id=2 AND Caption=N'target') OR (Id=3 AND Caption=N'edited');",
+            """
+            SELECT COUNT(*) FROM dbo.binding_rows
+            WHERE (Id=1 AND Caption=N'source')
+            OR (Id=2 AND Caption=N'target')
+            OR (Id=3 AND Caption=N'edited');
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -141,9 +146,11 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.binding_offsets "
-            + "(Id int NOT NULL PRIMARY KEY, Zoned datetimeoffset(7) NOT NULL); "
-            + "INSERT dbo.binding_offsets VALUES (1,CAST('2026-01-02T03:04:05+00:00' AS datetimeoffset(7)));",
+            """
+            CREATE TABLE dbo.binding_offsets (Id int NOT NULL PRIMARY KEY, Zoned datetimeoffset(7)
+            NOT NULL); INSERT dbo.binding_offsets VALUES (1,CAST('2026-01-02T03:04:05+00:00'
+            AS datetimeoffset(7)));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -211,9 +218,13 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.binding_values (Id int NOT NULL PRIMARY KEY, "
-            + "Caption nvarchar(80) NULL, Bytes varbinary(8) NULL, Amount decimal(38,20) NULL, "
-            + "Moment datetime2(7) NULL, Zoned datetimeoffset(7) NULL, Clock time(7) NULL);",
+            """
+            CREATE TABLE dbo.binding_values (Id int NOT NULL PRIMARY KEY, Caption nvarchar(80)
+            NULL,
+            Bytes varbinary(8) NULL, Amount decimal(38,20) NULL, Moment datetime2(7)
+            NULL,
+            Zoned datetimeoffset(7) NULL, Clock time(7) NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

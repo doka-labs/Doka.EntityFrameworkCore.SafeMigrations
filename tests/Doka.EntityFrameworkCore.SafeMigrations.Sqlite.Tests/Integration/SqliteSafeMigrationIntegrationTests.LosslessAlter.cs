@@ -25,9 +25,13 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER NOT NULL, "
-            + "CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
-            + "INSERT INTO lossless_alter_records VALUES (1, 9007199254740993);",
+            """
+            CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER
+            NOT NULL,
+            CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); INSERT INTO lossless_alter_records
+            VALUES (1,
+            9007199254740993);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteLosslessAlterTestContext<double>(connection, _internalServices);
@@ -94,9 +98,13 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            $"CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value {sourceStoreType} NOT NULL, "
-            + "CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
-            + $"INSERT INTO lossless_alter_records VALUES (1, {valueSql});",
+            $"""
+            CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value {sourceStoreType}
+            NOT NULL,
+            CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); INSERT INTO lossless_alter_records
+            VALUES (1,
+            {valueSql});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using DbContext context = targetClrType == typeof(long)
@@ -156,12 +164,15 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER "
-            + (targetNullable
+            $"""
+            CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER
+            {(targetNullable
                 ? "NOT NULL"
-                : "NULL")
-            + ", CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
-            + $"INSERT INTO lossless_alter_records VALUES (1, {value.ToString(CultureInfo.InvariantCulture)});",
+                : "NULL")},
+            CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); INSERT INTO lossless_alter_records
+            VALUES (1,
+            {value.ToString(CultureInfo.InvariantCulture)});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using DbContext context = targetNullable
@@ -217,13 +228,15 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER NULL, "
-            + "CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
-            + "INSERT INTO lossless_alter_records VALUES (1, "
-            + (sourceCondition == "null-value"
+            $"""
+            CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER
+            NULL,
+            CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); INSERT INTO lossless_alter_records
+            VALUES (1,
+            {(sourceCondition == "null-value"
                 ? "NULL"
-                : "9007199254740993")
-            + ");",
+                : "9007199254740993")});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteLosslessAlterTestContext<long>(connection, _internalServices);
@@ -293,9 +306,13 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER NOT NULL, "
-            + "CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
-            + $"INSERT INTO lossless_alter_records VALUES (1, {value.ToString(CultureInfo.InvariantCulture)});",
+            $"""
+            CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER
+            NOT NULL,
+            CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); INSERT INTO lossless_alter_records
+            VALUES (1,
+            {value.ToString(CultureInfo.InvariantCulture)});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteDefaultAlterTestContext(connection, _internalServices);
@@ -365,9 +382,13 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
         {
             await ExecuteSqlAsync(
                 connection,
-                "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER NOT NULL, "
-                + "CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
-                + "INSERT INTO lossless_alter_records VALUES (1, 9007199254740993);",
+                """
+                CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER
+                NOT NULL,
+                CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); INSERT INTO lossless_alter_records
+                VALUES (1,
+                9007199254740993);
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -450,7 +471,7 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
         Assert.Equal(0, autoincrementTables);
     }
 
-    /// <summary>The rejection observer actually counts accepted baseline DDL, rather than always returning zero.</summary>
+    /// <summary>The rejection observer counts accepted baseline DDL, rather than always returning zero.</summary>
     [Fact]
     public async Task BaselineDdlCounterObservesAcceptedTableCreation()
     {
@@ -504,17 +525,18 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
         var targetGenerated = change != "remove";
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER NOT NULL"
-            + (sourceGenerated
+            $"""
+            CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER
+            NOT NULL{(sourceGenerated
                 ? " GENERATED ALWAYS AS (Id + 1) "
                 + (stored
                     ? "STORED"
                     : "VIRTUAL")
-                : string.Empty)
-            + ", CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
-            + (sourceGenerated
+                : string.Empty)},
+            CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); {(sourceGenerated
                 ? "INSERT INTO lossless_alter_records (Id) VALUES (1);"
-                : "INSERT INTO lossless_alter_records VALUES (1, 9007199254740993);"),
+                : "INSERT INTO lossless_alter_records VALUES (1, 9007199254740993);")}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteLosslessAlterTestContext<long>(connection, _internalServices);

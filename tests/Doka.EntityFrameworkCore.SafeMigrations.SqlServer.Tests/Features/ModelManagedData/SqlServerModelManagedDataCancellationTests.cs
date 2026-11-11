@@ -37,10 +37,12 @@ public sealed partial class SqlServerModelManagedDataCancellationTests : SqlServ
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.identity_roles (Id int IDENTITY(1,1) NOT NULL "
-            + "CONSTRAINT PK_identity_roles PRIMARY KEY, Caption nvarchar(80) NOT NULL); "
-            + "CREATE TABLE dbo.identity_probe (Id int IDENTITY(1,1) NOT NULL "
-            + "CONSTRAINT PK_identity_probe PRIMARY KEY);",
+            """
+            CREATE TABLE dbo.identity_roles (Id int IDENTITY(1,1) NOT NULL CONSTRAINT
+            PK_identity_roles PRIMARY KEY,
+            Caption nvarchar(80) NOT NULL); CREATE TABLE dbo.identity_probe (Id int
+            IDENTITY(1,1) NOT NULL CONSTRAINT PK_identity_probe PRIMARY KEY);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var session = new SqlConnection(connectionString);
@@ -154,9 +156,10 @@ public sealed partial class SqlServerModelManagedDataCancellationTests : SqlServ
         }
 
         var probeFailure = await Record.ExceptionAsync(() => context.Database.ExecuteSqlRawAsync(
-            "SET IDENTITY_INSERT dbo.identity_probe ON; "
-            + "INSERT INTO dbo.identity_probe (Id) VALUES (11); "
-            + "SET IDENTITY_INSERT dbo.identity_probe OFF;",
+            """
+            SET IDENTITY_INSERT dbo.identity_probe ON; INSERT INTO dbo.identity_probe
+            (Id) VALUES (11); SET IDENTITY_INSERT dbo.identity_probe OFF;
+            """,
             CancellationToken.None));
 
         if (requiresCallerRecovery)
@@ -166,9 +169,10 @@ public sealed partial class SqlServerModelManagedDataCancellationTests : SqlServ
                 CancellationToken.None);
 
             await context.Database.ExecuteSqlRawAsync(
-                "SET IDENTITY_INSERT dbo.identity_probe ON; "
-                + "INSERT INTO dbo.identity_probe (Id) VALUES (12); "
-                + "SET IDENTITY_INSERT dbo.identity_probe OFF;",
+                """
+                SET IDENTITY_INSERT dbo.identity_probe ON; INSERT INTO dbo.identity_probe
+                (Id) VALUES (12); SET IDENTITY_INSERT dbo.identity_probe OFF;
+                """,
                 CancellationToken.None);
         }
 

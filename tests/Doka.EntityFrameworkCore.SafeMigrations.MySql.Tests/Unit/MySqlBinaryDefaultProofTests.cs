@@ -57,7 +57,7 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(binary_default_column.EXTRA, ''))) = 0",
+            "LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(binary_default_column.EXTRA,\n''))) = 0",
             eligibility,
             StringComparison.Ordinal);
 
@@ -81,9 +81,12 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
 
         // Assert
         Assert.Equal(
-            "SELECT EXISTS (SELECT 1 FROM (SELECT 1) AS doka_sm_seed "
-            + "LEFT JOIN `proof_items` AS doka_sm_default ON FALSE "
-            + "WHERE CAST(HEX(DEFAULT(doka_sm_default.`payload`)) AS BINARY) = '000A5C6EFF')",
+            """
+            SELECT EXISTS (SELECT 1 FROM (SELECT 1) AS doka_sm_seed
+            LEFT JOIN `proof_items` AS doka_sm_default ON FALSE
+            WHERE CAST(HEX(DEFAULT(doka_sm_default.`payload`)) AS BINARY)
+            = '000A5C6EFF')
+            """,
             proof.QueryExpression);
 
         Assert.DoesNotContain("SELECT HEX(DEFAULT(", proof.QueryExpression, StringComparison.Ordinal);
@@ -118,7 +121,7 @@ public sealed class MySqlBinaryDefaultProofTests : IDisposable
             .QueryExpression;
 
         // Assert
-        Assert.EndsWith("AS BINARY) = '" + expectedHex + "')", query, StringComparison.Ordinal);
+        Assert.EndsWith("AS BINARY)\n= '" + expectedHex + "')", query, StringComparison.Ordinal);
         Assert.Single(plan.BinaryDefaultProofs);
     }
 

@@ -76,11 +76,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 : string.Empty)
             + ")";
 
-        var classificationCode = $"CASE WHEN NOT ({canRead}) THEN N'check_row_data_unproven' "
-            + (orderedCapture
+        var classificationCode = $"""
+            CASE WHEN NOT ({canRead})
+            THEN N'check_row_data_unproven' {(orderedCapture
                 ? string.Empty
-                : $"WHEN {matching} OR ({occupied}) THEN NULL ")
-            + $"WHEN NOT ({support}) THEN N'check_column_type_unproven' ELSE NULL END";
+                : $"WHEN {matching} OR ({occupied}) THEN NULL ")}WHEN NOT ({support})
+            THEN N'check_column_type_unproven'
+            ELSE NULL END
+            """;
 
         // WHY: A CHECK rejects FALSE, not UNKNOWN. NOT(predicate) finds only
         // those failures. Rendering alone proves neither nonthrowing evaluation
@@ -88,9 +91,16 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // the empty-only proof and every row probe has an outer permission gate.
 
         return Plan(
-                $"CASE WHEN NOT {table} THEN N'prerequisite_missing' "
-                + $"WHEN {matching} THEN N'matching' WHEN {occupied} THEN N'different' "
-                + $"WHEN {unsafeRows} THEN N'data_blocked' ELSE N'missing' END",
+                $"""
+                CASE WHEN NOT {table}
+                THEN N'prerequisite_missing'
+                WHEN {matching}
+                THEN N'matching'
+                WHEN {occupied}
+                THEN N'different'
+                WHEN {unsafeRows}
+                THEN N'data_blocked' ELSE N'missing' END
+                """,
                 Bit(matching)) with
             {
                 RequiresDelayedBinding = true,
@@ -134,8 +144,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var checkExists = CheckExists(intent.Table, intent.Schema, intent.Name);
 
         return Plan(
-            $"CASE WHEN NOT {occupied} THEN N'missing' WHEN {checkExists} "
-            + "THEN N'matching' ELSE N'different' END",
+            $"""
+            CASE WHEN NOT {occupied}
+            THEN N'missing'
+            WHEN {checkExists}
+            THEN N'matching' ELSE N'different' END
+            """,
             Bit($"NOT {occupied}"));
     }
 
@@ -150,15 +164,18 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             definition.Name,
             CheckExpression(definition));
 
-        return "EXISTS (SELECT 1 FROM sys.check_constraints cc "
-            + $"WHERE cc.parent_object_id = {TableId(definition.Table, definition.Schema)} "
-            + $"AND cc.name = {Literal(definition.Name)} AND cc.is_disabled = 0 "
-            + "AND cc.is_not_trusted = 0 AND cc.is_not_for_replication = 0 "
-            + "AND EXISTS (SELECT 1 FROM sys.extended_properties ep "
-            + "WHERE ep.class = 1 AND ep.major_id = cc.object_id AND ep.minor_id = 0 "
-            + "AND ep.name = N'Doka:SafeMigrations:Contract' "
-            + $"AND CONVERT(nvarchar(64), ep.value) = {Literal(fingerprint)} "
-            + "COLLATE Latin1_General_100_BIN2))";
+        return $"""
+            EXISTS (SELECT 1 FROM sys.check_constraints cc
+            WHERE cc.parent_object_id = {TableId(definition.Table, definition.Schema)}
+            AND cc.name = {Literal(definition.Name)}
+            AND cc.is_disabled = 0 AND cc.is_not_trusted = 0
+            AND cc.is_not_for_replication = 0
+            AND EXISTS (SELECT 1 FROM sys.extended_properties ep
+            WHERE ep.class = 1 AND ep.major_id = cc.object_id
+            AND ep.minor_id = 0 AND ep.name = N'Doka:SafeMigrations:Contract'
+            AND CONVERT(nvarchar(64), ep.value) = {Literal(fingerprint)} COLLATE
+            Latin1_General_100_BIN2))
+            """;
     }
 
     private string BuildCheckStampSql(
@@ -205,22 +222,20 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 : variable + "_name",
             out var nameDeclaration);
 
-        return $"IF NOT {check} THROW 51004, N'SafeMigrations check contract was not created', 1; "
-
-            // WHY: Procedure arguments cannot contain the lossless string
-            // expression. Fingerprinted locals remain unique in table stamps.
-            + schemaDeclaration
-            + tableDeclaration
-            + nameDeclaration
-            + "EXEC sys.sp_addextendedproperty "
-            + "@name = N'Doka:SafeMigrations:Contract', "
-            + $"@value = {contractValue}, "
-            + "@level0type = N'SCHEMA', "
-            + $"@level0name = {schemaArgument}, "
-            + "@level1type = N'TABLE', "
-            + $"@level1name = {tableArgument}, "
-            + "@level2type = N'CONSTRAINT', "
-            + $"@level2name = {nameArgument}";
+        // WHY: Procedure arguments cannot contain the lossless string
+        // expression. Fingerprinted locals remain unique in table stamps.
+        return $"""
+            IF NOT {check} THROW 51004, N'SafeMigrations check contract was not created', 1;
+            {schemaDeclaration}{tableDeclaration}{nameDeclaration}EXEC sys.sp_addextendedproperty
+            @name = N'Doka:SafeMigrations:Contract',
+            @value = {contractValue},
+            @level0type = N'SCHEMA',
+            @level0name = {schemaArgument},
+            @level1type = N'TABLE',
+            @level1name = {tableArgument},
+            @level2type = N'CONSTRAINT',
+            @level2name = {nameArgument}
+            """;
     }
 
     private string CheckExpression(
@@ -236,6 +251,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string table,
         string? schema,
         string name
-    ) => $"EXISTS (SELECT 1 FROM sys.check_constraints cc WHERE cc.parent_object_id = {TableId(table, schema)} "
-        + $"AND cc.name = {Literal(name)})";
+    ) => $"""
+        EXISTS (SELECT 1 FROM sys.check_constraints cc
+        WHERE cc.parent_object_id = {TableId(table, schema)}
+        AND cc.name = {Literal(name)})
+        """;
 }

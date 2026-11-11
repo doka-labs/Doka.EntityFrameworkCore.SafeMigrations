@@ -2,10 +2,13 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-    protected const string RuntimeMatchingResetSql = "SET @runtime_matching_catalog_visits = 0, "
-        + "@runtime_matching_transition_visits = 0, @runtime_matching_repair_visits = 0, "
-        + "@runtime_matching_null_visits = 0, @runtime_matching_length_visits = 0, "
-        + "@runtime_matching_final_repair_visits = 0;";
+    protected const string RuntimeMatchingResetSql = """
+        SET @runtime_matching_catalog_visits = 0, @runtime_matching_transition_visits
+        = 0,
+        @runtime_matching_repair_visits = 0, @runtime_matching_null_visits = 0,
+        @runtime_matching_length_visits = 0, @runtime_matching_final_repair_visits
+        = 0;
+        """;
 }
 
 /// <summary>Exercises the RuntimeMatching migration contracts in an independent class collection.</summary>
@@ -38,9 +41,12 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` {storeType} NOT NULL "
-            + "COMMENT 'canonical') ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + $"INSERT INTO `runtime_match_rows` VALUES (1, {value});",
+            $"""
+            CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` {storeType}
+            NOT NULL COMMENT 'canonical') ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4
+            COLLATE utf8mb4_unicode_ci; INSERT INTO `runtime_match_rows` VALUES (1,
+            {value});
+            """,
             cancellationToken: CancellationToken.None);
 
         var observer = new RuntimeMatchingProbeInterceptor();
@@ -121,9 +127,13 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` {storeType} {nullability} "
-            + "COMMENT 'legacy') ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + $"INSERT INTO `runtime_match_rows` VALUES (1, {value});",
+            $"""
+            CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` {storeType}
+            {nullability} COMMENT 'legacy') ENGINE=InnoDB DEFAULT CHARACTER
+            SET utf8mb4 COLLATE utf8mb4_unicode_ci; INSERT INTO `runtime_match_rows`
+            VALUES (1,
+            {value});
+            """,
             cancellationToken: CancellationToken.None);
 
         var observer = new RuntimeMatchingProbeInterceptor();
@@ -154,9 +164,13 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
 
         var canonicalColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'runtime_match_rows' AND COLUMN_NAME = 'value' "
-            + "AND IS_NULLABLE = 'NO' AND COLUMN_COMMENT = 'canonical';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'runtime_match_rows'
+            AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO'
+            AND COLUMN_COMMENT = 'canonical';
+            """,
             cancellationToken: CancellationToken.None);
 
         var report = await context
@@ -239,10 +253,13 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` varchar(5) "
-            + $"COLLATE {columnCollation} NOT NULL {defaultClause}COMMENT 'canonical') "
-            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `runtime_match_rows` VALUES (1, 'kept');",
+            $"""
+            CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` varchar(5)
+            COLLATE {columnCollation} NOT NULL {defaultClause}COMMENT
+            'canonical') ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+            INSERT INTO `runtime_match_rows` VALUES (1,
+            'kept');
+            """,
             cancellationToken: CancellationToken.None);
 
         var observer = new RuntimeMatchingProbeInterceptor();
@@ -270,10 +287,14 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
 
         var finalColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'runtime_match_rows' AND COLUMN_NAME = 'value' "
-            + $"AND COLLATION_NAME = '{columnCollation}' AND COLUMN_DEFAULT IS NULL "
-            + "AND IS_NULLABLE = 'NO' AND COLUMN_COMMENT = 'canonical';",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'runtime_match_rows'
+            AND COLUMN_NAME = 'value' AND COLLATION_NAME = '{columnCollation}'
+            AND COLUMN_DEFAULT IS NULL AND IS_NULLABLE = 'NO'
+            AND COLUMN_COMMENT = 'canonical';
+            """,
             cancellationToken: CancellationToken.None);
 
         var report = await context
@@ -332,9 +353,12 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` {storeType} NOT NULL "
-            + "COMMENT 'canonical') ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + $"INSERT INTO `runtime_match_rows` VALUES (1, {value});",
+            $"""
+            CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` {storeType}
+            NOT NULL COMMENT 'canonical') ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4
+            COLLATE utf8mb4_unicode_ci; INSERT INTO `runtime_match_rows` VALUES (1,
+            {value});
+            """,
             cancellationToken: CancellationToken.None);
 
         var observer = new RuntimeMatchingProbeInterceptor();
@@ -348,9 +372,12 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.Operations.Add(operation);
         _ = builder.Sql(
-            "SET @runtime_matching_first_repair_visits = @runtime_matching_repair_visits; "
-            + $"ALTER TABLE `runtime_match_rows` MODIFY COLUMN `value` {storeType} NULL COMMENT 'canonical'; "
-            + "UPDATE `runtime_match_rows` SET `value` = NULL WHERE `id` = 1;");
+            $"""
+            SET @runtime_matching_first_repair_visits = @runtime_matching_repair_visits;
+            ALTER TABLE `runtime_match_rows` MODIFY COLUMN `value` {storeType}
+            NULL COMMENT 'canonical'; UPDATE `runtime_match_rows` SET `value` = NULL
+            WHERE `id` = 1;
+            """);
 
         builder.Operations.Add(RuntimeMatchingOperation(textColumn));
         _ = builder.Sql("SET @runtime_matching_after_rejection = 1;");
@@ -418,9 +445,12 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
         var foreignDatabase = new MySqlConnectionStringBuilder(foreignConnectionString).Database;
         await ExecuteSqlAsync(
             foreignConnectionString,
-            "CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` varchar(5) NOT NULL "
-            + "COMMENT 'canonical') ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `runtime_match_rows` VALUES (1, 'kept');",
+            """
+            CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` varchar(5)
+            NOT NULL COMMENT 'canonical') ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4
+            COLLATE utf8mb4_unicode_ci; INSERT INTO `runtime_match_rows` VALUES (1,
+            'kept');
+            """,
             cancellationToken: CancellationToken.None);
 
         var observer = new RuntimeMatchingProbeInterceptor();
@@ -485,9 +515,12 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` int NULL "
-            + $"COMMENT '{liveComment}') ENGINE=InnoDB; "
-            + "INSERT INTO `runtime_match_rows` VALUES (1, 7), (2, NULL);",
+            $"""
+            CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` int NULL
+            COMMENT '{liveComment}') ENGINE=InnoDB; INSERT INTO `runtime_match_rows`
+            VALUES (1,
+            7), (2, NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         var observer = new RuntimeMatchingProbeInterceptor();
@@ -525,9 +558,13 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
 
         var canonicalColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'runtime_match_rows' AND COLUMN_NAME = 'value' "
-            + "AND IS_NULLABLE = 'YES' AND COLUMN_COMMENT = 'canonical';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'runtime_match_rows'
+            AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'YES'
+            AND COLUMN_COMMENT = 'canonical';
+            """,
             cancellationToken: CancellationToken.None);
 
         var preservedRows = await ScalarIntAsync(

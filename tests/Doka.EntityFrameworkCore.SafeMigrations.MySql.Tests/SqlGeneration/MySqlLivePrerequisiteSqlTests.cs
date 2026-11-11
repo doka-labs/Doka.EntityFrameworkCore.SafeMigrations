@@ -135,12 +135,12 @@ public sealed class MySqlLivePrerequisiteSqlTests
         Assert.DoesNotContain("parent'quoted", command.CommandText, StringComparison.Ordinal);
         Assert.DoesNotContain("fk'quoted", command.CommandText, StringComparison.Ordinal);
         Assert.Contains(
-            "s.SEQ_IN_INDEX = 1 AND s.COLUMN_NAME = @live_3",
+            "s.SEQ_IN_INDEX = 1\nAND s.COLUMN_NAME = @live_3",
             command.CommandText,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "s.SEQ_IN_INDEX = 2 AND s.COLUMN_NAME = @live_4",
+            "s.SEQ_IN_INDEX = 2\nAND s.COLUMN_NAME = @live_4",
             command.CommandText,
             StringComparison.Ordinal);
 
@@ -153,7 +153,7 @@ public sealed class MySqlLivePrerequisiteSqlTests
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "GROUP BY s.INDEX_NAME, CAST(s.INDEX_NAME AS BINARY)",
+            "GROUP BY s.INDEX_NAME,\nCAST(s.INDEX_NAME AS BINARY)",
             command.CommandText,
             StringComparison.Ordinal);
 
@@ -163,7 +163,7 @@ public sealed class MySqlLivePrerequisiteSqlTests
         Assert.Equal(
             !databaseScopedNames,
             command.CommandText.Contains(
-                "AND rc.CONSTRAINT_NAME = @live_2 "
+                "AND rc.CONSTRAINT_NAME = @live_2\n"
                 + "AND "
                 + MySqlSafeMigrationCatalogSqlBuilder.BuildNativeCaseInsensitiveIdentifierMatches(
                     "rc.CONSTRAINT_NAME",

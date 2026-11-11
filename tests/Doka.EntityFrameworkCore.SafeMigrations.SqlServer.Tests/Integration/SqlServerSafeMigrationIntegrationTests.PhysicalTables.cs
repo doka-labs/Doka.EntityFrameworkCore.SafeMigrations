@@ -32,8 +32,10 @@ public sealed class SqlServerSafeMigrationPhysicalTablesIntegrationTests : SqlSe
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER doka_engine_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS, DDL_INDEX_EVENTS "
-            + "AS INSERT dbo.engine_ddl_events VALUES (1);",
+            """
+            CREATE TRIGGER doka_engine_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS,
+            DDL_INDEX_EVENTS AS INSERT dbo.engine_ddl_events VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         var originalId = await ScalarIntAsync(
@@ -159,8 +161,12 @@ public sealed class SqlServerSafeMigrationPhysicalTablesIntegrationTests : SqlSe
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var ordinaryEngines = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE name IN (N'ordinary_items', N'absent_items') "
-            + "AND is_memory_optimized = 0 AND is_filetable = 0 AND temporal_type = 0;",
+            """
+            SELECT COUNT(*) FROM sys.tables
+            WHERE name IN (N'ordinary_items', N'absent_items')
+            AND is_memory_optimized = 0 AND is_filetable = 0
+            AND temporal_type = 0;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -214,24 +220,30 @@ public sealed class SqlServerSafeMigrationPhysicalTablesIntegrationTests : SqlSe
         string engine
     ) => engine switch
     {
-        "memory" => "DECLARE @database sysname = DB_NAME(); "
-            + "DECLARE @quoted_database nvarchar(258) = QUOTENAME(@database); "
-            + "DECLARE @data nvarchar(4000) = CONVERT(nvarchar(4000), SERVERPROPERTY('InstanceDefaultDataPath')); "
-            + "DECLARE @file nvarchar(4000) = @data + @database + N'_memory'; "
-            + "DECLARE @sql nvarchar(max) = N'ALTER DATABASE ' + @quoted_database "
-            + "+ N' ADD FILEGROUP doka_memory CONTAINS MEMORY_OPTIMIZED_DATA'; EXEC sys.sp_executesql @sql; "
-            + "SET @sql = N'ALTER DATABASE ' + @quoted_database "
-            + "+ N' ADD FILE (NAME = N''doka_memory_file'', FILENAME = N''' + REPLACE(@file, N'''', N'''''') "
-            + "+ N''') TO FILEGROUP doka_memory'; EXEC sys.sp_executesql @sql; "
-            + "CREATE TABLE dbo.physical_items (Id int NOT NULL PRIMARY KEY NONCLUSTERED, Value int NULL) "
-            + "WITH (MEMORY_OPTIMIZED = ON, DURABILITY = SCHEMA_ONLY); "
-            + "INSERT dbo.physical_items VALUES (1, 7);",
-        "history" => "CREATE TABLE dbo.temporal_current (Id int NOT NULL PRIMARY KEY, Value int NULL, "
-            + "ValidFrom datetime2 GENERATED ALWAYS AS ROW START NOT NULL, "
-            + "ValidTo datetime2 GENERATED ALWAYS AS ROW END NOT NULL, PERIOD FOR SYSTEM_TIME (ValidFrom, ValidTo)) "
-            + "WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = dbo.physical_items)); "
-            + "INSERT dbo.temporal_current (Id, Value) VALUES (1, 7); "
-            + "UPDATE dbo.temporal_current SET Value = 8 WHERE Id = 1;",
+        "memory" => """
+            DECLARE @database sysname = DB_NAME(); DECLARE @quoted_database nvarchar(258)
+            = QUOTENAME(@database); DECLARE @data nvarchar(4000) = CONVERT(nvarchar(4000),
+            SERVERPROPERTY('InstanceDefaultDataPath')); DECLARE @file nvarchar(4000)
+            = @data + @database + N'_memory'; DECLARE @sql nvarchar(max) = N'ALTER DATABASE '
+            + @quoted_database + N' ADD FILEGROUP doka_memory CONTAINS MEMORY_OPTIMIZED_DATA';
+            EXEC sys.sp_executesql @sql; SET @sql = N'ALTER DATABASE ' + @quoted_database
+            + N' ADD FILE (NAME = N''doka_memory_file'', FILENAME = N''' + REPLACE(@file,
+            N'''', N'''''') + N''') TO FILEGROUP doka_memory'; EXEC sys.sp_executesql @sql;
+            CREATE TABLE dbo.physical_items (Id int NOT NULL PRIMARY KEY NONCLUSTERED,
+            Value int NULL) WITH (MEMORY_OPTIMIZED = ON, DURABILITY = SCHEMA_ONLY);
+            INSERT dbo.physical_items VALUES (1,
+            7);
+            """,
+        "history" => """
+            CREATE TABLE dbo.temporal_current (Id int NOT NULL PRIMARY KEY, Value int
+            NULL,
+            ValidFrom datetime2 GENERATED ALWAYS AS ROW START NOT NULL, ValidTo datetime2
+            GENERATED ALWAYS AS ROW END NOT NULL,
+            PERIOD FOR SYSTEM_TIME (ValidFrom, ValidTo)) WITH (SYSTEM_VERSIONING = ON
+            (HISTORY_TABLE = dbo.physical_items)); INSERT dbo.temporal_current (Id,
+            Value) VALUES (1, 7); UPDATE dbo.temporal_current SET Value = 8
+            WHERE Id = 1;
+            """,
         _ => throw new ArgumentOutOfRangeException(nameof(engine)),
     };
 }

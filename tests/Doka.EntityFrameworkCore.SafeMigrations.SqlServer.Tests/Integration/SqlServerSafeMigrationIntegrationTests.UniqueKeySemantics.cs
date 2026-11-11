@@ -40,25 +40,35 @@ public sealed class SqlServerSafeMigrationUniqueKeySemanticsIntegrationTests : S
 
         var keySql = family switch
         {
-            "primary" => $"ALTER TABLE dbo.unique_key_semantics ADD CONSTRAINT [{name}] PRIMARY KEY ([Id]) "
-                + $"WITH (IGNORE_DUP_KEY = {option});",
-            "unique" => $"ALTER TABLE dbo.unique_key_semantics ADD CONSTRAINT [{name}] UNIQUE ([Id]) "
-                + $"WITH (IGNORE_DUP_KEY = {option});",
-            "index" => $"CREATE UNIQUE INDEX [{name}] ON dbo.unique_key_semantics ([Id]) "
-                + $"WITH (IGNORE_DUP_KEY = {option});",
+            "primary" => $"""
+                ALTER TABLE dbo.unique_key_semantics ADD CONSTRAINT [{name}]
+                PRIMARY KEY ([Id]) WITH (IGNORE_DUP_KEY = {option});
+                """,
+            "unique" => $"""
+                ALTER TABLE dbo.unique_key_semantics ADD CONSTRAINT [{name}]
+                UNIQUE ([Id]) WITH (IGNORE_DUP_KEY = {option});
+                """,
+            "index" => $"""
+                CREATE UNIQUE INDEX [{name}] ON dbo.unique_key_semantics
+                ([Id]) WITH (IGNORE_DUP_KEY = {option});
+                """,
             _ => throw new ArgumentOutOfRangeException(nameof(family)),
         };
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.unique_key_semantics (Id int NOT NULL); "
-            + "INSERT INTO dbo.unique_key_semantics VALUES (1); "
-            + "CREATE TABLE dbo.unique_key_ddl_audit (Id int IDENTITY NOT NULL); "
-            + keySql,
+            $"""
+            CREATE TABLE dbo.unique_key_semantics (Id int NOT NULL); INSERT INTO dbo.unique_key_semantics
+            VALUES (1); CREATE TABLE dbo.unique_key_ddl_audit (Id int IDENTITY NOT NULL);
+            {keySql}
+            """,
             cancellationToken: CancellationToken.None);
 
-        var indexQuery = "SELECT index_id FROM sys.indexes "
-            + $"WHERE object_id = OBJECT_ID(N'dbo.unique_key_semantics', N'U') AND name = N'{name}';";
+        var indexQuery = $"""
+            SELECT index_id FROM sys.indexes
+            WHERE object_id = OBJECT_ID(N'dbo.unique_key_semantics', N'U')
+            AND name = N'{name}';
+            """;
 
         var originalIndexId = await ScalarIntAsync(
             connectionString,
@@ -67,8 +77,11 @@ public sealed class SqlServerSafeMigrationUniqueKeySemanticsIntegrationTests : S
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER unique_key_semantics_ddl_audit ON DATABASE FOR ALTER_TABLE, CREATE_INDEX, DROP_INDEX "
-            + "AS INSERT INTO dbo.unique_key_ddl_audit DEFAULT VALUES;",
+            """
+            CREATE TRIGGER unique_key_semantics_ddl_audit ON DATABASE FOR ALTER_TABLE,
+            CREATE_INDEX, DROP_INDEX AS INSERT INTO dbo.unique_key_ddl_audit DEFAULT
+            VALUES;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -110,9 +123,12 @@ public sealed class SqlServerSafeMigrationUniqueKeySemanticsIntegrationTests : S
 
         var physicalKeyCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes "
-            + $"WHERE object_id = OBJECT_ID(N'dbo.unique_key_semantics', N'U') AND name = N'{name}' "
-            + $"AND is_unique = 1 AND ignore_dup_key = {(ignoreDuplicateKey ? 1 : 0)};",
+            $"""
+            SELECT COUNT(*) FROM sys.indexes
+            WHERE object_id = OBJECT_ID(N'dbo.unique_key_semantics', N'U')
+            AND name = N'{name}'
+            AND is_unique = 1 AND ignore_dup_key = {(ignoreDuplicateKey ? 1 : 0)};
+            """,
             cancellationToken: CancellationToken.None);
 
         var unchangedRowCount = await ScalarIntAsync(

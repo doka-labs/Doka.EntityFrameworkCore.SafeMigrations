@@ -133,7 +133,7 @@ public sealed class SqlServerForeignKeyWidthSqlTests
         Assert.Contains("dc.precision = pc.precision", sql, StringComparison.Ordinal);
         Assert.Contains("dc.scale = pc.scale", sql, StringComparison.Ordinal);
         Assert.Contains(
-            "ISNULL(dc.collation_name, N'') = ISNULL(pc.collation_name, N'')",
+            "ISNULL(dc.collation_name, N'') = ISNULL(pc.collation_name,\nN'')",
             sql,
             StringComparison.Ordinal);
 
@@ -245,7 +245,7 @@ public sealed class SqlServerForeignKeyWidthSqlTests
             StringComparison.Ordinal);
 
         var prerequisiteGate = delayed.IndexOf("IF @doka_prerequisite = 1", StringComparison.Ordinal);
-        var rowBinding = delayed.IndexOf("IF @doka_prerequisite = 1 EXEC sys.sp_executesql", StringComparison.Ordinal);
+        var rowBinding = delayed.IndexOf("IF @doka_prerequisite = 1\nEXEC sys.sp_executesql", StringComparison.Ordinal);
         Assert.True(prerequisite >= 0);
         Assert.True(prerequisiteGate > prerequisite);
         Assert.Equal(prerequisiteGate, rowBinding);

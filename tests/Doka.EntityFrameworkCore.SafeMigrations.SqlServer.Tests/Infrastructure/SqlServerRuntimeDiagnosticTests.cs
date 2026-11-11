@@ -61,6 +61,46 @@ public sealed class SqlServerRuntimeDiagnosticTests
         Assert.IsType<DoesNotContainException>(failure);
     }
 
+    /// <summary>Generated layout variants do not change decoded message data.</summary>
+    /// <param name="prefix">An exact generated THROW-number-literal prefix.</param>
+    [Theory]
+    [InlineData("THROW 51003, N'")]
+    [InlineData("THROW 51003,\nN'")]
+    [InlineData("THROW\n51003,\nN'")]
+    public void MessageReaderPreservesLiteralContentsAcrossGeneratedLayouts(
+        string prefix
+    )
+    {
+        // Arrange
+        var sql = prefix + "doka_sm_data_blocked: O''Brien %% {0}\r\nkept', 1;";
+
+        // Act
+        var message = ReadMessage(sql, "doka_sm_data_blocked", 51003);
+
+        // Assert
+        Assert.Equal("doka_sm_data_blocked: O'Brien % {0}\r\nkept", message);
+    }
+
+    /// <summary>Layout recognition never accepts another guard number, code or native state.</summary>
+    /// <param name="sql">A deliberately incompatible native rejection.</param>
+    [Theory]
+    [InlineData("THROW 51004,\nN'doka_sm_data_blocked', 1;")]
+    [InlineData("THROW 51003,\nN'doka_sm_different', 1;")]
+    [InlineData("THROW 51003,\nN'doka_sm_data_blocked', 2;")]
+    public void MessageReaderRejectsWrongGuardIdentityOrState(
+        string sql
+    )
+    {
+        // Arrange
+        const string code = "doka_sm_data_blocked";
+
+        // Act
+        var failure = Record.Exception(() => ReadMessage(sql, code, 51003));
+
+        // Assert
+        Assert.IsAssignableFrom<XunitException>(failure);
+    }
+
     /// <summary>Every native rejection retains its number and supplies actionable operation context.</summary>
     /// <param name="code">The existing SafeMigrations guard token.</param>
     /// <param name="number">The existing SQL Server guard error number.</param>
@@ -521,10 +561,28 @@ public sealed class SqlServerRuntimeDiagnosticTests
         int number
     )
     {
-        var prefix = "THROW " + number.ToString(CultureInfo.InvariantCulture) + ", N'" + code;
-        var offset = sql.IndexOf(prefix, StringComparison.Ordinal);
+        var nativeNumber = number.ToString(CultureInfo.InvariantCulture);
+        string[] prefixes =
+        [
+            "THROW " + nativeNumber + ", N'" + code,
+            "THROW " + nativeNumber + ",\nN'" + code,
+            "THROW\n" + nativeNumber + ",\nN'" + code,
+        ];
+
+        var offset = -1;
+        // WHY: Recognize only the exact generated THROW layouts. Do not trim
+        // or normalize the native message literal, its number or its state.
+        foreach (var prefix in prefixes)
+        {
+            var candidate = sql.IndexOf(prefix, StringComparison.Ordinal);
+            if (candidate >= 0)
+            {
+                offset = candidate + prefix.Length - code.Length;
+                break;
+            }
+        }
+
         Assert.True(offset >= 0, "The expected native rejection was not generated.");
-        offset += prefix.Length - code.Length;
         var result = new StringBuilder();
         while (offset < sql.Length)
         {

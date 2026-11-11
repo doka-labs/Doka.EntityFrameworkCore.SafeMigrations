@@ -20,9 +20,12 @@ public sealed class SqlServerSafeMigrationModelManagedDataKeyColumnIdentityInteg
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.managed_key_identity (Id int NOT NULL "
-            + "CONSTRAINT PK_managed_key_identity PRIMARY KEY, Caption nvarchar(80) NOT NULL); "
-            + "INSERT INTO dbo.managed_key_identity (Id, Caption) VALUES (7, N'old');",
+            """
+            CREATE TABLE dbo.managed_key_identity (Id int NOT NULL CONSTRAINT PK_managed_key_identity
+            PRIMARY KEY,
+            Caption nvarchar(80) NOT NULL); INSERT INTO dbo.managed_key_identity (Id,
+            Caption) VALUES (7, N'old');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -115,9 +118,12 @@ public sealed class SqlServerSafeMigrationModelManagedDataKeyColumnIdentityInteg
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.managed_key_duplicate (Id int NOT NULL "
-            + "CONSTRAINT PK_managed_key_duplicate PRIMARY KEY, Caption nvarchar(80) NOT NULL); "
-            + "INSERT INTO dbo.managed_key_duplicate (Id, Caption) VALUES (7, N'old');",
+            """
+            CREATE TABLE dbo.managed_key_duplicate (Id int NOT NULL CONSTRAINT PK_managed_key_duplicate
+            PRIMARY KEY,
+            Caption nvarchar(80) NOT NULL); INSERT INTO dbo.managed_key_duplicate (Id,
+            Caption) VALUES (7, N'old');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -174,9 +180,12 @@ public sealed class SqlServerSafeMigrationModelManagedDataKeyColumnIdentityInteg
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.managed_key_alias (Id int NOT NULL "
-            + "CONSTRAINT PK_managed_key_alias PRIMARY KEY, Caption nvarchar(80) NOT NULL); "
-            + "INSERT INTO dbo.managed_key_alias (Id, Caption) VALUES (7, N'old');",
+            """
+            CREATE TABLE dbo.managed_key_alias (Id int NOT NULL CONSTRAINT PK_managed_key_alias
+            PRIMARY KEY,
+            Caption nvarchar(80) NOT NULL); INSERT INTO dbo.managed_key_alias (Id,
+            Caption) VALUES (7, N'old');
+            """,
             cancellationToken: CancellationToken.None);
 
         var catalogAliasesCase = await ScalarIntAsync(

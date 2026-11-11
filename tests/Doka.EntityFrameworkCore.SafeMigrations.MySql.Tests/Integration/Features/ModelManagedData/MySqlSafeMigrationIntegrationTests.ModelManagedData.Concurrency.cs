@@ -15,9 +15,12 @@ public sealed class MySqlModelManagedDataConcurrencyIntegrationTests : MySqlSafe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `model_race_roles` (`id` int NOT NULL, `name` varchar(64) NOT NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB;"
-            + "INSERT INTO `model_race_roles` (`id`, `name`) VALUES (1, 'source');",
+            """
+            CREATE TABLE `model_race_roles` (`id` int NOT NULL, `name` varchar(64) NOT
+            NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB;INSERT INTO `model_race_roles` (`id`,
+            `name`) VALUES (1, 'source');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -42,9 +45,11 @@ public sealed class MySqlModelManagedDataConcurrencyIntegrationTests : MySqlSafe
 
         await ExecuteSqlAsync(
             connectionString,
-            "UPDATE `model_race_roles` SET `name` = 'source' WHERE `id` = 1;"
-            + "CREATE TRIGGER `trg_model_race_roles_rewrite` BEFORE UPDATE ON `model_race_roles` "
-            + "FOR EACH ROW SET NEW.`name` = 'triggered';",
+            """
+            UPDATE `model_race_roles` SET `name` = 'source'
+            WHERE `id` = 1;CREATE TRIGGER `trg_model_race_roles_rewrite` BEFORE UPDATE
+            ON `model_race_roles` FOR EACH ROW SET NEW.`name` = 'triggered';
+            """,
             cancellationToken: CancellationToken.None);
 
         await using (var transaction = await context.Database.BeginTransactionAsync(CancellationToken.None))
@@ -85,12 +90,17 @@ public sealed class MySqlModelManagedDataConcurrencyIntegrationTests : MySqlSafe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `model_dependency_roles` (`id` int NOT NULL, `name` varchar(64) NOT NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB;"
-            + "CREATE TABLE `model_dependency_users` (`id` int NOT NULL, `role_id` int NULL, "
-            + "PRIMARY KEY (`id`), CONSTRAINT `fk_model_dependency_users_role` FOREIGN KEY (`role_id`) "
-            + $"REFERENCES `model_dependency_roles` (`id`) ON DELETE {referentialAction}) ENGINE=InnoDB;"
-            + "INSERT INTO `model_dependency_roles` (`id`, `name`) VALUES (1, 'source');",
+            $"""
+            CREATE TABLE `model_dependency_roles` (`id` int NOT NULL, `name` varchar(64)
+            NOT NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB;CREATE TABLE `model_dependency_users`
+            (`id` int NOT NULL,
+            `role_id` int NULL, PRIMARY KEY (`id`), CONSTRAINT `fk_model_dependency_users_role`
+            FOREIGN KEY (`role_id`) REFERENCES `model_dependency_roles` (`id`) ON DELETE
+            {referentialAction}) ENGINE=InnoDB;INSERT INTO `model_dependency_roles`
+            (`id`,
+            `name`) VALUES (1, 'source');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -139,11 +149,13 @@ public sealed class MySqlModelManagedDataConcurrencyIntegrationTests : MySqlSafe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `model_cancel_roles` (`id` int NOT NULL, `name` varchar(64) NOT NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB;"
-            + "INSERT INTO `model_cancel_roles` (`id`, `name`) VALUES (1, 'source');"
-            + "CREATE TRIGGER `trg_model_cancel_roles_wait` BEFORE UPDATE ON `model_cancel_roles` "
-            + "FOR EACH ROW DO SLEEP(10);",
+            """
+            CREATE TABLE `model_cancel_roles` (`id` int NOT NULL, `name` varchar(64)
+            NOT NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB;INSERT INTO `model_cancel_roles` (`id`,
+            `name`) VALUES (1, 'source');CREATE TRIGGER `trg_model_cancel_roles_wait`
+            BEFORE UPDATE ON `model_cancel_roles` FOR EACH ROW DO SLEEP(10);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

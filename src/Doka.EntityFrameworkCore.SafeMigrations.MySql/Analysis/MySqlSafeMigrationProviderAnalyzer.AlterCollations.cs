@@ -68,8 +68,11 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     valueBytes += Encoding.UTF8.GetByteCount(names[offset + index]) + 32;
                 }
 
-                command.CommandText = "SELECT COLLATION_NAME, CHARACTER_SET_NAME FROM INFORMATION_SCHEMA.COLLATIONS "
-                    + $"WHERE COLLATION_NAME IN ({string.Join(", ", parameters)});";
+                command.CommandText = $"""
+                    SELECT COLLATION_NAME, CHARACTER_SET_NAME
+                    FROM INFORMATION_SCHEMA.COLLATIONS
+                    WHERE COLLATION_NAME IN ({string.Join(", ", parameters)});
+                    """;
 
                 return new SafeMigrationCatalogProbeStatement(1, valueBytes, offset);
             },

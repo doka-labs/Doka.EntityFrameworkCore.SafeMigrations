@@ -212,11 +212,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     ? "1"
                     : names.Length == 0
                         ? "0"
-                        : "CASE WHEN EXISTS(SELECT 1 FROM(VALUES "
-                        + string.Join(",", names.Select(static name => "(" + KeyLiteral(name) + ")"))
-                        + ") refs(name) WHERE refs.name COLLATE CATALOG_DEFAULT="
-                        + KeyLiteral(rename.Name)
-                        + " COLLATE CATALOG_DEFAULT) THEN 1 ELSE 0 END";
+                        : $"""
+                        CASE WHEN EXISTS(SELECT 1 FROM(VALUES {string.Join(
+                            ",", names.Select(static name => "(" + KeyLiteral(name) + ")"))}) refs(name)
+                        WHERE refs.name COLLATE CATALOG_DEFAULT={KeyLiteral(rename.Name)} COLLATE
+                        CATALOG_DEFAULT)
+                        THEN 1 ELSE 0 END
+                        """;
 
                 // WHY: Native identifier equality includes accent and width
                 // rules. Neither OrdinalIgnoreCase nor a data-collation guess

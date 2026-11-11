@@ -154,8 +154,11 @@ public sealed class SqlServerSafeMigrationProjectedFiltersIntegrationTests : Sql
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var indexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.projected_filter_runtime') "
-            + "AND name = N'IX_projected_filter_runtime_Code';",
+            """
+            SELECT COUNT(*) FROM sys.indexes
+            WHERE object_id = OBJECT_ID(N'dbo.projected_filter_runtime')
+            AND name = N'IX_projected_filter_runtime_Code';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert

@@ -28,8 +28,10 @@ public sealed class SqlServerSafeMigrationDefaultsAndChecksIntegrationTests : Sq
             "none" => string.Empty,
             "inline" => "ALTER TABLE dbo.default_absence ADD CONSTRAINT DF_default_absence "
                 + "DEFAULT ('legacy') FOR Caption;",
-            "bound" => "EXEC(N'CREATE DEFAULT dbo.bound_caption_default AS ''legacy'';'); "
-                + "EXEC sys.sp_bindefault N'dbo.bound_caption_default', N'dbo.default_absence.Caption';",
+            "bound" => """
+                EXEC(N'CREATE DEFAULT dbo.bound_caption_default AS ''legacy'';'); EXEC sys.sp_bindefault
+                N'dbo.bound_caption_default', N'dbo.default_absence.Caption';
+                """,
             _ => throw new ArgumentOutOfRangeException(nameof(defaultKind)),
         };
 
@@ -91,9 +93,12 @@ public sealed class SqlServerSafeMigrationDefaultsAndChecksIntegrationTests : Sq
 
         var constraintCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.check_constraints "
-            + "WHERE parent_object_id = OBJECT_ID(N'dbo.checked_orders', N'U') "
-            + "AND name = N'CK_checked_orders_Amount' AND is_disabled = 0 AND is_not_trusted = 0;",
+            """
+            SELECT COUNT(*) FROM sys.check_constraints
+            WHERE parent_object_id = OBJECT_ID(N'dbo.checked_orders', N'U')
+            AND name = N'CK_checked_orders_Amount'
+            AND is_disabled = 0 AND is_not_trusted = 0;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -154,9 +159,10 @@ public sealed class SqlServerSafeMigrationDefaultsAndChecksIntegrationTests : Sq
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.unstamped_checks (Amount int NOT NULL); "
-            + "ALTER TABLE dbo.unstamped_checks ADD CONSTRAINT CK_unstamped_checks_Amount "
-            + "CHECK ([Amount] >= 0);",
+            """
+            CREATE TABLE dbo.unstamped_checks (Amount int NOT NULL); ALTER TABLE dbo.unstamped_checks
+            ADD CONSTRAINT CK_unstamped_checks_Amount CHECK ([Amount] >= 0);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -192,9 +198,10 @@ public sealed class SqlServerSafeMigrationDefaultsAndChecksIntegrationTests : Sq
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.unstamped_defaults "
-            + "(Id int NOT NULL, Caption nvarchar(80) NOT NULL "
-            + "CONSTRAINT DF_unstamped_defaults_Caption DEFAULT (N'ready'));",
+            """
+            CREATE TABLE dbo.unstamped_defaults (Id int NOT NULL, Caption nvarchar(80)
+            NOT NULL CONSTRAINT DF_unstamped_defaults_Caption DEFAULT (N'ready'));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

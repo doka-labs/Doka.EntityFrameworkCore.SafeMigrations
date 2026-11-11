@@ -190,9 +190,11 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA rename_scope; CREATE TABLE source_rows (value integer); "
-            + "INSERT INTO source_rows VALUES (7); CREATE TABLE target_rows (value integer); "
-            + "INSERT INTO target_rows VALUES (99);",
+            """
+            CREATE SCHEMA rename_scope; CREATE TABLE source_rows (value integer); INSERT
+            INTO source_rows VALUES (7); CREATE TABLE target_rows (value integer); INSERT
+            INTO target_rows VALUES (99);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

@@ -162,9 +162,11 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE rename_source (Id INTEGER NOT NULL); "
-            + "CREATE TABLE occupied_owner (Id INTEGER NOT NULL); "
-            + createOccupant,
+            $"""
+            CREATE TABLE rename_source (Id INTEGER NOT NULL);
+            CREATE TABLE occupied_owner (Id INTEGER NOT NULL);
+            {createOccupant}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -237,8 +239,10 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE occupied_owner (Id INTEGER NOT NULL); "
-            + "CREATE TRIGGER rename_destination AFTER INSERT ON occupied_owner BEGIN SELECT 1; END;",
+            """
+            CREATE TABLE occupied_owner (Id INTEGER NOT NULL);
+            CREATE TRIGGER rename_destination AFTER INSERT ON occupied_owner BEGIN SELECT 1; END;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);

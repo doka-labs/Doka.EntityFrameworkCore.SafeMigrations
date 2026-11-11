@@ -47,16 +47,25 @@ public sealed class MySqlProvider106IntegrationTests : MySqlSafeMigrationIntegra
         await ExecuteOperationsAsync(context, operations, CancellationToken.None);
         var physical = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND ("
-            + "(TABLE_NAME='budget_binary' AND COLUMN_NAME='payload' AND CHARACTER_MAXIMUM_LENGTH=254) OR "
-            + "(TABLE_NAME='budget_fixed' AND COLUMN_NAME='payload' AND CHARACTER_MAXIMUM_LENGTH=216) OR "
-            + "(TABLE_NAME='budget_explicit' AND COLUMN_NAME='value' AND CHARACTER_MAXIMUM_LENGTH=68) OR "
-            + "(TABLE_NAME='budget_guid' AND COLUMN_NAME='value' AND CHARACTER_MAXIMUM_LENGTH=164) OR "
-            + "(TABLE_NAME='budget_overlap' AND COLUMN_NAME='shared' AND CHARACTER_MAXIMUM_LENGTH=68) OR "
-            + "(TABLE_NAME IN ('budget_principals','budget_dependents') AND COLUMN_NAME='code' "
-            + "AND CHARACTER_MAXIMUM_LENGTH=168));",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA=DATABASE()
+            AND ((TABLE_NAME='budget_binary'
+            AND COLUMN_NAME='payload' AND CHARACTER_MAXIMUM_LENGTH=254)
+            OR (TABLE_NAME='budget_fixed'
+            AND COLUMN_NAME='payload' AND CHARACTER_MAXIMUM_LENGTH=216)
+            OR (TABLE_NAME='budget_explicit'
+            AND COLUMN_NAME='value' AND CHARACTER_MAXIMUM_LENGTH=68)
+            OR (TABLE_NAME='budget_guid' AND COLUMN_NAME='value'
+            AND CHARACTER_MAXIMUM_LENGTH=164)
+            OR (TABLE_NAME='budget_overlap'
+            AND COLUMN_NAME='shared' AND CHARACTER_MAXIMUM_LENGTH=68)
+            OR (TABLE_NAME IN ('budget_principals','budget_dependents')
+            AND COLUMN_NAME='code' AND CHARACTER_MAXIMUM_LENGTH=168));
+            """,
             cancellationToken: CancellationToken.None);
 
+        // WHY: Constant chunks preserve the authored LIKE escape and query bytes without inserting SQL newlines.
         var prefixes = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA=DATABASE() "
@@ -77,8 +86,12 @@ public sealed class MySqlProvider106IntegrationTests : MySqlSafeMigrationIntegra
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() "
-                + "AND TABLE_NAME='budget_dependents' AND REFERENCED_TABLE_NAME='budget_principals';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA=DATABASE()
+                AND TABLE_NAME='budget_dependents'
+                AND REFERENCED_TABLE_NAME='budget_principals';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -90,10 +103,14 @@ public sealed class MySqlProvider106IntegrationTests : MySqlSafeMigrationIntegra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `budget_explicit` (`id` int NOT NULL, `code` varchar(700) NOT NULL, "
-            + "`value` varchar(69) NOT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC "
-            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `budget_explicit` VALUES (1, 'preserved-code', 'preserved-value');",
+            """
+            CREATE TABLE `budget_explicit` (`id` int NOT NULL, `code` varchar(700) NOT
+            NULL,
+            `value` varchar(69) NOT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC
+            DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; INSERT INTO `budget_explicit`
+            VALUES (1,
+            'preserved-code', 'preserved-value');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = MySqlProvider106ContractTests.CreateContext(connectionString, Fixture.ServerVersion);
@@ -144,8 +161,13 @@ public sealed class MySqlProvider106IntegrationTests : MySqlSafeMigrationIntegra
 
         var length = await ScalarIntAsync(
             connectionString,
-            "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() "
-            + "AND TABLE_NAME='budget_explicit' AND COLUMN_NAME='value';",
+            """
+            SELECT CHARACTER_MAXIMUM_LENGTH
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA=DATABASE()
+            AND TABLE_NAME='budget_explicit'
+            AND COLUMN_NAME='value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var preserved = await ScalarIntAsync(
@@ -230,12 +252,15 @@ public sealed class MySqlProvider106IntegrationTests : MySqlSafeMigrationIntegra
 
         var keyParts = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA=DATABASE() "
-            + "AND TABLE_NAME='decimal_budget' AND INDEX_NAME="
-            + (kind == 1
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA=DATABASE()
+            AND TABLE_NAME='decimal_budget'
+            AND INDEX_NAME={(kind == 1
                 ? "'PRIMARY'"
-                : "'decimal_key'")
-            + " AND SUB_PART IS NULL;",
+                : "'decimal_key'")}
+            AND SUB_PART IS NULL;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -380,9 +405,11 @@ public sealed class MySqlProvider106IntegrationTests : MySqlSafeMigrationIntegra
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `decimal_budget` ("
-            + shape
-            + ") ENGINE=InnoDB ROW_FORMAT=DYNAMIC; INSERT INTO `decimal_budget` VALUES (1.25, 0x01);",
+            $"""
+            CREATE TABLE `decimal_budget` ({shape}) ENGINE=InnoDB
+            ROW_FORMAT=DYNAMIC; INSERT INTO `decimal_budget` VALUES (1.25,
+            0x01);
+            """,
             cancellationToken: cancellationToken);
 
         return connectionString;

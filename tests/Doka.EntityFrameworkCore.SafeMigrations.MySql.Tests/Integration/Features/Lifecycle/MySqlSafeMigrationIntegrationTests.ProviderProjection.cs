@@ -15,10 +15,12 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `projection_parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
-            + "CREATE TABLE `projection_children` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
-            + "INSERT INTO `projection_parents` (`id`) VALUES (1); "
-            + "INSERT INTO `projection_children` (`id`) VALUES (1);",
+            """
+            CREATE TABLE `projection_parents` (`id` int NOT NULL, PRIMARY KEY (`id`));
+            CREATE TABLE `projection_children` (`id` int NOT NULL,
+            PRIMARY KEY (`id`)); INSERT INTO `projection_parents` (`id`) VALUES (1);
+            INSERT INTO `projection_children` (`id`) VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -60,9 +62,11 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() "
-                + "AND CONSTRAINT_NAME = 'fk_projection_children_parents';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND CONSTRAINT_NAME = 'fk_projection_children_parents';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -79,10 +83,12 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `projection_parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
-            + "CREATE TABLE `projection_children` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
-            + "INSERT INTO `projection_parents` (`id`) VALUES (1); "
-            + "INSERT INTO `projection_children` (`id`) VALUES (1);",
+            """
+            CREATE TABLE `projection_parents` (`id` int NOT NULL, PRIMARY KEY (`id`));
+            CREATE TABLE `projection_children` (`id` int NOT NULL,
+            PRIMARY KEY (`id`)); INSERT INTO `projection_parents` (`id`) VALUES (1);
+            INSERT INTO `projection_children` (`id`) VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -107,9 +113,12 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'projection_children' "
-                + "AND COLUMN_NAME = 'parent_id';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'projection_children'
+                AND COLUMN_NAME = 'parent_id';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -119,10 +128,12 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `alias_projection_parents` ("
-            + "`id` int NOT NULL, `code` int NOT NULL, "
-            + "PRIMARY KEY (`id`), "
-            + "CONSTRAINT `uq_alias_projection_parents_code` UNIQUE (`code`));",
+            """
+            CREATE TABLE `alias_projection_parents` (`id` int NOT NULL, `code` int NOT
+            NULL,
+            PRIMARY KEY (`id`), CONSTRAINT `uq_alias_projection_parents_code` UNIQUE
+            (`code`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -163,16 +174,16 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `identity_parents` ("
-            + "`id` int NOT NULL, `code` int NOT NULL, `quantity` int NOT NULL, "
-            + "PRIMARY KEY (`id`), "
-            + "CONSTRAINT `uq_identity_code` UNIQUE (`code`), "
-            + "CONSTRAINT `ck_identity_quantity` CHECK (`quantity` >= 0), "
-            + "INDEX `ix_identity_quantity` (`quantity`)); "
-            + "CREATE TABLE `identity_children` ("
-            + "`id` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`), "
-            + "CONSTRAINT `fk_identity_parent` FOREIGN KEY (`parent_id`) "
-            + "REFERENCES `identity_parents` (`id`) ON DELETE CASCADE);",
+            """
+            CREATE TABLE `identity_parents` (`id` int NOT NULL, `code` int NOT NULL,
+            `quantity` int NOT NULL, PRIMARY KEY (`id`), CONSTRAINT `uq_identity_code`
+            UNIQUE (`code`),
+            CONSTRAINT `ck_identity_quantity` CHECK (`quantity` >= 0), INDEX `ix_identity_quantity`
+            (`quantity`)); CREATE TABLE `identity_children` (`id` int NOT NULL,
+            `parent_id` int NULL, PRIMARY KEY (`id`), CONSTRAINT `fk_identity_parent`
+            FOREIGN KEY (`parent_id`) REFERENCES `identity_parents` (`id`) ON DELETE
+            CASCADE);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -208,21 +219,22 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `ambiguous_parents` ("
-            + "`id` int NOT NULL, `code` int NOT NULL, `quantity` int NOT NULL, "
-            + "PRIMARY KEY (`id`), "
-            + "CONSTRAINT `uq_ambiguous_code_a` UNIQUE (`code`), "
-            + "CONSTRAINT `uq_ambiguous_code_b` UNIQUE (`code`), "
-            + "CONSTRAINT `ck_ambiguous_quantity_a` CHECK (`quantity` >= 0), "
-            + "CONSTRAINT `ck_ambiguous_quantity_b` CHECK (`quantity` >= 0), "
-            + "INDEX `ix_ambiguous_quantity_a` (`quantity`), "
-            + "INDEX `ix_ambiguous_quantity_b` (`quantity`)); "
-            + "CREATE TABLE `ambiguous_children` ("
-            + "`id` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`), "
-            + "CONSTRAINT `fk_ambiguous_parent_a` FOREIGN KEY (`parent_id`) "
-            + "REFERENCES `ambiguous_parents` (`id`) ON DELETE CASCADE, "
-            + "CONSTRAINT `fk_ambiguous_parent_b` FOREIGN KEY (`parent_id`) "
-            + "REFERENCES `ambiguous_parents` (`id`) ON DELETE CASCADE);",
+            """
+            CREATE TABLE `ambiguous_parents` (`id` int NOT NULL, `code` int NOT NULL,
+            `quantity` int NOT NULL, PRIMARY KEY (`id`), CONSTRAINT `uq_ambiguous_code_a`
+            UNIQUE (`code`),
+            CONSTRAINT `uq_ambiguous_code_b` UNIQUE (`code`), CONSTRAINT `ck_ambiguous_quantity_a`
+            CHECK (`quantity` >= 0),
+            CONSTRAINT `ck_ambiguous_quantity_b` CHECK (`quantity` >= 0), INDEX `ix_ambiguous_quantity_a`
+            (`quantity`),
+            INDEX `ix_ambiguous_quantity_b` (`quantity`)); CREATE TABLE `ambiguous_children`
+            (`id` int NOT NULL,
+            `parent_id` int NULL, PRIMARY KEY (`id`), CONSTRAINT `fk_ambiguous_parent_a`
+            FOREIGN KEY (`parent_id`) REFERENCES `ambiguous_parents` (`id`) ON DELETE
+            CASCADE,
+            CONSTRAINT `fk_ambiguous_parent_b` FOREIGN KEY (`parent_id`) REFERENCES
+            `ambiguous_parents` (`id`) ON DELETE CASCADE);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -386,9 +398,12 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'provider_artifacts' "
-                + "AND INDEX_NAME = 'ix_provider_artifacts_public_id';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'provider_artifacts'
+                AND INDEX_NAME = 'ix_provider_artifacts_public_id';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -419,15 +434,17 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{parentTable}` ("
-            + "`id` int NOT NULL, `code` int NOT NULL, `quantity` int NOT NULL, "
-            + $"PRIMARY KEY (`id`), CONSTRAINT `{uniqueConstraint}` UNIQUE (`code`), "
-            + $"CONSTRAINT `{checkConstraint}` CHECK (`quantity` >= 0), "
-            + $"INDEX `{index}` (`quantity`)); "
-            + $"CREATE TABLE `{childTable}` ("
-            + "`id` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`), "
-            + $"CONSTRAINT `{foreignKey}` FOREIGN KEY (`parent_id`) "
-            + $"REFERENCES `{parentTable}` (`id`) ON DELETE CASCADE);",
+            $"""
+            CREATE TABLE `{parentTable}` (`id` int NOT NULL, `code` int
+            NOT NULL,
+            `quantity` int NOT NULL, PRIMARY KEY (`id`), CONSTRAINT `{uniqueConstraint}`
+            UNIQUE (`code`),
+            CONSTRAINT `{checkConstraint}` CHECK (`quantity` >= 0), INDEX `{index}`
+            (`quantity`)); CREATE TABLE `{childTable}` (`id` int NOT NULL,
+            `parent_id` int NULL, PRIMARY KEY (`id`), CONSTRAINT `{foreignKey}`
+            FOREIGN KEY (`parent_id`) REFERENCES `{parentTable}` (`id`)
+            ON DELETE CASCADE);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -512,9 +529,11 @@ public sealed class MySqlProviderProjectionIntegrationTests : MySqlSafeMigration
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{table}` ("
-            + "`id` int NOT NULL, `code` int NOT NULL, PRIMARY KEY (`id`), "
-            + $"CONSTRAINT `{constraint}` UNIQUE (`code`));",
+            $"""
+            CREATE TABLE `{table}` (`id` int NOT NULL, `code` int
+            NOT NULL,
+            PRIMARY KEY (`id`), CONSTRAINT `{constraint}` UNIQUE (`code`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

@@ -75,7 +75,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             commandTimeout,
             (command, slot) =>
             {
-                var parameters = new PostgreSqlCatalogQueryParameters(command);
+                using var parameters = new PostgreSqlCatalogQueryParameters(command);
                 if (slot < schemaScopes.Length)
                 {
                     command.CommandText = BuildUnexpectedTableSql(BuildSchemaScope(schemaScopes[slot], parameters));

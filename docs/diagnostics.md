@@ -4,7 +4,7 @@ SafeMigrations diagnostics identify the authored operation, affected owner and
 established reason without changing the migration decision. No automatic
 preflight, data scan, new privilege or external logging service is required.
 Stable 10.5.0 introduced this diagnostic contract relative to 10.4.11.
-Version 10.7.1 retains its report schemas and exception transport. The earlier
+Version 10.7.2 retains its report schemas and exception transport. The earlier
 [10.6.0 expression upgrade](support-and-qualification.md#upgrade-to-1060)
 did not advance them again; this release does not either. The earlier
 [explicit-token API change](support-and-qualification.md#upgrade-to-1070)

@@ -32,15 +32,14 @@ public sealed class SqlServerSafeMigrationMemberRenameEvidenceIntegrationTests :
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT 0, "
-            + catalog.BuildMemberRenameDestinationExpression(column)
-            + ", CAST(NULL AS bit) UNION ALL SELECT 1, "
-            + catalog.BuildMemberRenameDestinationExpression(index)
-            + ", "
-            + catalog.BuildIndexRenameSourceSupportedExpression(index)
-            + " UNION ALL SELECT 2, "
-            + catalog.BuildMemberRenameDestinationExpression(replay)
-            + ", CAST(NULL AS bit) ORDER BY 1;";
+        command.CommandText = $"""
+            SELECT 0, {catalog.BuildMemberRenameDestinationExpression(column)}, CAST(NULL AS bit) UNION ALL SELECT
+            1,
+            {catalog.BuildMemberRenameDestinationExpression(index)}, {
+                catalog.BuildIndexRenameSourceSupportedExpression(index)} UNION ALL SELECT
+            2,
+            {catalog.BuildMemberRenameDestinationExpression(replay)}, CAST(NULL AS bit) ORDER BY 1;
+            """;
 
         // Act
         await using var reader = await command.ExecuteReaderAsync();
@@ -92,21 +91,18 @@ public sealed class SqlServerSafeMigrationMemberRenameEvidenceIntegrationTests :
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.member_rows (id int NOT NULL, decoy int NULL"
-            + (!index && sourceExists
+            $"""
+            CREATE TABLE dbo.member_rows (id int NOT NULL, decoy int NULL{(!index && sourceExists
                 ? ", source_value int NULL"
-                : string.Empty)
-            + (!index && targetExists
+                : string.Empty)}{(!index && targetExists
                 ? ", target_value int NULL"
-                : string.Empty)
-            + "); "
-            + "INSERT INTO dbo.member_rows (id) VALUES (7); "
-            + (index && sourceExists
+                : string.Empty)});
+            INSERT INTO dbo.member_rows (id) VALUES (7); {(index && sourceExists
                 ? "CREATE INDEX source_index ON dbo.member_rows (id); "
-                : string.Empty)
-            + (index && targetExists
+                : string.Empty)}{(index && targetExists
                 ? "CREATE INDEX target_index ON dbo.member_rows (decoy); "
-                : string.Empty),
+                : string.Empty)}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -221,8 +217,10 @@ public sealed class SqlServerSafeMigrationMemberRenameEvidenceIntegrationTests :
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.member_rows (id int NOT NULL); CREATE TABLE dbo.other_rows (id int NOT NULL); "
-            + "CREATE INDEX target_index ON dbo.other_rows (id);",
+            """
+            CREATE TABLE dbo.member_rows (id int NOT NULL); CREATE TABLE dbo.other_rows
+            (id int NOT NULL); CREATE INDEX target_index ON dbo.other_rows (id);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -270,8 +268,11 @@ public sealed class SqlServerSafeMigrationMemberRenameEvidenceIntegrationTests :
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.member_rows (id int NOT NULL, target_value int NULL); "
-            + "INSERT INTO dbo.member_rows VALUES (7, 29); CREATE INDEX target_index ON dbo.member_rows (id);",
+            """
+            CREATE TABLE dbo.member_rows (id int NOT NULL, target_value int NULL); INSERT
+            INTO dbo.member_rows VALUES (7,
+            29); CREATE INDEX target_index ON dbo.member_rows (id);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -322,15 +323,15 @@ public sealed class SqlServerSafeMigrationMemberRenameEvidenceIntegrationTests :
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.member_rows (id int NOT NULL, decoy int NULL"
-            + (constraint
+            $"""
+            CREATE TABLE dbo.member_rows (id int NOT NULL, decoy int NULL{(constraint
                 ? ", CONSTRAINT source_index PRIMARY KEY (id)"
-                : string.Empty)
-            + "); INSERT INTO dbo.member_rows (id) VALUES (7); "
-            + (constraint
+                : string.Empty)});
+            INSERT INTO dbo.member_rows (id) VALUES (7); {(constraint
                 ? string.Empty
-                : "CREATE INDEX source_index ON dbo.member_rows (id); ")
-            + "CREATE INDEX target_index ON dbo.member_rows (decoy);",
+                : "CREATE INDEX source_index ON dbo.member_rows (id); ")}CREATE
+            INDEX target_index ON dbo.member_rows (decoy);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

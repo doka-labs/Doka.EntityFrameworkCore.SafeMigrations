@@ -58,6 +58,15 @@ The original numeric spelling survives capture; a simplified tree must not
 silently erase an overloadable operator role. Parsing authorizes neither
 arbitrary functions nor custom native bindings.
 
+SQL defaults pass through that same source-role boundary. Native quoted
+function/type names and overloadable unary operators do not acquire portable
+meaning by losing their delimiters or operator. Numeric default tokens retain
+their source identity, including in fingerprint-bound approvals. Provider
+catalog comparisons admit only proven equivalent spellings, not shorter values,
+another search-path binding or text extracted from a quoted object's name.
+Scalar versus predicate rendering is a consumer role; computed/default DDL must
+not borrow the CHECK renderer's predicate role.
+
 The maintainer explicitly selected strict semantic non-NULL proofs for required
 MariaDB and virtual SQL Server results instead of helper CHECK constraints.
 Distinct SQL Server case-sensitive inputs that a case-insensitive tempdb compiler
@@ -194,6 +203,10 @@ authorized by this record.
   the additional ordinary SQL Server DROP projection correction. These
   choices do not imply approval of this whole retrospective rationale or a
   completed native qualification matrix.
+- 2026-11-10: Corrected shared default capture and provider catalog/renderer
+  consumers to preserve native token roles, value components, grammar positions
+  and scalar/predicate context. These implementation corrections do not change
+  this draft's approval status or claim completed hosted x64 qualification.
 
 ### Implementation References
 
@@ -209,6 +222,7 @@ authorized by this record.
 Representative regression contracts:
 
 - [Captured source semantics](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Expressions/SafeMigrationCapturedExpressionSourceTests.cs)
+- [Captured default identity](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Expressions/SafeMigrationCapturedDefaultSourceTests.cs)
 - [Ordered generated dependencies](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Features/Columns/SafeMigrationPreflightProjectionTests.GeneratedDependencies.cs)
 - [MySQL/MariaDB dependency candidates](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Unit/MySqlGeneratedColumnDependencyContractCatalogTests.cs)
 - [PostgreSQL native dependencies](../../tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Integration/Features/Columns/PostgreSqlGeneratedDropIntegrationTests.cs)

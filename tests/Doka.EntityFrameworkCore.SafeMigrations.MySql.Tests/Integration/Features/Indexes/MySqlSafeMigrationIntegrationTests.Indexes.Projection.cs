@@ -15,12 +15,14 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `projected_index_width` ("
-            + "`id` int NOT NULL, "
-            + "`property` varchar(700) NOT NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC "
-            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `projected_index_width` (`id`, `property`) VALUES (1, 'preserved');",
+            """
+            CREATE TABLE `projected_index_width` (`id` int NOT NULL, `property` varchar(700)
+            NOT NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARACTER SET
+            utf8mb4 COLLATE utf8mb4_unicode_ci; INSERT INTO `projected_index_width`
+            (`id`,
+            `property`) VALUES (1, 'preserved');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -71,18 +73,25 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
             800,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'projected_index_width' "
-                + "AND COLUMN_NAME = 'property';",
+                """
+                SELECT CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'projected_index_width'
+                AND COLUMN_NAME = 'property';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             768,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT SUB_PART FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'projected_index_width' "
-                + "AND INDEX_NAME = 'ix_projected_index_width_property';",
+                """
+                SELECT SUB_PART FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'projected_index_width'
+                AND INDEX_NAME = 'ix_projected_index_width_property';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -100,11 +109,12 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `rejected_projected_width` ("
-            + "`id` int NOT NULL, "
-            + "`property` varchar(700) NOT NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC "
-            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;",
+            """
+            CREATE TABLE `rejected_projected_width` (`id` int NOT NULL, `property` varchar(700)
+            NOT NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARACTER SET
+            utf8mb4 COLLATE utf8mb4_unicode_ci;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -141,9 +151,13 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
             700,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'rejected_projected_width' "
-                + "AND COLUMN_NAME = 'property';",
+                """
+                SELECT CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'rejected_projected_width'
+                AND COLUMN_NAME = 'property';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -153,13 +167,14 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `projected_composite_width` ("
-            + "`id` int NOT NULL, "
-            + "`left_value` varchar(700) NOT NULL, "
-            + "`right_value` varchar(100) NOT NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC "
-            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `projected_composite_width` VALUES (1, 'left', 'right');",
+            """
+            CREATE TABLE `projected_composite_width` (`id` int NOT NULL, `left_value`
+            varchar(700) NOT NULL,
+            `right_value` varchar(100) NOT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC
+            DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; INSERT INTO `projected_composite_width`
+            VALUES (1,
+            'left', 'right');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -214,12 +229,14 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `projected_unique_width` ("
-            + "`id` int NOT NULL, "
-            + "`property` varchar(700) NOT NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC "
-            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `projected_unique_width` VALUES (1, 'left'), (2, 'right');",
+            """
+            CREATE TABLE `projected_unique_width` (`id` int NOT NULL, `property` varchar(700)
+            NOT NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARACTER SET
+            utf8mb4 COLLATE utf8mb4_unicode_ci; INSERT INTO `projected_unique_width`
+            VALUES (1,
+            'left'), (2, 'right');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -265,12 +282,14 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `projected_unique_blocked` ("
-            + "`id` int NOT NULL, "
-            + "`property` varchar(700) NOT NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC "
-            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `projected_unique_blocked` VALUES (1, 'duplicate'), (2, 'duplicate');",
+            """
+            CREATE TABLE `projected_unique_blocked` (`id` int NOT NULL, `property` varchar(700)
+            NOT NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARACTER SET
+            utf8mb4 COLLATE utf8mb4_unicode_ci; INSERT INTO `projected_unique_blocked`
+            VALUES (1,
+            'duplicate'), (2, 'duplicate');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -306,9 +325,13 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
             700,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'projected_unique_blocked' "
-                + "AND COLUMN_NAME = 'property';",
+                """
+                SELECT CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'projected_unique_blocked'
+                AND COLUMN_NAME = 'property';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -318,13 +341,14 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `projected_unique_physical_blocked` ("
-            + "`id` int NOT NULL, "
-            + "`property` varchar(700) NOT NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC "
-            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `projected_unique_physical_blocked` "
-            + "VALUES (1, 'duplicate'), (2, 'duplicate');",
+            """
+            CREATE TABLE `projected_unique_physical_blocked` (`id` int NOT NULL, `property`
+            varchar(700) NOT NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARACTER SET
+            utf8mb4 COLLATE utf8mb4_unicode_ci; INSERT INTO `projected_unique_physical_blocked`
+            VALUES (1,
+            'duplicate'), (2, 'duplicate');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -360,10 +384,13 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
             700,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() "
-                + "AND TABLE_NAME = 'projected_unique_physical_blocked' "
-                + "AND COLUMN_NAME = 'property';",
+                """
+                SELECT CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'projected_unique_physical_blocked'
+                AND COLUMN_NAME = 'property';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -373,11 +400,12 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `provider_projected_index` ("
-            + "`id` int NOT NULL, "
-            + "`property` varchar(700) NOT NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC "
-            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;",
+            """
+            CREATE TABLE `provider_projected_index` (`id` int NOT NULL, `property` varchar(700)
+            NOT NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARACTER SET
+            utf8mb4 COLLATE utf8mb4_unicode_ci;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -440,12 +468,12 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `projected_index_blocked` ("
-            + "`id` int NOT NULL, "
-            + "`left_value` varchar(700) NOT NULL, "
-            + "`right_value` varchar(100) NOT NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC "
-            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;",
+            """
+            CREATE TABLE `projected_index_blocked` (`id` int NOT NULL, `left_value`
+            varchar(700) NOT NULL,
+            `right_value` varchar(100) NOT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC
+            DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -481,18 +509,25 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
             700,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'projected_index_blocked' "
-                + "AND COLUMN_NAME = 'left_value';",
+                """
+                SELECT CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'projected_index_blocked'
+                AND COLUMN_NAME = 'left_value';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'projected_index_blocked' "
-                + "AND INDEX_NAME = 'ix_projected_index_blocked_values';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'projected_index_blocked'
+                AND INDEX_NAME = 'ix_projected_index_blocked_values';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -538,8 +573,11 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'missing_projected_index';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'missing_projected_index';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -551,9 +589,11 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `accepted_index_drop` ("
-            + "`id` int NOT NULL, `property` int NOT NULL, "
-            + "PRIMARY KEY (`id`), INDEX `ix_accepted_index_drop_property` (`property`));",
+            """
+            CREATE TABLE `accepted_index_drop` (`id` int NOT NULL, `property` int NOT
+            NULL,
+            PRIMARY KEY (`id`), INDEX `ix_accepted_index_drop_property` (`property`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -593,9 +633,12 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accepted_index_drop' "
-                + "AND INDEX_NAME = 'ix_accepted_index_drop_property';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'accepted_index_drop'
+                AND INDEX_NAME = 'ix_accepted_index_drop_property';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -607,9 +650,11 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `accepted_index_column_drop` ("
-            + "`id` int NOT NULL, `property` int NOT NULL, "
-            + "PRIMARY KEY (`id`), INDEX `ix_accepted_index_column_drop_property` (`property`));",
+            """
+            CREATE TABLE `accepted_index_column_drop` (`id` int NOT NULL, `property`
+            int NOT NULL,
+            PRIMARY KEY (`id`), INDEX `ix_accepted_index_column_drop_property` (`property`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -641,18 +686,24 @@ public sealed class MySqlIndexesProjectionIntegrationTests : MySqlSafeMigrationI
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accepted_index_column_drop' "
-                + "AND COLUMN_NAME = 'property';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'accepted_index_column_drop'
+                AND COLUMN_NAME = 'property';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accepted_index_column_drop' "
-                + "AND INDEX_NAME = 'ix_accepted_index_column_drop_property';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'accepted_index_column_drop'
+                AND INDEX_NAME = 'ix_accepted_index_column_drop_property';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 

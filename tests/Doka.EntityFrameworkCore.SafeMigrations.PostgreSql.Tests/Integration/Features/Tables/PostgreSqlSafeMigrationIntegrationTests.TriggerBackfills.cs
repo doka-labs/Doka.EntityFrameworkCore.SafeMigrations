@@ -28,21 +28,21 @@ public sealed class PostgreSqlTriggerBackfillsIntegrationTests : PostgreSqlSafeM
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
-            + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
-            + "CREATE TABLE event_backfill_source(value integer "
-            + (authoring == "ensure"
+            $"""
+            CREATE TABLE event_existing_values(id integer NOT NULL, value integer);
+            CREATE INDEX ix_event_existing ON event_existing_values(id); CREATE TABLE
+            event_backfill_source(value integer {(authoring == "ensure"
                 ? "NOT NULL"
-                : "NULL")
-            + "); INSERT INTO event_backfill_source VALUES ("
-            + (authoring == "typed"
+                : "NULL")}); INSERT
+            INTO event_backfill_source VALUES ({(authoring == "typed"
                 ? "NULL"
-                : "3")
-            + "); "
-            + "CREATE FUNCTION event_backfill_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
-            + "BEGIN DROP INDEX ix_event_existing; CREATE INDEX ix_event_existing ON event_existing_values(value); "
-            + "RETURN NULL; END; $$; CREATE TRIGGER event_backfill_fixture AFTER UPDATE ON event_backfill_source "
-            + "FOR EACH STATEMENT EXECUTE FUNCTION event_backfill_trigger_fixture();",
+                : "3")}); CREATE FUNCTION
+            {"event_backfill_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
+                + "BEGIN DROP INDEX ix_event_existing; "
+                + "CREATE INDEX ix_event_existing ON event_existing_values(value); RETURN NULL; END; $$;"}
+            CREATE TRIGGER event_backfill_fixture AFTER UPDATE ON event_backfill_source
+            FOR EACH STATEMENT EXECUTE FUNCTION event_backfill_trigger_fixture();
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -108,17 +108,17 @@ public sealed class PostgreSqlTriggerBackfillsIntegrationTests : PostgreSqlSafeM
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
-            + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
-            + "CREATE TABLE event_backfill_source(value integer "
-            + (authoring == "ensure"
+            $"""
+            CREATE TABLE event_existing_values(id integer NOT NULL, value integer);
+            CREATE INDEX ix_event_existing ON event_existing_values(id); CREATE TABLE
+            event_backfill_source(value integer {(authoring == "ensure"
                 ? "NOT NULL"
-                : "NULL")
-            + "); INSERT INTO event_backfill_source VALUES (3); "
-            + "CREATE FUNCTION event_backfill_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
-            + "BEGIN DROP INDEX ix_event_existing; RETURN NULL; END; $$; "
-            + "CREATE TRIGGER event_backfill_fixture AFTER UPDATE ON event_backfill_source "
-            + "FOR EACH STATEMENT EXECUTE FUNCTION event_backfill_trigger_fixture();",
+                : "NULL")}); INSERT
+            INTO event_backfill_source VALUES (3); CREATE FUNCTION event_backfill_trigger_fixture()
+            RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN DROP INDEX ix_event_existing; RETURN NULL; END; $$;
+            CREATE TRIGGER event_backfill_fixture AFTER UPDATE ON event_backfill_source
+            FOR EACH STATEMENT EXECUTE FUNCTION event_backfill_trigger_fixture();
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -161,14 +161,15 @@ public sealed class PostgreSqlTriggerBackfillsIntegrationTests : PostgreSqlSafeM
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
-            + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
-            + "CREATE TABLE event_backfill_source(id integer NOT NULL, "
-            + "value integer GENERATED ALWAYS AS (id+1) STORED); INSERT INTO event_backfill_source(id) VALUES (1); "
-            + "CREATE FUNCTION event_backfill_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
-            + "BEGIN DROP INDEX ix_event_existing; RETURN NULL; END; $$; "
-            + "CREATE TRIGGER event_backfill_fixture AFTER UPDATE ON event_backfill_source "
-            + "FOR EACH STATEMENT EXECUTE FUNCTION event_backfill_trigger_fixture();",
+            """
+            CREATE TABLE event_existing_values(id integer NOT NULL, value integer); CREATE INDEX
+            ix_event_existing ON event_existing_values(id); CREATE TABLE event_backfill_source(id integer NOT NULL,
+            value integer GENERATED ALWAYS AS (id+1) STORED); INSERT INTO event_backfill_source(id) VALUES
+            (1); CREATE FUNCTION event_backfill_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS
+            $$ BEGIN DROP INDEX ix_event_existing; RETURN NULL; END; $$; CREATE TRIGGER
+            event_backfill_fixture AFTER UPDATE ON event_backfill_source FOR EACH STATEMENT EXECUTE FUNCTION
+            event_backfill_trigger_fixture();
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

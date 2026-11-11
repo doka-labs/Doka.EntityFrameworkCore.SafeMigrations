@@ -165,10 +165,10 @@ public sealed class MySqlSharedEngineIsolationTests : MySqlIntegrationTestBase
                 connectionString = await CreateDatabaseAsync(cancellationToken);
                 await ExecuteSqlAsync(
                     connectionString,
-                    "CREATE TABLE `parallel_owner_probe` (`value` int NOT NULL); "
-                    + "INSERT INTO `parallel_owner_probe` VALUES ("
-                    + value.ToString(CultureInfo.InvariantCulture)
-                    + ");",
+                    $"""
+                    CREATE TABLE `parallel_owner_probe` (`value` int NOT NULL); INSERT INTO
+                    `parallel_owner_probe` VALUES ({value.ToString(CultureInfo.InvariantCulture)});
+                    """,
                     cancellationToken: cancellationToken);
             }
             finally

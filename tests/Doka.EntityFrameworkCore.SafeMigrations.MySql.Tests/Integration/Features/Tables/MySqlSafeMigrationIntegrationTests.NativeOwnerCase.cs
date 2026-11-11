@@ -36,8 +36,10 @@ public sealed class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigrationInt
             var connectionString = await dedicated.CreateDatabaseAsync(CancellationToken.None);
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE TABLE `mixed_owner` (`id` int NOT NULL PRIMARY KEY, `value` int NULL, "
-                + "UNIQUE KEY `uq_slot` (`value`)) ENGINE=InnoDB;",
+                """
+                CREATE TABLE `mixed_owner` (`id` int NOT NULL PRIMARY KEY, `value` int NULL,
+                UNIQUE KEY `uq_slot` (`value`)) ENGINE=InnoDB;
+                """,
                 cancellationToken: CancellationToken.None);
 
             await using var context = new SafeMigrationDbContext(connectionString, dedicated.ServerVersion);
@@ -80,8 +82,11 @@ public sealed class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigrationInt
                     1,
                     await ScalarIntAsync(
                         connectionString,
-                        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA=DATABASE() "
-                        + "AND TABLE_NAME='mixed_owner' AND INDEX_NAME='uq_slot';",
+                        """
+                        SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                        WHERE TABLE_SCHEMA=DATABASE()
+                        AND TABLE_NAME='mixed_owner' AND INDEX_NAME='uq_slot';
+                        """,
                         cancellationToken: CancellationToken.None));
             }
         }
@@ -104,10 +109,12 @@ public sealed class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigrationInt
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `Mixed_Owner` (`id` int NOT NULL PRIMARY KEY, `value` int NULL, "
-            + "UNIQUE KEY `uq_unmodeled` (`value`)) ENGINE=InnoDB; "
-            + "CREATE TABLE `MIXED_OWNER` (`id` int NOT NULL PRIMARY KEY, `value` int NULL, "
-            + "UNIQUE KEY `uq_slot` (`value`)) ENGINE=InnoDB;",
+            """
+            CREATE TABLE `Mixed_Owner` (`id` int NOT NULL PRIMARY KEY, `value` int NULL,
+            UNIQUE KEY `uq_unmodeled` (`value`)) ENGINE=InnoDB; CREATE TABLE `MIXED_OWNER`
+            (`id` int NOT NULL PRIMARY KEY,
+            `value` int NULL, UNIQUE KEY `uq_slot` (`value`)) ENGINE=InnoDB;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -139,8 +146,11 @@ public sealed class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigrationInt
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() "
-                + "AND BINARY TABLE_NAME IN (BINARY 'Mixed_Owner', BINARY 'MIXED_OWNER');",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA=DATABASE()
+                AND BINARY TABLE_NAME IN (BINARY 'Mixed_Owner', BINARY 'MIXED_OWNER');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -165,8 +175,10 @@ public sealed class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigrationInt
             var connectionString = await dedicated.CreateDatabaseAsync(CancellationToken.None);
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE TABLE `backfill_owner` (`id` int NOT NULL PRIMARY KEY, `value` varchar(10) NULL) "
-                + "ENGINE=InnoDB; INSERT INTO `backfill_owner` VALUES (1,NULL),(2,NULL);",
+                """
+                CREATE TABLE `backfill_owner` (`id` int NOT NULL PRIMARY KEY, `value` varchar(10)
+                NULL) ENGINE=InnoDB; INSERT INTO `backfill_owner` VALUES (1,NULL),(2,NULL);
+                """,
                 cancellationToken: CancellationToken.None);
 
             await using var context = new SafeMigrationDbContext(connectionString, dedicated.ServerVersion);
@@ -351,8 +363,12 @@ public sealed class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigrationInt
 
         var originalColumn = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() "
-            + "AND BINARY TABLE_NAME=BINARY 'Rows' AND COLUMN_NAME='id';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA=DATABASE()
+            AND BINARY TABLE_NAME=BINARY 'Rows'
+            AND COLUMN_NAME='id';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -383,9 +399,12 @@ public sealed class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigrationInt
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `backfill_owner` (`id` int NOT NULL PRIMARY KEY, `value` varchar(10) NULL) "
-            + "ENGINE=InnoDB; INSERT INTO `backfill_owner` VALUES (1,NULL),(2,NULL); "
-            + "CREATE TABLE `BACKFILL_OWNER` (`id` int NOT NULL PRIMARY KEY, `value` varchar(20) NULL) ENGINE=InnoDB;",
+            """
+            CREATE TABLE `backfill_owner` (`id` int NOT NULL PRIMARY KEY, `value` varchar(10)
+            NULL) ENGINE=InnoDB; INSERT INTO `backfill_owner` VALUES (1,NULL),(2,NULL);
+            CREATE TABLE `BACKFILL_OWNER` (`id` int NOT NULL PRIMARY KEY,
+            `value` varchar(20) NULL) ENGINE=InnoDB;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -414,8 +433,12 @@ public sealed class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigrationInt
 
         var nativeIndex = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA=DATABASE() "
-            + "AND BINARY TABLE_NAME=BINARY 'BACKFILL_OWNER' AND INDEX_NAME='uq_future';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA=DATABASE()
+            AND BINARY TABLE_NAME=BINARY 'BACKFILL_OWNER'
+            AND INDEX_NAME='uq_future';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -490,8 +513,12 @@ public sealed class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigrationInt
                     0,
                     await ScalarIntAsync(
                         connectionString,
-                        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() "
-                        + "AND BINARY TABLE_NAME=BINARY 'rows' AND COLUMN_NAME='value';",
+                        """
+                        SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_SCHEMA=DATABASE()
+                        AND BINARY TABLE_NAME=BINARY 'rows'
+                        AND COLUMN_NAME='value';
+                        """,
                         cancellationToken: CancellationToken.None));
             }
         }

@@ -40,8 +40,10 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
 
         var nativeDeleteAction = await ScalarStringAsync(
             connectionString,
-            "SELECT confdeltype::text FROM pg_catalog.pg_constraint "
-            + "WHERE conname = 'fk_model_fence_users_role' AND conrelid = 'model_fence_users'::regclass;",
+            """
+            SELECT confdeltype::text FROM pg_catalog.pg_constraint WHERE conname = 'fk_model_fence_users_role'
+            AND conrelid = 'model_fence_users'::regclass;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -350,9 +352,13 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         var deletion = ModelDeleteFenceOperation(context.Database.ProviderName!);
         var nativeTriggers = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_trigger native_trigger "
-            + "JOIN pg_catalog.pg_constraint native_constraint ON native_constraint.oid = native_trigger.tgconstraint "
-            + "WHERE native_constraint.conname = 'fk_model_fence_users_role' AND native_trigger.tgisinternal;",
+            """
+            SELECT COUNT(*) FROM pg_catalog.pg_trigger native_trigger
+            JOIN pg_catalog.pg_constraint native_constraint ON native_constraint.oid
+            = native_trigger.tgconstraint
+            WHERE native_constraint.conname = 'fk_model_fence_users_role'
+            AND native_trigger.tgisinternal;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Act
@@ -419,9 +425,11 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         var deletion = ModelDeleteFenceOperation(context.Database.ProviderName!, includeForeignKey: hasConstraint);
         var nativeEnforcement = await ScalarStringAsync(
             connectionString,
-            "SELECT COALESCE((SELECT COALESCE(pg_catalog.to_jsonb(native_constraint)->>'conenforced', 'before_18') "
-            + "FROM pg_catalog.pg_constraint native_constraint "
-            + "WHERE native_constraint.conname = 'fk_model_fence_users_role'), 'absent');",
+            """
+            SELECT COALESCE((SELECT COALESCE(pg_catalog.to_jsonb(native_constraint)->>'conenforced',
+            'before_18') FROM pg_catalog.pg_constraint native_constraint
+            WHERE native_constraint.conname = 'fk_model_fence_users_role'), 'absent');
+            """,
             cancellationToken: CancellationToken.None);
 
         // Act
@@ -629,9 +637,11 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         await using var writerTransaction = await writer.BeginTransactionAsync();
         await ExecuteModelDeleteFenceSqlAsync(
             writer,
-            "ALTER TABLE model_fence_users ADD CONSTRAINT fk_model_fence_users_role "
-            + "FOREIGN KEY (role_id) REFERENCES model_fence_roles (id) ON DELETE CASCADE;"
-            + "INSERT INTO model_fence_users VALUES (11, 1);",
+            """
+            ALTER TABLE model_fence_users ADD CONSTRAINT fk_model_fence_users_role FOREIGN KEY (role_id)
+            REFERENCES model_fence_roles (id) ON DELETE CASCADE;INSERT INTO model_fence_users VALUES (11,
+            1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var observer = new NpgsqlConnection(connectionString);
@@ -797,12 +807,12 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE FUNCTION model_fence_pause_delete() RETURNS trigger LANGUAGE plpgsql AS $$ "
-            + "BEGIN PERFORM pg_catalog.pg_advisory_xact_lock("
-            + rendezvous
-            + "); RETURN OLD; END; $$;"
-            + "CREATE TRIGGER model_fence_pause_delete BEFORE DELETE ON model_fence_roles "
-            + "FOR EACH ROW EXECUTE FUNCTION model_fence_pause_delete();",
+            $"""
+            CREATE FUNCTION model_fence_pause_delete() RETURNS trigger LANGUAGE plpgsql
+            AS $$ BEGIN PERFORM pg_catalog.pg_advisory_xact_lock({rendezvous}); RETURN OLD; END; $$;CREATE
+            TRIGGER model_fence_pause_delete BEFORE DELETE ON model_fence_roles FOR
+            EACH ROW EXECUTE FUNCTION model_fence_pause_delete();
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1010,17 +1020,12 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE ROLE "
-            + role
-            + "; GRANT USAGE ON SCHEMA public TO "
-            + role
-            + ";"
-            + "GRANT SELECT, DELETE ON model_fence_roles TO "
-            + role
-            + ";"
-            + "GRANT SELECT ON model_fence_users TO "
-            + role
-            + ";",
+            $"""
+            CREATE ROLE {role}; GRANT USAGE ON SCHEMA public TO
+            {role};GRANT SELECT,
+            DELETE ON model_fence_roles TO {role};GRANT SELECT ON
+            model_fence_users TO {role};
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1085,24 +1090,25 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         var connectionString = await CreateDatabaseAsync(cancellationToken);
         var foreignKey = referentialAction is null
             ? string.Empty
-            : ", CONSTRAINT fk_model_fence_users_role FOREIGN KEY (role_id) "
-            + "REFERENCES model_fence_roles (id) ON DELETE "
-            + referentialAction
-            + (deferred
+            : $"""
+            , CONSTRAINT fk_model_fence_users_role FOREIGN KEY (role_id) REFERENCES
+            model_fence_roles (id) ON DELETE {referentialAction}{(deferred
                 ? " DEFERRABLE INITIALLY DEFERRED"
-                : string.Empty)
-            + (enforced is null
+                : string.Empty)}{(enforced is null
                 ? string.Empty
                 : enforced.Value
                     ? " ENFORCED"
-                    : " NOT ENFORCED");
+                    : " NOT ENFORCED")}
+            """;
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE model_fence_roles (id integer NOT NULL PRIMARY KEY, name varchar(64) NOT NULL);"
-            + "CREATE TABLE model_fence_users (id integer NOT NULL PRIMARY KEY, role_id integer NULL DEFAULT 2"
-            + foreignKey
-            + "); INSERT INTO model_fence_roles VALUES (1, 'source'), (2, 'default');",
+            $"""
+            CREATE TABLE model_fence_roles (id integer NOT NULL PRIMARY KEY, name varchar(64) NOT
+            NULL);CREATE TABLE model_fence_users (id integer NOT NULL PRIMARY KEY,
+            role_id integer NULL DEFAULT 2{foreignKey}); INSERT INTO model_fence_roles VALUES (1,
+            'source'), (2, 'default');
+            """,
             cancellationToken: cancellationToken);
 
         return connectionString;

@@ -88,6 +88,8 @@ public sealed class SafeMigrationSqlIdentifierExpression : SafeMigrationSqlExpre
 /// <summary>Represents a typed literal value.</summary>
 public sealed class SafeMigrationSqlLiteralExpression : SafeMigrationSqlExpression
 {
+    private readonly object? _value;
+
     /// <summary>Initializes a typed literal.</summary>
     /// <param name="value">The CLR value, including null.</param>
     /// <param name="storeType">The optional provider store type used for an explicit cast.</param>
@@ -103,13 +105,25 @@ public sealed class SafeMigrationSqlLiteralExpression : SafeMigrationSqlExpressi
         ReadOnlyMemory<char> numericSourceToken
     )
     {
-        Value = value;
+        // WHY: A literal is part of an immutable definition and its fingerprint.
+        // Snapshot caller-owned bytes once; internal read-only consumers borrow
+        // this snapshot instead of allocating another array for every traversal.
+        _value = value is byte[] bytes
+            ? bytes.ToArray()
+            : value;
+
         StoreType = SafeMigrationDefinitionValidator.Optional(storeType, nameof(storeType));
         NumericSourceToken = numericSourceToken;
     }
 
-    /// <summary>Gets the CLR value.</summary>
-    public object? Value { get; }
+    /// <summary>Gets the CLR value, returning a defensive copy for a binary literal.</summary>
+    public object? Value => _value is byte[] bytes
+        ? bytes.ToArray()
+        : _value;
+
+    /// <summary>Gets the owned literal snapshot for trusted read-only comparison and rendering.</summary>
+    /// <remarks>The borrowed binary value must never be mutated or exposed to a caller.</remarks>
+    internal object? BorrowedValue => _value;
 
     /// <summary>Gets the explicit provider store type when specified.</summary>
     public string? StoreType { get; }

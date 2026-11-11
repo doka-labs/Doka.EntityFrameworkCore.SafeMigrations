@@ -17,9 +17,11 @@ public sealed class SqlServerSafeMigrationIdentityAdmissionIntegrationTests : Sq
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.identity_admission (Id int IDENTITY(1,1) NOT NULL, Value int NOT NULL); "
-            + "CREATE USER identity_metadata_reader WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; "
-            + "GRANT VIEW DEFINITION TO identity_metadata_reader;",
+            """
+            CREATE TABLE dbo.identity_admission (Id int IDENTITY(1,1) NOT NULL, Value
+            int NOT NULL); CREATE USER identity_metadata_reader WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo;
+            GRANT VIEW DEFINITION TO identity_metadata_reader;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -121,8 +123,10 @@ public sealed class SqlServerSafeMigrationIdentityAdmissionIntegrationTests : Sq
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.identity_admission (First int IDENTITY(1,1) NOT NULL, Value int NOT NULL); "
-            + "CREATE TABLE dbo.identity_ddl_events (Id int NOT NULL);",
+            """
+            CREATE TABLE dbo.identity_admission (First int IDENTITY(1,1) NOT NULL,
+            Value int NOT NULL); CREATE TABLE dbo.identity_ddl_events (Id int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
@@ -187,13 +191,14 @@ public sealed class SqlServerSafeMigrationIdentityAdmissionIntegrationTests : Sq
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.identity_admission (Id int IDENTITY(1,1) "
-            + (notForReplication
+            $"""
+            CREATE TABLE dbo.identity_admission (Id int IDENTITY(1,1) {(notForReplication
                 ? "NOT FOR REPLICATION "
-                : string.Empty)
-            + "NOT NULL, Value int NOT NULL); "
-            + "INSERT dbo.identity_admission(Value) VALUES (7); "
-            + "CREATE TABLE dbo.identity_ddl_events (Id int NOT NULL);",
+                : string.Empty)}NOT
+            NULL,
+            Value int NOT NULL); INSERT dbo.identity_admission(Value) VALUES (7); CREATE
+            TABLE dbo.identity_ddl_events (Id int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
@@ -220,8 +225,10 @@ public sealed class SqlServerSafeMigrationIdentityAdmissionIntegrationTests : Sq
 
         var physicalFacet = await ScalarIntAsync(
             connectionString,
-            "SELECT CONVERT(int,is_not_for_replication) FROM sys.identity_columns "
-            + "WHERE object_id = OBJECT_ID(N'dbo.identity_admission');",
+            """
+            SELECT CONVERT(int,is_not_for_replication)
+            FROM sys.identity_columns WHERE object_id = OBJECT_ID(N'dbo.identity_admission');
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -272,8 +279,11 @@ public sealed class SqlServerSafeMigrationIdentityAdmissionIntegrationTests : Sq
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.identity_admission (Id decimal(38,0) IDENTITY(100000000000000000000,1) NOT NULL, "
-            + "Value int NOT NULL); CREATE TABLE dbo.identity_ddl_events (Id int NOT NULL);",
+            """
+            CREATE TABLE dbo.identity_admission (Id decimal(38,0) IDENTITY(100000000000000000000,1)
+            NOT NULL,
+            Value int NOT NULL); CREATE TABLE dbo.identity_ddl_events (Id int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
@@ -300,8 +310,11 @@ public sealed class SqlServerSafeMigrationIdentityAdmissionIntegrationTests : Sq
 
         var preserved = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.identity_columns WHERE object_id=OBJECT_ID(N'dbo.identity_admission') "
-            + "AND CONVERT(decimal(38,0),seed_value)=100000000000000000000;",
+            """
+            SELECT COUNT(*) FROM sys.identity_columns
+            WHERE object_id=OBJECT_ID(N'dbo.identity_admission')
+            AND CONVERT(decimal(38,0),seed_value)=100000000000000000000;
+            """,
             cancellationToken: CancellationToken.None);
 
         var events = await ScalarIntAsync(

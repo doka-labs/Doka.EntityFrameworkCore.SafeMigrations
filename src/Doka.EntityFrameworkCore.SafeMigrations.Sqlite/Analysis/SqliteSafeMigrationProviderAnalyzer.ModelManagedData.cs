@@ -254,15 +254,22 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
                             index) => $"stored.{Delimit(column)} IS expected.{Delimit($"target_{index}")}"));
 
         const string marker = "__doka_sm_present_8f29d0d2";
-        command.CommandText = $"WITH expected ({string.Join(", ", cteColumns.Select(Delimit))}) AS ("
-            + $"VALUES {string.Join(", ", rows)}) "
-            + $"SELECT expected.{Delimit("ordinal")}, "
-            + $"COUNT(stored.{Delimit(marker)}), "
-            + $"COALESCE(SUM(CASE WHEN {sourcePredicate} THEN 1 ELSE 0 END), 0), "
-            + $"COALESCE(SUM(CASE WHEN {targetPredicate} THEN 1 ELSE 0 END), 0) "
-            + $"FROM expected LEFT JOIN (SELECT 1 AS {Delimit(marker)}, source.* "
-            + $"FROM {Delimit(intent.Table)} AS source) AS stored ON {keyPredicate} "
-            + $"GROUP BY expected.{Delimit("ordinal")} ORDER BY expected.{Delimit("ordinal")};";
+        command.CommandText = $"""
+            WITH expected ({string.Join(", ", cteColumns.Select(Delimit))}) AS (
+                VALUES {string.Join(", ", rows)}
+            )
+            SELECT expected.{Delimit("ordinal")},
+                COUNT(stored.{Delimit(marker)}),
+                COALESCE(SUM(CASE WHEN {sourcePredicate} THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN {targetPredicate} THEN 1 ELSE 0 END), 0)
+            FROM expected
+            LEFT JOIN (
+                SELECT 1 AS {Delimit(marker)}, source.*
+                FROM {Delimit(intent.Table)} AS source
+            ) AS stored ON {keyPredicate}
+            GROUP BY expected.{Delimit("ordinal")}
+            ORDER BY expected.{Delimit("ordinal")};
+            """;
 
         using var reader = command.ExecuteReader();
         var observed = 0;
@@ -405,10 +412,17 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             intent.KeyColumns.Select((column,
                     index) => $"stored.{Delimit(column)} IS incoming.{Delimit($"key_{index}")}"));
 
-        command.CommandText = $"WITH incoming ({string.Join(", ", cteColumns.Select(Delimit))}) AS ("
-            + $"VALUES {string.Join(", ", rows)}) SELECT 1 FROM incoming "
-            + $"JOIN {Delimit(intent.Table)} AS stored ON {uniqueMatch} "
-            + $"WHERE {nonNullTarget} AND NOT ({samePrimaryKey}) LIMIT 1;";
+        command.CommandText = $"""
+            WITH incoming ({string.Join(", ", cteColumns.Select(Delimit))}) AS (
+                VALUES {string.Join(", ", rows)}
+            )
+            SELECT 1
+            FROM incoming
+            JOIN {Delimit(intent.Table)} AS stored ON {uniqueMatch}
+            WHERE {nonNullTarget}
+              AND NOT ({samePrimaryKey})
+            LIMIT 1;
+            """;
 
         return command.ExecuteScalar() is not null;
     }
@@ -502,9 +516,14 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             foreignKey.Columns.Select((column,
                     index) => $"dependent.{Delimit(column)} IS incoming.{Delimit($"principal_{index}")}"));
 
-        command.CommandText = $"WITH incoming ({string.Join(", ", cteColumns.Select(Delimit))}) AS ("
-            + $"VALUES {string.Join(", ", rows)}) SELECT COUNT(*) FROM incoming "
-            + $"JOIN {Delimit(foreignKey.Table)} AS dependent ON {dependencyMatch};";
+        command.CommandText = $"""
+            WITH incoming ({string.Join(", ", cteColumns.Select(Delimit))}) AS (
+                VALUES {string.Join(", ", rows)}
+            )
+            SELECT COUNT(*)
+            FROM incoming
+            JOIN {Delimit(foreignKey.Table)} AS dependent ON {dependencyMatch};
+            """;
 
         return Convert.ToInt64(command.ExecuteScalar(), CultureInfo.InvariantCulture);
     }

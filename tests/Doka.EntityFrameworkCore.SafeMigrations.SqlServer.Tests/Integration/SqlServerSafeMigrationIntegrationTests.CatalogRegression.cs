@@ -19,10 +19,10 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        // WHY: Compile-time chunks retain the exact native fixture text without adding runtime concatenation.
         await context.Database.ExecuteSqlRawAsync(
-            "CREATE TABLE #doka_sm_identifiers (Sentinel int NOT NULL); "
-            + "INSERT INTO #doka_sm_identifiers VALUES (73); "
-            + "CREATE TABLE dbo.identifier_items (Id int NOT NULL, Caption nvarchar(80) NULL);");
+            """CREATE TABLE #doka_sm_identifiers (Sentinel int NOT NULL); INSERT INTO #doka_sm_identifiers """
+            + """VALUES (73); CREATE TABLE dbo.identifier_items (Id int NOT NULL, Caption nvarchar(80) NULL);""");
 
         var connection = (SqlConnection)context.Database.GetDbConnection();
         var originalObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(
@@ -116,10 +116,11 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
 
         var physicalCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.physical_items', N'U') "
-            + "AND name = N'Value' AND "
-            + catalogFacet
-            + " = 1;",
+            $"""
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id = OBJECT_ID(N'dbo.physical_items', N'U')
+            AND name = N'Value' AND {catalogFacet} = 1;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -175,11 +176,17 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var matchingColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns c JOIN sys.types ty ON ty.user_type_id = c.user_type_id "
-            + "WHERE c.object_id = OBJECT_ID(N'dbo.inferred_items', N'U') AND "
-            + "((c.name = N'AnsiCaption' AND ty.name = N'varchar' AND c.max_length = 80) "
-            + "OR (c.name = N'FixedCaption' AND ty.name = N'nchar' AND c.max_length = 160) "
-            + "OR (c.name = N'Amount' AND ty.name = N'decimal' AND c.precision = 12 AND c.scale = 3));",
+            """
+            SELECT COUNT(*) FROM sys.columns c
+            JOIN sys.types ty ON ty.user_type_id = c.user_type_id
+            WHERE c.object_id = OBJECT_ID(N'dbo.inferred_items', N'U')
+            AND ((c.name = N'AnsiCaption'
+            AND ty.name = N'varchar' AND c.max_length = 80)
+            OR (c.name = N'FixedCaption' AND ty.name = N'nchar'
+            AND c.max_length = 160) OR (c.name = N'Amount'
+            AND ty.name = N'decimal' AND c.precision = 12
+            AND c.scale = 3));
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -207,8 +214,11 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE dbo.[{physicalTable}] ([{physicalColumn}] int NOT NULL); "
-            + $"CREATE INDEX [{physicalIndex}] ON dbo.[{physicalTable}] ([{physicalColumn}]);",
+            $"""
+            CREATE TABLE dbo.[{physicalTable}] ([{physicalColumn}]
+            int NOT NULL); CREATE INDEX [{physicalIndex}] ON dbo.[{physicalTable}]
+            ([{physicalColumn}]);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -403,8 +413,11 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
 
         var nullableColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.nullable_key', N'U') "
-            + "AND name = N'Id' AND is_nullable = 1;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id = OBJECT_ID(N'dbo.nullable_key', N'U')
+            AND name = N'Id' AND is_nullable = 1;
+            """,
             cancellationToken: CancellationToken.None);
 
         var primaryKeys = await ScalarIntAsync(
@@ -471,8 +484,11 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
 
         var originalKeys = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.key_constraints WHERE parent_object_id = OBJECT_ID(N'dbo.existing_key', N'U') "
-            + "AND type = 'PK' AND name = N'PK_existing';",
+            """
+            SELECT COUNT(*) FROM sys.key_constraints
+            WHERE parent_object_id = OBJECT_ID(N'dbo.existing_key', N'U')
+            AND type = 'PK' AND name = N'PK_existing';
+            """,
             cancellationToken: CancellationToken.None);
 
         var requestedKeys = await ScalarIntAsync(

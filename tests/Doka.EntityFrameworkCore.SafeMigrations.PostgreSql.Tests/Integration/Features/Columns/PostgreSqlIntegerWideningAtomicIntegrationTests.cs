@@ -86,8 +86,11 @@ public sealed class PostgreSqlIntegerWideningAtomicIntegrationTests : PostgreSql
                 : "integer",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT data_type FROM information_schema.columns WHERE table_schema='public' "
-                + "AND table_name='atomic_integer_rows' AND column_name='value';",
+                """
+                SELECT data_type FROM information_schema.columns
+                WHERE table_schema='public' AND table_name='atomic_integer_rows'
+                AND column_name='value';
+                """,
                 cancellationToken: cancellation.Token));
 
         Assert.Equal(
@@ -116,23 +119,14 @@ public sealed class PostgreSqlIntegerWideningAtomicIntegrationTests : PostgreSql
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE ROLE "
-            + role
-            + "; "
-            + "GRANT USAGE, CREATE ON SCHEMA public TO "
-            + role
-            + "; "
-            + "CREATE TABLE integer_lock_rows(value "
-            + (targetAlreadyWidened
+            $"""
+            CREATE ROLE {role}; GRANT USAGE, CREATE ON SCHEMA public TO {role}; CREATE TABLE
+            integer_lock_rows(value {(targetAlreadyWidened
                 ? "bigint"
-                : "integer")
-            + " NOT NULL); INSERT INTO integer_lock_rows VALUES(7); "
-            + "ALTER TABLE integer_lock_rows OWNER TO "
-            + role
-            + "; "
-            + "REVOKE ALL ON integer_lock_rows FROM "
-            + role
-            + ";",
+                : "integer")} NOT NULL); INSERT INTO integer_lock_rows VALUES(7); ALTER TABLE
+            integer_lock_rows OWNER TO {role}; REVOKE ALL ON integer_lock_rows
+            FROM {role};
+            """,
             cancellationToken: CancellationToken.None);
 
         try
@@ -192,12 +186,11 @@ public sealed class PostgreSqlIntegerWideningAtomicIntegrationTests : PostgreSql
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "ALTER TABLE integer_lock_rows OWNER TO postgres; "
-                + "REVOKE USAGE, CREATE ON SCHEMA public FROM "
-                + role
-                + "; DROP ROLE "
-                + role
-                + ";",
+                $"""
+                ALTER TABLE integer_lock_rows OWNER TO postgres; REVOKE USAGE, CREATE ON
+                SCHEMA public
+                FROM {role}; DROP ROLE {role};
+                """,
                 cancellationToken: CancellationToken.None);
         }
     }
@@ -219,12 +212,12 @@ public sealed class PostgreSqlIntegerWideningAtomicIntegrationTests : PostgreSql
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE integer_isolation_rows(value "
-            + (targetAlreadyWidened
+            $"""
+            CREATE TABLE integer_isolation_rows(value {(targetAlreadyWidened
                 ? "bigint"
-                : "integer")
-            + " NOT NULL); "
-            + "INSERT INTO integer_isolation_rows VALUES(7);",
+                : "integer")} NOT
+            NULL); INSERT INTO integer_isolation_rows VALUES(7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -262,8 +255,11 @@ public sealed class PostgreSqlIntegerWideningAtomicIntegrationTests : PostgreSql
                 : "integer",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT data_type FROM information_schema.columns WHERE table_schema='public' "
-                + "AND table_name='integer_isolation_rows' AND column_name='value';",
+                """
+                SELECT data_type FROM information_schema.columns
+                WHERE table_schema='public' AND table_name='integer_isolation_rows'
+                AND column_name='value';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -285,11 +281,15 @@ public sealed class PostgreSqlIntegerWideningAtomicIntegrationTests : PostgreSql
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_locks held "
-            + "JOIN pg_catalog.pg_stat_activity session ON session.pid = held.pid "
-            + "JOIN pg_catalog.pg_class owner ON owner.oid = held.relation "
-            + "WHERE session.application_name = @application AND owner.relname = 'atomic_integer_rows' "
-            + "AND held.mode = 'AccessExclusiveLock' AND NOT held.granted);";
+        command.CommandText = """
+        SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_locks held
+        JOIN pg_catalog.pg_stat_activity session ON session.pid = held.pid
+        JOIN pg_catalog.pg_class owner ON owner.oid = held.relation
+        WHERE session.application_name = @application
+        AND owner.relname = 'atomic_integer_rows'
+        AND held.mode = 'AccessExclusiveLock'
+        AND NOT held.granted);
+        """;
 
         command.Parameters.AddWithValue("application", applicationName);
 

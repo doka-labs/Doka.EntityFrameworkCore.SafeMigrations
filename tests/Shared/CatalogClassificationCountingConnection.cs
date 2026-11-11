@@ -157,25 +157,32 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
         string commandText
     )
     {
-        if (commandText.StartsWith(
-            "SELECT @@default_storage_engine, @@SESSION.sql_mode, "
-            + "@@SESSION.explicit_defaults_for_timestamp, ",
-            StringComparison.Ordinal))
+        const string sessionPrefix = "SELECT @@default_storage_engine, @@SESSION.sql_mode, "
+            + "@@SESSION.explicit_defaults_for_timestamp,";
+
+        // WHY: The raw template emits LF before the engine-specific fourth field; retain only the known
+        // legacy SPACE alternative, never generic whitespace normalization or reordered/missing metadata fields.
+        if (commandText.StartsWith(sessionPrefix, StringComparison.Ordinal)
+            && commandText.Length > sessionPrefix.Length
+            && commandText[sessionPrefix.Length] is ' ' or '\n')
         {
             RequiredAddSessionStatementCount++;
         }
         else if (commandText.StartsWith(
-                "SELECT source_owner.ordinal, EXISTS (SELECT 1 "
-                + "FROM INFORMATION_SCHEMA.TABLES physical_owner ",
+                """
+                SELECT source_owner.ordinal, EXISTS (SELECT 1
+                FROM INFORMATION_SCHEMA.TABLES physical_owner
+                """,
                 StringComparison.Ordinal)
             && commandText.Contains("UPPER(physical_owner.ENGINE) = 'INNODB'", StringComparison.Ordinal))
         {
             RequiredAddOwnerEngineStatementCount++;
         }
-        else if (commandText.Contains(", (CASE WHEN ", StringComparison.Ordinal)
+        else if ((commandText.Contains(", (CASE WHEN ", StringComparison.Ordinal)
+                || commandText.Contains(",\n(CASE WHEN ", StringComparison.Ordinal))
             && commandText.Contains("THEN 'complete'", StringComparison.Ordinal)
             && commandText.Contains("ELSE 'fresh' END", StringComparison.Ordinal)
-            && commandText.Contains("ELSE 'staged' END ELSE 'ordinary' END)", StringComparison.Ordinal))
+            && commandText.Contains("ELSE 'staged' END\nELSE 'ordinary' END)", StringComparison.Ordinal))
         {
             RequiredAddStatusStatementCount++;
         }
@@ -451,8 +458,12 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
                 _owner.StateEvaluationGuardStatementCount++;
             }
             else if (reader.FieldCount == 3
-                && CommandText.Contains(", COALESCE((", StringComparison.Ordinal)
-                && CommandText.Contains("), FALSE), COALESCE((", StringComparison.Ordinal)
+                && (CommandText.AsSpan(CommandText.IndexOf(',') + 1).StartsWith(" COALESCE((", StringComparison.Ordinal)
+                    && (CommandText.Contains("), FALSE), COALESCE((", StringComparison.Ordinal)
+                        || CommandText.Contains("),\nFALSE), COALESCE((", StringComparison.Ordinal))
+                    || CommandText.AsSpan(CommandText.IndexOf(',') + 1).StartsWith(
+                        "\nCOALESCE((", StringComparison.Ordinal)
+                    && CommandText.Contains("),\nFALSE), COALESCE((", StringComparison.Ordinal))
                 && CommandText.Contains(
                     "narrowing_column.CHARACTER_MAXIMUM_LENGTH",
                     StringComparison.OrdinalIgnoreCase)

@@ -45,9 +45,11 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accounts' "
-                + "AND COLUMN_NAME = 'description';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'accounts' AND COLUMN_NAME = 'description';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -57,9 +59,11 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `sql_mode_guard` ("
-            + "`id` int NOT NULL, `name` varchar(20) NULL, `quantity` int NOT NULL); "
-            + "INSERT INTO `sql_mode_guard` VALUES (1, 'legacy', -1);",
+            """
+            CREATE TABLE `sql_mode_guard` (`id` int NOT NULL, `name` varchar(20) NULL,
+            `quantity` int NOT NULL); INSERT INTO `sql_mode_guard` VALUES (1, 'legacy',
+            -1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -127,18 +131,24 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             "mode\\safe",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT COLUMN_COMMENT FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sql_mode_guard' "
-                + "AND COLUMN_NAME = 'note';",
+                """
+                SELECT COLUMN_COMMENT FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'sql_mode_guard'
+                AND COLUMN_NAME = 'note';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'sql_mode_guard' "
-                + "AND CONSTRAINT_NAME = 'ck_sql_mode_guard_quantity';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'sql_mode_guard'
+                AND CONSTRAINT_NAME = 'ck_sql_mode_guard_quantity';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -187,9 +197,12 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pipeline_state' "
-                + "AND COLUMN_NAME = 'payload';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'pipeline_state'
+                AND COLUMN_NAME = 'payload';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -229,9 +242,12 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
                 1,
                 await ScalarIntAsync(
                     connectionString,
-                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                    + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pipeline_state' "
-                    + "AND COLUMN_NAME = 'payload';",
+                    """
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME = 'pipeline_state'
+                    AND COLUMN_NAME = 'payload';
+                    """,
                     cancellationToken: CancellationToken.None));
 
             Assert.Equal(
@@ -267,9 +283,11 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                + "WHERE TABLE_SCHEMA = DATABASE() "
-                + "AND TABLE_NAME = '__ApplicationDbContextMigrationsHistory';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = '__ApplicationDbContextMigrationsHistory';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -302,9 +320,12 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pipeline_probe' "
-                + "AND TABLE_TYPE = 'BASE TABLE';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'pipeline_probe'
+                AND TABLE_TYPE = 'BASE TABLE';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -359,9 +380,12 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pipeline_state' "
-                + "AND COLUMN_NAME = 'payload';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'pipeline_state'
+                AND COLUMN_NAME = 'payload';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -404,9 +428,11 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                + "WHERE TABLE_SCHEMA = DATABASE() "
-                + "AND TABLE_NAME = '__ApplicationDbContextMigrationsHistory';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = '__ApplicationDbContextMigrationsHistory';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -460,9 +486,11 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                + "WHERE TABLE_SCHEMA = DATABASE() "
-                + "AND TABLE_NAME = '__ApplicationDbContextMigrationsHistory';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = '__ApplicationDbContextMigrationsHistory';
+                """,
                 cancellationToken: CancellationToken.None));
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -520,12 +548,12 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `mixed_customers` ("
-            + "`id` int NOT NULL, CONSTRAINT `pk_mixed_customers` PRIMARY KEY (`id`));"
-            + "CREATE TABLE `mixed_evolution` ("
-            + "`id` int NOT NULL, CONSTRAINT `pk_mixed_evolution` PRIMARY KEY (`id`));"
-            + "INSERT INTO `mixed_customers` (`id`) VALUES (7);"
-            + "INSERT INTO `mixed_evolution` (`id`) VALUES (1);",
+            """
+            CREATE TABLE `mixed_customers` (`id` int NOT NULL, CONSTRAINT `pk_mixed_customers`
+            PRIMARY KEY (`id`));CREATE TABLE `mixed_evolution` (`id` int NOT NULL,
+            CONSTRAINT `pk_mixed_evolution` PRIMARY KEY (`id`));INSERT INTO `mixed_customers`
+            (`id`) VALUES (7);INSERT INTO `mixed_evolution` (`id`) VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -570,9 +598,12 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mixed_evolution' "
-                + "AND COLUMN_NAME = 'customer_id';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'mixed_evolution'
+                AND COLUMN_NAME = 'customer_id';
+                """,
                 cancellationToken: CancellationToken.None));
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -598,27 +629,36 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() "
-                + "AND CONSTRAINT_NAME = 'fk_mixed_evolution_customers_customer_id';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND CONSTRAINT_NAME = 'fk_mixed_evolution_customers_customer_id';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mixed_evolution' "
-                + "AND COLUMN_NAME = 'customer_id' AND COLUMN_DEFAULT IS NULL;",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'mixed_evolution'
+                AND COLUMN_NAME = 'customer_id'
+                AND COLUMN_DEFAULT IS NULL;
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mixed_evolution' "
-                + "AND INDEX_NAME = 'ix_mixed_evolution_customer_id';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'mixed_evolution'
+                AND INDEX_NAME = 'ix_mixed_evolution_customer_id';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -684,9 +724,12 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'seed_projection' "
-                + "AND INDEX_NAME = 'ix_seed_projection_group_id';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'seed_projection'
+                AND INDEX_NAME = 'ix_seed_projection_group_id';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -896,18 +939,25 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM `seed_journey_dependents` AS `dependent` "
-                + "INNER JOIN `seed_journey_principals` AS `principal` "
-                + "ON `dependent`.`principal_id` = `principal`.`id`;",
+                """
+                SELECT COUNT(*) FROM `seed_journey_dependents` AS `dependent`
+                INNER JOIN `seed_journey_principals` AS `principal` ON `dependent`.`principal_id`
+                = `principal`.`id`;
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'seed_journey_dependents' "
-                + "AND COLUMN_NAME = 'principal_id' AND SEQ_IN_INDEX = 1;",
+                """
+                SELECT COUNT(DISTINCT INDEX_NAME)
+                FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'seed_journey_dependents'
+                AND COLUMN_NAME = 'principal_id'
+                AND SEQ_IN_INDEX = 1;
+                """,
                 cancellationToken: CancellationToken.None));
 
         await ExecuteSqlAsync(
@@ -972,8 +1022,11 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'seed_unique_projection';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'seed_unique_projection';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -1024,9 +1077,12 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'existing_seed_projection' "
-                + "AND INDEX_NAME = 'ix_existing_seed_projection_group_id';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'existing_seed_projection'
+                AND INDEX_NAME = 'ix_existing_seed_projection_group_id';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -1076,9 +1132,12 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'existing_seed_unique_projection' "
-                + "AND INDEX_NAME = 'ux_existing_seed_unique_projection_group_id';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'existing_seed_unique_projection'
+                AND INDEX_NAME = 'ux_existing_seed_unique_projection_group_id';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -1116,10 +1175,11 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `inventory_target` ("
-            + "`id` int NOT NULL, `legacy_column` int NULL); "
-            + "CREATE INDEX `ix_inventory_legacy` ON `inventory_target` (`legacy_column`); "
-            + "CREATE TABLE `legacy_extra` (`id` int NOT NULL);",
+            """
+            CREATE TABLE `inventory_target` (`id` int NOT NULL, `legacy_column` int
+            NULL); CREATE INDEX `ix_inventory_legacy` ON `inventory_target` (`legacy_column`);
+            CREATE TABLE `legacy_extra` (`id` int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1168,8 +1228,10 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `lifecycle` (`id` int NOT NULL, `old_name` varchar(40) NULL); "
-            + "CREATE INDEX `ix_lifecycle_old_name` ON `lifecycle` (`old_name`);",
+            """
+            CREATE TABLE `lifecycle` (`id` int NOT NULL, `old_name` varchar(40) NULL);
+            CREATE INDEX `ix_lifecycle_old_name` ON `lifecycle` (`old_name`);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1239,8 +1301,11 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('missing_table', 'renamed_table');",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME IN ('missing_table', 'renamed_table');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -1288,12 +1353,12 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             1,
             await ContextScalarIntAsync(
                 context,
-                "SELECT @doka_sm_state IS NULL "
-                + "AND @doka_sm_action IS NULL "
-                + "AND @doka_sm_repair_ok IS NULL "
-                + "AND @doka_sm_prerequisite_ok IS NULL "
-                + "AND @doka_sm_sql IS NULL "
-                + "AND @doka_sm_post_ok IS NULL;",
+                """
+                SELECT @doka_sm_state IS NULL
+                AND @doka_sm_action IS NULL AND @doka_sm_repair_ok IS NULL
+                AND @doka_sm_prerequisite_ok IS NULL
+                AND @doka_sm_sql IS NULL AND @doka_sm_post_ok IS NULL;
+                """,
                 cancellationToken: CancellationToken.None));
 
         await context.Database.ExecuteSqlRawAsync(
@@ -1311,9 +1376,12 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'fault_target' "
-                + "AND COLUMN_NAME = 'guarded_value';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'fault_target'
+                AND COLUMN_NAME = 'guarded_value';
+                """,
                 cancellationToken: CancellationToken.None));
 
         await MySqlConnection.ClearPoolAsync((MySqlConnection)context.Database.GetDbConnection(),
@@ -1369,12 +1437,12 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             1,
             await ContextScalarIntAsync(
                 context,
-                "SELECT @doka_sm_state IS NULL "
-                + "AND @doka_sm_action IS NULL "
-                + "AND @doka_sm_repair_ok IS NULL "
-                + "AND @doka_sm_prerequisite_ok IS NULL "
-                + "AND @doka_sm_sql IS NULL "
-                + "AND @doka_sm_post_ok IS NULL;",
+                """
+                SELECT @doka_sm_state IS NULL
+                AND @doka_sm_action IS NULL AND @doka_sm_repair_ok IS NULL
+                AND @doka_sm_prerequisite_ok IS NULL
+                AND @doka_sm_sql IS NULL AND @doka_sm_post_ok IS NULL;
+                """,
                 cancellationToken: CancellationToken.None));
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -1384,9 +1452,12 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cancel_target' "
-                + "AND COLUMN_NAME = 'guarded_value';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'cancel_target'
+                AND COLUMN_NAME = 'guarded_value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -1490,9 +1561,12 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
             1,
             await ScalarIntAsync(
                 rootConnectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'least_privilege_target' "
-                + "AND COLUMN_NAME = 'guarded_value';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'least_privilege_target'
+                AND COLUMN_NAME = 'guarded_value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 

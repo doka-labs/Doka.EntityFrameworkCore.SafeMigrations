@@ -19,20 +19,28 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     {
         var guardedState = plan.StateEvaluationGuardFailureExpression is null
             ? plan.RenderStateExpression()
-            : $"CASE WHEN COALESCE(({plan.StateEvaluationGuardExpression}), 0) = 1 "
-            + $"THEN ({plan.RenderStateExpression()}) "
-            + $"ELSE ({plan.StateEvaluationGuardFailureExpression}) END";
+            : $"""
+            CASE WHEN COALESCE(({plan.StateEvaluationGuardExpression}), 0) = 1
+            THEN ({plan.RenderStateExpression()})
+            ELSE ({plan.StateEvaluationGuardFailureExpression}) END
+            """;
 
-        var state = $"CASE WHEN COALESCE(({plan.PrerequisiteExpression}), 0) = 1 "
-            + $"THEN ({guardedState}) ELSE N'prerequisite_missing' END";
+        var state = $"""
+            CASE WHEN COALESCE(({plan.PrerequisiteExpression}), 0) = 1
+            THEN ({guardedState})
+            ELSE N'prerequisite_missing' END
+            """;
 
         var post = plan.Postcondition;
         var repair = plan.RenderRepairPrecondition();
         var code = plan.RenderClassificationCodeExpression() ?? "CONVERT(nvarchar(128), NULL)";
         if (plan.PrerequisiteFailureCodeExpression is { } failureCode)
         {
-            code = $"CASE WHEN COALESCE(({plan.PrerequisiteExpression}), 0) = 1 THEN ({code}) "
-                + $"ELSE ({failureCode}) END";
+            code = $"""
+                CASE WHEN COALESCE(({plan.PrerequisiteExpression}), 0) = 1
+                THEN ({code})
+                ELSE ({failureCode}) END
+                """;
         }
 
         var rows = plan.ModelManagedRowEvidenceExpression ?? "CONVERT(nvarchar(max), NULL)";
@@ -143,12 +151,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 + $"(SELECT ({columnLayoutFailure}) AS failure) doka_layout";
         }
 
-        return $"SELECT {ordinal}, ({state}), "
-            + $"COALESCE(({post}), 0), COALESCE(({repair}), 0), ({code}), "
-            + $"({rows}), ({dependencies}), ({diagnostics}), ({matched})"
-            + (supportSource.Length == 0
+        return $"""
+            SELECT {ordinal}, ({state}), COALESCE(({post}),
+            0), COALESCE(({repair}), 0), ({code}),
+            ({rows}), ({dependencies}), ({diagnostics}),
+            ({matched}){(supportSource.Length == 0
                 ? string.Empty
-                : " FROM " + supportSource);
+                : " FROM " + supportSource)}
+            """;
     }
 
     /// <summary>Builds one delayed classifier within the complete statement payload bound.</summary>
@@ -276,11 +286,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 "int",
                 definitions,
                 parameterArguments)
-            + "IF COALESCE(@doka_physical, 0) <> 1 "
-            + "SELECT @doka_ordinal, "
-            + $"N'unsupported', 0, 0, N'{SqlServerSafeMigrationRuntimePlan.PhysicalTableUnsupportedCode}', "
-            + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
-            + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE BEGIN ";
+            + $"""
+            IF COALESCE(@doka_physical, 0) <> 1
+            SELECT @doka_ordinal,
+            N'unsupported', 0, 0, N'{SqlServerSafeMigrationRuntimePlan.PhysicalTableUnsupportedCode}',
+            CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL),
+            CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE BEGIN{" "}
+            """;
 
         var collationGate = plan.ColumnCollationSupportExpression is null
             ? string.Empty
@@ -290,11 +302,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 "int",
                 definitions,
                 parameterArguments)
-            + "IF COALESCE(@doka_collation, 0) <> 1 "
-            + "SELECT @doka_ordinal, "
-            + $"N'unsupported', 0, 0, N'{SqlServerSafeMigrationRuntimePlan.ColumnCollationUnsupportedCode}', "
-            + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
-            + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE BEGIN ";
+            + $"""
+            IF COALESCE(@doka_collation, 0) <> 1
+            SELECT @doka_ordinal,
+            N'unsupported', 0, 0, N'{SqlServerSafeMigrationRuntimePlan.ColumnCollationUnsupportedCode}',
+            CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL),
+            CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE BEGIN{" "}
+            """;
 
         const string layoutVariable = "@doka_layout";
         var layoutSetup = plan.ColumnLayoutFailureExpression is null
@@ -308,10 +322,12 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
         var layoutGate = plan.ColumnLayoutFailureExpression is null
             ? string.Empty
-            : $"IF {layoutVariable} IS NOT NULL "
-            + $"SELECT @doka_ordinal, N'unsupported', 0, 0, {layoutVariable}, "
-            + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
-            + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE BEGIN ";
+            : $"""
+            IF {layoutVariable} IS NOT NULL SELECT @doka_ordinal, N'unsupported',
+            0, 0, {layoutVariable}, CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max),
+            NULL), CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL);
+            ELSE BEGIN{"\u0020"}
+            """;
 
         var defaultGate = plan.DefaultValueSupportExpression is null
             ? string.Empty
@@ -321,11 +337,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 "int",
                 definitions,
                 parameterArguments)
-            + "IF COALESCE(@doka_default, 0) <> 1 "
-            + "SELECT @doka_ordinal, "
-            + $"N'unsupported', 0, 0, N'{SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode}', "
-            + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
-            + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE BEGIN ";
+            + $"""
+            IF COALESCE(@doka_default, 0) <> 1
+            SELECT @doka_ordinal,
+            N'unsupported', 0, 0, N'{SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode}',
+            CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL),
+            CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE BEGIN{" "}
+            """;
 
         var indexFilterGate = plan.IndexFilterSupportExpression is null
             ? string.Empty
@@ -335,11 +353,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 "int",
                 definitions,
                 parameterArguments)
-            + "IF COALESCE(@doka_filter, 0) <> 1 "
-            + "SELECT @doka_ordinal, "
-            + $"N'unsupported', 0, 0, N'{SqlServerSafeMigrationRuntimePlan.IndexFilterUnsupportedCode}', "
-            + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
-            + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE BEGIN ";
+            + $"""
+            IF COALESCE(@doka_filter, 0) <> 1
+            SELECT @doka_ordinal,
+            N'unsupported', 0, 0, N'{SqlServerSafeMigrationRuntimePlan.IndexFilterUnsupportedCode}',
+            CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL),
+            CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL); ELSE BEGIN{" "}
+            """;
 
         var prerequisite = $"CASE WHEN COALESCE(({plan.PrerequisiteExpression}), 0) = 1 "
             + (outerStateFailure is null
@@ -347,45 +367,35 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 : $"AND COALESCE(({outerStateGuard}), 0) = 1 ")
             + "THEN 1 ELSE 0 END";
 
-        var fallback = "SELECT @doka_ordinal, "
-            + (outerStateFailure is null
+        var fallback = $"""
+            SELECT @doka_ordinal, {(outerStateFailure is null
                 ? "N'prerequisite_missing'"
-                : $"CASE WHEN COALESCE(({plan.PrerequisiteExpression}), 0) = 1 "
-                + $"THEN ({outerStateFailure}) ELSE N'prerequisite_missing' END")
-            + ", 0, 0, "
-            + (plan.PrerequisiteFailureCodeExpression ?? "CONVERT(nvarchar(128), NULL)")
-            + ", CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
-            + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL);";
+                : $"""
+                CASE WHEN COALESCE(({plan.PrerequisiteExpression}), 0) = 1
+                THEN ({outerStateFailure})
+                ELSE N'prerequisite_missing' END
+                """)}, 0, 0, {plan.PrerequisiteFailureCodeExpression ?? "CONVERT(nvarchar(128), NULL)"},
+            CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max),
+            NULL), CONVERT(nvarchar(128), NULL);
+            """;
 
         var fallbackArgument = SqlServerSqlStringLiteral.StatementArgument(
             fallback,
             "@doka_fallback_sql",
             out var fallbackDeclaration);
 
-        var selection = physicalGate
-            + layoutSetup
-            + layoutGate
-            + collationGate
-            + defaultGate
-            + indexFilterGate
-            + BuildDelayedScalarProof(prerequisite, "@doka_prerequisite", "int", definitions, parameterArguments)
-            + innerDeclaration
-            + fallbackDeclaration
-            + "IF @doka_prerequisite = 1 "
-
-            // WHY: Returning the nested SELECT directly avoids INSERT EXEC and a statement-sized
-            // table variable. Transport validates one result set per classifier before accepting evidence.
-            + "EXEC sys.sp_executesql "
-            + innerArgument
-            + ", "
-            + $"N'{definitions}', @doka_ordinal = @doka_ordinal"
-            + parameterArguments
-            + " "
-            + "ELSE EXEC sys.sp_executesql "
-            + fallbackArgument
-            + $", N'{definitions}', @doka_ordinal = @doka_ordinal"
-            + parameterArguments
-            + ";";
+        // WHY: Returning the nested SELECT directly avoids INSERT EXEC and a statement-sized
+        // table variable. Transport validates one result set per classifier before accepting evidence.
+        var selection = $"""
+            {physicalGate}{layoutSetup}{layoutGate}{collationGate}{defaultGate}{
+                indexFilterGate}{BuildDelayedScalarProof(
+                prerequisite, "@doka_prerequisite", "int", definitions, parameterArguments)}{innerDeclaration}{
+                fallbackDeclaration}IF @doka_prerequisite = 1
+            EXEC sys.sp_executesql {innerArgument},
+            N'{definitions}', @doka_ordinal = @doka_ordinal{parameterArguments}
+            ELSE EXEC sys.sp_executesql {fallbackArgument},
+            N'{definitions}', @doka_ordinal = @doka_ordinal{parameterArguments};
+            """;
 
         // WHY: An ELSE protects only one T-SQL statement. Every admitted support gate must enclose
         // all subsequent declarations, scalar EXEC calls and the final classifier, not just a DECLARE.

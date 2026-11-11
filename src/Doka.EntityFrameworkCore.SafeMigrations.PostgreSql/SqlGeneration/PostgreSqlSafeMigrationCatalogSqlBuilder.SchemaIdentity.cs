@@ -104,11 +104,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string? optionalAbsentBinding
     )
     {
-        var native = "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class identity_relation "
-            + "JOIN pg_catalog.pg_namespace identity_namespace "
-            + "ON identity_namespace.oid = identity_relation.relnamespace "
-            + $"WHERE identity_relation.oid = pg_catalog.to_regclass({Literal(Qualified(table, null))}) "
-            + "AND identity_namespace.nspname <> current_schema())";
+        var native = $"""
+            NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class identity_relation
+            JOIN pg_catalog.pg_namespace identity_namespace ON identity_namespace.oid
+            = identity_relation.relnamespace
+            WHERE identity_relation.oid = pg_catalog.to_regclass({Literal(Qualified(table, null))})
+            AND identity_namespace.nspname <> current_schema())
+            """;
 
         return StringComparer.Ordinal.Equals(table, optionalAbsentBinding)
             ? $"(CASE WHEN {RelationExists(table, null)} THEN ({native}) ELSE TRUE END)"

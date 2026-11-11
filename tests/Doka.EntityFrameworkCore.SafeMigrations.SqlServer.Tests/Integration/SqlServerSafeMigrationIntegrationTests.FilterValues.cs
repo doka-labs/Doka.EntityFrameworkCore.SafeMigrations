@@ -28,15 +28,20 @@ public sealed class SqlServerSafeMigrationFilterValuesIntegrationTests : SqlServ
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE dbo.filter_values (Code int NOT NULL, Flag {type} NULL); "
-            + $"INSERT dbo.filter_values VALUES (1, {value}), (2, {value}); "
-            + "CREATE TABLE dbo.filter_value_ddl_events (Id int NOT NULL);",
+            $"""
+            CREATE TABLE dbo.filter_values (Code int NOT NULL, Flag {type}
+            NULL); INSERT dbo.filter_values VALUES (1,
+            {value}), (2, {value}); CREATE TABLE
+            dbo.filter_value_ddl_events (Id int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER doka_filter_value_ddl_audit ON DATABASE FOR DDL_INDEX_EVENTS "
-            + "AS INSERT dbo.filter_value_ddl_events VALUES (1);",
+            """
+            CREATE TRIGGER doka_filter_value_ddl_audit ON DATABASE FOR DDL_INDEX_EVENTS
+            AS INSERT dbo.filter_value_ddl_events VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -87,8 +92,11 @@ public sealed class SqlServerSafeMigrationFilterValuesIntegrationTests : SqlServ
 
         var indexes = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.filter_values', N'U') "
-            + "AND name = N'IX_filter_values_Code';",
+            """
+            SELECT COUNT(*) FROM sys.indexes
+            WHERE object_id = OBJECT_ID(N'dbo.filter_values', N'U')
+            AND name = N'IX_filter_values_Code';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -132,14 +140,18 @@ public sealed class SqlServerSafeMigrationFilterValuesIntegrationTests : SqlServ
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items VALUES (1); "
-            + "CREATE TABLE dbo.default_collation_events (Id int NOT NULL);",
+            """
+            CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items
+            VALUES (1); CREATE TABLE dbo.default_collation_events (Id int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER doka_default_collation_audit ON DATABASE FOR DDL_TABLE_EVENTS "
-            + "AS INSERT dbo.default_collation_events VALUES (1);",
+            """
+            CREATE TRIGGER doka_default_collation_audit ON DATABASE FOR DDL_TABLE_EVENTS
+            AS INSERT dbo.default_collation_events VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

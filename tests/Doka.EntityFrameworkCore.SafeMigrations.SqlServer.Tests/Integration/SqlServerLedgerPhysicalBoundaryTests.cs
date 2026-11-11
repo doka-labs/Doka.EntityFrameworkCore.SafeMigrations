@@ -92,15 +92,14 @@ public sealed class SqlServerLedgerPhysicalBoundaryTests : SqlServerIntegrationT
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo."
-            + table
-            + " (Id int NOT NULL PRIMARY KEY, Value int NOT NULL) "
-            + (ledgerAvailable
+            $"""
+            CREATE TABLE dbo.{table} (Id int NOT NULL PRIMARY KEY,
+            Value int NOT NULL) {(ledgerAvailable
                 ? "WITH (LEDGER = ON (APPEND_ONLY = ON))"
-                : string.Empty)
-            + "; INSERT dbo."
-            + table
-            + " (Id, Value) VALUES (1, 7);",
+                : string.Empty)}; INSERT dbo.{table}
+            (Id,
+            Value) VALUES (1, 7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

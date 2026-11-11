@@ -111,21 +111,13 @@ internal sealed record MySqlSafeMigrationIdentifierReferenceProof
         // the synthetic source resolves names without touching application rows.
         // Only syntax error 1064 is evidence of an invalid head; resource errors,
         // permission failures and cancellation must retain their native failure.
-        var block = "BEGIN NOT ATOMIC DECLARE EXIT HANDLER FOR 1064 SET "
-            + proof.ResultVariable
-            + " = FALSE;SET "
-            + proof.InnerSqlVariable
-            + " = "
-            + HexLiteral(query)
-            + ";PREPARE "
-            + proof.InnerStatementName
-            + " FROM "
-            + proof.InnerSqlVariable
-            + ";DEALLOCATE PREPARE "
-            + proof.InnerStatementName
-            + ";SET "
-            + proof.ResultVariable
-            + " = TRUE;END";
+        var block = $"""
+            BEGIN NOT ATOMIC DECLARE EXIT HANDLER FOR 1064 SET {proof.ResultVariable}
+            = FALSE;SET {proof.InnerSqlVariable} = {HexLiteral(query)};PREPARE
+            {proof.InnerStatementName}
+            FROM {proof.InnerSqlVariable};DEALLOCATE PREPARE {proof.InnerStatementName};SET
+            {proof.ResultVariable} = TRUE;END
+            """;
 
         var builder = new StringBuilder();
         builder
@@ -169,33 +161,18 @@ internal sealed record MySqlSafeMigrationIdentifierReferenceProof
         // update. Ignore only 1243 for absent GUID-owned statements during
         // cleanup, rather than masking the original execution failure or relying
         // on metadata visibility to discover which preparation completed.
-        var block = "BEGIN NOT ATOMIC DECLARE CONTINUE HANDLER FOR 1243 BEGIN END;DEALLOCATE PREPARE "
-            + proof.InnerStatementName
-            + ";DEALLOCATE PREPARE "
-            + proof.OuterStatementName
-            + ";SET "
-            + proof.ResultVariable
-            + " = NULL, "
-            + proof.InnerSqlVariable
-            + " = NULL, "
-            + proof.OuterSqlVariable
-            + " = NULL;END";
+        var block = $"""
+            BEGIN NOT ATOMIC DECLARE CONTINUE HANDLER FOR 1243 BEGIN END;DEALLOCATE
+            PREPARE {proof.InnerStatementName};DEALLOCATE PREPARE {proof.OuterStatementName};SET
+            {proof.ResultVariable} = NULL,
+            {proof.InnerSqlVariable} = NULL, {proof.OuterSqlVariable} = NULL;END
+            """;
 
-        return "SET "
-            + proof.CleanupSqlVariable
-            + " = "
-            + HexLiteral(block)
-            + ";PREPARE "
-            + proof.CleanupStatementName
-            + " FROM "
-            + proof.CleanupSqlVariable
-            + ";EXECUTE "
-            + proof.CleanupStatementName
-            + ";DEALLOCATE PREPARE "
-            + proof.CleanupStatementName
-            + ";SET "
-            + proof.CleanupSqlVariable
-            + " = NULL;";
+        return $"""
+            SET {proof.CleanupSqlVariable} = {HexLiteral(block)};PREPARE {proof.CleanupStatementName}
+            FROM {proof.CleanupSqlVariable};EXECUTE {proof.CleanupStatementName};DEALLOCATE
+            PREPARE {proof.CleanupStatementName};SET {proof.CleanupSqlVariable} = NULL;
+            """;
     }
 
     private static string HexLiteral(

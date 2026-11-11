@@ -15,15 +15,17 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `annotated_column_repair` ("
-            + "`id` int NOT NULL, "
-            + "`is_active` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'legacy', "
-            + "`display_name` varchar(80) NULL DEFAULT '' COMMENT 'legacy', "
-            + "`external_id` char(36) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000' COMMENT 'legacy', "
-            + "`occurred_at` datetime(6) NOT NULL DEFAULT '0001-01-01 00:00:00.000000' COMMENT 'legacy', "
-            + "PRIMARY KEY (`id`));"
-            + "INSERT INTO `annotated_column_repair` VALUES ("
-            + "1, 1, 'preserved', '22222222-2222-2222-2222-222222222222', '2026-08-31 12:00:00.000000');",
+            """
+            CREATE TABLE `annotated_column_repair` (`id` int NOT NULL, `is_active` tinyint(1)
+            NOT NULL DEFAULT 0 COMMENT 'legacy',
+            `display_name` varchar(80) NULL DEFAULT '' COMMENT 'legacy', `external_id`
+            char(36) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000' COMMENT
+            'legacy',
+            `occurred_at` datetime(6) NOT NULL DEFAULT '0001-01-01 00:00:00.000000'
+            COMMENT 'legacy',
+            PRIMARY KEY (`id`));INSERT INTO `annotated_column_repair` VALUES (1, 1,
+            'preserved', '22222222-2222-2222-2222-222222222222', '2026-08-31 12:00:00.000000');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -82,10 +84,11 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "INSERT INTO `annotated_column_repair` "
-            + "(`id`, `is_active`, `display_name`, `external_id`, `occurred_at`) VALUES "
-            + "(2, 0, 'inserted', '33333333-3333-3333-3333-333333333333', "
-            + "'2026-08-31 13:00:00.000000');",
+            """
+            INSERT INTO `annotated_column_repair` (`id`, `is_active`, `display_name`,
+            `external_id`, `occurred_at`) VALUES (2, 0, 'inserted', '33333333-3333-3333-3333-333333333333',
+            '2026-08-31 13:00:00.000000');
+            """,
             cancellationToken: CancellationToken.None);
 
         var postflight = await runner.VerifyAsync(context, builder.Operations, options, CancellationToken.None);
@@ -104,9 +107,13 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
             4,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'annotated_column_repair' "
-                + "AND COLUMN_NAME <> 'id' AND COLUMN_COMMENT = 'canonical' AND COLUMN_DEFAULT IS NULL;",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'annotated_column_repair'
+                AND COLUMN_NAME <> 'id' AND COLUMN_COMMENT = 'canonical'
+                AND COLUMN_DEFAULT IS NULL;
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -116,9 +123,11 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `annotated_nullable_blocked` ("
-            + "`value` varchar(80) NULL DEFAULT '' COMMENT 'legacy');"
-            + "INSERT INTO `annotated_nullable_blocked` (`value`) VALUES (NULL);",
+            """
+            CREATE TABLE `annotated_nullable_blocked` (`value` varchar(80) NULL DEFAULT
+            '' COMMENT 'legacy');INSERT INTO `annotated_nullable_blocked` (`value`)
+            VALUES (NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -164,10 +173,14 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'annotated_nullable_blocked' "
-                + "AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'YES' "
-                + "AND COLUMN_DEFAULT IS NOT NULL AND COLUMN_COMMENT = 'legacy';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'annotated_nullable_blocked'
+                AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'YES'
+                AND COLUMN_DEFAULT IS NOT NULL
+                AND COLUMN_COMMENT = 'legacy';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -222,9 +235,12 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
             string.Empty,
             await ScalarStringAsync(
                 connectionString,
-                "SELECT EXTRA FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'annotated_identity_mismatch' "
-                + "AND COLUMN_NAME = 'id';",
+                """
+                SELECT EXTRA FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'annotated_identity_mismatch'
+                AND COLUMN_NAME = 'id';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -260,9 +276,12 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
             "auto_increment",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT LOWER(EXTRA) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'scaffolded_identity' "
-                + "AND COLUMN_NAME = 'id';",
+                """
+                SELECT LOWER(EXTRA) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'scaffolded_identity'
+                AND COLUMN_NAME = 'id';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -310,9 +329,12 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
             string.Empty,
             await ScalarStringAsync(
                 connectionString,
-                "SELECT EXTRA FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'scaffolded_identity_drift' "
-                + "AND COLUMN_NAME = 'id';",
+                """
+                SELECT EXTRA FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'scaffolded_identity_drift'
+                AND COLUMN_NAME = 'id';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -348,8 +370,11 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'unsupported_scaffolded_annotation';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'unsupported_scaffolded_annotation';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -422,9 +447,10 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "INSERT INTO `client_guid_roots` (`id`) VALUES ('9ca407b5-d320-442f-9b52-a41448759585');"
-            + "INSERT INTO `client_guid_leaves` (`root_id`) "
-            + "VALUES ('9ca407b5-d320-442f-9b52-a41448759585');",
+            """
+            INSERT INTO `client_guid_roots` (`id`) VALUES ('9ca407b5-d320-442f-9b52-a41448759585');INSERT
+            INTO `client_guid_leaves` (`root_id`) VALUES ('9ca407b5-d320-442f-9b52-a41448759585');
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -671,14 +697,17 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
 
         await ExecuteSqlAsync(
             connectionString,
-            "INSERT INTO `native_guid_roots` (`id`, `alternate_id`, `owned_display_name`) "
-            + $"VALUES ({rootId}, {alternateId}, 'owned value');"
-            + "INSERT INTO `native_guid_composites` (`tenant_id`, `id`) "
-            + $"VALUES ({tenantId}, {compositeId});"
-            + "INSERT INTO `native_guid_leaves` ("
-            + "`id`, `root_id`, `nullable_root_id`, `root_alternate_id`, "
-            + "`composite_tenant_id`, `composite_id`) "
-            + $"VALUES ({leafId}, {rootId}, NULL, {alternateId}, {tenantId}, {compositeId});",
+            $"""
+            INSERT INTO `native_guid_roots` (`id`, `alternate_id`, `owned_display_name`)
+            VALUES ({rootId},
+            {alternateId}, 'owned value');INSERT INTO `native_guid_composites`
+            (`tenant_id`,
+            `id`) VALUES ({tenantId}, {compositeId});INSERT
+            INTO `native_guid_leaves` (`id`,
+            `root_id`, `nullable_root_id`, `root_alternate_id`, `composite_tenant_id`,
+            `composite_id`) VALUES ({leafId}, {rootId},
+            NULL, {alternateId}, {tenantId}, {compositeId});
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -698,10 +727,12 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
             10,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() "
-                + "AND TABLE_NAME IN ('native_guid_roots', 'native_guid_composites', 'native_guid_leaves') "
-                + $"AND LOWER(COLUMN_TYPE) = '{storeType}';",
+                $"""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME IN ('native_guid_roots', 'native_guid_composites', 'native_guid_leaves')
+                AND LOWER(COLUMN_TYPE) = '{storeType}';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -846,8 +877,11 @@ public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigration
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{tableName}';",
+                $"""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = '{tableName}';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 

@@ -22,11 +22,13 @@ public sealed class SqlServerIndexDropColumnTransitionIntegrationTests : SqlServ
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.index_drop_values (Value int NOT NULL); "
-            + "INSERT dbo.index_drop_values VALUES (-2147483648), (2147483647);"
-            + (indexExists
+            $"""
+            CREATE TABLE dbo.index_drop_values (Value int NOT NULL); INSERT dbo.index_drop_values
+            VALUES (-2147483648),
+            (2147483647);{(indexExists
                 ? " CREATE INDEX IX_upgrade_value ON dbo.index_drop_values(Value);"
-                : string.Empty),
+                : string.Empty)}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -63,8 +65,12 @@ public sealed class SqlServerIndexDropColumnTransitionIntegrationTests : SqlServ
 
         var widened = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.index_drop_values') "
-            + "AND name=N'Value' AND system_type_id=127 AND is_nullable=0;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.index_drop_values')
+            AND name=N'Value' AND system_type_id=127
+            AND is_nullable=0;
+            """,
             cancellationToken: CancellationToken.None);
 
         var indexes = await ScalarIntAsync(
@@ -109,16 +115,15 @@ public sealed class SqlServerIndexDropColumnTransitionIntegrationTests : SqlServ
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.index_drop_values (Value int NULL); "
-            + "INSERT dbo.index_drop_values VALUES ("
-            + (control == "null-row"
+            $"""
+            CREATE TABLE dbo.index_drop_values (Value int NULL); INSERT dbo.index_drop_values
+            VALUES ({(control == "null-row"
                 ? "NULL"
-                : "2147483647")
-            + "); "
-            + "CREATE INDEX IX_upgrade_value ON dbo.index_drop_values(Value);"
-            + (control == "remaining-index"
+                : "2147483647")}); CREATE INDEX IX_upgrade_value ON dbo.index_drop_values(Value);{(control
+                == "remaining-index"
                 ? " CREATE INDEX IX_retained_value ON dbo.index_drop_values(Value);"
-                : string.Empty),
+                : string.Empty)}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -154,8 +159,12 @@ public sealed class SqlServerIndexDropColumnTransitionIntegrationTests : SqlServ
 
         var source = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.index_drop_values') "
-            + "AND name=N'Value' AND system_type_id=56 AND is_nullable=1;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.index_drop_values')
+            AND name=N'Value' AND system_type_id=56
+            AND is_nullable=1;
+            """,
             cancellationToken: CancellationToken.None);
 
         var retained = await ScalarIntAsync(

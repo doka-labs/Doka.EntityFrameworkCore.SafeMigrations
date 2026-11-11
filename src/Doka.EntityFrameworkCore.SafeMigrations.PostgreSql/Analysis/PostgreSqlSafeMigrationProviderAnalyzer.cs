@@ -259,7 +259,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                         && workIndex < workOrder.Length)
                     {
                         var command = batch.CreateCommand();
-                        var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
+                        using var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
                         var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
                             _typeMappingSource,
                             _sqlGenerationHelper,
@@ -347,16 +347,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                             var dependencyCounts = plan.ModelManagedDependencyCountsExpression ?? "NULL";
                             var diagnosticEvidence = plan.DiagnosticEvidenceExpression ?? "NULL";
                             var matchedObjectName = plan.MatchedObjectNameExpression ?? "NULL";
-                            var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
-                                + $"({stateExpression})::text, "
-                                + $"COALESCE(({postcondition}), FALSE), "
-                                + $"COALESCE(({repairPrecondition}), FALSE), "
-                                + $"({classificationCode}), "
-                                + $"({rowEvidence}), "
-                                + $"({dependencyCounts}), "
-                                + $"({diagnosticEvidence}), "
-                                + $"({matchedObjectName}), "
-                                + $"COALESCE(({nullabilityProofRequired}), FALSE)";
+                            var selection = $"""
+                                SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, ({stateExpression})::text,
+                                COALESCE(({postcondition}), FALSE), COALESCE(({repairPrecondition}),
+                                FALSE), ({classificationCode}), ({rowEvidence}),
+                                ({dependencyCounts}), ({diagnosticEvidence}), ({matchedObjectName}),
+                                COALESCE(({nullabilityProofRequired}), FALSE)
+                                """;
 
                             var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                                 + (selections.Count == 0
@@ -547,7 +544,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                 && ordinal < operations.Count)
             {
                 var command = batch.CreateCommand();
-                var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
+                using var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
                 var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
                     _typeMappingSource,
                     _sqlGenerationHelper,
@@ -594,11 +591,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                         indexInputState = builder.BuildIndexInputRoutingState(index);
                     }
 
-                    var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE "
-                        + $"WHEN NOT COALESCE(({identityGuard}), FALSE) THEN 'schema_search_path_mismatch' "
-                        + $"WHEN NOT COALESCE(({prerequisite}), FALSE) "
-                        + "THEN 'prerequisite_missing' "
-                        + $"ELSE ({indexInputState}) END";
+                    var selection = $"""
+                        SELECT {ordinal.ToString(CultureInfo.InvariantCulture)},
+                        CASE WHEN NOT COALESCE(({identityGuard}),
+                        FALSE) THEN 'schema_search_path_mismatch'
+                        WHEN NOT COALESCE(({prerequisite}), FALSE)
+                        THEN 'prerequisite_missing' ELSE ({indexInputState}) END
+                        """;
 
                     var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                         + (selections.Count == 0
@@ -703,7 +702,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                 && ordinal < operations.Count)
             {
                 var command = batch.CreateCommand();
-                var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
+                using var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
                 var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
                     _typeMappingSource,
                     _sqlGenerationHelper,
@@ -764,9 +763,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                     var failureCode = plan.StateEvaluationGuardFailureCodeExpression
                         ?? parameters.AddString(defaultCode);
 
-                    var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE "
-                        + $"WHEN {guardFailed} THEN ({plan.StateEvaluationGuardFailureExpression}) ELSE NULL END, "
-                        + $"CASE WHEN {guardFailed} THEN ({failureCode}) ELSE NULL END";
+                    var selection = $"""
+                        SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE WHEN {guardFailed}
+                        THEN ({plan.StateEvaluationGuardFailureExpression})
+                        ELSE NULL END, CASE WHEN {guardFailed}
+                        THEN ({failureCode})
+                        ELSE NULL END
+                        """;
 
                     var selectionBytes = Encoding.UTF8.GetByteCount(selection)
                         + (selections.Count == 0

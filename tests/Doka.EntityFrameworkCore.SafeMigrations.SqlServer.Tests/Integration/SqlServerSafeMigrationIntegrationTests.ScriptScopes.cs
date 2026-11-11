@@ -95,9 +95,14 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
         await connection.OpenAsync(cancellationToken: cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandTimeout = SafeMigrationDbContext.CommandTimeoutSeconds;
-        command.CommandText = "SELECT (SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(@table)), "
-            + "(SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(@table) AND name=@column), "
-            + "(SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(@table) AND name=@index);";
+        command.CommandText = """
+        SELECT (SELECT COUNT(*) FROM sys.tables
+        WHERE object_id=OBJECT_ID(@table)), (SELECT COUNT(*)
+        FROM sys.columns WHERE object_id=OBJECT_ID(@table)
+        AND name=@column), (SELECT COUNT(*)
+        FROM sys.indexes WHERE object_id=OBJECT_ID(@table)
+        AND name=@index);
+        """;
 
         command.Parameters.Add("@table", SqlDbType.NVarChar, 512)
                 .Value =
@@ -204,10 +209,16 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
         await connection.OpenAsync(cancellationToken: cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandTimeout = SafeMigrationDbContext.CommandTimeoutSeconds;
-        command.CommandText = "SELECT (SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(@table) "
-            + "AND name IN (@first,@second)), (SELECT COUNT(*) FROM sys.extended_properties ep "
-            + "WHERE ep.name=N'Doka:SafeMigrations:Contract' AND (ep.major_id=OBJECT_ID(@table) "
-            + "OR ep.major_id IN (SELECT object_id FROM sys.objects WHERE parent_object_id=OBJECT_ID(@table))));";
+        command.CommandText = """
+        SELECT (SELECT COUNT(*) FROM sys.columns
+        WHERE object_id=OBJECT_ID(@table)
+        AND name IN (@first,@second)), (SELECT COUNT(*)
+        FROM sys.extended_properties ep
+        WHERE ep.name=N'Doka:SafeMigrations:Contract'
+        AND (ep.major_id=OBJECT_ID(@table)
+        OR ep.major_id IN (SELECT object_id
+        FROM sys.objects WHERE parent_object_id=OBJECT_ID(@table))));
+        """;
 
         command.Parameters.Add("@table", SqlDbType.NVarChar, 512)
                 .Value =
@@ -360,14 +371,14 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
         await connection.OpenAsync(cancellationToken: cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandTimeout = SafeMigrationDbContext.CommandTimeoutSeconds;
-        command.CommandText = "SELECT Payload, ["
-            + SqlServerMultilineUpgradeMigration.ColumnName
-            + "], (SELECT COUNT(*) FROM dbo.__EFMigrationsHistory WHERE MigrationId IN (N'"
-            + SqlServerMultilineInitialMigration.MigrationIdentifier
-            + "', N'"
-            + SqlServerMultilineUpgradeMigration.MigrationIdentifier
-            + "')) "
-            + "FROM dbo.multiline_payload_items WHERE Id = 7;";
+        command.CommandText = $"""
+            SELECT Payload, [{SqlServerMultilineUpgradeMigration.ColumnName}], (SELECT COUNT(*)
+            FROM dbo.__EFMigrationsHistory
+            WHERE MigrationId IN (N'{SqlServerMultilineInitialMigration.MigrationIdentifier}', N'{
+                SqlServerMultilineUpgradeMigration.MigrationIdentifier}'))
+            FROM dbo.multiline_payload_items
+            WHERE Id = 7;
+            """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken: cancellationToken);
 
@@ -445,17 +456,20 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
 
         await using var batch = connection.CreateCommand();
         batch.Transaction = transaction;
-        batch.CommandText = "DECLARE @doka_state nvarchar(32) = N'caller';\n"
-            + "DECLARE @doka_action nvarchar(32) = N'caller';\n"
-            + "DECLARE @doka_repair_ok int = 41;\n"
-            + "DECLARE @doka_postcondition int = 42;\n"
-            + "DECLARE @doka_default_supported int = 43;\n"
-            + "DECLARE @doka_script_payload nvarchar(max) = N'caller';\n"
-            + string.Join("\n", commands.Select(static command => command.CommandText))
-            + "\nIF @doka_state <> N'caller' OR @doka_action <> N'caller' "
-            + "OR @doka_repair_ok <> 41 OR @doka_postcondition <> 42 OR @doka_default_supported <> 43 "
-            + "OR @doka_script_payload <> N'caller' "
-            + "THROW 51011, N'Caller guard variables changed', 1;";
+        batch.CommandText = $"""
+            DECLARE @doka_state nvarchar(32) = N'caller';
+            DECLARE @doka_action nvarchar(32) = N'caller';
+            DECLARE @doka_repair_ok int = 41;
+            DECLARE @doka_postcondition int = 42;
+            DECLARE @doka_default_supported int = 43;
+            DECLARE @doka_script_payload nvarchar(max) = N'caller';
+            {string.Join("\n", commands.Select(static command => command.CommandText))}
+            IF @doka_state <> N'caller' OR @doka_action <> N'caller'
+            OR @doka_repair_ok <> 41 OR @doka_postcondition <> 42
+            OR @doka_default_supported <> 43
+            OR @doka_script_payload <> N'caller' THROW 51011, N'Caller guard variables changed',
+            1;
+            """;
 
         await batch.ExecuteNonQueryAsync();
         await using var observation = connection.CreateCommand();
@@ -520,14 +534,20 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
 
         var columnCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.safe_history_probe') "
-            + "AND name = N'Caption' AND is_nullable = 0;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id = OBJECT_ID(N'dbo.safe_history_probe')
+            AND name = N'Caption' AND is_nullable = 0;
+            """,
             cancellationToken: CancellationToken.None);
 
         var checkCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.check_constraints WHERE parent_object_id = OBJECT_ID(N'dbo.safe_history_probe') "
-            + "AND name = N'CK_safe_history_probe_Id';",
+            """
+            SELECT COUNT(*) FROM sys.check_constraints
+            WHERE parent_object_id = OBJECT_ID(N'dbo.safe_history_probe')
+            AND name = N'CK_safe_history_probe_Id';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -577,9 +597,11 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
 
         var historyCount = await ScalarIntAsync(
             connectionString,
-            "IF OBJECT_ID(N'dbo.__EFMigrationsHistory', N'U') IS NULL SELECT 0; "
-            + "ELSE SELECT COUNT(*) FROM dbo.__EFMigrationsHistory "
-            + $"WHERE MigrationId = N'{SqlServerHistoryMigration.MigrationIdentifier}';",
+            $"""
+            IF OBJECT_ID(N'dbo.__EFMigrationsHistory', N'U') IS NULL SELECT 0;
+            ELSE SELECT COUNT(*) FROM dbo.__EFMigrationsHistory
+            WHERE MigrationId = N'{SqlServerHistoryMigration.MigrationIdentifier}';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert

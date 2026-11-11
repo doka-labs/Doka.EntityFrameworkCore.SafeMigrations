@@ -21,7 +21,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         var expression = GetDefaultSqlExpression(definition);
         if (expression is null
-            || _expressionRenderer.GetUnsupportedFeature(expression) is not null)
+            || _expressionRenderer.GetUnsupportedScalarFeature(expression) is not null)
         {
             return "default_expression_unproven";
         }
@@ -118,8 +118,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 }
 
                 return (literal.StoreType is null
-                        || IsDefaultValueRepresentable(literal.Value, literal.StoreType, nullable))
-                    && IsDefaultValueRepresentable(literal.Value, storeType, nullable)
+                        || IsDefaultValueRepresentable(literal.BorrowedValue, literal.StoreType, nullable))
+                    && IsDefaultValueRepresentable(literal.BorrowedValue, storeType, nullable)
                         ? null
                         : SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode;
 
@@ -165,10 +165,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             {
                 switch (current.Expression)
                 {
-                    case SafeMigrationSqlLiteralExpression { Value: not null }:
+                    case SafeMigrationSqlLiteralExpression { BorrowedValue: not null }:
                     case SafeMigrationSqlCastExpression
                     {
-                        Operand: SafeMigrationSqlLiteralExpression { Value: not null },
+                        Operand: SafeMigrationSqlLiteralExpression { BorrowedValue: not null },
                     }:
                     case SafeMigrationSqlCurrentValueExpression:
                         return true;
@@ -318,10 +318,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
 
         return Bit(
-            "NOT EXISTS (SELECT 1 FROM (VALUES "
-            + string.Join(", ", names.Select(name => "(" + Literal(name) + ")"))
-            + ") expected(name) WHERE NOT EXISTS (SELECT 1 FROM sys.fn_helpcollations() installed "
-            + "WHERE installed.name = expected.name))");
+            $"""
+            NOT EXISTS (SELECT 1 FROM (VALUES {string.Join(
+                ", ", names.Select(name => "(" + Literal(name) + ")"))}) expected(name)
+            WHERE NOT EXISTS (SELECT 1 FROM sys.fn_helpcollations() installed
+            WHERE installed.name = expected.name))
+            """);
     }
 
     private string BuildColumnDefaultSupportPredicate(
@@ -464,10 +466,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string? collation
     )
     {
-        if (expression is SafeMigrationSqlLiteralExpression { Value: null }
+        if (expression is SafeMigrationSqlLiteralExpression { BorrowedValue: null }
             or SafeMigrationSqlCastExpression
             {
-                Operand: SafeMigrationSqlLiteralExpression { Value: null },
+                Operand: SafeMigrationSqlLiteralExpression { BorrowedValue: null },
             })
         {
             return nullable
@@ -484,7 +486,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             SafeMigrationSqlCastExpression { Operand: SafeMigrationSqlLiteralExpression literal } cast
                 => NonThrowingScalarConversion(
                     NonThrowingDefaultLiteral(literal, cast.StoreType),
-                    literal.Value,
+                    literal.BorrowedValue,
                     cast.StoreType),
             SafeMigrationSqlCurrentValueExpression current => "TRY_CAST(SYSDATETIME() AS "
                 + current.Value switch
@@ -497,14 +499,15 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     _ => throw new ArgumentOutOfRangeException(nameof(expression)),
                 }
                 + ")",
-            SafeMigrationSqlFunctionExpression => _expressionRenderer.Render(expression),
+            SafeMigrationSqlFunctionExpression => _expressionRenderer.RenderScalar(expression),
             _ => throw new NotSupportedException("SQL Server has no proven default conversion operand."),
         };
 
         var literalValue = expression switch
         {
-            SafeMigrationSqlLiteralExpression literal => literal.Value,
-            SafeMigrationSqlCastExpression { Operand: SafeMigrationSqlLiteralExpression literal } => literal.Value,
+            SafeMigrationSqlLiteralExpression literal => literal.BorrowedValue,
+            SafeMigrationSqlCastExpression { Operand: SafeMigrationSqlLiteralExpression literal }
+                => literal.BorrowedValue,
             _ => null,
         };
 
@@ -512,9 +515,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var intermediate = expression switch
         {
             SafeMigrationSqlLiteralExpression { StoreType: not null } literal
-                => BuildDefaultLiteralSupportPredicate(literal.Value, literal.StoreType, collation: null),
+                => BuildDefaultLiteralSupportPredicate(literal.BorrowedValue, literal.StoreType, collation: null),
             SafeMigrationSqlCastExpression { Operand: SafeMigrationSqlLiteralExpression literal } cast
-                => BuildDefaultLiteralSupportPredicate(literal.Value, cast.StoreType, collation: null),
+                => BuildDefaultLiteralSupportPredicate(literal.BorrowedValue, cast.StoreType, collation: null),
             _ => "1 = 1",
         };
 
@@ -531,11 +534,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string fallbackStoreType
     )
     {
-        var raw = ManagedValueLiteral(expression.Value, expression.StoreType ?? fallbackStoreType);
+        var raw = ManagedValueLiteral(expression.BorrowedValue, expression.StoreType ?? fallbackStoreType);
 
         return expression.StoreType is null
             ? raw
-            : NonThrowingScalarConversion(raw, expression.Value, expression.StoreType);
+            : NonThrowingScalarConversion(raw, expression.BorrowedValue, expression.StoreType);
     }
 
     private static string NonThrowingScalarConversion(

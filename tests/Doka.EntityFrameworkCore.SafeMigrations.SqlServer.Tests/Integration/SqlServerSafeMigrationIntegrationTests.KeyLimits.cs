@@ -23,8 +23,11 @@ public sealed class SqlServerSafeMigrationKeyLimitsIntegrationTests : SqlServerS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.duplicate_keys (Id int NOT NULL, Code int NOT NULL); "
-            + "INSERT INTO dbo.duplicate_keys (Id, Code) VALUES (1, 7), (1, 7);",
+            """
+            CREATE TABLE dbo.duplicate_keys (Id int NOT NULL, Code int NOT NULL); INSERT
+            INTO dbo.duplicate_keys (Id,
+            Code) VALUES (1, 7), (1, 7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

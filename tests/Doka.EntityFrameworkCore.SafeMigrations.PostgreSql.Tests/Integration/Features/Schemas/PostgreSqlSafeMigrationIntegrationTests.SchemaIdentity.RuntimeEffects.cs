@@ -32,15 +32,17 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE public.identity_target (id integer NULL); "
-            + "CREATE SCHEMA identity_redirect; "
-            + "CREATE TABLE identity_redirect.identity_target (id integer NULL, added integer NULL); "
-            + "CREATE FUNCTION public.identity_guard_effect() RETURNS event_trigger LANGUAGE plpgsql "
-            + "AS $identity_effect$ BEGIN IF TG_TAG = 'ALTER TABLE' THEN "
-            + triggerBody
-            + " END IF; END; $identity_effect$; "
-            + "CREATE EVENT TRIGGER identity_after_alter ON ddl_command_end "
-            + "EXECUTE FUNCTION public.identity_guard_effect();",
+            $"""
+            CREATE TABLE public.identity_target (id integer NULL); CREATE SCHEMA identity_redirect; CREATE
+            TABLE identity_redirect.identity_target (id integer NULL,
+            added integer NULL); CREATE FUNCTION public.identity_guard_effect() RETURNS event_trigger
+            LANGUAGE plpgsql AS
+            $identity_effect${
+                " BEGIN IF TG_TAG = 'ALTER TABLE' THEN " + triggerBody + " END IF; END; "
+            }$identity_effect$;
+            CREATE EVENT TRIGGER identity_after_alter ON ddl_command_end
+            EXECUTE FUNCTION public.identity_guard_effect();
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -62,14 +64,21 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
         var temporaryShadows = await context
             .Database
             .SqlQueryRaw<int>(
-                "SELECT COUNT(*)::integer AS \"Value\" FROM pg_catalog.pg_class "
-                + "WHERE relnamespace = pg_catalog.pg_my_temp_schema() AND relname = 'identity_target'")
+                """
+                SELECT COUNT(*)::integer AS "Value"
+                FROM pg_catalog.pg_class WHERE relnamespace = pg_catalog.pg_my_temp_schema()
+                AND relname = 'identity_target'
+                """)
             .SingleAsync();
 
         var targetColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' "
-            + "AND table_name = 'identity_target' AND column_name = 'added';",
+            """
+            SELECT COUNT(*) FROM information_schema.columns
+            WHERE table_schema = 'public'
+            AND table_name = 'identity_target'
+            AND column_name = 'added';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -110,8 +119,10 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync(
-            "CREATE TEMPORARY TABLE identity_auxiliary (id integer NULL); "
-            + "CREATE INDEX ix_identity_target ON identity_auxiliary (id);");
+            """
+            CREATE TEMPORARY TABLE identity_auxiliary (id integer NULL); CREATE INDEX
+            ix_identity_target ON identity_auxiliary (id);
+            """);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (rename)
@@ -138,9 +149,12 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
         var temporaryIndexes = await context
             .Database
             .SqlQueryRaw<int>(
-                "SELECT COUNT(*)::integer AS \"Value\" FROM pg_catalog.pg_class "
-                + "WHERE relnamespace = pg_catalog.pg_my_temp_schema() AND relname = 'ix_identity_target' "
-                + "AND relkind = 'i'")
+                """
+                SELECT COUNT(*)::integer AS "Value"
+                FROM pg_catalog.pg_class WHERE relnamespace = pg_catalog.pg_my_temp_schema()
+                AND relname = 'ix_identity_target'
+                AND relkind = 'i'
+                """)
             .SingleAsync();
 
         // Assert
@@ -151,9 +165,12 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_class relation "
-                + "JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace "
-                + "WHERE namespace.nspname = 'public' AND relation.relname = 'ix_identity_target';",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_class relation
+                JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace
+                WHERE namespace.nspname = 'public'
+                AND relation.relname = 'ix_identity_target';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -172,11 +189,12 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA identity_tail; "
-            + "CREATE TABLE public.identity_target (id integer NULL); "
-            + "CREATE TABLE identity_tail.identity_target (id integer NULL); "
-            + "CREATE INDEX ix_identity_target ON public.identity_target (id); "
-            + "CREATE INDEX ix_identity_target ON identity_tail.identity_target (id);",
+            """
+            CREATE SCHEMA identity_tail; CREATE TABLE public.identity_target (id integer
+            NULL); CREATE TABLE identity_tail.identity_target (id integer NULL); CREATE
+            INDEX ix_identity_target ON public.identity_target (id); CREATE INDEX ix_identity_target
+            ON identity_tail.identity_target (id);
+            """,
             cancellationToken: CancellationToken.None);
 
         var configured = new NpgsqlConnectionStringBuilder(connectionString)
@@ -220,10 +238,12 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_class relation "
-                + "JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace "
-                + "WHERE namespace.nspname = 'identity_tail' "
-                + "AND relation.relname IN ('identity_target', 'ix_identity_target');",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_class relation
+                JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace
+                WHERE namespace.nspname = 'identity_tail'
+                AND relation.relname IN ('identity_target', 'ix_identity_target');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -291,14 +311,16 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA identity_final; CREATE TABLE public.identity_source (id integer NULL); "
-            + "CREATE TABLE identity_final.identity_target (id integer NULL); "
-            + "CREATE FUNCTION public.identity_scope_move() RETURNS event_trigger LANGUAGE plpgsql "
-            + "AS $identity_move$ BEGIN IF TG_TAG = 'ALTER TABLE' THEN "
-            + "PERFORM pg_catalog.set_config('search_path', 'identity_final,public', false); "
-            + "END IF; END; $identity_move$; "
-            + "CREATE EVENT TRIGGER identity_scope_after_alter ON ddl_command_end "
-            + "EXECUTE FUNCTION public.identity_scope_move();",
+            $"""
+            CREATE SCHEMA identity_final; CREATE TABLE public.identity_source (id integer
+            NULL); CREATE TABLE identity_final.identity_target (id integer NULL); CREATE
+            FUNCTION public.identity_scope_move() RETURNS event_trigger LANGUAGE plpgsql
+            {"AS $identity_move$ BEGIN IF TG_TAG = 'ALTER TABLE' THEN "
+                + "PERFORM pg_catalog.set_config('search_path', 'identity_final,public', false); "
+                + "END IF; END; $identity_move$;"}
+            CREATE EVENT TRIGGER identity_scope_after_alter ON ddl_command_end EXECUTE
+            FUNCTION public.identity_scope_move();
+            """,
             cancellationToken: CancellationToken.None);
 
         var configured = new NpgsqlConnectionStringBuilder(connectionString)
@@ -336,8 +358,12 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'identity_final' "
-                + "AND table_name = 'identity_target' AND column_name = 'later_added';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = 'identity_final'
+                AND table_name = 'identity_target'
+                AND column_name = 'later_added';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -389,8 +415,12 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'identity_final' "
-                + "AND table_name = 'identity_target' AND column_name = 'added';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = 'identity_final'
+                AND table_name = 'identity_target'
+                AND column_name = 'added';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -408,23 +438,26 @@ public sealed class PostgreSqlSchemaIdentityRuntimeEffectsIntegrationTests : Pos
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA identity_final; CREATE TABLE public.identity_source (id integer NULL); "
-            + "CREATE TABLE public.identity_target (id integer NULL); "
-            + "CREATE TABLE identity_final.identity_target (id integer NULL); "
-            + "INSERT INTO public.identity_target VALUES (1); "
-            + "INSERT INTO identity_final.identity_target VALUES (2);",
+            """
+            CREATE SCHEMA identity_final; CREATE TABLE public.identity_source (id integer
+            NULL); CREATE TABLE public.identity_target (id integer NULL); CREATE TABLE
+            identity_final.identity_target (id integer NULL); INSERT INTO public.identity_target
+            VALUES (1); INSERT INTO identity_final.identity_target VALUES (2);
+            """,
             cancellationToken: CancellationToken.None);
 
         if (effect != "absent")
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE FUNCTION public.identity_final_scope() RETURNS event_trigger LANGUAGE plpgsql "
-                + "AS $identity_final_scope$ BEGIN IF TG_TAG = 'ALTER TABLE' THEN "
-                + "PERFORM pg_catalog.set_config('search_path', 'identity_final,public', false); "
-                + "END IF; END; $identity_final_scope$; "
-                + "CREATE EVENT TRIGGER identity_final_scope_after_alter ON ddl_command_end "
-                + "EXECUTE FUNCTION public.identity_final_scope();",
+                $"""
+                CREATE FUNCTION public.identity_final_scope() RETURNS event_trigger LANGUAGE
+                {"plpgsql AS $identity_final_scope$ BEGIN IF TG_TAG = 'ALTER TABLE' THEN "
+                    + "PERFORM pg_catalog.set_config('search_path', 'identity_final,public', false); "
+                    + "END IF; END; $identity_final_scope$;"}
+                CREATE EVENT TRIGGER identity_final_scope_after_alter ON ddl_command_end
+                EXECUTE FUNCTION public.identity_final_scope();
+                """,
                 cancellationToken: CancellationToken.None);
         }
 

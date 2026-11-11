@@ -24,7 +24,7 @@ public sealed class PostgreSqlPrerequisiteSqlTests
             registerSafeMigrations: false);
 
         using var command = new NpgsqlCommand();
-        var parameters = new PostgreSqlCatalogQueryParameters(command);
+        using var parameters = new PostgreSqlCatalogQueryParameters(command);
         var mappingSource = context.GetService<IRelationalTypeMappingSource>();
         var sqlHelper = context.GetService<ISqlGenerationHelper>();
         var literalBuilder = new PostgreSqlSafeMigrationCatalogSqlBuilder(mappingSource, sqlHelper);

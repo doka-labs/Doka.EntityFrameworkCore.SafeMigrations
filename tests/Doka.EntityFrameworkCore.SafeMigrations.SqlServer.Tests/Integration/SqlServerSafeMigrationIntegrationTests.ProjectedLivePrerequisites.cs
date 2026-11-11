@@ -149,9 +149,12 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.sparse_parent (Id int NOT NULL CONSTRAINT PK_sparse_parent PRIMARY KEY); "
-            + "CREATE TABLE dbo.sparse_child (Id int NOT NULL CONSTRAINT PK_sparse_child PRIMARY KEY); "
-            + "INSERT INTO dbo.sparse_child VALUES (1), (2);",
+            """
+            CREATE TABLE dbo.sparse_parent (Id int NOT NULL CONSTRAINT PK_sparse_parent
+            PRIMARY KEY); CREATE TABLE dbo.sparse_child (Id int NOT NULL CONSTRAINT
+            PK_sparse_child PRIMARY KEY); INSERT INTO dbo.sparse_child VALUES (1),
+            (2);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -190,9 +193,12 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
 
         var physicalColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns c JOIN sys.types ty ON ty.user_type_id = c.user_type_id "
-            + "WHERE c.object_id = OBJECT_ID(N'dbo.sparse_child', N'U') AND c.name = N'ParentId' "
-            + "AND ty.name = N'int';",
+            """
+            SELECT COUNT(*) FROM sys.columns c
+            JOIN sys.types ty ON ty.user_type_id = c.user_type_id
+            WHERE c.object_id = OBJECT_ID(N'dbo.sparse_child', N'U')
+            AND c.name = N'ParentId' AND ty.name = N'int';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -224,9 +230,13 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.sparse_parent (Id int NOT NULL CONSTRAINT PK_sparse_parent PRIMARY KEY); "
-            + "CREATE TABLE dbo.sparse_child (Id int NOT NULL CONSTRAINT PK_sparse_child PRIMARY KEY); "
-            + "INSERT INTO dbo.sparse_parent VALUES (7); INSERT INTO dbo.sparse_child VALUES (1), (2);",
+            """
+            CREATE TABLE dbo.sparse_parent (Id int NOT NULL CONSTRAINT PK_sparse_parent
+            PRIMARY KEY); CREATE TABLE dbo.sparse_child (Id int NOT NULL CONSTRAINT
+            PK_sparse_child PRIMARY KEY); INSERT INTO dbo.sparse_parent VALUES (7);
+            INSERT INTO dbo.sparse_child VALUES (1),
+            (2);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -255,8 +265,11 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
 
         var trusted = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.foreign_keys WHERE name = N'FK_sparse_child_parent' "
-            + "AND is_disabled = 0 AND is_not_trusted = 0;",
+            """
+            SELECT COUNT(*) FROM sys.foreign_keys
+            WHERE name = N'FK_sparse_child_parent'
+            AND is_disabled = 0 AND is_not_trusted = 0;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -293,9 +306,12 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE dbo.sparse_parent (Id {parentType} NOT NULL{key}); "
-            + "CREATE TABLE dbo.sparse_child (Id int NOT NULL CONSTRAINT PK_sparse_child PRIMARY KEY); "
-            + "INSERT INTO dbo.sparse_child VALUES (1), (2);",
+            $"""
+            CREATE TABLE dbo.sparse_parent (Id {parentType} NOT NULL{key});
+            CREATE TABLE dbo.sparse_child (Id int NOT NULL CONSTRAINT PK_sparse_child
+            PRIMARY KEY); INSERT INTO dbo.sparse_child VALUES (1),
+            (2);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -330,9 +346,11 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.sparse_parent (Id int NOT NULL CONSTRAINT PK_sparse_parent PRIMARY KEY); "
-            + "CREATE TABLE dbo.sparse_child (Id int NOT NULL CONSTRAINT PK_sparse_child PRIMARY KEY); "
-            + "INSERT INTO dbo.sparse_child VALUES (1);",
+            """
+            CREATE TABLE dbo.sparse_parent (Id int NOT NULL CONSTRAINT PK_sparse_parent
+            PRIMARY KEY); CREATE TABLE dbo.sparse_child (Id int NOT NULL CONSTRAINT
+            PK_sparse_child PRIMARY KEY); INSERT INTO dbo.sparse_child VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -386,10 +404,13 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.sparse_parent (TenantId int NOT NULL, Id int NOT NULL, "
-            + "CONSTRAINT PK_sparse_parent PRIMARY KEY (TenantId, Id)); "
-            + "CREATE TABLE dbo.sparse_child (Id int NOT NULL PRIMARY KEY, TenantId int NOT NULL); "
-            + "INSERT INTO dbo.sparse_child VALUES (1, 123), (2, 456);",
+            """
+            CREATE TABLE dbo.sparse_parent (TenantId int NOT NULL, Id int NOT NULL,
+            CONSTRAINT PK_sparse_parent PRIMARY KEY (TenantId, Id)); CREATE TABLE dbo.sparse_child
+            (Id int NOT NULL PRIMARY KEY,
+            TenantId int NOT NULL); INSERT INTO dbo.sparse_child VALUES (1, 123),
+            (2, 456);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -441,8 +462,11 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.sparse_index (Id int NOT NULL PRIMARY KEY, TenantId int NOT NULL); "
-            + "INSERT INTO dbo.sparse_index VALUES (1, 7), (2, 7);",
+            """
+            CREATE TABLE dbo.sparse_index (Id int NOT NULL PRIMARY KEY, TenantId int
+            NOT NULL); INSERT INTO dbo.sparse_index VALUES (1,
+            7), (2, 7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -493,8 +517,11 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.sparse_check (Id int NOT NULL PRIMARY KEY, Value int NOT NULL); "
-            + "INSERT INTO dbo.sparse_check VALUES (1, -7), (2, -9);",
+            """
+            CREATE TABLE dbo.sparse_check (Id int NOT NULL PRIMARY KEY, Value int NOT
+            NULL); INSERT INTO dbo.sparse_check VALUES (1,
+            -7), (2, -9);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -640,10 +667,12 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.sparse_parent (Id char(36) COLLATE Latin1_General_100_BIN2 NOT NULL "
-            + "CONSTRAINT PK_sparse_parent PRIMARY KEY); "
-            + "CREATE TABLE dbo.sparse_child (Id int NOT NULL PRIMARY KEY); "
-            + "INSERT INTO dbo.sparse_child VALUES (1), (2);",
+            """
+            CREATE TABLE dbo.sparse_parent (Id char(36) COLLATE Latin1_General_100_BIN2
+            NOT NULL CONSTRAINT PK_sparse_parent PRIMARY KEY); CREATE TABLE dbo.sparse_child
+            (Id int NOT NULL PRIMARY KEY); INSERT INTO dbo.sparse_child VALUES (1),
+            (2);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -701,12 +730,13 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.sparse_parent (Id int NOT NULL CONSTRAINT K_sparse_parent "
-            + (unique
+            $"""
+            CREATE TABLE dbo.sparse_parent (Id int NOT NULL CONSTRAINT K_sparse_parent
+            {(unique
                 ? "UNIQUE"
-                : "PRIMARY KEY")
-            + "); "
-            + "CREATE TABLE dbo.sparse_child (Id int NOT NULL PRIMARY KEY); INSERT dbo.sparse_child VALUES (1);",
+                : "PRIMARY KEY")}); CREATE TABLE dbo.sparse_child (Id int NOT NULL
+            PRIMARY KEY); INSERT dbo.sparse_child VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -750,8 +780,11 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.sparse_self (Id int NOT NULL CONSTRAINT PK_sparse_self PRIMARY KEY); "
-            + "INSERT INTO dbo.sparse_self VALUES (1), (2);",
+            """
+            CREATE TABLE dbo.sparse_self (Id int NOT NULL CONSTRAINT PK_sparse_self
+            PRIMARY KEY); INSERT INTO dbo.sparse_self VALUES (1),
+            (2);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

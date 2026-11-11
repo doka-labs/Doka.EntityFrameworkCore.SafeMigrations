@@ -168,9 +168,16 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             : "FALSE";
 
         return Plan(
-                $"CASE WHEN NOT {BaseTableExists(intent.Table)} OR NOT {columnExists} THEN 'different' "
-                + $"WHEN {matching} THEN 'matching' "
-                + $"WHEN ({classificationInvariant}) AND ({nullBlocked}) THEN 'data_blocked' ELSE 'different' END",
+                $"""
+                CASE WHEN NOT {BaseTableExists(intent.Table)}
+                OR NOT {columnExists}
+                THEN 'different'
+                WHEN {matching}
+                THEN 'matching'
+                WHEN ({classificationInvariant})
+                AND ({nullBlocked})
+                THEN 'data_blocked' ELSE 'different' END
+                """,
                 matching,
                 repairCapability,
                 $"({classificationInvariant}) AND NOT ({nullBlocked})") with
@@ -190,11 +197,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private string BuildNoPrimaryKeyColumn(
         string table,
         string column
-    ) => "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS nullable_primary "
-        + "WHERE nullable_primary.TABLE_SCHEMA = DATABASE() "
-        + $"AND nullable_primary.TABLE_NAME = {Literal(table)} "
-        + $"AND nullable_primary.COLUMN_NAME = {Literal(column)} "
-        + "AND nullable_primary.INDEX_NAME = 'PRIMARY')";
+    ) => $"""
+        NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS nullable_primary
+        WHERE nullable_primary.TABLE_SCHEMA = DATABASE()
+        AND nullable_primary.TABLE_NAME = {Literal(table)}
+        AND nullable_primary.COLUMN_NAME = {Literal(column)}
+        AND nullable_primary.INDEX_NAME = 'PRIMARY')
+        """;
 
     /// <summary>Rejects outgoing actions that require an existing local column to remain nullable.</summary>
     /// <param name="table">The exact local table identity.</param>
@@ -203,16 +212,19 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private string BuildNoOutgoingSetNullForeignKey(
         string table,
         string column
-    ) => "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS nullable_fk "
-        + "JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE nullable_fk_column "
-        + "ON nullable_fk_column.CONSTRAINT_SCHEMA = nullable_fk.CONSTRAINT_SCHEMA "
-        + "AND nullable_fk_column.CONSTRAINT_NAME = nullable_fk.CONSTRAINT_NAME "
-        + "AND nullable_fk_column.TABLE_SCHEMA = nullable_fk.CONSTRAINT_SCHEMA "
-        + "AND nullable_fk_column.TABLE_NAME = nullable_fk.TABLE_NAME "
-        + "WHERE nullable_fk.CONSTRAINT_SCHEMA = DATABASE() "
-        + $"AND nullable_fk.TABLE_NAME = {Literal(table)} "
-        + $"AND nullable_fk_column.COLUMN_NAME = {Literal(column)} "
-        + "AND (nullable_fk.DELETE_RULE = 'SET NULL' OR nullable_fk.UPDATE_RULE = 'SET NULL'))";
+    ) => $"""
+        NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS nullable_fk
+        JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE nullable_fk_column ON nullable_fk_column.CONSTRAINT_SCHEMA
+        = nullable_fk.CONSTRAINT_SCHEMA
+        AND nullable_fk_column.CONSTRAINT_NAME = nullable_fk.CONSTRAINT_NAME
+        AND nullable_fk_column.TABLE_SCHEMA = nullable_fk.CONSTRAINT_SCHEMA
+        AND nullable_fk_column.TABLE_NAME = nullable_fk.TABLE_NAME
+        WHERE nullable_fk.CONSTRAINT_SCHEMA = DATABASE()
+        AND nullable_fk.TABLE_NAME = {Literal(table)}
+        AND nullable_fk_column.COLUMN_NAME = {Literal(column)}
+        AND (nullable_fk.DELETE_RULE = 'SET NULL'
+        OR nullable_fk.UPDATE_RULE = 'SET NULL'))
+        """;
 
     /// <summary>Combines the shared type proof with an explicit alteration's exact source contract.</summary>
     private MySqlSafeMigrationRuntimePlan BuildAlterColumnTransitionPlan(
@@ -289,10 +301,16 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var dataBlocked = $"({nullBlocked}) OR ({transition.DataBlockedExpression})";
 
         return Plan(
-                $"CASE WHEN NOT {BaseTableExists(intent.Table)} "
-                + $"OR NOT {ColumnExists(intent.Table, intent.Definition.Name)} THEN 'different' "
-                + $"WHEN {matching} THEN 'matching' "
-                + $"WHEN ({classificationInvariant}) AND ({dataBlocked}) THEN 'data_blocked' ELSE 'different' END",
+                $"""
+                CASE WHEN NOT {BaseTableExists(intent.Table)}
+                OR NOT {ColumnExists(intent.Table, intent.Definition.Name)}
+                THEN 'different'
+                WHEN {matching}
+                THEN 'matching'
+                WHEN ({classificationInvariant})
+                AND ({dataBlocked})
+                THEN 'data_blocked' ELSE 'different' END
+                """,
                 matching,
                 SafeMigrationRepairCapability.Safe,
                 $"({classificationInvariant}) AND NOT ({dataBlocked}) AND ({transition.ExecutionInvariantExpression})")
@@ -317,13 +335,17 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <summary>Finds live dependencies that require a NULL-free proof before a replacement update.</summary>
     private string BuildConstrainedBackfillExists(
         AlterColumnIntent intent
-    ) => "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS backfill_key "
-        + "WHERE backfill_key.TABLE_SCHEMA = DATABASE() "
-        + $"AND backfill_key.TABLE_NAME = {Literal(intent.Table)} "
-        + $"AND backfill_key.COLUMN_NAME = {Literal(intent.Definition.Name)} AND backfill_key.NON_UNIQUE = 0) "
-        + "OR EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS backfill_check "
-        + "WHERE backfill_check.CONSTRAINT_SCHEMA = DATABASE() "
-        + $"AND backfill_check.TABLE_NAME = {Literal(intent.Table)} AND backfill_check.CONSTRAINT_TYPE = 'CHECK')";
+    ) => $"""
+        EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS backfill_key
+        WHERE backfill_key.TABLE_SCHEMA = DATABASE()
+        AND backfill_key.TABLE_NAME = {Literal(intent.Table)}
+        AND backfill_key.COLUMN_NAME = {Literal(intent.Definition.Name)}
+        AND backfill_key.NON_UNIQUE = 0)
+        OR EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS backfill_check
+        WHERE backfill_check.CONSTRAINT_SCHEMA = DATABASE()
+        AND backfill_check.TABLE_NAME = {Literal(intent.Table)}
+        AND backfill_check.CONSTRAINT_TYPE = 'CHECK')
+        """;
 
     /// <summary>Checks a conservative InnoDB inline-record budget for newly admitted type alterations.</summary>
     private string BuildAlterColumnInlineRowFits(
@@ -332,36 +354,56 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         var targetType = ResolveStoreType(intent.Definition);
         var targetColumn = $"inline_column.COLUMN_NAME = {Literal(intent.Definition.Name)}";
-        var noPrimaryKey = "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS inline_primary "
-            + "WHERE inline_primary.TABLE_SCHEMA = inline_column.TABLE_SCHEMA "
-            + "AND inline_primary.TABLE_NAME = inline_column.TABLE_NAME AND inline_primary.INDEX_NAME = 'PRIMARY')";
+        const string noPrimaryKey = """
+            NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS inline_primary
+            WHERE inline_primary.TABLE_SCHEMA = inline_column.TABLE_SCHEMA
+            AND inline_primary.TABLE_NAME = inline_column.TABLE_NAME
+            AND inline_primary.INDEX_NAME = 'PRIMARY')
+            """;
 
-        var nonNullableUnique = "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS inline_part "
-            + "LEFT JOIN INFORMATION_SCHEMA.COLUMNS inline_part_column "
-            + "ON inline_part_column.TABLE_SCHEMA = inline_part.TABLE_SCHEMA "
-            + "AND inline_part_column.TABLE_NAME = inline_part.TABLE_NAME "
-            + "AND inline_part_column.COLUMN_NAME = inline_part.COLUMN_NAME "
-            + "WHERE inline_part.TABLE_SCHEMA = inline_key.TABLE_SCHEMA "
-            + "AND inline_part.TABLE_NAME = inline_key.TABLE_NAME AND inline_part.INDEX_NAME = inline_key.INDEX_NAME "
-            + "AND (inline_part_column.COLUMN_NAME IS NULL OR CASE WHEN inline_part.COLUMN_NAME = "
-            + $"{Literal(intent.Definition.Name)} THEN {(intent.Definition.IsNullable ? "TRUE" : "FALSE")} "
-            + "ELSE inline_part_column.IS_NULLABLE <> 'NO' END))";
+        var nonNullableUnique = $"""
+            NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS inline_part
+            LEFT JOIN INFORMATION_SCHEMA.COLUMNS inline_part_column ON inline_part_column.TABLE_SCHEMA
+            = inline_part.TABLE_SCHEMA
+            AND inline_part_column.TABLE_NAME = inline_part.TABLE_NAME
+            AND inline_part_column.COLUMN_NAME = inline_part.COLUMN_NAME
+            WHERE inline_part.TABLE_SCHEMA = inline_key.TABLE_SCHEMA
+            AND inline_part.TABLE_NAME = inline_key.TABLE_NAME
+            AND inline_part.INDEX_NAME = inline_key.INDEX_NAME
+            AND (inline_part_column.COLUMN_NAME IS NULL
+            OR CASE WHEN inline_part.COLUMN_NAME = {Literal(intent.Definition.Name)}
+            THEN {(intent.Definition.IsNullable ? "TRUE" : "FALSE")}
+            ELSE inline_part_column.IS_NULLABLE <> 'NO' END))
+            """;
 
-        var primaryColumn = "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS inline_key "
-            + "WHERE inline_key.TABLE_SCHEMA = inline_column.TABLE_SCHEMA "
-            + "AND inline_key.TABLE_NAME = inline_column.TABLE_NAME "
-            + "AND inline_key.COLUMN_NAME = inline_column.COLUMN_NAME AND (inline_key.INDEX_NAME = 'PRIMARY' "
-            + $"OR (inline_key.NON_UNIQUE = 0 AND {noPrimaryKey} AND {nonNullableUnique})))";
+        var primaryColumn = $"""
+            EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS inline_key
+            WHERE inline_key.TABLE_SCHEMA = inline_column.TABLE_SCHEMA
+            AND inline_key.TABLE_NAME = inline_column.TABLE_NAME
+            AND inline_key.COLUMN_NAME = inline_column.COLUMN_NAME
+            AND (inline_key.INDEX_NAME = 'PRIMARY'
+            OR (inline_key.NON_UNIQUE = 0
+            AND {noPrimaryKey}
+            AND {nonNullableUnique})))
+            """;
 
-        var dynamicRow = "UPPER(inline_table.ROW_FORMAT) = 'DYNAMIC'";
-        var octets = "COALESCE(inline_column.CHARACTER_OCTET_LENGTH, 65536)";
-        var textWidth = $"CASE WHEN {dynamicRow} THEN 40 ELSE 788 END";
-        var variableWidth = $"CASE WHEN {primaryColumn} THEN {octets} + CASE WHEN {octets} <= 255 THEN 1 ELSE 2 END "
-            + $"WHEN {dynamicRow} THEN LEAST({octets}, 255) "
-            + $"WHEN {octets} <= 768 THEN {octets} ELSE 788 END";
+        const string dynamicRow = "UPPER(inline_table.ROW_FORMAT) = 'DYNAMIC'";
+        const string octets = "COALESCE(inline_column.CHARACTER_OCTET_LENGTH, 65536)";
+        const string textWidth = $"CASE WHEN {dynamicRow} THEN 40 ELSE 788 END";
+        var variableWidth = $"""
+            CASE WHEN {primaryColumn} THEN {octets} + CASE WHEN {octets} <= 255 THEN 1 ELSE 2 END
+            WHEN {dynamicRow} THEN LEAST({octets}, 255)
+            WHEN {octets} <= 768 THEN {octets}
+            ELSE 788 END
+            """;
 
-        var fixedWidth = $"CASE WHEN NOT ({primaryColumn}) AND {dynamicRow} AND {octets} >= 768 "
-            + $"THEN LEAST({octets}, 767) ELSE {octets} END";
+        var fixedWidth = $"""
+            CASE WHEN NOT ({primaryColumn})
+            AND {dynamicRow}
+            AND {octets} >= 768
+            THEN LEAST({octets}, 767)
+            ELSE {octets} END
+            """;
 
         string targetWidth;
         if (TryParseVarcharLength(targetType, out var targetLength))
@@ -369,10 +411,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             var targetOctets = $"({targetLength.ToString(CultureInfo.InvariantCulture)} "
                 + "* COALESCE(inline_charset.MAXLEN, 65536))";
 
-            targetWidth = $"CASE WHEN {primaryColumn} THEN {targetOctets} "
-                + $"+ CASE WHEN {targetOctets} <= 255 THEN 1 ELSE 2 END "
-                + $"WHEN {dynamicRow} THEN LEAST({targetOctets}, 255) "
-                + $"WHEN {targetOctets} <= 768 THEN {targetOctets} ELSE 788 END";
+            targetWidth = $"""
+                CASE WHEN {primaryColumn} THEN {targetOctets} + CASE WHEN {targetOctets} <= 255 THEN 1 ELSE 2 END
+                WHEN {dynamicRow} THEN LEAST({targetOctets}, 255)
+                WHEN {targetOctets} <= 768 THEN {targetOctets}
+                ELSE 788 END
+                """;
         }
         else if (TryGetTextCapacity(targetType, out _))
         {
@@ -392,43 +436,46 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // record fits its page. Include directory/null overhead, retain full
         // primary-key values, and fail closed for unknown storage layouts.
         // Native UUID always remains an inline sixteen-byte scalar.
-        var width = $"CASE WHEN {targetColumn} THEN ({targetWidth}) "
-            + "WHEN LOWER(inline_column.DATA_TYPE) IN ('varchar', 'varbinary') "
-            + $"THEN ({variableWidth}) "
-            + $"WHEN LOWER(inline_column.DATA_TYPE) IN ('char', 'binary') THEN ({fixedWidth}) "
-            + "WHEN LOWER(inline_column.DATA_TYPE) IN ('tinyblob', 'tinytext', 'blob', 'text', "
-            + "'mediumblob', 'mediumtext', 'longblob', 'longtext', 'json', 'geometry') "
-            + $"THEN CASE WHEN {primaryColumn} THEN {octets} ELSE {textWidth} END "
-            + "WHEN LOWER(inline_column.DATA_TYPE) = 'uuid' THEN 16 "
-            + "WHEN LOWER(inline_column.DATA_TYPE) = 'tinyint' THEN 1 "
-            + "WHEN LOWER(inline_column.DATA_TYPE) = 'smallint' THEN 2 "
-            + "WHEN LOWER(inline_column.DATA_TYPE) = 'mediumint' THEN 3 "
-            + "WHEN LOWER(inline_column.DATA_TYPE) IN ('int', 'integer') THEN 4 "
-            + "WHEN LOWER(inline_column.DATA_TYPE) = 'float' "
-            + "THEN CASE WHEN inline_column.NUMERIC_PRECISION <= 24 THEN 4 ELSE 8 END "
-            + "WHEN LOWER(inline_column.DATA_TYPE) IN ('bigint', 'double') THEN 8 "
-            + "WHEN LOWER(inline_column.DATA_TYPE) = 'decimal' THEN 36 "
-            + "WHEN LOWER(inline_column.DATA_TYPE) = 'bit' "
-            + "THEN CEIL(COALESCE(inline_column.NUMERIC_PRECISION, 64) / 8) "
-            + "WHEN LOWER(inline_column.DATA_TYPE) = 'date' THEN 3 "
-            + "WHEN LOWER(inline_column.DATA_TYPE) IN ('time', 'datetime', 'timestamp') THEN 8 "
-            + "WHEN LOWER(inline_column.DATA_TYPE) = 'year' THEN 1 "
-            + "WHEN LOWER(inline_column.DATA_TYPE) = 'enum' THEN 2 "
-            + "WHEN LOWER(inline_column.DATA_TYPE) = 'set' THEN 8 ELSE 65536 END";
+        var width = $"""
+            CASE WHEN {targetColumn} THEN ({targetWidth})
+            WHEN LOWER(inline_column.DATA_TYPE) IN ('varchar', 'varbinary') THEN ({variableWidth})
+            WHEN LOWER(inline_column.DATA_TYPE) IN ('char', 'binary') THEN ({fixedWidth})
+            WHEN LOWER(inline_column.DATA_TYPE) IN ('tinyblob', 'tinytext', 'blob',
+            'text', 'mediumblob', 'mediumtext', 'longblob', 'longtext', 'json', 'geometry')
+            THEN CASE WHEN {primaryColumn} THEN {octets} ELSE {textWidth} END
+            WHEN LOWER(inline_column.DATA_TYPE) = 'uuid' THEN 16
+            WHEN LOWER(inline_column.DATA_TYPE) = 'tinyint' THEN 1
+            WHEN LOWER(inline_column.DATA_TYPE) = 'smallint' THEN 2
+            WHEN LOWER(inline_column.DATA_TYPE) = 'mediumint' THEN 3
+            WHEN LOWER(inline_column.DATA_TYPE) IN ('int', 'integer') THEN 4
+            WHEN LOWER(inline_column.DATA_TYPE) = 'float'
+            THEN CASE WHEN inline_column.NUMERIC_PRECISION <= 24 THEN 4 ELSE 8 END
+            WHEN LOWER(inline_column.DATA_TYPE) IN ('bigint', 'double') THEN 8
+            WHEN LOWER(inline_column.DATA_TYPE) = 'decimal' THEN 36
+            WHEN LOWER(inline_column.DATA_TYPE) = 'bit'
+            THEN CEIL(COALESCE(inline_column.NUMERIC_PRECISION, 64) / 8)
+            WHEN LOWER(inline_column.DATA_TYPE) = 'date' THEN 3
+            WHEN LOWER(inline_column.DATA_TYPE) IN ('time', 'datetime', 'timestamp') THEN 8
+            WHEN LOWER(inline_column.DATA_TYPE) = 'year' THEN 1
+            WHEN LOWER(inline_column.DATA_TYPE) = 'enum' THEN 2
+            WHEN LOWER(inline_column.DATA_TYPE) = 'set' THEN 8 ELSE 65536 END
+            """;
 
-        return "@@innodb_page_size IN (4096, 8192, 16384, 32768, 65536) AND COALESCE((SELECT "
-            + $"SUM(({width}) + 2) + CEIL(SUM(CASE WHEN {targetColumn} "
-            + $"THEN {(intent.Definition.IsNullable ? 1 : 0)} "
-            + "WHEN inline_column.IS_NULLABLE = 'YES' THEN 1 ELSE 0 END) / 8) "
-            + "FROM INFORMATION_SCHEMA.COLUMNS inline_column "
-            + "JOIN INFORMATION_SCHEMA.TABLES inline_table ON inline_table.TABLE_SCHEMA = inline_column.TABLE_SCHEMA "
-            + "AND inline_table.TABLE_NAME = inline_column.TABLE_NAME "
-            + "LEFT JOIN INFORMATION_SCHEMA.CHARACTER_SETS inline_charset "
-            + "ON inline_charset.CHARACTER_SET_NAME = inline_column.CHARACTER_SET_NAME "
-            + "WHERE inline_column.TABLE_SCHEMA = DATABASE() "
-            + $"AND inline_column.TABLE_NAME = {Literal(intent.Table)} AND UPPER(inline_table.ENGINE) = 'INNODB' "
-            + "AND UPPER(inline_table.ROW_FORMAT) IN ('DYNAMIC', 'COMPACT', 'REDUNDANT')), 65536) "
-            + "<= LEAST(@@innodb_page_size / 2, 16384) - 256";
+        return $"""
+            @@innodb_page_size IN (4096, 8192, 16384, 32768, 65536) AND COALESCE((SELECT
+            SUM(({width}) + 2) + CEIL(SUM(CASE WHEN {targetColumn}
+            THEN {(intent.Definition.IsNullable ? 1 : 0)}
+            WHEN inline_column.IS_NULLABLE = 'YES' THEN 1 ELSE 0 END) / 8)
+            FROM INFORMATION_SCHEMA.COLUMNS inline_column
+            JOIN INFORMATION_SCHEMA.TABLES inline_table ON inline_table.TABLE_SCHEMA = inline_column.TABLE_SCHEMA
+            AND inline_table.TABLE_NAME = inline_column.TABLE_NAME
+            LEFT JOIN INFORMATION_SCHEMA.CHARACTER_SETS inline_charset
+            ON inline_charset.CHARACTER_SET_NAME = inline_column.CHARACTER_SET_NAME
+            WHERE inline_column.TABLE_SCHEMA = DATABASE()
+            AND inline_column.TABLE_NAME = {Literal(intent.Table)} AND UPPER(inline_table.ENGINE) = 'INNODB'
+            AND UPPER(inline_table.ROW_FORMAT) IN ('DYNAMIC', 'COMPACT', 'REDUNDANT')), 65536)
+            <= LEAST(@@innodb_page_size / 2, 16384) - 256
+            """;
     }
 
     /// <summary>Proves a replacement value fits both sides of the provider's UPDATE-before-MODIFY sequence.</summary>
@@ -563,7 +610,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         var literal = target.DefaultValue.Kind == SafeMigrationDefaultValueKind.Literal
             ? target.DefaultValue.GetLiteralValue()
-            : (target.DefaultValue.StructuredExpression as SafeMigrationSqlLiteralExpression)?.Value;
+            : (target.DefaultValue.StructuredExpression as SafeMigrationSqlLiteralExpression)?.BorrowedValue;
 
         if (literal is bool)
         {
@@ -625,7 +672,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // Plain VARCHAR defaults and source-only defaults do not take that path.
         var value = target.DefaultValue.Kind == SafeMigrationDefaultValueKind.Literal
             ? target.DefaultValue.GetLiteralValue()
-            : (target.DefaultValue.StructuredExpression as SafeMigrationSqlLiteralExpression)?.Value;
+            : (target.DefaultValue.StructuredExpression as SafeMigrationSqlLiteralExpression)?.BorrowedValue;
 
         return value is string text
             && text.Contains('\'', StringComparison.Ordinal)
@@ -645,7 +692,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         var value = target.DefaultValue.Kind == SafeMigrationDefaultValueKind.Literal
             ? target.DefaultValue.GetLiteralValue()
-            : (target.DefaultValue.StructuredExpression as SafeMigrationSqlLiteralExpression)?.Value;
+            : (target.DefaultValue.StructuredExpression as SafeMigrationSqlLiteralExpression)?.BorrowedValue;
 
         // WHY: A backfill can retain these bytes while the engine serializes
         // the TEXT expression default into a different value. Row preservation
@@ -669,7 +716,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         var literal = definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Literal
             ? definition.DefaultValue.GetLiteralValue()
-            : (definition.DefaultValue.StructuredExpression as SafeMigrationSqlLiteralExpression)?.Value;
+            : (definition.DefaultValue.StructuredExpression as SafeMigrationSqlLiteralExpression)?.BorrowedValue;
 
         // WHY: The UTF-8 three-byte catalog surface can expose supplementary
         // defaults as question marks even while the stored default is intact.

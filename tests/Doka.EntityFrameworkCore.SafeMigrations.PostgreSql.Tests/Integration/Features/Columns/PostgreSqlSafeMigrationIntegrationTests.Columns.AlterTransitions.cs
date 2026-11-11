@@ -31,10 +31,12 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA alter_scope; CREATE TABLE alter_rows (value integer); "
-            + $"CREATE TABLE alter_scope.alter_rows (value {liveType} NULL); "
-            + "CREATE INDEX ix_alter_rows_value ON alter_scope.alter_rows (value); "
-            + "INSERT INTO alter_scope.alter_rows VALUES ('preserved');",
+            $"""
+            CREATE SCHEMA alter_scope; CREATE TABLE alter_rows (value integer); CREATE
+            TABLE alter_scope.alter_rows (value {liveType} NULL); CREATE
+            INDEX ix_alter_rows_value ON alter_scope.alter_rows (value); INSERT INTO
+            alter_scope.alter_rows VALUES ('preserved');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -95,8 +97,13 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
 
         var length = await ScalarIntAsync(
             connectionString,
-            "SELECT character_maximum_length FROM information_schema.columns "
-            + "WHERE table_schema = 'alter_scope' AND table_name = 'alter_rows' AND column_name = 'value';",
+            """
+            SELECT character_maximum_length
+            FROM information_schema.columns
+            WHERE table_schema = 'alter_scope'
+            AND table_name = 'alter_rows'
+            AND column_name = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -143,8 +150,10 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE alter_rows (value character varying(40) NULL); "
-            + $"INSERT INTO alter_rows VALUES ('{value}');",
+            $"""
+            CREATE TABLE alter_rows (value character varying(40) NULL); INSERT INTO
+            alter_rows VALUES ('{value}');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -201,8 +210,10 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE alter_rows (value character varying(40) NULL); "
-            + $"INSERT INTO alter_rows VALUES ('{(overlong ? "longer-than-ten" : "fits")}');",
+            $"""
+            CREATE TABLE alter_rows (value character varying(40) NULL); INSERT INTO
+            alter_rows VALUES ('{(overlong ? "longer-than-ten" : "fits")}');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -303,7 +314,10 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE alter_rows (value {liveType}{collation} NULL); INSERT INTO alter_rows VALUES ('fits');",
+            $"""
+            CREATE TABLE alter_rows (value {liveType}{collation}
+            NULL); INSERT INTO alter_rows VALUES ('fits');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -493,8 +507,12 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
 
         var columns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = current_schema() "
-            + "AND table_name = 'alter_rows' AND column_name = 'value';",
+            """
+            SELECT COUNT(*) FROM information_schema.columns
+            WHERE table_schema = current_schema()
+            AND table_name = 'alter_rows'
+            AND column_name = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -531,8 +549,11 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE alter_rows (value character varying(10) NULL); "
-            + "INSERT INTO alter_rows VALUES ('preserved'); CREATE VIEW alter_view AS SELECT value FROM alter_rows;",
+            """
+            CREATE TABLE alter_rows (value character varying(10) NULL); INSERT INTO alter_rows VALUES
+            ('preserved'); CREATE VIEW alter_view AS SELECT value
+            FROM alter_rows;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -686,8 +707,10 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
         {
             await ExecuteSqlAsync(
                 connectionString,
-                $"CREATE TABLE alter_rows (value character varying({sourceLength}) NULL); "
-                + "INSERT INTO alter_rows VALUES ('fits');",
+                $"""
+                CREATE TABLE alter_rows (value character varying({sourceLength})
+                NULL); INSERT INTO alter_rows VALUES ('fits');
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -835,7 +858,12 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
         CancellationToken cancellationToken
     ) => ScalarIntAsync(
         connectionString,
-        "SELECT character_maximum_length FROM information_schema.columns WHERE table_schema = current_schema() "
-        + "AND table_name = 'alter_rows' AND column_name = 'value';",
+        """
+        SELECT character_maximum_length
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+        AND table_name = 'alter_rows'
+        AND column_name = 'value';
+        """,
         cancellationToken: cancellationToken);
 }

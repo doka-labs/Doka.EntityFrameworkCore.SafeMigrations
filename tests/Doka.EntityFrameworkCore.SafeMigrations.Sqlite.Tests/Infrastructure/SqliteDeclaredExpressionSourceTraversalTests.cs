@@ -3,7 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 /// <summary>Guards declared expression-source traversal without a native catalog or connection.</summary>
 public sealed class SqliteDeclaredExpressionSourceTraversalTests
 {
-    /// <summary>Both expression roles retain missing-source rejection and exact immutable snapshot membership.</summary>
+    /// <summary>Both expression roles retain missing-source rejection and exact snapshot membership.</summary>
     /// <param name="width">The number of ordinary columns before the generated member.</param>
     /// <param name="checkRole">Whether the structured reference belongs to a CHECK rather than a column.</param>
     /// <param name="missing">Whether the referenced physical source is absent.</param>

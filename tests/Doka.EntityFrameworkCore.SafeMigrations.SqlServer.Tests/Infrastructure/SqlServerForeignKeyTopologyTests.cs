@@ -174,7 +174,7 @@ public sealed class SqlServerForeignKeyTopologyTests
             sql.IndexOf("IF (NOT EXISTS", StringComparison.Ordinal)
             < sql.IndexOf("DECLARE @doka_fk_edges", StringComparison.Ordinal));
 
-        Assert.Contains("COUNT(*) > 1", sql, StringComparison.Ordinal);
+        Assert.Contains("COUNT(*)\n> 1", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("WITH RECURSIVE", sql, StringComparison.Ordinal);
     }
 

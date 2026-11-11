@@ -7,6 +7,9 @@
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests")]
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests")]
 
+// WHY: Nonpackable measurement code uses the existing internal projection/parser contracts,
+// rather than adding public runtime APIs solely to expose a benchmark workload.
+[assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.Benchmarks")]
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks")]
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks")]
 [assembly: InternalsVisibleTo("Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks")]

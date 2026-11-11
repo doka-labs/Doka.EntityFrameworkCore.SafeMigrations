@@ -42,24 +42,24 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         ApplyCommandTimeout(command, commandTimeout);
-        command.CommandText =
-            "SELECT SCHEMA_NAME(), CONVERT(nvarchar(128), DATABASEPROPERTYEX(DB_NAME(), 'Collation')), "
-            + "HAS_PERMS_BY_NAME(DB_NAME(), N'DATABASE', N'VIEW DEFINITION'), "
-            + "CASE WHEN SCHEMA_NAME() COLLATE CATALOG_DEFAULT = N'dbo' COLLATE CATALOG_DEFAULT "
-            + "THEN 1 ELSE 0 END, DATABASE_PRINCIPAL_ID(), CONVERT(varchar(170), SUSER_SID(), 2), "
-            + "CASE WHEN EXISTS(SELECT 1 FROM sys.triggers WHERE parent_class=0 AND is_disabled=0) "
-            + "OR EXISTS(SELECT 1 FROM sys.server_triggers WHERE is_disabled=0) THEN 1 "
-            + "WHEN COALESCE(HAS_PERMS_BY_NAME(DB_NAME(), N'DATABASE', N'VIEW DEFINITION'),0)<>1 "
-            + "OR COALESCE(HAS_PERMS_BY_NAME(NULL,NULL,N'VIEW ANY DEFINITION'),0)<>1 THEN 2 ELSE 0 END, "
-            + "CASE WHEN ("
-            + SqlServerSafeMigrationCatalogSqlBuilder.ExpressionDependencyReadPermission
-            + ") THEN 1 ELSE 0 END, "
 
-            // WHY: One invocation-local bit covers SQL/CLR triggers on any
-            // table or view, including indirectly modified cascade targets.
-            // Complete database visibility is already mandatory above.
-            + "CASE WHEN EXISTS(SELECT 1 FROM sys.triggers WHERE parent_class=1 AND is_disabled=0) "
-            + "THEN 1 ELSE 0 END;";
+        // WHY: The final invocation-local bit covers SQL/CLR triggers on any
+        // table or view, including indirectly modified cascade targets.
+        // Complete database visibility is already mandatory above.
+        command.CommandText = $"""
+            SELECT SCHEMA_NAME(), CONVERT(nvarchar(128), DATABASEPROPERTYEX(DB_NAME(), 'Collation')),
+            HAS_PERMS_BY_NAME(DB_NAME(), N'DATABASE', N'VIEW DEFINITION'),
+            CASE WHEN SCHEMA_NAME() COLLATE CATALOG_DEFAULT = N'dbo' COLLATE CATALOG_DEFAULT
+            THEN 1 ELSE 0 END, DATABASE_PRINCIPAL_ID(), CONVERT(varchar(170), SUSER_SID(), 2),
+            CASE WHEN EXISTS(SELECT 1 FROM sys.triggers WHERE parent_class=0 AND is_disabled=0)
+            OR EXISTS(SELECT 1 FROM sys.server_triggers WHERE is_disabled=0) THEN 1
+            WHEN COALESCE(HAS_PERMS_BY_NAME(DB_NAME(), N'DATABASE', N'VIEW DEFINITION'),0)<>1
+            OR COALESCE(HAS_PERMS_BY_NAME(NULL,NULL,N'VIEW ANY DEFINITION'),0)<>1 THEN 2 ELSE 0 END,
+            CASE WHEN ({SqlServerSafeMigrationCatalogSqlBuilder.ExpressionDependencyReadPermission})
+            THEN 1 ELSE 0 END,
+            CASE WHEN EXISTS(SELECT 1 FROM sys.triggers WHERE parent_class=1 AND is_disabled=0)
+            THEN 1 ELSE 0 END;
+            """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (reader.FieldCount != 9

@@ -23,12 +23,12 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_constraint_parents PRIMARY KEY (Id)); "
-            + "CREATE TABLE constraint_children (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_constraint_children PRIMARY KEY (Id)); "
-            + "INSERT INTO constraint_parents (Id) VALUES (1); "
-            + "INSERT INTO constraint_children (Id) VALUES (11);",
+            """
+            CREATE TABLE constraint_parents (Id INTEGER NOT NULL, CONSTRAINT pk_constraint_parents
+            PRIMARY KEY (Id)); CREATE TABLE constraint_children (Id INTEGER NOT NULL,
+            CONSTRAINT pk_constraint_children PRIMARY KEY (Id)); INSERT INTO constraint_parents
+            (Id) VALUES (1); INSERT INTO constraint_children (Id) VALUES (11);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -135,8 +135,11 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
             1,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM pragma_foreign_key_list('constraint_children') "
-                + "WHERE \"table\" = 'constraint_parents' AND \"from\" = 'ParentId' AND \"to\" = 'Id';",
+                """
+                SELECT COUNT(*) FROM pragma_foreign_key_list('constraint_children')
+                WHERE "table" = 'constraint_parents'
+                AND "from" = 'ParentId' AND "to" = 'Id';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -224,14 +227,21 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         "CREATE TABLE constraint_parents (Id INTEGER NOT NULL); "
         + "CREATE INDEX ix_parent ON constraint_parents(Id);")]
     [InlineData(
-        "CREATE TABLE constraint_parents (Id INTEGER NOT NULL); "
-        + "CREATE UNIQUE INDEX ix_parent ON constraint_parents(Id COLLATE NOCASE);")]
+        """
+        CREATE TABLE constraint_parents (Id INTEGER NOT NULL);
+        CREATE UNIQUE INDEX ix_parent ON constraint_parents(Id COLLATE NOCASE);
+        """)]
     [InlineData(
-        "CREATE TABLE constraint_parents (Id INTEGER NOT NULL); "
-        + "CREATE UNIQUE INDEX ix_parent ON constraint_parents(Id) WHERE Id > 0;")]
+        """
+        CREATE TABLE constraint_parents (Id INTEGER NOT NULL);
+        CREATE UNIQUE INDEX ix_parent ON constraint_parents(Id)
+        WHERE Id > 0;
+        """)]
     [InlineData(
-        "CREATE TABLE constraint_parents (Id INTEGER NOT NULL); "
-        + "CREATE UNIQUE INDEX ix_parent ON constraint_parents(Id + 0);")]
+        """
+        CREATE TABLE constraint_parents (Id INTEGER NOT NULL);
+        CREATE UNIQUE INDEX ix_parent ON constraint_parents(Id + 0);
+        """)]
     public async Task ProjectedForeignKey_UnusableLivePrincipalRemainsBlocked(
         string principalSql
     )
@@ -239,9 +249,14 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            principalSql
-            + "CREATE TABLE constraint_children (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_constraint_children PRIMARY KEY (Id)); INSERT INTO constraint_children VALUES(11);",
+            $"""
+            {principalSql}
+            CREATE TABLE constraint_children (
+                Id INTEGER NOT NULL,
+                CONSTRAINT pk_constraint_children PRIMARY KEY (Id)
+            );
+            INSERT INTO constraint_children VALUES(11);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -301,15 +316,27 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         await ExecuteSqlAsync(
             connection,
             independentIndex
-                ? "CREATE TABLE constraint_parents (Id INTEGER NOT NULL); "
-                + $"CREATE UNIQUE INDEX ux_parent_id ON constraint_parents({keySql});"
-                : $"CREATE TABLE constraint_parents (Id INTEGER NOT NULL, CONSTRAINT uq_parent_id UNIQUE({keySql}));",
+                ? $"""
+                CREATE TABLE constraint_parents (Id INTEGER NOT NULL);
+                CREATE UNIQUE INDEX ux_parent_id ON constraint_parents({keySql});
+                """
+                : $"""
+                CREATE TABLE constraint_parents (
+                    Id INTEGER NOT NULL,
+                    CONSTRAINT uq_parent_id UNIQUE({keySql})
+                );
+                """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_children (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_constraint_children PRIMARY KEY (Id)); INSERT INTO constraint_children VALUES(11);",
+            """
+            CREATE TABLE constraint_children (
+                Id INTEGER NOT NULL,
+                CONSTRAINT pk_constraint_children PRIMARY KEY (Id)
+            );
+            INSERT INTO constraint_children VALUES(11);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -469,10 +496,13 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_parents (Id INTEGER NOT NULL); "
-            + "CREATE UNIQUE INDEX ux_parent_id ON constraint_parents(Id); "
-            + "CREATE TABLE constraint_children (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_constraint_children PRIMARY KEY (Id)); INSERT INTO constraint_children VALUES(11);",
+            """
+            CREATE TABLE constraint_parents (Id INTEGER NOT NULL); CREATE UNIQUE INDEX
+            ux_parent_id ON constraint_parents(Id); CREATE TABLE constraint_children
+            (Id INTEGER NOT NULL,
+            CONSTRAINT pk_constraint_children PRIMARY KEY (Id)); INSERT INTO constraint_children
+            VALUES(11);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -512,11 +542,14 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_parents (Id INTEGER NOT NULL); "
-            + "CREATE UNIQUE INDEX ux_parent_id ON constraint_parents(Id); "
-            + "CREATE UNIQUE INDEX ux_parent_id_survivor ON constraint_parents(Id); "
-            + "CREATE TABLE constraint_children (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_constraint_children PRIMARY KEY (Id)); INSERT INTO constraint_children VALUES(11);",
+            """
+            CREATE TABLE constraint_parents (Id INTEGER NOT NULL); CREATE UNIQUE INDEX
+            ux_parent_id ON constraint_parents(Id); CREATE UNIQUE INDEX ux_parent_id_survivor
+            ON constraint_parents(Id); CREATE TABLE constraint_children (Id INTEGER
+            NOT NULL,
+            CONSTRAINT pk_constraint_children PRIMARY KEY (Id)); INSERT INTO constraint_children
+            VALUES(11);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -562,10 +595,14 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE composite_parents (TenantId INTEGER NOT NULL, Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_composite_parents PRIMARY KEY(TenantId, Id)); "
-            + "CREATE TABLE composite_children (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_composite_children PRIMARY KEY(Id)); INSERT INTO composite_children VALUES(11);",
+            """
+            CREATE TABLE composite_parents (TenantId INTEGER NOT NULL, Id INTEGER NOT
+            NULL,
+            CONSTRAINT pk_composite_parents PRIMARY KEY(TenantId, Id)); CREATE TABLE
+            composite_children (Id INTEGER NOT NULL,
+            CONSTRAINT pk_composite_children PRIMARY KEY(Id)); INSERT INTO composite_children
+            VALUES(11);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteProjectedCompositeForeignKeyContext(
@@ -624,9 +661,12 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_parents (Id INTEGER NOT NULL); "
-            + "CREATE TABLE constraint_children (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_constraint_children PRIMARY KEY (Id)); INSERT INTO constraint_children VALUES(11);",
+            """
+            CREATE TABLE constraint_parents (Id INTEGER NOT NULL); CREATE TABLE constraint_children
+            (Id INTEGER NOT NULL,
+            CONSTRAINT pk_constraint_children PRIMARY KEY (Id)); INSERT INTO constraint_children
+            VALUES(11);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -673,9 +713,12 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_parents (Id INTEGER NOT NULL); "
-            + "CREATE TABLE constraint_children (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_constraint_children PRIMARY KEY (Id)); INSERT INTO constraint_children VALUES(11);",
+            """
+            CREATE TABLE constraint_parents (Id INTEGER NOT NULL); CREATE TABLE constraint_children
+            (Id INTEGER NOT NULL,
+            CONSTRAINT pk_constraint_children PRIMARY KEY (Id)); INSERT INTO constraint_children
+            VALUES(11);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -740,10 +783,13 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, "
-            + $"CONSTRAINT uq_parent_id UNIQUE({keySql})); "
-            + "CREATE TABLE constraint_children (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_constraint_children PRIMARY KEY (Id)); INSERT INTO constraint_children VALUES(11);",
+            $"""
+            CREATE TABLE constraint_parents (Id INTEGER NOT NULL, CONSTRAINT uq_parent_id
+            UNIQUE({keySql})); CREATE TABLE constraint_children (Id
+            INTEGER NOT NULL,
+            CONSTRAINT pk_constraint_children PRIMARY KEY (Id)); INSERT INTO constraint_children
+            VALUES(11);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -792,12 +838,12 @@ public sealed class SqliteSafeMigrationProjectedForeignKeyNullProofIntegrationTe
         CancellationToken cancellationToken
     ) => ExecuteSqlAsync(
         connection,
-        "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, "
-        + "CONSTRAINT pk_constraint_parents PRIMARY KEY (Id)); "
-        + "CREATE TABLE constraint_children (Id INTEGER NOT NULL, "
-        + "CONSTRAINT pk_constraint_children PRIMARY KEY (Id)); "
-        + "INSERT INTO constraint_parents (Id) VALUES (1); "
-        + "INSERT INTO constraint_children (Id) VALUES (11);",
+        """
+        CREATE TABLE constraint_parents (Id INTEGER NOT NULL, CONSTRAINT pk_constraint_parents
+        PRIMARY KEY (Id)); CREATE TABLE constraint_children (Id INTEGER NOT NULL,
+        CONSTRAINT pk_constraint_children PRIMARY KEY (Id)); INSERT INTO constraint_parents
+        (Id) VALUES (1); INSERT INTO constraint_children (Id) VALUES (11);
+        """,
         cancellationToken: cancellationToken);
 
     /// <summary>Builds the sparse ordered ADD, supporting index and FK stream without parent convergence.</summary>

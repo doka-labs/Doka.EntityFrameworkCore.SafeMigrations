@@ -10,8 +10,10 @@ public sealed partial class MySqlLifecycleIntegrationTests
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `__LegacyMigrationsHistory` (`MigrationId` varchar(150) NOT NULL); "
-            + "INSERT INTO `__LegacyMigrationsHistory` VALUES ('legacy-unchanged');",
+            """
+            CREATE TABLE `__LegacyMigrationsHistory` (`MigrationId` varchar(150) NOT
+            NULL); INSERT INTO `__LegacyMigrationsHistory` VALUES ('legacy-unchanged');
+            """,
             cancellationToken: CancellationToken.None);
 
         var firstGate = new MigrationAdmissionGate();
@@ -169,9 +171,12 @@ public sealed partial class MySqlLifecycleIntegrationTests
         await using var connection = new MySqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.PROCESSLIST "
-            + "WHERE ID <> CONNECTION_ID() AND COMMAND = 'Query' "
-            + "AND INFO LIKE 'SELECT GET_LOCK(%' AND LOCATE(@lockName, INFO) > 0;";
+        command.CommandText = """
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.PROCESSLIST
+        WHERE ID <> CONNECTION_ID() AND COMMAND = 'Query'
+        AND INFO LIKE 'SELECT GET_LOCK(%'
+        AND LOCATE(@lockName, INFO) > 0;
+        """;
 
         command.Parameters.AddWithValue("@lockName", lockName);
 

@@ -1,5 +1,3 @@
-using SQLitePCL;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
 /// <summary>Preserves captured native SQL while validating its bounded structured contract.</summary>
@@ -108,9 +106,13 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
 
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE source_nodes (source INTEGER NOT NULL, derived INTEGER NOT NULL GENERATED ALWAYS AS ("
-            + actual
-            + ") VIRTUAL); INSERT INTO source_nodes (source) VALUES (7);",
+            $"""
+            CREATE TABLE source_nodes (
+                source INTEGER NOT NULL,
+                derived INTEGER NOT NULL GENERATED ALWAYS AS ({actual}) VIRTUAL
+            );
+            INSERT INTO source_nodes (source) VALUES (7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -325,9 +327,13 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
 
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE native_dqs (source TEXT NOT NULL, derived TEXT GENERATED ALWAYS AS ("
-            + expression
-            + ") VIRTUAL); INSERT INTO native_dqs (source) VALUES ('present');",
+            $"""
+            CREATE TABLE native_dqs (
+                source TEXT NOT NULL,
+                derived TEXT GENERATED ALWAYS AS ({expression}) VIRTUAL
+            );
+            INSERT INTO native_dqs (source) VALUES ('present');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -419,9 +425,10 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
 
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE native_dqs (source TEXT NOT NULL, CHECK ("
-            + expression
-            + ")); INSERT INTO native_dqs VALUES ('present');",
+            $"""
+            CREATE TABLE native_dqs (source TEXT NOT NULL, CHECK ({expression}));
+            INSERT INTO native_dqs VALUES ('present');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -430,7 +437,12 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
         {
             await ExecuteSqlAsync(
                 connection,
-                "CREATE TABLE source_nodes (source TEXT NOT NULL, CONSTRAINT ck_source CHECK (" + expression + "));",
+                $"""
+                CREATE TABLE source_nodes (
+                    source TEXT NOT NULL,
+                    CONSTRAINT ck_source CHECK ({expression})
+                );
+                """,
                 cancellationToken: CancellationToken.None);
 
             builder.AddCheckConstraintIfNotExists("ck_source", "source_nodes", expression);
@@ -524,7 +536,10 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
         {
             await ExecuteSqlAsync(
                 connection,
-                "ALTER TABLE source_nodes ADD derived TEXT NOT NULL GENERATED ALWAYS AS (" + expression + ") VIRTUAL;",
+                $"""
+                ALTER TABLE source_nodes
+                ADD derived TEXT NOT NULL GENERATED ALWAYS AS ({expression}) VIRTUAL;
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -883,11 +898,12 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE source_nodes (renamed INTEGER NOT NULL, payload TEXT NOT NULL DEFAULT 'drift', "
-            + "derived INTEGER NOT NULL GENERATED ALWAYS AS ("
-            + renamed
-            + ") VIRTUAL); "
-            + "INSERT INTO source_nodes (renamed) VALUES (7);",
+            $"""
+            CREATE TABLE source_nodes (renamed INTEGER NOT NULL, payload TEXT NOT NULL
+            DEFAULT 'drift',
+            derived INTEGER NOT NULL GENERATED ALWAYS AS ({renamed})
+            VIRTUAL); INSERT INTO source_nodes (renamed) VALUES (7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);

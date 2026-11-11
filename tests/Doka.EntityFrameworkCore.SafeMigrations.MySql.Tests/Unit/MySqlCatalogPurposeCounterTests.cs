@@ -53,10 +53,26 @@ public sealed class MySqlCatalogPurposeCounterTests
     [Theory]
     [InlineData(false, "session")]
     [InlineData(true, "session")]
+    [InlineData(false, "session_mysql_lf")]
+    [InlineData(true, "session_mysql_lf")]
+    [InlineData(false, "session_mariadb_lf")]
+    [InlineData(true, "session_mariadb_lf")]
+    [InlineData(false, "session_missing_timestamp")]
+    [InlineData(true, "session_missing_timestamp")]
+    [InlineData(false, "session_reordered")]
+    [InlineData(true, "session_reordered")]
+    [InlineData(false, "session_tab")]
+    [InlineData(true, "session_tab")]
     [InlineData(false, "engine")]
     [InlineData(true, "engine")]
     [InlineData(false, "status")]
     [InlineData(true, "status")]
+    [InlineData(false, "status_split")]
+    [InlineData(true, "status_split")]
+    [InlineData(false, "engine_decoy")]
+    [InlineData(true, "engine_decoy")]
+    [InlineData(false, "status_decoy")]
+    [InlineData(true, "status_decoy")]
     [InlineData(false, "dependency")]
     [InlineData(true, "dependency")]
     [InlineData(false, "unrelated")]
@@ -75,12 +91,54 @@ public sealed class MySqlCatalogPurposeCounterTests
         {
             "session" => "SELECT @@default_storage_engine, @@SESSION.sql_mode, "
                 + "@@SESSION.explicit_defaults_for_timestamp, 1;",
+            "session_mysql_lf" => """
+                SELECT @@default_storage_engine, @@SESSION.sql_mode, @@SESSION.explicit_defaults_for_timestamp,
+                1;
+                """,
+            "session_mariadb_lf" => """
+                SELECT @@default_storage_engine, @@SESSION.sql_mode, @@SESSION.explicit_defaults_for_timestamp,
+                @@SESSION.check_constraint_checks;
+                """,
+            "session_missing_timestamp" => """
+                SELECT @@default_storage_engine, @@SESSION.sql_mode,
+                1;
+                """,
+            "session_reordered" => """
+                SELECT @@SESSION.sql_mode, @@default_storage_engine, @@SESSION.explicit_defaults_for_timestamp,
+                1;
+                """,
+            "session_tab" => "SELECT @@default_storage_engine, @@SESSION.sql_mode, "
+                + "@@SESSION.explicit_defaults_for_timestamp,\t1;",
             "engine" => MySqlSafeMigrationProviderAnalyzer.BuildRequiredColumnAddOwnerEngineQuery(
                 "SELECT 17 AS ordinal, 'items' AS owner",
                 "'items'"),
-            "status" => "SELECT 17, (CASE WHEN FALSE THEN 'complete' "
-                + "WHEN FALSE THEN CASE WHEN FALSE THEN 'conflict' ELSE 'fresh' END "
-                + "WHEN FALSE THEN CASE WHEN FALSE THEN 'conflict' ELSE 'staged' END ELSE 'ordinary' END) ORDER BY 1;",
+            "status" => """
+                SELECT 17, (CASE WHEN FALSE THEN 'complete'
+                WHEN FALSE THEN CASE WHEN FALSE
+                THEN 'conflict' ELSE 'fresh' END
+                WHEN FALSE THEN CASE WHEN FALSE
+                THEN 'conflict' ELSE 'staged' END
+                ELSE 'ordinary' END) ORDER BY 1;
+                """,
+            "status_split" => """
+                SELECT 17,
+                (CASE WHEN FALSE THEN 'complete'
+                WHEN FALSE THEN CASE WHEN FALSE
+                THEN 'conflict' ELSE 'fresh' END
+                WHEN FALSE THEN CASE WHEN FALSE
+                THEN 'conflict' ELSE 'staged' END
+                ELSE 'ordinary' END) ORDER BY 1;
+                """,
+            "engine_decoy" => """
+                SELECT source_owner.ordinal, EXISTS (SELECT 1
+                FROM INFORMATION_SCHEMA.TABLES physical_owner
+                WHERE UPPER(physical_owner.ENGINE) = 'MYISAM');
+                """,
+            "status_decoy" => """
+                SELECT 17, (CASE WHEN FALSE THEN 'complete'
+                WHEN FALSE THEN CASE WHEN FALSE THEN 'conflict' ELSE 'fresh' END
+                ELSE 'staged' END) ORDER BY 1;
+                """,
             "dependency" => "SELECT /* doka_sm_column_dependencies */ 17, 'primary', NULL ORDER BY 1;",
             _ => "SELECT 17, 'complete', 'fresh', 'staged' ORDER BY 1;",
         };
@@ -107,7 +165,7 @@ public sealed class MySqlCatalogPurposeCounterTests
         // Assert
         Assert.True(hasRow);
         Assert.Equal(
-            purpose == "session"
+            purpose is "session" or "session_mysql_lf" or "session_mariadb_lf"
                 ? 1
                 : 0,
             connection.RequiredAddSessionStatementCount);
@@ -119,7 +177,7 @@ public sealed class MySqlCatalogPurposeCounterTests
             connection.RequiredAddOwnerEngineStatementCount);
 
         Assert.Equal(
-            purpose == "status"
+            purpose is "status" or "status_split"
                 ? 1
                 : 0,
             connection.RequiredAddStatusStatementCount);
@@ -157,18 +215,25 @@ public sealed class MySqlCatalogPurposeCounterTests
         await using var command = connection.CreateCommand();
         command.CommandText = purpose switch
         {
-            "guard" => "SELECT 17, CASE WHEN NOT COALESCE((FALSE), FALSE) THEN ('unsupported') ELSE NULL END, "
-                + "CASE WHEN NOT COALESCE((FALSE), FALSE) THEN ('column_native_enum_mode_conflict') "
-                + "ELSE NULL END ORDER BY 1;",
-            "eligibility" => "SELECT 17, COALESCE((TRUE), FALSE), COALESCE((EXISTS (SELECT 1 "
-                + "FROM INFORMATION_SCHEMA.COLUMNS narrowing_column WHERE "
-                + "narrowing_column.CHARACTER_MAXIMUM_LENGTH > 5)), FALSE) ORDER BY 1;",
+            "guard" => """
+                SELECT 17, CASE WHEN NOT COALESCE((FALSE), FALSE)
+                THEN ('unsupported') ELSE NULL END, CASE WHEN NOT COALESCE((FALSE), FALSE)
+                THEN ('column_native_enum_mode_conflict')
+                ELSE NULL END ORDER BY 1;
+                """,
+            "eligibility" => """
+                SELECT 17, COALESCE((TRUE), FALSE), COALESCE((EXISTS (SELECT 1
+                FROM INFORMATION_SCHEMA.COLUMNS narrowing_column
+                WHERE narrowing_column.CHARACTER_MAXIMUM_LENGTH > 5)), FALSE) ORDER BY 1;
+                """,
 
             // WHY: The shared counter must recognize PostgreSQL's lowercase
             // catalog identifiers without confusing unrelated three-field SQL.
-            "postgresql_eligibility" => "SELECT 17, COALESCE((TRUE), FALSE), COALESCE((EXISTS (SELECT 1 "
-                + "FROM information_schema.columns narrowing_column WHERE "
-                + "narrowing_column.character_maximum_length > 5)), FALSE) ORDER BY 1;",
+            "postgresql_eligibility" => """
+                SELECT 17, COALESCE((TRUE), FALSE), COALESCE((EXISTS (SELECT 1
+                FROM information_schema.columns narrowing_column
+                WHERE narrowing_column.character_maximum_length > 5)), FALSE) ORDER BY 1;
+                """,
             "quoted_marker" => "SELECT 17, 'narrowing_column.CHARACTER_MAXIMUM_LENGTH', FALSE ORDER BY 1;",
             _ => "SELECT 17, TRUE, FALSE ORDER BY 1;",
         };
@@ -204,7 +269,7 @@ public sealed class MySqlCatalogPurposeCounterTests
     )
     {
         var result = new DataTable();
-        if (purpose == "session")
+        if (purpose is "session" or "session_mysql_lf" or "session_mariadb_lf")
         {
             result.Columns.Add("engine", typeof(string));
             result.Columns.Add("mode", typeof(string));

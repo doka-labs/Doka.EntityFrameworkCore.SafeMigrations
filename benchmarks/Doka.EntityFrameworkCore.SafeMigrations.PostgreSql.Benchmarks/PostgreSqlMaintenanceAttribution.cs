@@ -321,9 +321,10 @@ public class PostgreSqlMaintenanceAttribution : IDisposable
                 .DataProbe
             ?? throw new InvalidOperationException("The PostgreSQL attribution operation has no narrowing probe.");
 
-        return $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
-            + $"COALESCE(({probe.TransitionInvariantExpression}), FALSE), "
-            + $"COALESCE(({probe.NarrowingExpression}), FALSE)";
+        return $"""
+            SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, COALESCE(({probe.TransitionInvariantExpression}),
+            FALSE), COALESCE(({probe.NarrowingExpression}), FALSE)
+            """;
     }
 
     /// <summary>Returns bounded deterministic catalog eligibility with no live row probes required.</summary>

@@ -28,7 +28,7 @@ internal static class SqlServerSourceExpressionRoles
         {
             // WHY: Bare TRUE/FALSE are identifiers in native T-SQL, not the
             // portable Boolean literal represented by these parsed nodes.
-            SafeMigrationSqlLiteralExpression literal => literal.Value is not bool,
+            SafeMigrationSqlLiteralExpression literal => literal.BorrowedValue is not bool,
             SafeMigrationSqlIdentifierExpression or SafeMigrationSqlCurrentValueExpression => true,
             SafeMigrationSqlUnaryExpression { Operator: SafeMigrationSqlUnaryOperator.Negate } unary =>
                 IsScalar(unary.Operand, depth + 1),

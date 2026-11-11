@@ -35,9 +35,11 @@ public sealed class MySqlIndexesIntegrationTests : MySqlSafeMigrationIntegration
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'events' "
-                + "AND INDEX_NAME = 'ix_events_filtered';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'events' AND INDEX_NAME = 'ix_events_filtered';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -133,9 +135,12 @@ public sealed class MySqlIndexesIntegrationTests : MySqlSafeMigrationIntegration
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'functional_indexes' "
-                + "AND INDEX_NAME = 'ix_functional_lower_value';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'functional_indexes'
+                AND INDEX_NAME = 'ix_functional_lower_value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 }

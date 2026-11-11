@@ -479,8 +479,11 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE native_members (id integer NOT NULL, "
-            + "payload json NULL, label text NOT NULL); INSERT INTO native_members VALUES (1, '{}', 'a');",
+            """
+            CREATE TABLE native_members (id integer NOT NULL, payload json NULL, label text NOT NULL);
+            INSERT INTO native_members VALUES (1,
+            '{}', 'a');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -666,8 +669,10 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE native_members (id integer, other integer); "
-            + "CREATE INDEX ix_native_members ON native_members ((id::bigint));",
+            """
+            CREATE TABLE native_members (id integer, other integer); CREATE INDEX ix_native_members
+            ON native_members ((id::bigint));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -769,9 +774,12 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE FUNCTION custom_btree(internal) RETURNS index_am_handler "
-            + "LANGUAGE internal AS 'bthandler'; CREATE ACCESS METHOD custom_btree_alias TYPE INDEX "
-            + "HANDLER custom_btree; CREATE TABLE native_members (id integer, added integer);",
+            """
+            CREATE FUNCTION custom_btree(internal) RETURNS index_am_handler LANGUAGE internal AS
+            'bthandler'; CREATE ACCESS METHOD custom_btree_alias TYPE INDEX HANDLER custom_btree; CREATE
+            TABLE native_members (id integer,
+            added integer);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -808,10 +816,13 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE ACCESS METHOD native_hash_alias TYPE INDEX "
-            + "HANDLER pg_catalog.hashhandler; CREATE OPERATOR CLASS alias_integer_ops DEFAULT FOR TYPE integer "
-            + "USING native_hash_alias AS OPERATOR 1 =(integer, integer), FUNCTION 1 hashint4(integer); "
-            + "CREATE TABLE native_members (id integer NOT NULL); INSERT INTO native_members VALUES (1);",
+            """
+            CREATE ACCESS METHOD native_hash_alias TYPE INDEX HANDLER pg_catalog.hashhandler; CREATE
+            OPERATOR CLASS alias_integer_ops DEFAULT FOR TYPE integer USING native_hash_alias AS OPERATOR 1
+            =(integer,
+            integer), FUNCTION 1 hashint4(integer); CREATE TABLE native_members (id integer NOT NULL);
+            INSERT INTO native_members VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

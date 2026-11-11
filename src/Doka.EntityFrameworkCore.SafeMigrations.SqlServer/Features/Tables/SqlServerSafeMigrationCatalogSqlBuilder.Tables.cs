@@ -132,13 +132,22 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     "(" + BuildInlineForeignKeyPrerequisite(definition, foreignKey) + ")"));
 
         return Plan(
-                "CASE "
-                + topologyGuard
-                + $"WHEN NOT ({computedSupport}) THEN N'unsupported' "
-                + $"WHEN NOT {occupied} AND NOT ({inlinePhysical}) THEN N'prerequisite_missing' "
-                + $"WHEN NOT {occupied} AND NOT ({inlinePrerequisites}) THEN N'prerequisite_missing' "
-                + $"WHEN NOT {occupied} THEN N'missing' WHEN NOT {table} THEN N'different' "
-                + $"WHEN {matching} THEN N'matching' ELSE N'different' END",
+                $"""
+                CASE {topologyGuard}WHEN NOT ({computedSupport})
+                THEN N'unsupported'
+                WHEN NOT {occupied}
+                AND NOT ({inlinePhysical})
+                THEN N'prerequisite_missing'
+                WHEN NOT {occupied}
+                AND NOT ({inlinePrerequisites})
+                THEN N'prerequisite_missing'
+                WHEN NOT {occupied}
+                THEN N'missing'
+                WHEN NOT {table}
+                THEN N'different'
+                WHEN {matching}
+                THEN N'matching' ELSE N'different' END
+                """,
                 Bit(matching)) with
             {
                 // WHY: Only the occupancy-certified ordinary missing fast path has
@@ -154,17 +163,19 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                         ? computedPreamble
                         : preamble + "\n" + computedPreamble,
                 PostconditionPreambleSql = computedPreamble,
-                ClassificationCodeExpression = $"CASE WHEN ({computedIdentityFailure}) "
-                + "THEN N'computed_column_operand_identity_unproven' "
-                + $"WHEN NOT ({computedSupport}) "
-                + "THEN N'computed_column_native_type_unproven' "
-                + $"WHEN NOT {occupied} AND NOT ({inlinePrerequisites}) "
-                + "THEN N'inline_foreign_key_prerequisite' "
-                + (preamble is null
+                ClassificationCodeExpression = $"""
+                CASE WHEN ({computedIdentityFailure})
+                THEN N'computed_column_operand_identity_unproven'
+                WHEN NOT ({computedSupport})
+                THEN N'computed_column_native_type_unproven'
+                WHEN NOT {occupied}
+                AND NOT ({inlinePrerequisites})
+                THEN N'inline_foreign_key_prerequisite' {(preamble is null
                     ? string.Empty
                     : $"WHEN NOT ({SqlServerForeignKeySafety.GraphSafePredicate}) "
-                    + "THEN N'foreign_key_cascade_topology' ")
-                + "ELSE NULL END",
+                    + "THEN N'foreign_key_cascade_topology' ")}ELSE NULL
+                END
+                """,
                 PostApplySql = stamps.Length == 0
                     ? null
                     : string.Join("; ", stamps),
@@ -223,21 +234,33 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     {
         var table = TableExists(intent.Table, intent.Schema);
         var occupied = ObjectExists(intent.Table, intent.Schema);
-        var incomingForeignKey = $"EXISTS (SELECT 1 FROM sys.foreign_keys fk WHERE fk.referenced_object_id = "
-            + $"{TableId(intent.Table, intent.Schema)} "
-            + $"AND fk.parent_object_id <> {TableId(intent.Table, intent.Schema)})";
+        var incomingForeignKey = $"""
+            EXISTS (SELECT 1 FROM sys.foreign_keys fk
+            WHERE fk.referenced_object_id = {TableId(intent.Table, intent.Schema)}
+            AND fk.parent_object_id <> {TableId(intent.Table, intent.Schema)})
+            """;
 
-        var otherDependency = $"EXISTS (SELECT 1 FROM sys.sql_expression_dependencies d "
-            + $"WHERE d.referenced_id = {TableId(intent.Table, intent.Schema)} "
-            + $"AND d.referencing_id <> {TableId(intent.Table, intent.Schema)} "
-            + "AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys fk WHERE fk.object_id = d.referencing_id "
-            + $"AND fk.referenced_object_id = {TableId(intent.Table, intent.Schema)})) "
-            + $"OR EXISTS (SELECT 1 FROM sys.tables t WHERE t.object_id = {TableId(intent.Table, intent.Schema)} "
-            + "AND (t.temporal_type <> 0 OR t.is_filetable = 1))";
+        var otherDependency = $"""
+            EXISTS (SELECT 1 FROM sys.sql_expression_dependencies d
+            WHERE d.referenced_id = {TableId(intent.Table, intent.Schema)}
+            AND d.referencing_id <> {TableId(intent.Table, intent.Schema)}
+            AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys fk
+            WHERE fk.object_id = d.referencing_id
+            AND fk.referenced_object_id = {TableId(intent.Table, intent.Schema)}))
+            OR EXISTS (SELECT 1 FROM sys.tables t
+            WHERE t.object_id = {TableId(intent.Table, intent.Schema)}
+            AND (t.temporal_type <> 0 OR t.is_filetable = 1))
+            """;
 
         return Plan(
-                $"CASE WHEN NOT {occupied} THEN N'missing' WHEN NOT {table} OR {incomingForeignKey} OR {otherDependency} "
-                + "THEN N'different' ELSE N'matching' END",
+                $"""
+                CASE WHEN NOT {occupied}
+                THEN N'missing'
+                WHEN NOT {table}
+                OR {incomingForeignKey}
+                OR {otherDependency}
+                THEN N'different' ELSE N'matching' END
+                """,
                 Bit($"NOT {occupied}")) with
             {
                 RequiresExpressionDependencyRead = true,
@@ -245,8 +268,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 // WHY: Projection may discharge incoming FKs through an earlier
                 // accepted dependent/FK DROP, but must preserve every independent
                 // view, temporal, FileTable, or wrong-object-kind conflict.
-                ClassificationCodeExpression = $"CASE WHEN {table} AND {incomingForeignKey} "
-                + $"AND NOT ({otherDependency}) THEN N'incoming_foreign_key_dependency' ELSE NULL END",
+                ClassificationCodeExpression = $"""
+                CASE WHEN {table}
+                AND {incomingForeignKey}
+                AND NOT ({otherDependency})
+                THEN N'incoming_foreign_key_dependency'
+                ELSE NULL END
+                """,
             };
     }
 
@@ -263,8 +291,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             // target. Its existing table already satisfies the postcondition;
             // never invoke sp_rename or TRANSFER for this no-op contract.
             return Plan(
-                $"CASE WHEN NOT {sourceOccupied} THEN N'missing' WHEN {source} "
-                + "THEN N'matching' ELSE N'different' END",
+                $"""
+                CASE WHEN NOT {sourceOccupied}
+                THEN N'missing'
+                WHEN {source}
+                THEN N'matching' ELSE N'different' END
+                """,
                 Bit($"NOT {sourceOccupied} OR {source}"));
         }
 
@@ -278,14 +310,21 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 ? " OR " + ObjectExists(intent.NewName ?? intent.Name, intent.Schema)
                 : string.Empty;
 
-        var dependent = $"EXISTS (SELECT 1 FROM sys.sql_expression_dependencies d "
-            + $"WHERE d.referenced_id = {TableId(intent.Name, intent.Schema)} "
-            + $"AND d.referencing_id <> {TableId(intent.Name, intent.Schema)})";
+        var dependent = $"""
+            EXISTS (SELECT 1 FROM sys.sql_expression_dependencies d
+            WHERE d.referenced_id = {TableId(intent.Name, intent.Schema)}
+            AND d.referencing_id <> {TableId(intent.Name, intent.Schema)})
+            """;
 
         return Plan(
-                $"CASE WHEN NOT {sourceOccupied} THEN N'missing' "
-                + $"WHEN NOT {source} OR {target}{intermediate} OR {dependent} "
-                + "THEN N'different' ELSE N'matching' END",
+                $"""
+                CASE WHEN NOT {sourceOccupied}
+                THEN N'missing'
+                WHEN NOT {source}
+                OR {target}{intermediate}
+                OR {dependent}
+                THEN N'different' ELSE N'matching' END
+                """,
                 Bit(
                     $"NOT {sourceOccupied} AND {TableExists(
                         intent.NewName ?? intent.Name, intent.NewSchema ?? intent.Schema)}")) with
@@ -416,8 +455,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             ? "1 = 0"
             : $"constraint_object.name IN ({string.Join(", ", names.Select(Literal))})";
 
-        return $"NOT EXISTS (SELECT 1 FROM {catalog} constraint_object "
-            + $"WHERE constraint_object.parent_object_id = {TableId(table, schema)} "
-            + $"AND {filter} AND NOT ({allowed}))";
+        return $"""
+            NOT EXISTS (SELECT 1 FROM {catalog} constraint_object
+            WHERE constraint_object.parent_object_id = {TableId(table, schema)}
+            AND {filter}
+            AND NOT ({allowed}))
+            """;
     }
 }

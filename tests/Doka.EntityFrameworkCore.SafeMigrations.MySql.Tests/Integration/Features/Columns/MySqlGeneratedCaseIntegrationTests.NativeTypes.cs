@@ -16,9 +16,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{Table}` (`id` int NOT NULL, "
-            + "native_result bigint GENERATED ALWAYS AS (CAST(id AS SIGNED)) VIRTUAL, "
-            + "CONSTRAINT ck_source_cast CHECK(CAST(id AS SIGNED) > 0));",
+            $"""
+            CREATE TABLE `{Table}` (`id` int NOT NULL, native_result
+            bigint GENERATED ALWAYS AS (CAST(id AS SIGNED)) VIRTUAL,
+            CONSTRAINT ck_source_cast CHECK(CAST(id AS SIGNED) > 0));
+            """,
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);

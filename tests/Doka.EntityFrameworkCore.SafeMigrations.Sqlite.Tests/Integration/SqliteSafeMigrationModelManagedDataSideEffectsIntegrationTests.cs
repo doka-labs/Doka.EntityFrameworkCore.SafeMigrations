@@ -24,22 +24,25 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
 
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE side_effect_rows (id INTEGER NOT NULL PRIMARY KEY, "
-            + "managed_value TEXT NOT NULL); "
-            + "CREATE TABLE side_effect_writes (id INTEGER NOT NULL PRIMARY KEY, "
-            + "managed_value TEXT NOT NULL); "
-            + "INSERT INTO side_effect_rows (id, managed_value) VALUES (1, 'expected');"
-            + (writeKind == "INSERT"
+            $"""
+            CREATE TABLE side_effect_rows (id INTEGER NOT NULL PRIMARY KEY, managed_value
+            TEXT NOT NULL); CREATE TABLE side_effect_writes (id INTEGER NOT NULL PRIMARY
+            KEY,
+            managed_value TEXT NOT NULL); INSERT INTO side_effect_rows (id, managed_value)
+            VALUES (1,
+            'expected');{(writeKind == "INSERT"
                 ? string.Empty
-                : "INSERT INTO side_effect_writes (id, managed_value) VALUES (1, 'source');"),
+                : "INSERT INTO side_effect_writes (id, managed_value) VALUES (1, 'source');")}
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connection,
-            "CREATE TRIGGER side_effect_trigger AFTER "
-            + writeKind
-            + " ON side_effect_writes BEGIN "
-            + "UPDATE side_effect_rows SET managed_value = 'trigger-change' WHERE id = 1; END;",
+            $"""
+            CREATE TRIGGER side_effect_trigger AFTER {writeKind} ON side_effect_writes
+            BEGIN UPDATE side_effect_rows SET managed_value = 'trigger-change'
+            WHERE id = 1; END;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -213,12 +216,15 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
 
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE side_effect_parents (id INTEGER NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE side_effect_children (id INTEGER NOT NULL PRIMARY KEY, "
-            + "parent_id INTEGER NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY (parent_id) "
-            + "REFERENCES side_effect_parents (id) ON DELETE CASCADE); "
-            + "INSERT INTO side_effect_parents (id) VALUES (1); "
-            + "INSERT INTO side_effect_children (id, parent_id) VALUES (11, 1), (12, 1);",
+            """
+            CREATE TABLE side_effect_parents (id INTEGER NOT NULL PRIMARY KEY); CREATE
+            TABLE side_effect_children (id INTEGER NOT NULL PRIMARY KEY,
+            parent_id INTEGER NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY
+            (parent_id) REFERENCES side_effect_parents (id) ON DELETE CASCADE); INSERT
+            INTO side_effect_parents (id) VALUES (1); INSERT INTO side_effect_children
+            (id,
+            parent_id) VALUES (11, 1), (12, 1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -275,23 +281,27 @@ public sealed partial class SqliteSafeMigrationModelManagedDataSideEffectsIntegr
 
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE side_effect_parents (id INTEGER NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE side_effect_children (id INTEGER NOT NULL PRIMARY KEY, "
-            + "parent_id INTEGER NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY (parent_id) "
-            + "REFERENCES side_effect_parents (id) ON DELETE CASCADE); "
-            + "CREATE TABLE side_effect_writes (id INTEGER NOT NULL PRIMARY KEY, "
-            + "managed_value TEXT NOT NULL); "
-            + "INSERT INTO side_effect_parents (id) VALUES (1); "
-            + "INSERT INTO side_effect_children (id, parent_id) VALUES (11, 1);",
+            """
+            CREATE TABLE side_effect_parents (id INTEGER NOT NULL PRIMARY KEY); CREATE
+            TABLE side_effect_children (id INTEGER NOT NULL PRIMARY KEY,
+            parent_id INTEGER NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY
+            (parent_id) REFERENCES side_effect_parents (id) ON DELETE CASCADE); CREATE
+            TABLE side_effect_writes (id INTEGER NOT NULL PRIMARY KEY,
+            managed_value TEXT NOT NULL); INSERT INTO side_effect_parents (id) VALUES
+            (1); INSERT INTO side_effect_children (id,
+            parent_id) VALUES (11, 1);
+            """,
             cancellationToken: CancellationToken.None);
 
         const string writeKind = "INSERT";
 
         await ExecuteSqlAsync(
             connection,
-            "CREATE TRIGGER side_effect_trigger AFTER "
-            + writeKind
-            + " ON side_effect_writes BEGIN INSERT INTO side_effect_children (id, parent_id) VALUES (99, 1); END;",
+            $"""
+            CREATE TRIGGER side_effect_trigger AFTER {writeKind} ON side_effect_writes
+            BEGIN INSERT INTO side_effect_children (id,
+            parent_id) VALUES (99, 1); END;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);

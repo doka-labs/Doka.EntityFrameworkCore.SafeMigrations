@@ -26,9 +26,12 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.filter_items (Id int NOT NULL, Code int NULL, Flag int NULL); "
-            + "INSERT dbo.filter_items (Id, Code, Flag) VALUES (1, 7, 1), (2, 7, 1); "
-            + "CREATE TABLE dbo.filter_ddl_events (Id int NOT NULL);",
+            """
+            CREATE TABLE dbo.filter_items (Id int NOT NULL, Code int NULL, Flag int
+            NULL); INSERT dbo.filter_items (Id,
+            Code, Flag) VALUES (1, 7, 1), (2, 7, 1); CREATE TABLE dbo.filter_ddl_events
+            (Id int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await CreateFilterPredicateAuditAsync(connectionString, cancellationToken: CancellationToken.None);
@@ -69,8 +72,11 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
 
         var indexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.filter_items', N'U') "
-            + "AND name = N'IX_filter_items_Code';",
+            """
+            SELECT COUNT(*) FROM sys.indexes
+            WHERE object_id = OBJECT_ID(N'dbo.filter_items', N'U')
+            AND name = N'IX_filter_items_Code';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rowCount = await ScalarIntAsync(
@@ -136,11 +142,12 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.filter_items (Id int NOT NULL, Code int NULL"
-            + column
-            + "); "
-            + "INSERT dbo.filter_items (Id, Code) VALUES (1, 7), (2, 7); "
-            + "CREATE TABLE dbo.filter_ddl_events (Id int NOT NULL);",
+            $"""
+            CREATE TABLE dbo.filter_items (Id int NOT NULL, Code int NULL{column});
+            INSERT dbo.filter_items (Id,
+            Code) VALUES (1, 7), (2, 7); CREATE TABLE dbo.filter_ddl_events (Id int
+            NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await CreateFilterPredicateAuditAsync(connectionString, cancellationToken: CancellationToken.None);
@@ -180,8 +187,11 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
 
         var indexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.filter_items', N'U') "
-            + "AND name = N'IX_filter_items_Code';",
+            """
+            SELECT COUNT(*) FROM sys.indexes
+            WHERE object_id = OBJECT_ID(N'dbo.filter_items', N'U')
+            AND name = N'IX_filter_items_Code';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rowCount = await ScalarIntAsync(
@@ -230,10 +240,12 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.filter_items (Id int NOT NULL, Code int NULL, Flag int NULL); "
-            + "INSERT dbo.filter_items (Id, Code, Flag) VALUES "
-            + "(1, 10, 1), (2, 20, 2), (3, NULL, 3), (4, NULL, NULL); "
-            + "CREATE TABLE dbo.filter_ddl_events (Id int NOT NULL);",
+            """
+            CREATE TABLE dbo.filter_items (Id int NOT NULL, Code int NULL, Flag int
+            NULL); INSERT dbo.filter_items (Id,
+            Code, Flag) VALUES (1, 10, 1), (2, 20, 2), (3, NULL, 3), (4, NULL, NULL);
+            CREATE TABLE dbo.filter_ddl_events (Id int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await CreateFilterPredicateAuditAsync(connectionString, cancellationToken: CancellationToken.None);
@@ -275,8 +287,12 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
 
         var indexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.filter_items', N'U') "
-            + "AND name = N'IX_filter_items_Code' AND is_unique = 1 AND has_filter = 1;",
+            """
+            SELECT COUNT(*) FROM sys.indexes
+            WHERE object_id = OBJECT_ID(N'dbo.filter_items', N'U')
+            AND name = N'IX_filter_items_Code'
+            AND is_unique = 1 AND has_filter = 1;
+            """,
             cancellationToken: CancellationToken.None);
 
         var rowCount = await ScalarIntAsync(
@@ -317,9 +333,12 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.filter_items (Id int NOT NULL, Code int NULL, Flag int NULL); "
-            + "INSERT dbo.filter_items (Id, Code, Flag) VALUES (1, NULL, 1), (2, NULL, 1), (3, 7, 1); "
-            + "CREATE TABLE dbo.filter_ddl_events (Id int NOT NULL);",
+            """
+            CREATE TABLE dbo.filter_items (Id int NOT NULL, Code int NULL, Flag int
+            NULL); INSERT dbo.filter_items (Id,
+            Code, Flag) VALUES (1, NULL, 1), (2, NULL, 1), (3, 7, 1); CREATE TABLE dbo.filter_ddl_events
+            (Id int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await CreateFilterPredicateAuditAsync(connectionString, cancellationToken: CancellationToken.None);
@@ -349,8 +368,11 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
 
         var indexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.filter_items', N'U') "
-            + "AND name = N'IX_filter_items_Code';",
+            """
+            SELECT COUNT(*) FROM sys.indexes
+            WHERE object_id = OBJECT_ID(N'dbo.filter_items', N'U')
+            AND name = N'IX_filter_items_Code';
+            """,
             cancellationToken: CancellationToken.None);
 
         var ddlEvents = await ScalarIntAsync(
@@ -462,7 +484,9 @@ public sealed class SqlServerSafeMigrationFilterPredicatesIntegrationTests : Sql
         CancellationToken cancellationToken
     ) => ExecuteSqlAsync(
         connectionString,
-        "CREATE TRIGGER doka_filter_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS, DDL_INDEX_EVENTS "
-        + "AS INSERT dbo.filter_ddl_events VALUES (1);",
+        """
+        CREATE TRIGGER doka_filter_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS,
+        DDL_INDEX_EVENTS AS INSERT dbo.filter_ddl_events VALUES (1);
+        """,
         cancellationToken: cancellationToken);
 }

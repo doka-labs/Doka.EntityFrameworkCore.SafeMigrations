@@ -18,10 +18,12 @@ public sealed class
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE FUNCTION metadata_equal(smallint, text) RETURNS boolean LANGUAGE sql IMMUTABLE "
-            + "AS 'SELECT TRUE'; CREATE OPERATOR public.= (LEFTARG = smallint, RIGHTARG = text, "
-            + "FUNCTION = metadata_equal); CREATE TABLE mixed_columns (id smallint NOT NULL, "
-            + "CONSTRAINT ck_integer_input CHECK (id = CAST('40000' AS text)));",
+            """
+            CREATE FUNCTION metadata_equal(smallint, text) RETURNS boolean LANGUAGE sql IMMUTABLE AS
+            'SELECT TRUE'; CREATE OPERATOR public.= (LEFTARG = smallint,
+            RIGHTARG = text, FUNCTION = metadata_equal); CREATE TABLE mixed_columns (id smallint NOT NULL,
+            CONSTRAINT ck_integer_input CHECK (id = CAST('40000' AS text)));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

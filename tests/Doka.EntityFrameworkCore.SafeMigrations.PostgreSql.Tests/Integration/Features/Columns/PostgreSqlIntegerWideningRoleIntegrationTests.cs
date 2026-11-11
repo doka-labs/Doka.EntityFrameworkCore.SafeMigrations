@@ -30,28 +30,30 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
 
             // WHY: The server parses this SQL-standard body as one CREATE command;
             // Npgsql's client-side semicolon splitter cannot parse BEGIN ATOMIC.
-            "sql-procedure" => "DO $create_procedure$ BEGIN EXECUTE 'CREATE PROCEDURE role_integer_write() "
-                + "LANGUAGE SQL BEGIN ATOMIC UPDATE role_integer_rows SET value = value; END'; "
-                + "END $create_procedure$;",
-            "trigger-when" or "trigger-update-of" => "CREATE FUNCTION role_integer_trigger() RETURNS trigger "
-                + "LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$; "
-                + "CREATE TRIGGER role_integer_trigger BEFORE UPDATE "
-                + (caseId == "trigger-update-of"
+            // Compile-time chunks retain every byte of that indivisible nested source.
+            "sql-procedure" =>
+                "DO $create_procedure$ BEGIN EXECUTE 'CREATE PROCEDURE role_integer_write() "
+                + "LANGUAGE SQL BEGIN ATOMIC UPDATE role_integer_rows SET value = value; END'; END $create_procedure$;",
+            "trigger-when" or "trigger-update-of" => $"""
+                CREATE FUNCTION role_integer_trigger() RETURNS trigger LANGUAGE plpgsql
+                AS $$ BEGIN RETURN NEW; END $$; CREATE TRIGGER role_integer_trigger BEFORE
+                UPDATE {(caseId == "trigger-update-of"
                     ? "OF value "
-                    : string.Empty)
-                + "ON role_integer_rows FOR EACH ROW "
-                + (caseId == "trigger-when"
+                    : string.Empty)}ON role_integer_rows FOR EACH ROW {(caseId == "trigger-when"
                     ? "WHEN (OLD.value IS DISTINCT FROM NEW.value) "
-                    : string.Empty)
-                + "EXECUTE FUNCTION role_integer_trigger();",
+                    : string.Empty)}EXECUTE
+                FUNCTION role_integer_trigger();
+                """,
             "row-policy" => "CREATE POLICY integer_value_policy ON role_integer_rows USING (value > 0);",
             _ => throw new ArgumentOutOfRangeException(nameof(caseId)),
         };
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE role_integer_rows(value integer NOT NULL); INSERT INTO role_integer_rows VALUES (7); "
-            + dependent,
+            $"""
+            CREATE TABLE role_integer_rows(value integer NOT NULL); INSERT INTO role_integer_rows
+            VALUES (7); {dependent}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -137,9 +139,11 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE independent_integer_rows(value integer NOT NULL, unrelated integer NOT NULL); "
-            + "INSERT INTO independent_integer_rows VALUES (7, 9); "
-            + unrelated,
+            $"""
+            CREATE TABLE independent_integer_rows(value integer NOT NULL, unrelated integer NOT NULL);
+            INSERT INTO independent_integer_rows VALUES (7,
+            9); {unrelated}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -179,8 +183,11 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
             "bigint",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT data_type FROM information_schema.columns WHERE table_schema='public' "
-                + "AND table_name='independent_integer_rows' AND column_name='value';",
+                """
+                SELECT data_type FROM information_schema.columns
+                WHERE table_schema='public' AND table_name='independent_integer_rows'
+                AND column_name='value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -205,22 +212,26 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
 
         var callback = caseId switch
         {
-            "type-function" => "CREATE FUNCTION whole_integer_accepts(whole_integer_rows) RETURNS boolean "
-                + "LANGUAGE sql AS 'SELECT pg_typeof($1.value) = ''integer''::regtype'; ",
-            "type-operator" => "CREATE FUNCTION whole_integer_compares(whole_integer_rows,whole_integer_rows) "
-                + "RETURNS boolean LANGUAGE sql AS 'SELECT pg_typeof($1.value) = ''integer''::regtype'; "
-                + "CREATE OPERATOR #=# (LEFTARG=whole_integer_rows, RIGHTARG=whole_integer_rows, "
-                + "FUNCTION=whole_integer_compares); ",
+            "type-function" => $"""
+                CREATE FUNCTION whole_integer_accepts(whole_integer_rows) RETURNS boolean
+                LANGUAGE sql AS 'SELECT pg_typeof($1.value) = ''integer''::regtype';{"\u0020"}
+                """,
+            "type-operator" => $"""
+                CREATE FUNCTION whole_integer_compares(whole_integer_rows,whole_integer_rows)
+                RETURNS boolean LANGUAGE sql AS 'SELECT pg_typeof($1.value) = ''integer''::regtype';
+                {"CREATE OPERATOR #=# (LEFTARG=whole_integer_rows, RIGHTARG=whole_integer_rows, "
+                    + "FUNCTION=whole_integer_compares);"}{"\u0020"}
+                """,
             _ => string.Empty,
         };
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE whole_integer_rows(value integer NOT NULL); INSERT INTO whole_integer_rows VALUES(7); "
-            + callback
-            + "ALTER TABLE whole_integer_rows ADD CONSTRAINT ck_whole_integer CHECK("
-            + check
-            + ");",
+            $"""
+            CREATE TABLE whole_integer_rows(value integer NOT NULL); INSERT INTO whole_integer_rows
+            VALUES(7); {callback}ALTER TABLE whole_integer_rows ADD
+            CONSTRAINT ck_whole_integer CHECK({check});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -274,8 +285,11 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
             "integer",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT data_type FROM information_schema.columns WHERE table_schema='public' "
-                + "AND table_name='whole_integer_rows' AND column_name='value';",
+                """
+                SELECT data_type FROM information_schema.columns
+                WHERE table_schema='public' AND table_name='whole_integer_rows'
+                AND column_name='value';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -318,18 +332,14 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE "
-            + owner
-            + "(value integer NULL, unrelated integer NULL, CHECK("
-            + predicate
-            + ")); "
-            + "INSERT INTO "
-            + owner
-            + " VALUES("
-            + (notNull
+            $"""
+            CREATE TABLE {owner}(value integer NULL, unrelated integer
+            NULL,
+            CHECK({predicate})); INSERT INTO {owner}
+            VALUES({(notNull
                 ? "7,9"
-                : "NULL,NULL")
-            + ");",
+                : "NULL,NULL")});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -369,10 +379,11 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
             "bigint",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT data_type FROM information_schema.columns WHERE table_schema='public' "
-                + "AND table_name='"
-                + table
-                + "' AND column_name='value';",
+                $"""
+                SELECT data_type FROM information_schema.columns
+                WHERE table_schema='public' AND table_name='{table}'
+                AND column_name='value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -424,8 +435,11 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
             "bigint",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT data_type FROM information_schema.columns WHERE table_schema='public' "
-                + "AND table_name='empty_integer_rows' AND column_name='value';",
+                """
+                SELECT data_type FROM information_schema.columns
+                WHERE table_schema='public' AND table_name='empty_integer_rows'
+                AND column_name='value';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -441,13 +455,17 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var definition = partial
-            ? "CREATE FUNCTION indexed_accepts(indexed_integer_rows) RETURNS boolean IMMUTABLE LANGUAGE plpgsql "
-            + "AS $$ BEGIN RETURN pg_typeof($1.value) = 'integer'::regtype; END $$; "
-            + "CREATE INDEX ix_whole_native ON indexed_integer_rows(unrelated) "
-            + "WHERE indexed_accepts(indexed_integer_rows.*);"
-            : "CREATE FUNCTION indexed_size(indexed_integer_rows) RETURNS integer IMMUTABLE LANGUAGE sql "
-            + "AS 'SELECT pg_column_size($1)'; CREATE INDEX ix_whole_native ON indexed_integer_rows "
-            + "((indexed_size(indexed_integer_rows.*)));";
+            ? """
+            CREATE FUNCTION indexed_accepts(indexed_integer_rows) RETURNS boolean IMMUTABLE LANGUAGE plpgsql
+            AS $$ BEGIN RETURN pg_typeof($1.value) = 'integer'::regtype; END $$; CREATE INDEX
+            ix_whole_native ON indexed_integer_rows(unrelated)
+            WHERE indexed_accepts(indexed_integer_rows.*);
+            """
+            : """
+            CREATE FUNCTION indexed_size(indexed_integer_rows) RETURNS integer IMMUTABLE
+            LANGUAGE sql AS 'SELECT pg_column_size($1)'; CREATE INDEX ix_whole_native
+            ON indexed_integer_rows ((indexed_size(indexed_integer_rows.*)));
+            """;
 
         var predicate = partial
             ? "indexed_accepts(indexed_integer_rows.*)"
@@ -455,9 +473,10 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE indexed_integer_rows(value integer NOT NULL, unrelated integer NOT NULL); "
-            + "INSERT INTO indexed_integer_rows VALUES(7,9); "
-            + definition,
+            $"""
+            CREATE TABLE indexed_integer_rows(value integer NOT NULL, unrelated integer
+            NOT NULL); INSERT INTO indexed_integer_rows VALUES(7,9); {definition}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -541,13 +560,13 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
         var filtered = Fixture.ServerVersion.Major >= 15;
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE published_integer_rows(value integer NOT NULL); "
-            + "INSERT INTO published_integer_rows VALUES(7); "
-            + "CREATE PUBLICATION integer_values FOR TABLE published_integer_rows"
-            + (filtered
+            $"""
+            CREATE TABLE published_integer_rows(value integer NOT NULL); INSERT INTO
+            published_integer_rows VALUES(7); CREATE PUBLICATION integer_values FOR
+            TABLE published_integer_rows{(filtered
                 ? " WHERE (value > 0)"
-                : string.Empty)
-            + ";",
+                : string.Empty)};
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

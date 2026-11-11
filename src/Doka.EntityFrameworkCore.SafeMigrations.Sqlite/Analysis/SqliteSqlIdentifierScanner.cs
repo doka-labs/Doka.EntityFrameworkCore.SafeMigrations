@@ -199,16 +199,56 @@ internal static class SqliteSqlIdentifierScanner
         string keyword
     ) => ReadIdentifierFollowingKeyword(sql, keyword, returnLast: true);
 
+    /// <summary>Reads the last declared identifier outside parenthesized expressions.</summary>
+    /// <param name="sql">The native declaration, including its expression source.</param>
+    /// <param name="keyword">The declaration keyword, such as COLLATE.</param>
+    /// <returns>The last outer identifier, or null when the declaration omits it.</returns>
+    internal static string? ReadTopLevelIdentifierFollowingKeyword(
+        string sql,
+        string keyword
+    ) => ReadIdentifierFollowingKeyword(sql, keyword, returnLast: true, topLevelOnly: true);
+
+    /// <summary>Finds the real key-list delimiter after an owner identifier, never inside a quoted name.</summary>
+    /// <param name="sql">The native CREATE INDEX statement.</param>
+    /// <param name="keyword">The owner keyword, ON for an index.</param>
+    /// <returns>The owner key-list opening parenthesis, or -1 for an unsupported header.</returns>
+    internal static int IndexOfOwnerKeyList(
+        string sql,
+        string keyword
+    )
+    {
+        var keywordPosition = IndexOfKeyword(sql, keyword);
+        if (keywordPosition < 0)
+        {
+            return -1;
+        }
+
+        var position = keywordPosition + keyword.Length;
+        SkipTrivia(sql, ref position);
+        if (!TryReadIdentifier(sql, ref position, out _, allowSingleQuoted: true))
+        {
+            return -1;
+        }
+
+        SkipTrivia(sql, ref position);
+
+        return position < sql.Length && sql[position] == '('
+            ? position
+            : -1;
+    }
+
     private static string? ReadIdentifierFollowingKeyword(
         string sql,
         string keyword,
-        bool returnLast
+        bool returnLast,
+        bool topLevelOnly = false
     )
     {
         ArgumentNullException.ThrowIfNull(sql);
         ArgumentNullException.ThrowIfNull(keyword);
 
         var position = 0;
+        var depth = 0;
         string? result = null;
         while (position < sql.Length)
         {
@@ -230,6 +270,20 @@ internal static class SqliteSqlIdentifierScanner
                 continue;
             }
 
+            if (sql[position] == '(')
+            {
+                depth++;
+                position++;
+                continue;
+            }
+
+            if (sql[position] == ')')
+            {
+                depth--;
+                position++;
+                continue;
+            }
+
             var start = position;
             if (!TryReadBareWord(sql, ref position))
             {
@@ -237,9 +291,10 @@ internal static class SqliteSqlIdentifierScanner
                 continue;
             }
 
-            if (!sql
-                .AsSpan(start, position - start)
-                .Equals(keyword, StringComparison.OrdinalIgnoreCase))
+            if ((topLevelOnly && depth != 0)
+                || !sql
+                    .AsSpan(start, position - start)
+                    .Equals(keyword, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -311,7 +366,8 @@ internal static class SqliteSqlIdentifierScanner
     private static bool TryReadIdentifier(
         string sql,
         ref int position,
-        [NotNullWhen(true)] out string? identifier
+        [NotNullWhen(true)] out string? identifier,
+        bool allowSingleQuoted = false
     )
     {
         identifier = null;
@@ -321,7 +377,8 @@ internal static class SqliteSqlIdentifierScanner
         }
 
         var current = sql[position];
-        if (current is '"' or '`')
+        if (current is '"' or '`'
+            || (allowSingleQuoted && current == '\''))
         {
             identifier = ReadDelimitedIdentifier(sql, ref position, current, current);
 
@@ -352,8 +409,9 @@ internal static class SqliteSqlIdentifierScanner
         return true;
     }
 
-    private static bool TryReadBareWord(
-        string sql,
+    /// <summary>Advances across one native unquoted identifier/keyword token without allocating a string.</summary>
+    internal static bool TryReadBareWord(
+        ReadOnlySpan<char> sql,
         ref int position
     )
     {
@@ -450,8 +508,9 @@ internal static class SqliteSqlIdentifierScanner
         return result.ToString();
     }
 
-    private static void SkipTrivia(
-        string sql,
+    /// <summary>Advances across native SQL whitespace and comments while leaving quoted payloads untouched.</summary>
+    internal static void SkipTrivia(
+        ReadOnlySpan<char> sql,
         ref int position
     )
     {

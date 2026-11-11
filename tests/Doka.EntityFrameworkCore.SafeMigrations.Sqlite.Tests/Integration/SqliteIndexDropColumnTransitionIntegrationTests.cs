@@ -37,15 +37,17 @@ public sealed class SqliteIndexDropColumnTransitionIntegrationTests : SqliteInte
         var sourceNullable = transition == "nullability";
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER "
-            + (sourceNullable
+            $"""
+            CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER
+            {(sourceNullable
                 ? "NULL"
-                : "NOT NULL")
-            + ", CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
-            + "INSERT INTO lossless_alter_records VALUES (1, -2147483648), (2, 2147483647);"
-            + (indexExists
+                : "NOT NULL")},
+            CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); INSERT INTO lossless_alter_records
+            VALUES (1,
+            -2147483648), (2, 2147483647);{(indexExists
                 ? " CREATE INDEX ix_upgrade_value ON lossless_alter_records (Value);"
-                : string.Empty),
+                : string.Empty)}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using DbContext context = transition == "default"
@@ -162,17 +164,18 @@ public sealed class SqliteIndexDropColumnTransitionIntegrationTests : SqliteInte
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER NULL, "
-            + "CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
-            + "INSERT INTO lossless_alter_records VALUES (1, "
-            + (control == "null-row"
+            $"""
+            CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER
+            NULL,
+            CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); INSERT INTO lossless_alter_records
+            VALUES (1,
+            {(control == "null-row"
                 ? "NULL"
-                : "9007199254740993")
-            + "); "
-            + "CREATE INDEX ix_upgrade_value ON lossless_alter_records (Value);"
-            + (control == "unmanaged-trigger"
+                : "9007199254740993")}); CREATE INDEX ix_upgrade_value ON lossless_alter_records
+            (Value);{(control == "unmanaged-trigger"
                 ? " CREATE TRIGGER caller_trigger AFTER UPDATE ON lossless_alter_records BEGIN SELECT 1; END;"
-                : string.Empty),
+                : string.Empty)}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteLosslessAlterTestContext<long>(connection, _internalServices);
@@ -222,8 +225,11 @@ public sealed class SqliteIndexDropColumnTransitionIntegrationTests : SqliteInte
 
         var source = await ScalarIntAsync(
             connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('lossless_alter_records') "
-            + "WHERE name='Value' AND type='INTEGER' AND \"notnull\"=0;",
+            """
+            SELECT COUNT(*) FROM pragma_table_xinfo('lossless_alter_records')
+            WHERE name='Value' AND type='INTEGER'
+            AND "notnull"=0;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -242,9 +248,13 @@ public sealed class SqliteIndexDropColumnTransitionIntegrationTests : SqliteInte
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER NOT NULL UNIQUE, "
-            + "CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
-            + "INSERT INTO lossless_alter_records VALUES (1, 2147483647);",
+            """
+            CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER
+            NOT NULL UNIQUE,
+            CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); INSERT INTO lossless_alter_records
+            VALUES (1,
+            2147483647);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteLosslessAlterTestContext<long>(connection, _internalServices);
@@ -296,10 +306,13 @@ public sealed class SqliteIndexDropColumnTransitionIntegrationTests : SqliteInte
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER NULL, "
-            + "CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
-            + "INSERT INTO lossless_alter_records VALUES (1, 2147483647); "
-            + "CREATE INDEX ix_upgrade_value ON lossless_alter_records (Value);",
+            """
+            CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER
+            NULL,
+            CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); INSERT INTO lossless_alter_records
+            VALUES (1,
+            2147483647); CREATE INDEX ix_upgrade_value ON lossless_alter_records (Value);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteLosslessAlterTestContext<long>(connection, _internalServices);
@@ -365,8 +378,10 @@ public sealed class SqliteIndexDropColumnTransitionIntegrationTests : SqliteInte
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER NOT NULL UNIQUE); "
-            + "CREATE INDEX ix_upgrade_value ON lossless_alter_records (Value);",
+            """
+            CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER NOT NULL UNIQUE);
+            CREATE INDEX ix_upgrade_value ON lossless_alter_records (Value);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteLosslessAlterTestContext<long>(connection, _internalServices);

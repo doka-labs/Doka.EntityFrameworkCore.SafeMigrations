@@ -95,13 +95,15 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         var encoded = encoder.Invoke(null, [body]) as string
             ?? throw new InvalidOperationException("The production anonymous-body encoder returned no SQL.");
 
-        var script = "SET standard_conforming_strings = "
-            + (standardStrings
+        var script = $"""
+            SET standard_conforming_strings = {(standardStrings
                 ? "on"
-                : "off")
-            + "; SET backslash_quote = off; DO $EF$\nBEGIN\n    "
-            + encoded
-            + "\nEND $EF$;";
+                : "off")}; SET backslash_quote
+            = off; DO $EF$
+            BEGIN
+                {encoded}
+            END $EF$;
+            """;
 
         await ExecuteSqlAsync(connectionString, script, cancellationToken: CancellationToken.None);
         var payload = await ScalarStringAsync(
@@ -131,10 +133,12 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         await context.Database.MigrateAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "ALTER TABLE scripted_generated_nodes DROP COLUMN has_descendants; "
-            + "ALTER TABLE scripted_generated_nodes ADD has_descendants boolean "
-            + "GENERATED ALWAYS AS (right_bound > left_bound + 2) STORED NOT NULL; "
-            + "DELETE FROM \"__GeneratedScriptHistory\";",
+            """
+            ALTER TABLE scripted_generated_nodes DROP COLUMN has_descendants; ALTER TABLE
+            scripted_generated_nodes ADD has_descendants boolean GENERATED ALWAYS AS (right_bound >
+            left_bound + 2) STORED NOT NULL; DELETE
+            FROM "__GeneratedScriptHistory";
+            """,
             cancellationToken: CancellationToken.None);
 
         var options = MigrationsSqlGenerationOptions.Idempotent
@@ -283,11 +287,13 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE TABLE generated_nodes "
-                + "(id integer NOT NULL PRIMARY KEY, left_bound bigint NOT NULL, right_bound bigint NOT NULL, "
-                + "depth integer NOT NULL, position integer NOT NULL); "
-                + "INSERT INTO generated_nodes VALUES (1, 1, 2, 0, 0), (2, 3, 6, 0, 1), "
-                + "(3, 9223372036854775806, 9223372036854775807, 0, 2);",
+                """
+                CREATE TABLE generated_nodes (id integer NOT NULL PRIMARY KEY, left_bound bigint NOT NULL,
+                right_bound bigint NOT NULL, depth integer NOT NULL, position integer NOT NULL); INSERT INTO
+                generated_nodes VALUES (1,
+                1, 2, 0, 0), (2, 3, 6, 0, 1), (3, 9223372036854775806, 9223372036854775807,
+                0, 2);
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -308,9 +314,12 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "INSERT INTO generated_nodes "
-                + "(id, left_bound, right_bound, depth, position) VALUES "
-                + "(1, 1, 2, 0, 0), (2, 3, 6, 0, 1), (3, 9223372036854775806, 9223372036854775807, 0, 2);",
+                """
+                INSERT INTO generated_nodes (id, left_bound, right_bound, depth, position)
+                VALUES (1,
+                1, 2, 0, 0), (2, 3, 6, 0, 1), (3, 9223372036854775806, 9223372036854775807,
+                0, 2);
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -362,10 +371,12 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
             "boolean:true:s",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT pg_catalog.format_type(atttypid, atttypmod) || ':' || attnotnull::text "
-                + "|| ':' || attgenerated::text "
-                + "FROM pg_catalog.pg_attribute WHERE attrelid = 'generated_nodes'::regclass "
-                + "AND attname = 'has_descendants';",
+                """
+                SELECT pg_catalog.format_type(atttypid, atttypmod) || ':' || attnotnull::text
+                || ':' || attgenerated::text FROM pg_catalog.pg_attribute WHERE attrelid
+                = 'generated_nodes'::regclass
+                AND attname = 'has_descendants';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -384,10 +395,15 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE generated_nodes "
-            + "(id integer NOT NULL PRIMARY KEY, left_bound bigint NOT NULL, right_bound bigint NOT NULL, "
-            + $"depth integer NOT NULL, position integer NOT NULL, has_descendants {declaration}); "
-            + "INSERT INTO generated_nodes (id, left_bound, right_bound, depth, position) VALUES (1, 1, 2, 0, 0);",
+            $"""
+            CREATE TABLE generated_nodes (id integer NOT NULL PRIMARY KEY, left_bound
+            bigint NOT NULL,
+            right_bound bigint NOT NULL, depth integer NOT NULL, position integer NOT
+            NULL,
+            has_descendants {declaration}); INSERT INTO generated_nodes
+            (id,
+            left_bound, right_bound, depth, position) VALUES (1, 1, 2, 0, 0);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -489,9 +505,12 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE generated_nodes "
-            + "(id integer NOT NULL, left_bound bigint NOT NULL, right_bound bigint NOT NULL); "
-            + "INSERT INTO generated_nodes VALUES (1, 9223372036854775807, 9223372036854775807);",
+            """
+            CREATE TABLE generated_nodes (id integer NOT NULL, left_bound bigint NOT
+            NULL,
+            right_bound bigint NOT NULL); INSERT INTO generated_nodes VALUES (1, 9223372036854775807,
+            9223372036854775807);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -543,9 +562,13 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE generated_text (id integer NOT NULL, "
-            + "label text GENERATED ALWAYS AS (CASE WHEN id > 0 THEN 'a  b' ELSE 'a b' END) STORED); "
-            + "INSERT INTO generated_text (id) VALUES (1), (0);",
+            """
+            CREATE TABLE generated_text (id integer NOT NULL, label text GENERATED ALWAYS
+            AS (CASE WHEN id > 0
+            THEN 'a  b' ELSE 'a b' END) STORED); INSERT INTO generated_text (id) VALUES
+            (1),
+            (0);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -613,8 +636,11 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE generated_cases (id integer NOT NULL, "
-            + "left_bound bigint NOT NULL); INSERT INTO generated_cases VALUES (-1, 10), (0, 20), (1, 30), (2, 40);",
+            """
+            CREATE TABLE generated_cases (id integer NOT NULL, left_bound bigint NOT NULL); INSERT INTO
+            generated_cases VALUES (-1,
+            10), (0, 20), (1, 30), (2, 40);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -745,8 +771,11 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE TABLE generated_collation (id integer NOT NULL, "
-                + $"left_text text COLLATE \"C\", right_text text COLLATE \"{rightCollation}\");",
+                $"""
+                CREATE TABLE generated_collation (id integer NOT NULL, left_text text COLLATE
+                "C",
+                right_text text COLLATE "{rightCollation}");
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -810,8 +839,12 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
                 : 0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT count(*) FROM information_schema.columns WHERE table_schema = current_schema() "
-                + "AND table_name = 'generated_collation' AND column_name = 'flag';",
+                """
+                SELECT count(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'generated_collation'
+                AND column_name = 'flag';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -835,8 +868,11 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE generated_collation (id integer NOT NULL, "
-            + $"left_text text COLLATE \"C\", right_text text COLLATE \"{initialCollation}\");",
+            $"""
+            CREATE TABLE generated_collation (id integer NOT NULL, left_text text COLLATE
+            "C",
+            right_text text COLLATE "{initialCollation}");
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -894,8 +930,12 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
                 : 0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT count(*) FROM information_schema.columns WHERE table_schema = current_schema() "
-                + "AND table_name = 'generated_collation' AND column_name = 'flag';",
+                """
+                SELECT count(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'generated_collation'
+                AND column_name = 'flag';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -950,8 +990,10 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT count(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'generated_nodes'::regclass "
-                + "AND attname = 'has_descendants';",
+                """
+                SELECT count(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'generated_nodes'::regclass
+                AND attname = 'has_descendants';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -1028,8 +1070,12 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT count(*) FROM information_schema.columns WHERE table_schema = current_schema() "
-                + "AND table_name = 'invalid_case' AND column_name = 'flag';",
+                """
+                SELECT count(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'invalid_case'
+                AND column_name = 'flag';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -1143,8 +1189,12 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
                 : 0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT count(*) FROM information_schema.columns WHERE table_schema = current_schema() "
-                + "AND table_name = 'prefix_case' AND column_name = 'flag';",
+                """
+                SELECT count(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'prefix_case'
+                AND column_name = 'flag';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 

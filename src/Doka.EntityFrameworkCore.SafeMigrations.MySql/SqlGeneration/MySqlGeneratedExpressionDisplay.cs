@@ -23,18 +23,44 @@ internal static class MySqlGeneratedExpressionDisplay
             display,
             includeMySqlEncodedDisplay: !isMariaDb);
 
+        var groupedBooleanChains = isMariaDb && HasAssociativeBooleanChain(expression);
+        if (groupedBooleanChains)
+        {
+            // WHY: MariaDB can retain authored Boolean-group parentheses while
+            // omitting per-predicate parentheses. Keep this finite AST-derived
+            // spelling alongside the existing minimal native candidate.
+            candidates = candidates
+                .Concat(MySqlExpressionCanonicalizer.BuildComparisonCandidates(
+                    Render(expression, renderer, isMariaDb, groupBooleanChains: true),
+                    includeMySqlEncodedDisplay: false))
+                .ToArray();
+        }
+
         if (capturedSource && MySqlCapturedExpressionContract.RequiresStableStrings(expression))
         {
             // WHY: Captured SQL is deliberately retained verbatim. Its parsed
             // delimiter-doubled string values are unambiguous, so retain their
             // ordinary native display alongside the stable structured-API DDL
             // display instead of requiring authors to rewrite historical SQL.
-            return candidates
+            candidates = candidates
                 .Concat(
                     MySqlExpressionCanonicalizer.BuildComparisonCandidates(
                         Render(expression, renderer, isMariaDb, preserveCapturedStringLiterals: true),
                         includeMySqlEncodedDisplay: !isMariaDb))
                 .ToArray();
+
+            if (groupedBooleanChains)
+            {
+                candidates = candidates
+                    .Concat(MySqlExpressionCanonicalizer.BuildComparisonCandidates(
+                        Render(expression,
+                            renderer,
+                            isMariaDb,
+                            preserveCapturedStringLiterals: true,
+                            groupBooleanChains: true),
+                        includeMySqlEncodedDisplay: false))
+                    .ToArray();
+            }
         }
 
         return candidates;
@@ -45,12 +71,18 @@ internal static class MySqlGeneratedExpressionDisplay
     /// <param name="renderer">The native provider's identifier and literal renderer.</param>
     /// <param name="isMariaDb">Whether the catalog emits minimally parenthesized MariaDB expressions.</param>
     /// <param name="preserveCapturedStringLiterals">Whether author SQL retains ordinary value tokens.</param>
+    /// <param name="groupBooleanChains">Whether to retain native groups around differing Boolean operators.</param>
+    /// <param name="nativeIndexStringLiterals">
+    /// Whether to retain ordinary value semantics in native key displays.
+    /// </param>
     /// <returns>A structurally equivalent candidate, never a rewritten catalog value.</returns>
     internal static string Render(
         SafeMigrationSqlExpression expression,
         MySqlSafeMigrationSqlExpressionRenderer renderer,
         bool isMariaDb,
-        bool preserveCapturedStringLiterals = false
+        bool preserveCapturedStringLiterals = false,
+        bool groupBooleanChains = false,
+        bool nativeIndexStringLiterals = false
     )
     {
         var builder = new StringBuilder();
@@ -59,8 +91,11 @@ internal static class MySqlGeneratedExpressionDisplay
             expression,
             renderer,
             isMariaDb,
-            stableStrings: !preserveCapturedStringLiterals
-            && MySqlCapturedExpressionContract.RequiresStableStrings(expression));
+            stableStrings: !nativeIndexStringLiterals
+            && !preserveCapturedStringLiterals
+            && MySqlCapturedExpressionContract.RequiresStableStrings(expression),
+            groupBooleanChains: groupBooleanChains,
+            nativeIndexStringLiterals: nativeIndexStringLiterals);
 
         return builder.ToString();
     }
@@ -73,7 +108,9 @@ internal static class MySqlGeneratedExpressionDisplay
         bool isMariaDb,
         int parentPrecedence = 0,
         bool rightOperand = false,
-        bool stableStrings = false
+        bool stableStrings = false,
+        bool groupBooleanChains = false,
+        bool nativeIndexStringLiterals = false
     )
     {
         var pending = new SafeMigrationWorkStack<DisplayFrame>();
@@ -91,8 +128,9 @@ internal static class MySqlGeneratedExpressionDisplay
 
                 var precedence = Precedence(expression);
 
-                // WHY: Grouping follows the same parent/child binding as native
-                // deparsers; a flat output buffer must not flatten the AST.
+                // WHY: MySQL flattens adjacent AND/OR nodes with the same operator,
+                // including nested groups. Only those operators have precedence
+                // 10/20; unlike operators and every arithmetic grouping remain intact.
                 var parentheses = isMariaDb
                     ? precedence < parentPrecedence
                     || (rightOperand && precedence == parentPrecedence)
@@ -103,14 +141,28 @@ internal static class MySqlGeneratedExpressionDisplay
                         or SafeMigrationSqlBetweenExpression
                         or SafeMigrationSqlInExpression
                         or SafeMigrationSqlCaseExpression
-                        or SafeMigrationSqlCollateExpression;
+                        or SafeMigrationSqlCollateExpression
+                    && !(expression is SafeMigrationSqlBinaryExpression
+                        {
+                            Operator: SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or,
+                        }
+                        && precedence == parentPrecedence);
+
+                if (groupBooleanChains
+                    && expression is SafeMigrationSqlBinaryExpression
+                    {
+                        Operator: SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or,
+                    })
+                {
+                    parentheses = precedence != parentPrecedence;
+                }
 
                 if (parentheses)
                 {
                     builder.Append('(');
                 }
 
-                AppendStart(builder, expression, renderer, isMariaDb, stableStrings);
+                AppendStart(builder, expression, renderer, isMariaDb, stableStrings, nativeIndexStringLiterals);
                 var frame = new DisplayFrame(expression, precedence, parentheses);
                 if (frame.Children.TryMoveNext(out var child))
                 {
@@ -163,15 +215,25 @@ internal static class MySqlGeneratedExpressionDisplay
         SafeMigrationSqlExpression expression,
         MySqlSafeMigrationSqlExpressionRenderer renderer,
         bool isMariaDb,
-        bool stableStrings
+        bool stableStrings,
+        bool nativeIndexStringLiterals
     )
     {
         switch (expression)
         {
-            case SafeMigrationSqlLiteralExpression { Value: string or char } when stableStrings:
+            case SafeMigrationSqlLiteralExpression { BorrowedValue: string text, StoreType: null }
+                when nativeIndexStringLiterals:
+                AppendNativeIndexString(builder, text);
+                break;
+            case SafeMigrationSqlLiteralExpression { BorrowedValue: char value, StoreType: null }
+                when nativeIndexStringLiterals:
+                ReadOnlySpan<char> characters = [value];
+                AppendNativeIndexString(builder, characters);
+                break;
+            case SafeMigrationSqlLiteralExpression { BorrowedValue: string or char } when stableStrings:
                 builder.Append(renderer.RenderDefault(expression));
                 break;
-            case SafeMigrationSqlLiteralExpression { Value: string text, StoreType: null }:
+            case SafeMigrationSqlLiteralExpression { BorrowedValue: string text, StoreType: null }:
                 // WHY: Delimiter doubling has identical meaning in either
                 // native SQL mode and let's catalog encoders retain the actual
                 // value role without depending on a mapping's escape style.
@@ -187,7 +249,7 @@ internal static class MySqlGeneratedExpressionDisplay
                 // expression arithmetic even when the displayed value agrees.
                 builder.Append(value.NumericSourceToken.Span);
                 break;
-            case SafeMigrationSqlLiteralExpression { Value: bool boolean, StoreType: null } when isMariaDb:
+            case SafeMigrationSqlLiteralExpression { BorrowedValue: bool boolean, StoreType: null } when isMariaDb:
                 // WHY: MariaDB deparses Boolean literal leaves as integer 0/1;
                 // MySQL retains true/false. This changes a typed literal only,
                 // never a quoted string or a caller-authored identifier.
@@ -232,6 +294,48 @@ internal static class MySqlGeneratedExpressionDisplay
                 builder.Append(renderer.Render(expression));
                 break;
         }
+    }
+
+    /// <summary>Emits a typed value in MySQL's native functional-key display spelling, never executable DDL.</summary>
+    private static void AppendNativeIndexString(
+        StringBuilder builder,
+        ReadOnlySpan<char> value
+    )
+    {
+        // WHY: Ordinary provider DDL safely encodes these values as UTF-8 hex,
+        // but MySQL deparses them to quoted text. Construct this finite candidate
+        // from trusted value characters before the catalog encoder adds its second
+        // escape layer; raw backslashes could otherwise consume the closing quote.
+        builder.Append('\'');
+        foreach (var character in value)
+        {
+            switch (character)
+            {
+                case '\\':
+                    builder.Append(@"\\");
+                    break;
+                case '\'':
+                    builder.Append("''");
+                    break;
+                case '\0':
+                    builder.Append("\\0");
+                    break;
+                case '\n':
+                    builder.Append("\\n");
+                    break;
+                case '\r':
+                    builder.Append("\\r");
+                    break;
+                case '\u001a':
+                    builder.Append("\\Z");
+                    break;
+                default:
+                    builder.Append(character);
+                    break;
+            }
+        }
+
+        builder.Append('\'');
     }
 
     /// <summary>Emits native separators immediately before the corresponding child.</summary>
@@ -369,10 +473,11 @@ internal static class MySqlGeneratedExpressionDisplay
                 var required = current switch
                 {
                     SafeMigrationSqlCaseExpression or SafeMigrationSqlInExpression => true,
-                    SafeMigrationSqlLiteralExpression { Value: bool } => isMariaDb,
+                    SafeMigrationSqlLiteralExpression { BorrowedValue: bool } => isMariaDb,
                     SafeMigrationSqlUnaryExpression { Operator: SafeMigrationSqlUnaryOperator.Not } => true,
-                    SafeMigrationSqlBinaryExpression value =>
-                        isMariaDb && (!IsAtom(value.Left) || !IsAtom(value.Right)),
+                    SafeMigrationSqlBinaryExpression value => isMariaDb
+                        ? !IsAtom(value.Left) || !IsAtom(value.Right)
+                        : HasAssociativeBooleanChild(value),
                     SafeMigrationSqlNullTestExpression value => isMariaDb && !IsAtom(value.Operand),
                     SafeMigrationSqlBetweenExpression value => isMariaDb
                         && (!IsAtom(value.Operand) || !IsAtom(value.Lower) || !IsAtom(value.Upper)),
@@ -380,6 +485,38 @@ internal static class MySqlGeneratedExpressionDisplay
                 };
 
                 if (required)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        finally
+        {
+            traversal.Dispose();
+        }
+    }
+
+    /// <summary>Requests native spelling only when a Boolean chain can lose an internal grouping delimiter.</summary>
+    private static bool HasAssociativeBooleanChild(
+        SafeMigrationSqlBinaryExpression expression
+    ) => expression.Operator is SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or
+        && ((expression.Left is SafeMigrationSqlBinaryExpression left && left.Operator == expression.Operator)
+            || (expression.Right is SafeMigrationSqlBinaryExpression right && right.Operator == expression.Operator));
+
+    /// <summary>Finds Boolean chains without recursion, source reparsing or descendant collections.</summary>
+    private static bool HasAssociativeBooleanChain(
+        SafeMigrationSqlExpression expression
+    )
+    {
+        var traversal = new MySqlExpressionTraversal(expression);
+        try
+        {
+            while (traversal.TryMoveNext(out var current))
+            {
+                if (current is SafeMigrationSqlBinaryExpression binary
+                    && HasAssociativeBooleanChild(binary))
                 {
                     return true;
                 }

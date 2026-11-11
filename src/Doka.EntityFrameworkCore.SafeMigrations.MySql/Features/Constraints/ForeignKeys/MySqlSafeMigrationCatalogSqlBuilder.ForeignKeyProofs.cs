@@ -22,40 +22,50 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 + $"AND principal_column.COLUMN_NAME = {Literal(definition.PrincipalColumns[index])})");
 
             keyParts.Add(
-                $"SUM(CASE WHEN principal_key.SEQ_IN_INDEX = {index + 1} "
-                + $"AND principal_key.COLUMN_NAME = {Literal(definition.PrincipalColumns[index])} "
-                + "AND principal_key.SUB_PART IS NULL THEN 1 ELSE 0 END) = 1");
+                $"""
+                SUM(CASE WHEN principal_key.SEQ_IN_INDEX = {index + 1}
+                AND principal_key.COLUMN_NAME = {Literal(definition.PrincipalColumns[index])}
+                AND principal_key.SUB_PART IS NULL THEN 1 ELSE 0 END) = 1
+                """);
         }
 
         // WHY: ENUM/SET COLUMN_TYPE text contains member literals. Folding the
         // whole text erases their case-sensitive storage contract. Both sides
         // come from the same catalog statement, so binary comparison needs no
         // reinterpretation of authored literals or session SQL modes.
-        const string storageMatches = "(CASE WHEN dependent_column.DATA_TYPE IN ('enum', 'set') "
-            + "OR principal_column.DATA_TYPE IN ('enum', 'set') "
-            + "THEN CAST(dependent_column.COLUMN_TYPE AS BINARY) = CAST(principal_column.COLUMN_TYPE AS BINARY) "
-            + "ELSE LOWER(dependent_column.COLUMN_TYPE) = LOWER(principal_column.COLUMN_TYPE) END)";
+        const string storageMatches = """
+            (CASE WHEN dependent_column.DATA_TYPE IN ('enum', 'set')
+            OR principal_column.DATA_TYPE IN ('enum', 'set')
+            THEN CAST(dependent_column.COLUMN_TYPE AS BINARY) = CAST(principal_column.COLUMN_TYPE
+            AS BINARY)
+            ELSE LOWER(dependent_column.COLUMN_TYPE) = LOWER(principal_column.COLUMN_TYPE)
+            END)
+            """;
 
-        var compatible = "(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS dependent_column "
-            + "JOIN INFORMATION_SCHEMA.COLUMNS principal_column "
-            + "ON principal_column.TABLE_SCHEMA = dependent_column.TABLE_SCHEMA "
-            + $"AND principal_column.TABLE_NAME = {Literal(definition.PrincipalTable)} "
-            + $"AND ({string.Join(" OR ", pairs)}) "
-            + "WHERE dependent_column.TABLE_SCHEMA = DATABASE() "
-            + $"AND dependent_column.TABLE_NAME = {Literal(definition.Table)} "
-            + $"AND {storageMatches} "
-            + "AND dependent_column.COLLATION_NAME <=> principal_column.COLLATION_NAME "
-            + "AND COALESCE(dependent_column.GENERATION_EXPRESSION, '') = '' "
-            + "AND COALESCE(principal_column.GENERATION_EXPRESSION, '') = '') "
-            + $"= {definition.Columns.Count.ToString(CultureInfo.InvariantCulture)}";
+        var compatible = $"""
+            (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS dependent_column
+            JOIN INFORMATION_SCHEMA.COLUMNS principal_column ON principal_column.TABLE_SCHEMA
+            = dependent_column.TABLE_SCHEMA
+            AND principal_column.TABLE_NAME = {Literal(definition.PrincipalTable)}
+            AND ({string.Join(" OR ", pairs)})
+            WHERE dependent_column.TABLE_SCHEMA = DATABASE()
+            AND dependent_column.TABLE_NAME = {Literal(definition.Table)}
+            AND {storageMatches}
+            AND dependent_column.COLLATION_NAME <=> principal_column.COLLATION_NAME
+            AND COALESCE(dependent_column.GENERATION_EXPRESSION, '') = ''
+            AND COALESCE(principal_column.GENERATION_EXPRESSION, '') = '') = {definition.Columns.Count.ToString(
+                CultureInfo.InvariantCulture)}
+            """;
 
-        var candidate = "EXISTS (SELECT principal_key.INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS principal_key "
-            + "WHERE principal_key.TABLE_SCHEMA = DATABASE() "
-            + $"AND principal_key.TABLE_NAME = {Literal(definition.PrincipalTable)} "
-            + "AND principal_key.NON_UNIQUE = 0 "
-            + "GROUP BY principal_key.INDEX_NAME "
-            + $"HAVING COUNT(*) = {definition.PrincipalColumns.Count.ToString(CultureInfo.InvariantCulture)} "
-            + $"AND {string.Join(" AND ", keyParts)})";
+        var candidate = $"""
+            EXISTS (SELECT principal_key.INDEX_NAME
+            FROM INFORMATION_SCHEMA.STATISTICS principal_key
+            WHERE principal_key.TABLE_SCHEMA = DATABASE()
+            AND principal_key.TABLE_NAME = {Literal(definition.PrincipalTable)}
+            AND principal_key.NON_UNIQUE = 0 GROUP BY principal_key.INDEX_NAME HAVING
+            COUNT(*) = {definition.PrincipalColumns.Count.ToString(CultureInfo.InvariantCulture)}
+            AND {string.Join(" AND ", keyParts)})
+            """;
 
         return $"({compatible}) AND ({candidate})";
     }
@@ -67,12 +77,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         ExpectedForeignKeyDefinition definition
     ) => definition.OnDelete != ReferentialAction.SetNull && definition.OnUpdate != ReferentialAction.SetNull
         ? "TRUE"
-        : "(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS null_column "
-        + "WHERE null_column.TABLE_SCHEMA = DATABASE() "
-        + $"AND null_column.TABLE_NAME = {Literal(definition.Table)} "
-        + $"AND null_column.COLUMN_NAME IN ({string.Join(", ", definition.Columns.Select(Literal))}) "
-        + "AND null_column.IS_NULLABLE = 'YES') "
-        + $"= {definition.Columns.Count.ToString(CultureInfo.InvariantCulture)}";
+        : $"""
+        (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS null_column
+        WHERE null_column.TABLE_SCHEMA = DATABASE()
+        AND null_column.TABLE_NAME = {Literal(definition.Table)}
+        AND null_column.COLUMN_NAME IN ({string.Join(", ", definition.Columns.Select(Literal))})
+        AND null_column.IS_NULLABLE = 'YES') = {definition.Columns.Count.ToString(CultureInfo.InvariantCulture)}
+        """;
 
     /// <summary>Captures bounded catalog facts for an ordered, source-bound FK replacement.</summary>
     /// <param name="definition">The immutable replacement endpoints.</param>
@@ -161,11 +172,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 + $"THEN {(1UL << index).ToString(CultureInfo.InvariantCulture)}");
         }
 
-        var mask = "(SELECT COALESCE(SUM(CASE WHEN local_column.IS_NULLABLE = 'YES' "
-            + $"THEN CASE local_column.COLUMN_NAME {string.Join(" ", nullableBits)} ELSE 0 END "
-            + "ELSE 0 END), 0) FROM INFORMATION_SCHEMA.COLUMNS local_column "
-            + "WHERE local_column.TABLE_SCHEMA = DATABASE() "
-            + $"AND local_column.TABLE_NAME = {Literal(definition.Table)})";
+        var mask = $"""
+            (SELECT COALESCE(SUM(CASE WHEN local_column.IS_NULLABLE = 'YES'
+            THEN CASE local_column.COLUMN_NAME {string.Join(" ", nullableBits)}
+            ELSE 0 END ELSE 0 END), 0) FROM INFORMATION_SCHEMA.COLUMNS local_column
+            WHERE local_column.TABLE_SCHEMA = DATABASE()
+            AND local_column.TABLE_NAME = {Literal(definition.Table)})
+            """;
 
         var matchingAliases = ForeignKeyMatchQuery(
             definition,
@@ -177,8 +190,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // WHY: Every matching physical alias survives independently of the
         // requested name. Individual catalog rows avoid GROUP_CONCAT truncation
         // and preserve all identities for ordered removal during projection.
-        return "SELECT certificate.eligible, certificate.nullable_mask, matching_alias.candidate_name "
-            + $"FROM (SELECT ({eligible}) AS eligible, ({mask}) AS nullable_mask) certificate "
-            + $"LEFT JOIN ({matchingAliases}) matching_alias ON certificate.eligible;";
+        return $"""
+            SELECT certificate.eligible, certificate.nullable_mask, matching_alias.candidate_name
+            FROM (SELECT ({eligible}) AS eligible, ({mask})
+            AS nullable_mask) certificate
+            LEFT JOIN ({matchingAliases}) matching_alias ON certificate.eligible;
+            """;
     }
 }

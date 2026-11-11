@@ -28,15 +28,15 @@ public sealed class MySqlReservedIndexRenameIntegrationTests : MySqlSafeMigratio
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE reserved_index_rows (id int NOT NULL"
-            + (source == "PRIMARY"
+            $"""
+            CREATE TABLE reserved_index_rows (id int NOT NULL{(source == "PRIMARY"
                 ? ", PRIMARY KEY (id)"
-                : string.Empty)
-            + "); "
-            + (source == "PRIMARY"
+                : string.Empty)});
+            {(source == "PRIMARY"
                 ? string.Empty
-                : "CREATE INDEX source_index ON reserved_index_rows (id); ")
-            + "INSERT INTO reserved_index_rows (id) VALUES (7);",
+                : "CREATE INDEX source_index ON reserved_index_rows (id); "
+            )}INSERT INTO reserved_index_rows (id) VALUES (7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -64,9 +64,13 @@ public sealed class MySqlReservedIndexRenameIntegrationTests : MySqlSafeMigratio
 
         var sourceCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reserved_index_rows' "
-            + $"AND INDEX_NAME = '{source}';",
+            $"""
+            SELECT COUNT(DISTINCT INDEX_NAME)
+            FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'reserved_index_rows'
+            AND INDEX_NAME = '{source}';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert

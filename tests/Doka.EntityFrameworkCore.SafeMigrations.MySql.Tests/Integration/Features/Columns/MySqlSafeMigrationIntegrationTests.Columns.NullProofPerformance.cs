@@ -21,16 +21,22 @@ public sealed class MySqlColumnsNullProofPerformanceIntegrationTests : MySqlSafe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        const string digits = "(SELECT 0 d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 "
-            + "UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 "
-            + "UNION ALL SELECT 8 UNION ALL SELECT 9)";
+        const string digits = """
+            (SELECT 0 d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION
+            ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION
+            ALL SELECT 8 UNION ALL SELECT 9)
+            """;
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `null_read_rows` (`Id` int NOT NULL PRIMARY KEY, `Value` int NULL); "
-            + "INSERT INTO `null_read_rows` SELECT a.d + 10*b.d + 100*c.d + 1000*d.d, 7 "
-            + $"FROM {digits} a CROSS JOIN {digits} b CROSS JOIN {digits} c CROSS JOIN {digits} d "
-            + $"LIMIT {rowCount.ToString(CultureInfo.InvariantCulture)};",
+            $"""
+            CREATE TABLE `null_read_rows` (`Id` int NOT NULL PRIMARY KEY, `Value` int
+            NULL); INSERT INTO `null_read_rows` SELECT a.d + 10*b.d + 100*c.d + 1000*d.d,
+            7 FROM {digits} a CROSS
+            JOIN {digits} b CROSS
+            JOIN {digits} c CROSS
+            JOIN {digits} d LIMIT {rowCount.ToString(CultureInfo.InvariantCulture)};
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -179,8 +185,12 @@ public sealed class MySqlColumnsNullProofPerformanceIntegrationTests : MySqlSafe
             1,
             await ContextScalarIntAsync(
                 context,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-                + "AND TABLE_NAME = 'null_read_rows' AND COLUMN_NAME = 'Value' AND IS_NULLABLE = 'YES';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'null_read_rows'
+                AND COLUMN_NAME = 'Value' AND IS_NULLABLE = 'YES';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 

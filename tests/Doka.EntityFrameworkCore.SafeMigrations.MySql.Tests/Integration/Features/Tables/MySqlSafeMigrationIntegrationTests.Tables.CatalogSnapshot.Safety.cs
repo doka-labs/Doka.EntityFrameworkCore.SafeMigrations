@@ -82,9 +82,12 @@ public sealed class MySqlTablesCatalogSnapshotSafetyIntegrationTests : MySqlSafe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `snapshot_check` (`value` varchar(64) NOT NULL);"
-            + $" INSERT INTO `snapshot_check` (`value`) VALUES ('{rowValue}');"
-            + " CREATE TABLE `snapshot_padding` (`id` int NOT NULL, `code` int NOT NULL);",
+            $"""
+            CREATE TABLE `snapshot_check` (`value` varchar(64) NOT NULL); INSERT INTO
+            `snapshot_check` (`value`) VALUES ('{rowValue}'); CREATE
+            TABLE `snapshot_padding` (`id` int NOT NULL,
+            `code` int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
@@ -123,19 +126,26 @@ public sealed class MySqlTablesCatalogSnapshotSafetyIntegrationTests : MySqlSafe
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `snapshot_parent` (`id` int NOT NULL PRIMARY KEY);"
-            + " INSERT INTO `snapshot_parent` (`id`) VALUES (1);"
-            + " CREATE TABLE `snapshot_padding` (`id` int NOT NULL, `code` int NOT NULL);",
+            """
+            CREATE TABLE `snapshot_parent` (`id` int NOT NULL PRIMARY KEY); INSERT INTO
+            `snapshot_parent` (`id`) VALUES (1); CREATE TABLE `snapshot_padding` (`id`
+            int NOT NULL,
+            `code` int NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         if (hasIncomingDependency)
         {
             await ExecuteSqlAsync(
                 childConnectionString,
-                "CREATE TABLE `snapshot_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NOT NULL,"
-                + " CONSTRAINT `fk_snapshot_child_parent` FOREIGN KEY (`parent_id`)"
-                + $" REFERENCES `{database}`.`snapshot_parent` (`id`));"
-                + " INSERT INTO `snapshot_child` (`id`, `parent_id`) VALUES (1, 1);",
+                $"""
+                CREATE TABLE `snapshot_child` (`id` int NOT NULL PRIMARY KEY, `parent_id`
+                int NOT NULL,
+                CONSTRAINT `fk_snapshot_child_parent` FOREIGN KEY (`parent_id`) REFERENCES
+                `{database}`.`snapshot_parent` (`id`)); INSERT INTO `snapshot_child`
+                (`id`,
+                `parent_id`) VALUES (1, 1);
+                """,
                 cancellationToken: CancellationToken.None);
         }
 

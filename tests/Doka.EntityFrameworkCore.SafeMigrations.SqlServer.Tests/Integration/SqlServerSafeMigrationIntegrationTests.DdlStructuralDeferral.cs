@@ -26,9 +26,10 @@ public sealed class SqlServerSafeMigrationDdlStructuralDeferralIntegrationTests 
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.ddl_structure_values(Value int NOT NULL); "
-            + "INSERT dbo.ddl_structure_values VALUES(-2147483648),(2147483647); "
-            + "CREATE INDEX IX_old ON dbo.ddl_structure_values(Value);",
+            """
+            CREATE TABLE dbo.ddl_structure_values(Value int NOT NULL); INSERT dbo.ddl_structure_values
+            VALUES(-2147483648),(2147483647); CREATE INDEX IX_old ON dbo.ddl_structure_values(Value);
+            """,
             cancellationToken: CancellationToken.None);
 
         var mutation = dependency == "index"
@@ -37,13 +38,14 @@ public sealed class SqlServerSafeMigrationDdlStructuralDeferralIntegrationTests 
 
         // WHY: Dynamic trigger SQL is deliberately absent from static expression
         // dependencies. A captured index list cannot infer the resulting object.
+        // The constant hole preserves its exact EVENTDATA predicate when wrapping C# source.
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER create_ddl_dependency ON DATABASE FOR DROP_INDEX AS "
-            + "IF EVENTDATA().value('(/EVENT_INSTANCE/ObjectName)[1]','nvarchar(128)')=N'IX_old' "
-            + "EXEC sys.sp_executesql N'"
-            + mutation
-            + "';",
+            $"""
+            CREATE TRIGGER create_ddl_dependency ON DATABASE FOR DROP_INDEX AS IF {
+                "EVENTDATA().value('(/EVENT_INSTANCE/ObjectName)[1]','nvarchar(128)')=N'IX_old'"}
+            EXEC sys.sp_executesql N'{mutation}';
+            """,
             cancellationToken: CancellationToken.None);
 
         if (disabled)
@@ -85,8 +87,11 @@ public sealed class SqlServerSafeMigrationDdlStructuralDeferralIntegrationTests 
                     dependency == "index"
                         ? "SELECT COUNT(*) AS [Value] FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ddl_structure_values') "
                         + "AND name=N'IX_new'"
-                        : "SELECT COUNT(*) AS [Value] FROM sys.check_constraints "
-                        + "WHERE parent_object_id=OBJECT_ID(N'dbo.ddl_structure_values') AND name=N'CK_new'")
+                        : """
+                        SELECT COUNT(*) AS [Value] FROM sys.check_constraints
+                        WHERE parent_object_id=OBJECT_ID(N'dbo.ddl_structure_values')
+                        AND name=N'CK_new'
+                        """)
                 .SingleAsync();
 
             failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
@@ -104,8 +109,11 @@ public sealed class SqlServerSafeMigrationDdlStructuralDeferralIntegrationTests 
 
         var source = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.ddl_structure_values') "
-            + "AND name=N'Value' AND system_type_id=56;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.ddl_structure_values')
+            AND name=N'Value' AND system_type_id=56;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -152,17 +160,20 @@ public sealed class SqlServerSafeMigrationDdlStructuralDeferralIntegrationTests 
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.ddl_metadata_source(Value int NOT NULL); "
-            + "CREATE TABLE dbo.ddl_metadata_other(Value int NOT NULL); "
-            + "CREATE INDEX IX_old ON dbo.ddl_metadata_source(Value); "
-            + "CREATE INDEX IX_matching ON dbo.ddl_metadata_other(Value);",
+            """
+            CREATE TABLE dbo.ddl_metadata_source(Value int NOT NULL); CREATE TABLE dbo.ddl_metadata_other(Value
+            int NOT NULL); CREATE INDEX IX_old ON dbo.ddl_metadata_source(Value); CREATE
+            INDEX IX_matching ON dbo.ddl_metadata_other(Value);
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER remove_matching_ddl_metadata ON DATABASE FOR DROP_INDEX AS "
-            + "IF EVENTDATA().value('(/EVENT_INSTANCE/ObjectName)[1]','nvarchar(128)')=N'IX_old' "
-            + "EXEC sys.sp_executesql N'DROP INDEX IX_matching ON dbo.ddl_metadata_other;';",
+            """
+            CREATE TRIGGER remove_matching_ddl_metadata ON DATABASE FOR DROP_INDEX AS
+            IF EVENTDATA().value('(/EVENT_INSTANCE/ObjectName)[1]','nvarchar(128)')=N'IX_old'
+            EXEC sys.sp_executesql N'DROP INDEX IX_matching ON dbo.ddl_metadata_other;';
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

@@ -16,17 +16,18 @@ SafeMigrations publishes these package IDs at one version:
 - `Doka.EntityFrameworkCore.SafeMigrations.SqlServer`.
 
 Stable 10.4.6 introduced this five-package inventory; releases 10.4.2 through
-10.4.5 retain their historical four-package set. Version 10.7.1 keeps the shared
-.NET/EF Core 10 identity and corrects table metadata and SQLite retirement
-internally, without changing existing public APIs. It retains explicit
-cancellation arguments and BenchmarkDotNet for engineering measurements. The
-[changelog](../CHANGELOG.md#1071---2026-11-09) and
-[upgrade notes](support-and-qualification.md#upgrade-to-1071) record current
+10.4.5 retain their historical four-package set. Version 10.7.2 keeps the shared
+.NET/EF Core 10 identity and corrects native expression/catalog comparison
+internally, without changing existing public APIs or dependency floors. Explicit
+cancellation arguments and BenchmarkDotNet engineering measurements remain. The
+[changelog](../CHANGELOG.md#1072---2026-11-11) and
+[upgrade notes](support-and-qualification.md#upgrade-to-1072) record current
 consumer requirements. The earlier removal of public optional-token defaults in
 10.7.0 is a deliberate source-breaking exception within 10.x, not a strictly
 SemVer-compatible minor change. Existing CLR method signatures, migration
-policies, report schemas and fingerprint formats remain. Applications upgrading
-from before 10.6.0 must still review its
+policies, report schemas and fingerprint formats remain. Corrected captured
+numeric-default identities require renewed affected approvals, not an old digest
+or history rewrite. Applications upgrading from before 10.6.0 must still review its
 [computed/CHECK approval boundaries](support-and-qualification.md#upgrade-to-1060).
 Do not carry an obsolete contract approval forward or rewrite historical
 migrations. Timing comparisons stay informational; functional and evidence
@@ -63,7 +64,7 @@ CI and release call the same reusable quality workflow. It enforces:
 - SPDX 2.2 SBOM generation and validation.
 
 It also runs Core, MySQL/MariaDB, PostgreSQL, SQLite, and SQL Server through
-BenchmarkDotNet 0.15.8 with `--filter '*' --job Dry`. This smoke checks all 56
+BenchmarkDotNet 0.15.8 with `--filter '*' --job Dry`. This smoke checks all
 default cases and native full JSON export, not statistical performance.
 Duration and managed allocation values never determine qualification success.
 Invalid configuration, generated-build or execution failures, missing/failed

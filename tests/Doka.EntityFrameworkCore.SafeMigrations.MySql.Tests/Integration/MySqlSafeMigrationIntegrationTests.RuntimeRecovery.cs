@@ -2,11 +2,17 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-    protected const string RuntimeGuardVariablesClearedSql = "SELECT @doka_sm_state IS NULL "
-        + "AND @doka_sm_action IS NULL AND @doka_sm_repair_ok IS NULL AND @doka_sm_prerequisite_ok IS NULL "
-        + "AND @doka_sm_sql IS NULL AND @doka_sm_post_ok IS NULL AND @doka_sm_data_probe_required IS NULL "
-        + "AND @doka_sm_data_blocked IS NULL AND @doka_sm_transition_eligible IS NULL "
-        + "AND @doka_sm_nullability_blocked IS NULL AND @doka_sm_column_repair_eligible IS NULL;";
+    protected const string RuntimeGuardVariablesClearedSql = """
+        SELECT @doka_sm_state IS NULL
+        AND @doka_sm_action IS NULL AND @doka_sm_repair_ok IS NULL
+        AND @doka_sm_prerequisite_ok IS NULL
+        AND @doka_sm_sql IS NULL AND @doka_sm_post_ok IS NULL
+        AND @doka_sm_data_probe_required IS NULL
+        AND @doka_sm_data_blocked IS NULL
+        AND @doka_sm_transition_eligible IS NULL
+        AND @doka_sm_nullability_blocked IS NULL
+        AND @doka_sm_column_repair_eligible IS NULL;
+        """;
 }
 
 /// <summary>Exercises the RuntimeRecovery migration contracts in an independent class collection.</summary>
@@ -33,8 +39,10 @@ public sealed partial class MySqlRuntimeRecoveryIntegrationTests : MySqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `runtime_records_probe` (`Id` int NOT NULL, PRIMARY KEY (`Id`)); "
-            + "INSERT INTO `runtime_records_probe` VALUES (1);",
+            """
+            CREATE TABLE `runtime_records_probe` (`Id` int NOT NULL, PRIMARY KEY (`Id`));
+            INSERT INTO `runtime_records_probe` VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var blocker = failureMode == "error"
@@ -405,8 +413,12 @@ public sealed partial class MySqlRuntimeRecoveryIntegrationTests
         var rows = RuntimeScalarInt(connection, "SELECT COUNT(*) FROM `runtime_sync_rows` WHERE `Id` = 1;");
         var columns = RuntimeScalarInt(
             connection,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'runtime_sync_rows' AND COLUMN_NAME = 'Note';");
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'runtime_sync_rows'
+            AND COLUMN_NAME = 'Note';
+            """);
 
         return new RuntimeSynchronousRecovery(
             exception,

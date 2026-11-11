@@ -164,6 +164,8 @@ public sealed class SqlServerGeneratedHistoryScriptTests
             ? MigrationsSqlGenerationOptions.Idempotent
             : MigrationsSqlGenerationOptions.Default;
 
+        var expectedDefault = ExpectedTypedDefaultSql();
+
         // Act
         var script = context
             .GetService<IMigrator>()
@@ -177,15 +179,66 @@ public sealed class SqlServerGeneratedHistoryScriptTests
         // Assert
         Assert.Contains(
             payloads,
-            static payload => payload.Contains(
-                SqlServerMultilineInitialMigration.Payload,
-                StringComparison.Ordinal));
+            payload => payload.Contains(expectedDefault, StringComparison.Ordinal));
 
         Assert.Contains(
             payloads,
             static payload => payload.Contains(
                 SqlServerMultilineUpgradeMigration.ColumnName,
                 StringComparison.Ordinal));
+
+        Assert.Equal(ConnectionState.Closed,
+            context.Database.GetDbConnection()
+                .State);
+    }
+
+    /// <summary>Actual generated guards retain literal data through every execution-mode carrier.</summary>
+    /// <param name="options">The ordinary runtime, script or idempotent-script generation mode.</param>
+    [Theory]
+    [InlineData(MigrationsSqlGenerationOptions.Default)]
+    [InlineData(MigrationsSqlGenerationOptions.Script)]
+    [InlineData(MigrationsSqlGenerationOptions.Idempotent)]
+    public void GeneratedDefaultGuardPreservesQuotedBraceUnicodeAndControlData(
+        MigrationsSqlGenerationOptions options
+    )
+    {
+        // Arrange
+        using var context = new SqlServerMultilineScriptContext(
+            "Server=127.0.0.1,1433;Database=offline_payload;User ID=sa;Password=unused;TrustServerCertificate=True");
+
+        const string columnName = "Payload\\\r\n{literal}\u20ac\ud83d\ude00";
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.AddColumnIfNotExists<string>(
+            columnName,
+            "multiline_payload_items",
+            type: "nvarchar(max)",
+            nullable: true,
+            defaultValue: SqlServerMultilineInitialMigration.Payload);
+
+        // WHY: EF encodes control characters in typed defaults with CONCAT and
+        // nchar. The independently authored native source must survive intact;
+        // the legal multiline identifier separately requires command transport.
+        var expectedDefault = ExpectedTypedDefaultSql();
+
+        // Act
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(
+                builder.Operations,
+                options: options);
+
+        var payloads = commands
+            .SelectMany(command => DecodeNestedPayloads(command.CommandText))
+            .ToArray();
+
+        // Assert
+        Assert.NotEmpty(payloads);
+        Assert.Contains(payloads,
+            payload => payload.Contains("[" + columnName + "]", StringComparison.Ordinal)
+                && payload.Contains(expectedDefault, StringComparison.Ordinal));
+
+        Assert.Contains(commands,
+            static command => command.CommandText.Contains("DECLARE @doka_script_payload", StringComparison.Ordinal));
 
         Assert.Equal(ConnectionState.Closed,
             context.Database.GetDbConnection()
@@ -214,15 +267,25 @@ public sealed class SqlServerGeneratedHistoryScriptTests
                 current,
                 "EXEC sys\\.sp_executesql N'((?:''|[^'])*)';"))
             {
-                pending.Enqueue(scope
+                var payload = scope
                     .Groups[1]
                     .Value
-                    .Replace("''", "'", StringComparison.Ordinal));
+                    .Replace("''", "'", StringComparison.Ordinal);
+
+                payloads.Add(payload);
+                pending.Enqueue(payload);
             }
         }
 
         return payloads.ToArray();
     }
+
+    /// <summary>States the complete native typed-default source independently of the product literal writer.</summary>
+    /// <returns>The Unicode MAX-first expression whose nchar terms preserve the original CRLF and LF values.</returns>
+    private static string ExpectedTypedDefaultSql() => "CONCAT(CAST(N'"
+        + new string('x', 5000)
+        + "O''Brien {0} {{literal}} \u20ac\ud83d\ude00 before' AS nvarchar(max)), "
+        + "nchar(13), nchar(10), N'GO', nchar(10), N'after')";
 
     /// <summary>Decodes the emitted literal and newline expression independently of product writer helpers.</summary>
     /// <param name="script">The public EF script, including its real history framing.</param>
@@ -409,8 +472,9 @@ public sealed class SqlServerMultilineInitialMigration : Migration
     /// <summary>Gets the isolated initial migration identity.</summary>
     public const string MigrationIdentifier = "20261025000100_MultilineInitial";
 
-    /// <summary>Gets the original multiline value, including a client batch delimiter inside its literal.</summary>
-    public static string Payload { get; } = new string('x', 5000) + "before\r\nGO\nafter";
+    /// <summary>Gets exact quote, brace, Unicode and line-control data inside the generated DEFAULT literal.</summary>
+    public static string Payload { get; } = new string('x', 5000)
+        + "O'Brien {0} {{literal}} \u20ac\ud83d\ude00 before\r\nGO\nafter";
 
     /// <inheritdoc />
     protected override void Up(
@@ -425,15 +489,15 @@ public sealed class SqlServerMultilineInitialMigration : Migration
             },
             constraints: table => table.PrimaryKey("PK_multiline_payload_items", row => row.Id));
 
-        // WHY: The direct SQL-default API retains authored SQL. Captured table
-        // defaults can be rewritten by EF as CONCAT/nchar and would not
-        // reproduce this independent command-text transport defect.
+        // WHY: A typed CLR default keeps the Unicode domain in the provider's
+        // supported literal contract. Its complete generated SQL still passes
+        // through the actual command/script carriers, including their escaping.
         migrationBuilder.AddColumnIfNotExists<string>(
             "Payload",
             "multiline_payload_items",
             type: "nvarchar(max)",
             nullable: true,
-            defaultValueSql: "'" + Payload.Replace("'", "''", StringComparison.Ordinal) + "'");
+            defaultValue: Payload);
     }
 
     /// <inheritdoc />

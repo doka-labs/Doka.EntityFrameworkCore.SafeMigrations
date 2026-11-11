@@ -15,9 +15,12 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `mixed_records` (`id` int NOT NULL, `code` varchar(20) NOT NULL, "
-            + "PRIMARY KEY (`id`)); "
-            + "INSERT INTO `mixed_records` (`id`, `code`) VALUES (1, 'duplicate'), (2, 'duplicate');",
+            """
+            CREATE TABLE `mixed_records` (`id` int NOT NULL, `code` varchar(20) NOT
+            NULL,
+            PRIMARY KEY (`id`)); INSERT INTO `mixed_records` (`id`, `code`) VALUES (1,
+            'duplicate'), (2, 'duplicate');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new MixedPendingStreamDbContext(connectionString, Fixture.ServerVersion);
@@ -44,9 +47,12 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
 
         var indexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mixed_records' "
-            + "AND INDEX_NAME = 'ux_mixed_records_code';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'mixed_records'
+            AND INDEX_NAME = 'ux_mixed_records_code';
+            """,
             cancellationToken: CancellationToken.None);
 
         var markerCount = await ScalarIntAsync(
@@ -78,9 +84,12 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `mixed_records` (`id` int NOT NULL, `code` varchar(20) NOT NULL, "
-            + "PRIMARY KEY (`id`)); "
-            + "INSERT INTO `mixed_records` (`id`, `code`) VALUES (1, 'duplicate'), (2, 'duplicate');",
+            """
+            CREATE TABLE `mixed_records` (`id` int NOT NULL, `code` varchar(20) NOT
+            NULL,
+            PRIMARY KEY (`id`)); INSERT INTO `mixed_records` (`id`, `code`) VALUES (1,
+            'duplicate'), (2, 'duplicate');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new MixedPendingStreamDbContext(connectionString, Fixture.ServerVersion);
@@ -135,9 +144,12 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `mixed_records` (`id` int NOT NULL, `code` varchar(20) NOT NULL, "
-            + "PRIMARY KEY (`id`)); "
-            + "INSERT INTO `mixed_records` (`id`, `code`) VALUES (1, 'duplicate'), (2, 'duplicate');",
+            """
+            CREATE TABLE `mixed_records` (`id` int NOT NULL, `code` varchar(20) NOT
+            NULL,
+            PRIMARY KEY (`id`)); INSERT INTO `mixed_records` (`id`, `code`) VALUES (1,
+            'duplicate'), (2, 'duplicate');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new MixedPendingStreamDbContext(connectionString, Fixture.ServerVersion);
@@ -161,9 +173,12 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
 
         var indexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mixed_records' "
-            + "AND INDEX_NAME = 'ux_mixed_records_code';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'mixed_records'
+            AND INDEX_NAME = 'ux_mixed_records_code';
+            """,
             cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -189,9 +204,12 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `mixed_records` (`id` int NOT NULL, `code` varchar(20) NOT NULL, "
-            + "PRIMARY KEY (`id`)); "
-            + "INSERT INTO `mixed_records` (`id`, `code`) VALUES (1, 'first'), (2, 'second');",
+            """
+            CREATE TABLE `mixed_records` (`id` int NOT NULL, `code` varchar(20) NOT
+            NULL,
+            PRIMARY KEY (`id`)); INSERT INTO `mixed_records` (`id`, `code`) VALUES (1,
+            'first'), (2, 'second');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new MixedPendingStreamDbContext(connectionString, Fixture.ServerVersion);
@@ -218,9 +236,12 @@ public sealed class MySqlMixedPendingStreamIntegrationTests : MySqlSafeMigration
 
         var indexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mixed_records' "
-            + "AND INDEX_NAME = 'ux_mixed_records_code';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'mixed_records'
+            AND INDEX_NAME = 'ux_mixed_records_code';
+            """,
             cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);

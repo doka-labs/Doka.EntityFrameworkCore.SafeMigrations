@@ -6,6 +6,7 @@ if (args is ["--maintenance-attribution", .. var maintenanceArgs])
 return BenchmarkProgram.Run(
     args,
     typeof(MySqlGenerationBenchmarks),
+    typeof(MySqlAllocationBenchmarks),
     typeof(MySqlAnalyzerBenchmarks),
     typeof(MySqlMigrationBenchmarks),
     typeof(MySqlModelFingerprintBenchmarks));

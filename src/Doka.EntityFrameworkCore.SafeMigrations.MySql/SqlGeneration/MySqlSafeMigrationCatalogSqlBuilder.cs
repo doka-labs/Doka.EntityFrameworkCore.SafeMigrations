@@ -264,11 +264,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return tableExists;
         }
 
-        return $"({tableExists}) AND ((SELECT COUNT(DISTINCT c.COLUMN_NAME) "
-            + "FROM INFORMATION_SCHEMA.COLUMNS c "
-            + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(table)} "
-            + $"AND c.COLUMN_NAME IN ({string.Join(", ", columns.Select(Literal))})) "
-            + $"= {columns.Count.ToString(CultureInfo.InvariantCulture)})";
+        return $"""
+            ({tableExists}) AND ((SELECT COUNT(DISTINCT c.COLUMN_NAME)
+            FROM INFORMATION_SCHEMA.COLUMNS c
+            WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(table)}
+            AND c.COLUMN_NAME IN ({string.Join(", ", columns.Select(Literal))}))
+            = {columns.Count.ToString(CultureInfo.InvariantCulture)})
+            """;
     }
 
     private static bool RequiresLazyStateEvaluation(
@@ -481,9 +483,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string exactMatch,
         string expectedName,
         string semanticCandidates
-    ) => $"CASE WHEN ({exactMatch}) THEN {expectedName} ELSE "
-        + "(SELECT CASE WHEN COUNT(*) = 1 THEN MIN(candidate_name) ELSE NULL END "
-        + $"FROM ({semanticCandidates}) AS doka_sm_semantic_candidates) END";
+    ) => $"""
+        CASE WHEN ({exactMatch})
+        THEN {expectedName}
+        ELSE (SELECT CASE WHEN COUNT(*) = 1
+        THEN MIN(candidate_name) ELSE NULL END
+        FROM ({semanticCandidates}) AS doka_sm_semantic_candidates) END
+        """;
 
     private static MySqlSafeMigrationRuntimePlan Unsupported(
         string code

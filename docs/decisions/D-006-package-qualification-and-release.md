@@ -363,6 +363,17 @@ owns independent consumer readback.
   exact release evidence; preserve native, coverage, SBOM and protected-release
   gates. No .NET 11 or additional release line is activated.
 
+- 2026-11-11: Set the shared five-package stable identity to 10.7.2. Include
+  native expression/catalog, temporal-value and binary-literal ownership fixes
+  through existing public contracts, plus readable raw SQL and LF-stable C#.
+  Public APIs, dependency floors, report schemas and fingerprint formats remain;
+  corrected captured numeric-default identities require review and renewal of
+  affected approvals. Preserve previous release/upgrade history and the explicit
+  10.7.1 completion-only recovery example. Qualify exact 10.7.2 package bytes;
+  earlier local/native results do not complete the final hosted matrix, x64
+  SQL Server, coverage or public-readback gates. No publication, extra release
+  line, .NET 11 support or timing threshold is authorized by preparation.
+
 ### Implementation References
 
 - [Release-line decision](D-018-release-lines-and-monotonic-publication.md)

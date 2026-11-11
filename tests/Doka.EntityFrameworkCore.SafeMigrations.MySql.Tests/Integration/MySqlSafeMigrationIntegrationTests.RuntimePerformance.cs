@@ -515,27 +515,35 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests
                 cancellationToken: cancellationToken),
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE "
-                + constraints
-                + " AND CONSTRAINT_TYPE = 'PRIMARY KEY'",
+                $"""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE {constraints}
+                AND CONSTRAINT_TYPE = 'PRIMARY KEY'
+                """,
                 cancellationToken: cancellationToken),
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE "
-                + constraints
-                + " AND CONSTRAINT_TYPE = 'UNIQUE'",
+                $"""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE {constraints}
+                AND CONSTRAINT_TYPE = 'UNIQUE'
+                """,
                 cancellationToken: cancellationToken),
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE "
-                + tables
-                + " AND INDEX_NAME LIKE 'IX_runtime_records_%_ParentId'",
+                $"""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE {tables}
+                AND INDEX_NAME LIKE 'IX_runtime_records_%_ParentId'
+                """,
                 cancellationToken: cancellationToken),
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE "
-                + constraints
-                + " AND CONSTRAINT_TYPE = 'FOREIGN KEY'",
+                $"""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE {constraints}
+                AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+                """,
                 cancellationToken: cancellationToken),
             await ScalarIntAsync(
                 connectionString,
@@ -543,13 +551,20 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests
                 cancellationToken: cancellationToken),
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE "
-                + tables
-                + " AND NOT ((COLUMN_NAME = 'Id' AND COLUMN_TYPE IN ('int','int(11)') AND IS_NULLABLE = 'NO') "
-                + "OR (COLUMN_NAME = 'ParentId' AND COLUMN_TYPE IN ('int','int(11)') AND IS_NULLABLE = 'YES') "
-                + "OR (COLUMN_NAME = 'Code' AND COLUMN_TYPE = 'varchar(80)' AND IS_NULLABLE = 'NO') "
-                + "OR (COLUMN_NAME LIKE 'Value%' AND COLUMN_TYPE = 'varchar(40)' AND IS_NULLABLE = 'YES') "
-                + "OR (COLUMN_NAME = 'Marker' AND COLUMN_TYPE = 'varchar(32)' AND IS_NULLABLE = 'YES'))",
+                $"""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE {tables}
+                AND NOT ((COLUMN_NAME = 'Id' AND COLUMN_TYPE IN ('int','int(11)')
+                AND IS_NULLABLE = 'NO') OR (COLUMN_NAME = 'ParentId'
+                AND COLUMN_TYPE IN ('int','int(11)')
+                AND IS_NULLABLE = 'YES') OR (COLUMN_NAME = 'Code'
+                AND COLUMN_TYPE = 'varchar(80)'
+                AND IS_NULLABLE = 'NO') OR (COLUMN_NAME LIKE 'Value%'
+                AND COLUMN_TYPE = 'varchar(40)'
+                AND IS_NULLABLE = 'YES') OR (COLUMN_NAME = 'Marker'
+                AND COLUMN_TYPE = 'varchar(32)'
+                AND IS_NULLABLE = 'YES'))
+                """,
                 cancellationToken: cancellationToken),
             rows.Preserved,
             rows.Total,
@@ -575,8 +590,11 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests
         {
             var table = MySqlRuntimeConvergenceMigration.TableName(ordinal);
             await using var command = connection.CreateCommand();
-            command.CommandText = "SELECT COUNT(*), COALESCE(SUM(`Id` = 1 AND `Code` = 'preserved' "
-                + $"AND `Value01` = 'original' AND `Marker` IS NULL), 0) FROM `{table}`;";
+            command.CommandText = $"""
+                SELECT COUNT(*), COALESCE(SUM(`Id` = 1
+                AND `Code` = 'preserved' AND `Value01` = 'original'
+                AND `Marker` IS NULL), 0) FROM `{table}`;
+                """;
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             if (!await reader.ReadAsync(cancellationToken))
@@ -638,8 +656,12 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
         var columnsBefore = await ContextScalarIntAsync(
             context,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'runtime_records_probe' AND COLUMN_NAME = 'Code';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'runtime_records_probe'
+            AND COLUMN_NAME = 'Code';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rowsBefore = tables == 0
@@ -663,8 +685,12 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
         var columnsAfter = await ContextScalarIntAsync(
             context,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'runtime_records_probe' AND COLUMN_NAME = 'Code';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'runtime_records_probe'
+            AND COLUMN_NAME = 'Code';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rowsAfter = await ContextScalarIntAsync(
@@ -757,8 +783,12 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests
             ? "UQ_" + table + "_Code"
             : "FK_" + table + "_Parent";
 
-        var constraintQuery = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-            + $"WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = '{table}' AND CONSTRAINT_NAME = '{name}';";
+        var constraintQuery = $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = '{table}'
+            AND CONSTRAINT_NAME = '{name}';
+            """;
 
         var targetBefore = await ContextScalarIntAsync(
             context,
@@ -823,9 +853,12 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        const string constraintQuery = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'runtime_fresh_rows' "
-            + "AND CONSTRAINT_NAME = 'UQ_runtime_fresh_rows_Code';";
+        const string constraintQuery = """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'runtime_fresh_rows'
+            AND CONSTRAINT_NAME = 'UQ_runtime_fresh_rows_Code';
+            """;
 
         var sessionBefore = await ContextScalarIntAsync(
             context,
@@ -950,20 +983,26 @@ public sealed partial class MySqlRuntimePerformanceIntegrationTests
         await using var connection = new MySqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT CONCAT(TABLE_NAME, ':', COLUMN_NAME, ':', ORDINAL_POSITION, ':', "
-            + "COLUMN_TYPE, ':', IS_NULLABLE, "
-            + "':', COALESCE(COLLATION_NAME, '')) FROM INFORMATION_SCHEMA.COLUMNS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME LIKE 'runtime_records_%' "
-            + "UNION ALL SELECT CONCAT(TABLE_NAME, ':index:', INDEX_NAME, ':', NON_UNIQUE, ':', SEQ_IN_INDEX, "
-            + "':', COLUMN_NAME, ':', COALESCE(SUB_PART, '')) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME LIKE 'runtime_records_%' "
-            + "UNION ALL SELECT CONCAT(TABLE_NAME, ':key:', CONSTRAINT_NAME, ':', COLUMN_NAME, ':', ORDINAL_POSITION, "
-            + "':', COALESCE(REFERENCED_TABLE_NAME, ''), ':', COALESCE(REFERENCED_COLUMN_NAME, '')) "
-            + "FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME LIKE 'runtime_records_%' "
-            + "UNION ALL SELECT CONCAT(TABLE_NAME, ':fk:', CONSTRAINT_NAME, ':', REFERENCED_TABLE_NAME, "
-            + "':', UPDATE_RULE, ':', DELETE_RULE) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME LIKE 'runtime_records_%' ORDER BY 1;";
+        command.CommandText = """
+        SELECT CONCAT(TABLE_NAME, ':', COLUMN_NAME, ':', ORDINAL_POSITION, ':',
+        COLUMN_TYPE, ':', IS_NULLABLE, ':', COALESCE(COLLATION_NAME, ''))
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME LIKE 'runtime_records_%' UNION ALL SELECT CONCAT(TABLE_NAME,
+        ':index:', INDEX_NAME, ':', NON_UNIQUE, ':', SEQ_IN_INDEX, ':', COLUMN_NAME,
+        ':', COALESCE(SUB_PART, '')) FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME LIKE 'runtime_records_%' UNION ALL SELECT CONCAT(TABLE_NAME,
+        ':key:', CONSTRAINT_NAME, ':', COLUMN_NAME, ':', ORDINAL_POSITION, ':',
+        COALESCE(REFERENCED_TABLE_NAME, ''), ':', COALESCE(REFERENCED_COLUMN_NAME,
+        '')) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+        WHERE CONSTRAINT_SCHEMA = DATABASE()
+        AND TABLE_NAME LIKE 'runtime_records_%' UNION ALL SELECT CONCAT(TABLE_NAME,
+        ':fk:', CONSTRAINT_NAME, ':', REFERENCED_TABLE_NAME, ':', UPDATE_RULE,
+        ':', DELETE_RULE) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+        WHERE CONSTRAINT_SCHEMA = DATABASE()
+        AND TABLE_NAME LIKE 'runtime_records_%' ORDER BY 1;
+        """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var schema = new StringBuilder();

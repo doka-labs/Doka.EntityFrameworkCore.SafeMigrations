@@ -119,9 +119,12 @@ public sealed class PostgreSqlIndexesIntegrationTests : PostgreSqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE ordered_indexes (value_provider_default integer NULL, "
-            + "value_asc_first integer NULL, value_asc_last integer NULL, "
-            + "value_desc_first integer NULL, value_desc_last integer NULL);",
+            """
+            CREATE TABLE ordered_indexes (value_provider_default integer NULL, value_asc_first
+            integer NULL,
+            value_asc_last integer NULL, value_desc_first integer NULL, value_desc_last
+            integer NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -182,10 +185,13 @@ public sealed class PostgreSqlIndexesIntegrationTests : PostgreSqlSafeMigrationI
                 1,
                 await ScalarIntAsync(
                     connectionString,
-                    "SELECT CASE WHEN pg_catalog.pg_index_column_has_property(i.indexrelid, 1, "
-                    + $"'{expectedProperty}') IS TRUE THEN 1 ELSE 0 END "
-                    + "FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid "
-                    + $"WHERE c.relname = 'ix_ordered_{ordering.Name}';",
+                    $"""
+                    SELECT CASE WHEN pg_catalog.pg_index_column_has_property(i.indexrelid,
+                    1, '{expectedProperty}') IS TRUE
+                    THEN 1 ELSE 0 END FROM pg_catalog.pg_index i
+                    JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
+                    WHERE c.relname = 'ix_ordered_{ordering.Name}';
+                    """,
                     cancellationToken: CancellationToken.None));
         }
     }

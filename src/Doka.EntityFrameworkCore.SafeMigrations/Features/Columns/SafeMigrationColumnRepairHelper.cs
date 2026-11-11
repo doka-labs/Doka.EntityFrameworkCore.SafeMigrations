@@ -19,7 +19,7 @@ internal static class SafeMigrationColumnRepairHelper
                 && expected.DefaultValue is not
                 {
                     Kind: SafeMigrationDefaultValueKind.Sql,
-                    StructuredExpression: SafeMigrationSqlLiteralExpression { Value: null },
+                    StructuredExpression: SafeMigrationSqlLiteralExpression { BorrowedValue: null },
                 })
             || expected.ComputedColumnSql is not null
             || expected.ComputedExpression is not null;
@@ -137,7 +137,7 @@ internal static class SafeMigrationColumnRepairHelper
 
                 var result = current switch
                 {
-                    SafeMigrationSqlLiteralExpression value => value.Value is not null,
+                    SafeMigrationSqlLiteralExpression value => value.BorrowedValue is not null,
 
                     // WHY: Even non-null operands can yield NULL for division by zero.
                     SafeMigrationSqlBinaryExpression => false,

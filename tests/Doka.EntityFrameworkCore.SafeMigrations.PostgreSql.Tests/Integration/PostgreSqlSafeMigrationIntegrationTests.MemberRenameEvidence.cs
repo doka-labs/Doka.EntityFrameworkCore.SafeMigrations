@@ -40,21 +40,18 @@ public sealed class PostgreSqlMemberRenameEvidenceIntegrationTests : PostgreSqlS
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE member_rows (id integer NOT NULL, decoy integer NULL"
-            + (!index && sourceExists
+            $"""
+            CREATE TABLE member_rows (id integer NOT NULL, decoy integer NULL{(!index && sourceExists
                 ? ", source_value integer NULL"
-                : string.Empty)
-            + (!index && targetExists
+                : string.Empty)}{(!index && targetExists
                 ? ", target_value integer NULL"
-                : string.Empty)
-            + "); "
-            + "INSERT INTO member_rows (id) VALUES (7); "
-            + (index && sourceExists
+                : string.Empty)});
+            INSERT INTO member_rows (id) VALUES (7); {(index && sourceExists
                 ? "CREATE INDEX source_index ON member_rows (id); "
-                : string.Empty)
-            + (index && targetExists
+                : string.Empty)}{(index && targetExists
                 ? "CREATE INDEX target_index ON member_rows (decoy); "
-                : string.Empty),
+                : string.Empty)}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -106,11 +103,17 @@ public sealed class PostgreSqlMemberRenameEvidenceIntegrationTests : PostgreSqlS
         var targetCount = await ScalarIntAsync(
             connectionString,
             index
-                ? "SELECT COUNT(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-                + "WHERE n.nspname = 'public' AND c.relname = 'target_index';"
-                : "SELECT COUNT(*) FROM pg_catalog.pg_attribute a "
-                + "WHERE a.attrelid = 'public.member_rows'::regclass AND a.attname = 'target_value' "
-                + "AND a.attnum > 0 AND NOT a.attisdropped;",
+                ? """
+                SELECT COUNT(*) FROM pg_catalog.pg_class c
+                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'public' AND c.relname = 'target_index';
+                """
+                : """
+                SELECT COUNT(*) FROM pg_catalog.pg_attribute a
+                WHERE a.attrelid = 'public.member_rows'::regclass
+                AND a.attname = 'target_value'
+                AND a.attnum > 0 AND NOT a.attisdropped;
+                """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -173,11 +176,13 @@ public sealed class PostgreSqlMemberRenameEvidenceIntegrationTests : PostgreSqlS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE member_rows (id integer NOT NULL); "
-            + "CREATE TABLE other_rows (id integer NOT NULL); "
-            + (tableOccupant
+            $"""
+            CREATE TABLE member_rows (id integer NOT NULL);
+            CREATE TABLE other_rows (id integer NOT NULL);
+            {(tableOccupant
                 ? "CREATE TABLE target_index (id integer NOT NULL);"
-                : "CREATE INDEX target_index ON other_rows (id);"),
+                : "CREATE INDEX target_index ON other_rows (id);")}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -244,8 +249,11 @@ public sealed class PostgreSqlMemberRenameEvidenceIntegrationTests : PostgreSqlS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE member_rows (id integer NOT NULL, target_value integer NULL); "
-            + "INSERT INTO member_rows VALUES (7, 29); CREATE INDEX target_index ON member_rows (id);",
+            """
+            CREATE TABLE member_rows (id integer NOT NULL, target_value integer NULL); INSERT INTO
+            member_rows VALUES (7,
+            29); CREATE INDEX target_index ON member_rows (id);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -296,8 +304,10 @@ public sealed class PostgreSqlMemberRenameEvidenceIntegrationTests : PostgreSqlS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE member_rows (id integer NOT NULL, decoy integer NULL, \"Target_Value\" integer NULL); "
-            + "CREATE INDEX \"Target_Index\" ON member_rows (decoy);",
+            """
+            CREATE TABLE member_rows (id integer NOT NULL, decoy integer NULL, "Target_Value"
+            integer NULL); CREATE INDEX "Target_Index" ON member_rows (decoy);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -370,20 +380,20 @@ public sealed class PostgreSqlMemberRenameEvidenceIntegrationTests : PostgreSqlS
         var supported = kind == "independent";
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE member_rows (id integer NOT NULL, decoy integer NULL"
-            + (kind == "constraint"
+            $"""
+            CREATE TABLE member_rows (id integer NOT NULL, decoy integer NULL{(kind == "constraint"
                 ? ", CONSTRAINT source_index PRIMARY KEY (id)"
-                : string.Empty)
-            + "); CREATE TABLE other_rows (id integer NOT NULL); "
-            + "INSERT INTO member_rows (id) VALUES (7); "
-            + (kind == "constraint"
+                : string.Empty)});
+            CREATE TABLE other_rows (id integer NOT NULL); INSERT INTO member_rows (id)
+            VALUES (7); {(kind == "constraint"
                 ? string.Empty
                 : "CREATE INDEX source_index ON "
                 + (kind == "foreign-owner"
                     ? "other_rows"
                     : "member_rows")
-                + " (id); ")
-            + "CREATE INDEX target_index ON member_rows (decoy);",
+                + " (id); ")}CREATE INDEX target_index ON member_rows
+            (decoy);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -415,8 +425,11 @@ public sealed class PostgreSqlMemberRenameEvidenceIntegrationTests : PostgreSqlS
 
         var sourceCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-            + "WHERE n.nspname = 'public' AND c.relname = 'source_index';",
+            """
+            SELECT COUNT(*) FROM pg_catalog.pg_class c
+            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public' AND c.relname = 'source_index';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(

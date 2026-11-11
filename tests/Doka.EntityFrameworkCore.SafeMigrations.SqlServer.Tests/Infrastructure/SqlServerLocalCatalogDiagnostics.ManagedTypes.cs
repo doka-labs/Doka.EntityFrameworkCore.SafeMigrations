@@ -150,8 +150,10 @@ internal static partial class SqlServerLocalCatalogDiagnostics
             await ExecuteAsync(connection, "CREATE SCHEMA audit;", cancellationToken: cancellationToken);
             await ExecuteAsync(
                 connection,
-                "CREATE TABLE dbo.type_principals (Id int NOT NULL PRIMARY KEY, "
-                + "Code bigint NOT NULL); CREATE TABLE dbo.type_dependents (ReferenceId int NULL);",
+                """
+                CREATE TABLE dbo.type_principals (Id int NOT NULL PRIMARY KEY, Code bigint
+                NOT NULL); CREATE TABLE dbo.type_dependents (ReferenceId int NULL);
+                """,
                 cancellationToken: cancellationToken);
 
             (string Mode, bool Matches)[] dependents =

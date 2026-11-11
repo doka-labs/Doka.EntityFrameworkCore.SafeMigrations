@@ -93,16 +93,24 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
 
             var requiredColumns = await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-                + "AND BINARY TABLE_NAME = BINARY 'mixeditems' AND COLUMN_NAME = 'required_value' "
-                + "AND IS_NULLABLE = 'NO';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND BINARY TABLE_NAME = BINARY 'mixeditems'
+                AND COLUMN_NAME = 'required_value'
+                AND IS_NULLABLE = 'NO';
+                """,
                 cancellationToken: CancellationToken.None);
 
             var defaultRows = await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-                + "AND BINARY TABLE_NAME = BINARY 'mixeditems' AND COLUMN_NAME = 'required_value' "
-                + "AND COLUMN_DEFAULT = '7';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND BINARY TABLE_NAME = BINARY 'mixeditems'
+                AND COLUMN_NAME = 'required_value'
+                AND COLUMN_DEFAULT = '7';
+                """,
                 cancellationToken: CancellationToken.None);
 
             var preserved = await ScalarIntAsync(
@@ -387,8 +395,11 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
 
         var physicalOwners = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND BINARY TABLE_NAME IN (BINARY 'MixedItems', BINARY 'mixeditems');",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND BINARY TABLE_NAME IN (BINARY 'MixedItems', BINARY 'mixeditems');
+            """,
             cancellationToken: CancellationToken.None);
 
         var inventory = await context
@@ -467,17 +478,16 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
         var shadow = AtomicRequiredAddOperation(useGuidStorage: false, table: shadowTable);
         await ExecuteSqlAsync(
             connectionString,
-            AtomicRequiredAddOriginalTableSql(requestedTable)
-            + AtomicRequiredAddStagedTableSql(
+            $"""
+            {AtomicRequiredAddOriginalTableSql(requestedTable)}{AtomicRequiredAddStagedTableSql(
                 shadow,
                 guardName: null,
                 expression: "`required_value` IS NOT NULL",
                 columnType: "int",
-                nullable: false)
-            + " INSERT INTO "
-            + AtomicRequiredAddDelimited(shadowTable)
-            + " (`key`, `required_value`) VALUES (1, 7); "
-            + "CREATE TABLE `benign_required_add_owner` (`value` int NULL) ENGINE=InnoDB;",
+                nullable: false)} INSERT INTO {AtomicRequiredAddDelimited(shadowTable)}
+            (`key`, `required_value`) VALUES (1, 7); CREATE TABLE `benign_required_add_owner`
+            (`value` int NULL) ENGINE=InnoDB;
+            """,
             cancellationToken: CancellationToken.None);
 
         var benign = new SafeMigrationOperation(
@@ -644,12 +654,13 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
 
         var guards = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() "
-            + "AND BINARY TABLE_NAME = BINARY "
-            + AtomicRequiredAddLiteral(intent.Table)
-            + " AND CONSTRAINT_TYPE = 'CHECK' AND BINARY CONSTRAINT_NAME = BINARY "
-            + AtomicRequiredAddLiteral(AtomicRequiredAddGuardName(operation))
-            + ";",
+            $"""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND BINARY TABLE_NAME = BINARY {AtomicRequiredAddLiteral(intent.Table)}
+            AND CONSTRAINT_TYPE = 'CHECK'
+            AND BINARY CONSTRAINT_NAME = BINARY {AtomicRequiredAddLiteral(AtomicRequiredAddGuardName(operation))};
+            """,
             cancellationToken: cancellationToken);
 
         var rows = await ScalarIntAsync(

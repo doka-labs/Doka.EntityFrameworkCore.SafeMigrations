@@ -39,14 +39,14 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE TABLE dbo.drop_nodes(R bigint NOT NULL,Payload int NULL"
-                + (missing
+                $"""
+                CREATE TABLE dbo.drop_nodes(R bigint NOT NULL,Payload int NULL{(missing
                     ? string.Empty
-                    : ",L bigint NOT NULL")
-                + "); INSERT dbo.drop_nodes VALUES"
-                + (missing
+                    : ",L bigint NOT NULL")});
+                INSERT dbo.drop_nodes VALUES{(missing
                     ? "(4,10);"
-                    : "(4,10,1);"),
+                    : "(4,10,1);")}
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -227,14 +227,14 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
         // compiling legal CS-distinct L/l fields; no product gate is involved.
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.drop_nodes(L bigint NOT NULL,R bigint NOT NULL"
-            + (sensitive
+            $"""
+            CREATE TABLE dbo.drop_nodes(L bigint NOT NULL,R bigint NOT NULL{(sensitive
                 ? ",l bigint NOT NULL"
-                : string.Empty)
-            + "); INSERT dbo.drop_nodes VALUES"
-            + (sensitive
+                : string.Empty)});
+            INSERT dbo.drop_nodes VALUES{(sensitive
                 ? "(1,4,99);"
-                : "(1,4);"),
+                : "(1,4);")}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -302,12 +302,13 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.drop_nodes(L bigint NOT NULL,R bigint NOT NULL,"
-            + "HasChildren AS CONVERT(bit,CASE WHEN R>L THEN 1 ELSE 0 END));"
-            + "INSERT dbo.drop_nodes(L,R) VALUES(1,4);"
-            + (independentIndex
+            $"""
+            CREATE TABLE dbo.drop_nodes(L bigint NOT NULL,R bigint NOT NULL,HasChildren
+            AS CONVERT(bit,CASE WHEN R>L
+            THEN 1 ELSE 0 END));INSERT dbo.drop_nodes(L,R) VALUES(1,4);{(independentIndex
                 ? "CREATE INDEX IX_L ON dbo.drop_nodes(L);"
-                : string.Empty),
+                : string.Empty)}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -398,22 +399,20 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
         var failed = scenario == 6;
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.drop_nodes(L bigint NOT NULL,R bigint NOT NULL,"
-            + "HasChildren AS CONVERT(bit,CASE WHEN R>L THEN 1 ELSE 0 END)"
-            + (failed
+            $"""
+            CREATE TABLE dbo.drop_nodes(L bigint NOT NULL,R bigint NOT NULL,HasChildren
+            AS CONVERT(bit,CASE WHEN R>L
+            THEN 1 ELSE 0 END){(failed
                 ? ",CONSTRAINT PK_drop_nodes PRIMARY KEY(L)"
-                : string.Empty)
-            + ");"
-            + "INSERT dbo.drop_nodes(L,R) VALUES(1,4);"
-            + (failed
+                : string.Empty)});INSERT dbo.drop_nodes(L,R)
+            VALUES(1,4);{(failed
                 ? string.Empty
-                : "CREATE INDEX IX_L ON dbo.drop_nodes(L);")
-            + (scenario == 2
+                : "CREATE INDEX IX_L ON dbo.drop_nodes(L);")}{(scenario == 2
                 ? "CREATE INDEX IX_L_other ON dbo.drop_nodes(L);"
-                : string.Empty)
-            + (scenario == 3
+                : string.Empty)}{(scenario == 3
                 ? "CREATE STATISTICS S_L ON dbo.drop_nodes(L);"
-                : string.Empty),
+                : string.Empty)}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -509,9 +508,12 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.drop_nodes(L bigint NOT NULL,R bigint NOT NULL,"
-            + "HasChildren AS CONVERT(bit,CASE WHEN R>L THEN 1 ELSE 0 END));"
-            + "INSERT dbo.drop_nodes(L,R) VALUES(1,4);CREATE INDEX IX_L ON dbo.drop_nodes(L);",
+            """
+            CREATE TABLE dbo.drop_nodes(L bigint NOT NULL,R bigint NOT NULL,HasChildren
+            AS CONVERT(bit,CASE WHEN R>L
+            THEN 1 ELSE 0 END));INSERT dbo.drop_nodes(L,R) VALUES(1,4);CREATE INDEX
+            IX_L ON dbo.drop_nodes(L);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -578,9 +580,11 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.drop_nodes(L bigint NOT NULL,R bigint NOT NULL,"
-            + "HasChildren AS CONVERT(bit,CASE WHEN R>L THEN 1 ELSE 0 END));"
-            + "INSERT dbo.drop_nodes(L,R) VALUES(1,4);",
+            """
+            CREATE TABLE dbo.drop_nodes(L bigint NOT NULL,R bigint NOT NULL,HasChildren
+            AS CONVERT(bit,CASE WHEN R>L
+            THEN 1 ELSE 0 END));INSERT dbo.drop_nodes(L,R) VALUES(1,4);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -698,17 +702,12 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE "
-            + preciseName
-            + "(L bigint NOT NULL,R bigint NOT NULL);"
-            + "CREATE TABLE "
-            + impreciseName
-            + "(L float NOT NULL,R bigint NOT NULL);"
-            + "INSERT "
-            + preciseName
-            + " VALUES(1,4);INSERT "
-            + impreciseName
-            + " VALUES(1,4);",
+            $"""
+            CREATE TABLE {preciseName}(L bigint NOT NULL,R bigint NOT NULL);CREATE
+            TABLE {impreciseName}(L float NOT NULL,R bigint NOT NULL);INSERT
+            {preciseName} VALUES(1,4);INSERT {impreciseName}
+            VALUES(1,4);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -761,12 +760,12 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
 
         var preservedRows = await ScalarIntAsync(
             connectionString,
-            "SELECT (SELECT COUNT(*) FROM "
-            + preciseName
-            + " WHERE L=1 AND R=4)"
-            + "+(SELECT COUNT(*) FROM "
-            + impreciseName
-            + " WHERE L=1 AND R=4);",
+            $"""
+            SELECT (SELECT COUNT(*) FROM {preciseName}
+            WHERE L=1 AND R=4)+(SELECT COUNT(*)
+            FROM {impreciseName}
+            WHERE L=1 AND R=4);
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert

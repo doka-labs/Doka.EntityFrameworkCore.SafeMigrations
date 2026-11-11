@@ -29,7 +29,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
 
         if (!SqlServerComputedColumnContract.IsDeterministic(expression)
-            || _expressionRenderer.GetUnsupportedFeature(expression) is not null)
+            || _expressionRenderer.GetUnsupportedScalarFeature(expression) is not null)
         {
             return "computed_expression_unproven";
         }
@@ -69,19 +69,26 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var rowCapacity = BuildColumnAdditionRowCapacityPredicate(intent);
         var capacityFailure = rowCapacity is null
             ? string.Empty
-            : $"WHEN NOT {exists} AND ({rowCapacity}) AND EXISTS(SELECT TOP (1) 1 FROM "
-            + QualifiedTable(intent.Table, intent.Schema)
-            + ") THEN N'data_blocked' ";
+            : $"""
+            WHEN NOT {exists}
+            AND ({rowCapacity})
+            AND EXISTS(SELECT TOP (1) 1 FROM {QualifiedTable(intent.Table, intent.Schema)})
+            THEN N'data_blocked'{"\u0020"}
+            """;
 
         var canRead = $"COALESCE(HAS_PERMS_BY_NAME({Literal(QualifiedTable(intent.Table, intent.Schema))}, "
             + "N'OBJECT',N'SELECT'),0)=1";
 
         return Plan(
-                $"CASE WHEN NOT {table} THEN N'prerequisite_missing' "
-                + $"WHEN {support} <> 1 THEN N'unsupported' "
-                + capacityFailure
-                + $"WHEN NOT {exists} THEN N'missing' "
-                + $"WHEN {matching} THEN N'matching' ELSE N'different' END",
+                $"""
+                CASE WHEN NOT {table}
+                THEN N'prerequisite_missing'
+                WHEN {support} <> 1
+                THEN N'unsupported' {capacityFailure}WHEN NOT {exists}
+                THEN N'missing'
+                WHEN {matching}
+                THEN N'matching' ELSE N'different' END
+                """,
                 Bit(matching)) with
             {
                 RequiresDelayedBinding = true,
@@ -94,17 +101,21 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 StateEvaluationGuardFailureExpression = rowCapacity is null
                     ? null
                     : "N'unsupported'",
-                ClassificationCodeExpression = $"CASE WHEN {support} = -1 "
-                + "THEN N'computed_column_operand_identity_unproven' "
-                + $"WHEN {support} <> 1 "
-                + "THEN N'computed_column_native_type_unproven' ELSE NULL END",
+                ClassificationCodeExpression = $"""
+                CASE WHEN {support} = -1
+                THEN N'computed_column_operand_identity_unproven'
+                WHEN {support} <> 1
+                THEN N'computed_column_native_type_unproven'
+                ELSE NULL END
+                """,
                 ColumnLayoutFailureExpression = intent.Definition.IsStored == true
                     ? BuildColumnAdditionLayoutFailureExpression(intent)
-                    : "CASE WHEN (SELECT COUNT(*) FROM sys.columns WHERE object_id = "
-                    + TableId(intent.Table, intent.Schema)
-                    + ") >= 1024 AND NOT "
-                    + exists
-                    + " THEN N'column_limit' ELSE NULL END",
+                    : $"""
+                    CASE WHEN (SELECT COUNT(*) FROM sys.columns
+                    WHERE object_id = {TableId(intent.Table, intent.Schema)}) >= 1024
+                    AND NOT {exists}
+                    THEN N'column_limit' ELSE NULL END
+                    """,
             };
     }
 
@@ -215,8 +226,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 // WHY: SQL Server requires an ordinary field beside computed
                 // members. Resolve its private name under tempdb's identifier
                 // collation, which can differ from the user's database collation.
-                var chooseOperand = "SELECT @name=CASE WHEN @target COLLATE CATALOG_DEFAULT="
-                    + "N'__doka_operand' THEN N'__doka_operand_other' ELSE N'__doka_operand' END;";
+                const string chooseOperand = """
+                    SELECT @name=CASE WHEN @target COLLATE CATALOG_DEFAULT=N'__doka_operand'
+                    THEN N'__doka_operand_other' ELSE N'__doka_operand' END;
+                    """;
 
                 var targetArgument = SqlServerSqlStringLiteral.ProcedureArgument(
                     column.Name,
@@ -247,34 +260,41 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             AppendComputedProbeDefinition(generated, column, expression);
             generated.Append("; ");
 
+            // WHY: Raw constant runs retain incremental writes and native
+            // quoted values; only existing command separators become LF.
             generated
-                .Append("SELECT @definition = cc.definition, @nullable = c.is_nullable, ")
-                .Append("@collation=c.collation_name, @support = CASE WHEN ")
+                .Append(
+                    """
+                    SELECT @definition = cc.definition, @nullable = c.is_nullable,
+                    @collation=c.collation_name, @support = CASE WHEN
+                    """
+                    + " ")
                 .Append(ComputedProbeTypePredicate(column))
                 .Append(
                     column.IsNullable || SqlServerComputedColumnContract.IsNonNull(expression)
                         ? string.Empty
                         : " AND c.is_nullable = 0")
-                .Append(" THEN 1 ELSE 0 END FROM tempdb.sys.computed_columns cc ")
-                .Append("JOIN tempdb.sys.columns c ON c.object_id=cc.object_id AND c.column_id=cc.column_id ")
-                .Append("JOIN tempdb.sys.types ty ON ty.user_type_id=c.user_type_id ")
-                .Append("WHERE cc.object_id=OBJECT_ID(N'tempdb..")
+                .Append(" "
+                    + """
+                    THEN 1 ELSE 0 END FROM tempdb.sys.computed_columns cc
+                    JOIN tempdb.sys.columns c ON c.object_id=cc.object_id AND c.column_id=cc.column_id
+                    JOIN tempdb.sys.types ty ON ty.user_type_id=c.user_type_id
+                    WHERE cc.object_id=OBJECT_ID(N'tempdb..
+                    """)
                 .Append(temporary)
                 .Append("') AND cc.name=")
                 .Append(RenderStringLiteral(column.Name))
                 .Append(';');
 
-            var indexProperties = "SELECT @indexable=CASE WHEN "
-                + "COLUMNPROPERTY(cc.object_id,cc.name,N'IsDeterministic')=1 "
-                + "AND (COLUMNPROPERTY(cc.object_id,cc.name,N'IsPrecise')=1 OR cc.is_persisted=1) "
-                + "AND COLUMNPROPERTY(cc.object_id,cc.name,N'IsIndexable')=1 THEN 1 ELSE 0 END, "
-                + "@includeable=CASE WHEN COLUMNPROPERTY(cc.object_id,cc.name,N'IsDeterministic')=1 "
-                + "THEN 1 ELSE 0 END "
-                + "FROM sys.computed_columns cc WHERE cc.object_id=OBJECT_ID(N'tempdb.."
-                + temporary
-                + "') AND cc.name="
-                + RenderStringLiteral(column.Name)
-                + ";";
+            var indexProperties = $"""
+                SELECT @indexable=CASE WHEN COLUMNPROPERTY(cc.object_id,cc.name,N'IsDeterministic')=1
+                AND (COLUMNPROPERTY(cc.object_id,cc.name,N'IsPrecise')=1
+                OR cc.is_persisted=1) AND COLUMNPROPERTY(cc.object_id,cc.name,N'IsIndexable')=1
+                THEN 1 ELSE 0 END, @includeable=CASE WHEN COLUMNPROPERTY(cc.object_id,cc.name,N'IsDeterministic')=1
+                THEN 1 ELSE 0 END FROM sys.computed_columns cc
+                WHERE cc.object_id=OBJECT_ID(N'tempdb..{temporary}')
+                AND cc.name={RenderStringLiteral(column.Name)};
+                """;
 
             // WHY: COLUMNPROPERTY resolves object ids in its current database.
             // The compiler-owned table lives in tempdb, so read those properties
@@ -292,8 +312,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 .Append(indexDeclaration)
                 .Append("EXEC tempdb.sys.sp_executesql ")
                 .Append(indexArgument)
-                .Append(",N'@indexable int OUTPUT,@includeable int OUTPUT',")
-                .Append("@indexable=@indexable OUTPUT,@includeable=@includeable OUTPUT;");
+                .Append(
+                    """
+                    ,N'@indexable int OUTPUT,@includeable int OUTPUT',@indexable=@indexable
+                    OUTPUT,@includeable=@includeable OUTPUT;
+                    """);
 
             // WHY: A temporary table created in a child EXEC disappears when
             // that child returns. CREATE, ADD and catalog acquisition therefore
@@ -396,23 +419,17 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     )
     {
         var preamble = BuildComputedColumnPreamble(table, schema, [definition], authoredTable, captureBindings: true);
-        var select = "SELECT "
-            + ordinal.ToString(CultureInfo.InvariantCulture)
-            + ", CASE WHEN "
-            + ComputedVariable(definition, "support")
-            + "=1 THEN CONVERT(int,"
-            + ComputedVariable(definition, "nullable")
-            + ")+CASE WHEN "
-            + ComputedVariable(definition, "indexable")
-            + "=1 AND ("
-            + ComputedIndexSessionPredicate
-            + ") THEN 1 WHEN "
-            + ComputedVariable(definition, "includeable")
-            + "=1 AND ("
-            + ComputedIndexSessionPredicate
-            + ") THEN 5 ELSE 3 END ELSE 0 END, "
-            + ComputedVariable(definition, "bindings")
-            + ";";
+        var select = $"""
+            SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE
+            WHEN {ComputedVariable(definition, "support")}=1
+            THEN CONVERT(int,{ComputedVariable(definition, "nullable")})+CASE
+            WHEN {ComputedVariable(definition, "indexable")}=1
+            AND ({ComputedIndexSessionPredicate})
+            THEN 1
+            WHEN {ComputedVariable(definition, "includeable")}=1
+            AND ({ComputedIndexSessionPredicate})
+            THEN 5 ELSE 3 END ELSE 0 END, {ComputedVariable(definition, "bindings")};
+            """;
 
         var body = preamble + select;
         var argument = SqlServerSqlStringLiteral.ProcedureArgument(
@@ -467,7 +484,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // WHY: A completely parsed authored literal can still have different native
         // typing from its CLR-rendered form (for example a large numeric constant).
         // Compile exactly the same text as Core's baseline, not a rewritten spelling.
-        => definition.CapturedComputedSql ?? definition.ComputedColumnSql ?? _expressionRenderer.Render(expression);
+        => definition.CapturedComputedSql
+            ?? definition.ComputedColumnSql
+            ?? _expressionRenderer.RenderScalar(expression);
 
     private static string[] ComputedPrerequisiteColumns(
         ExpectedColumnDefinition definition
@@ -503,28 +522,36 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // requirements. Exact catalog-only built-in metadata needs neither, and
         // rejects computed/UDT operands that SQL Server cannot reference safely.
         probe
-            .Append("DECLARE @operands nvarchar(max), @identities nvarchar(max), @operand_count int; ")
-            .Append("WITH resolved AS (SELECT expected.ordinal, ROW_NUMBER() OVER(PARTITION BY ")
-            .Append("COALESCE(authored.name,c.name) COLLATE CATALOG_DEFAULT ORDER BY expected.ordinal) AS duplicate, ")
-            .Append("COALESCE(authored.name,c.name) AS physical_name, authored.ordinal AS authored_ordinal, ")
-            .Append("CASE WHEN authored.definition IS NOT NULL THEN authored.definition ELSE ")
-            .Append("QUOTENAME(c.name)+N' '+QUOTENAME(ty.name)+CASE ")
-            .Append("WHEN ty.name IN (N'varchar',N'char',N'varbinary',N'binary') ")
-            .Append("THEN N'('+CASE WHEN c.max_length=-1 THEN N'max' ")
-            .Append("ELSE CONVERT(nvarchar(10),c.max_length) END+N')' ")
-            .Append("WHEN ty.name IN (N'nvarchar',N'nchar') THEN N'('+CASE WHEN c.max_length=-1 THEN N'max' ")
-            .Append("ELSE CONVERT(nvarchar(10),c.max_length/2) END+N')' ")
-            .Append("WHEN ty.name IN (N'decimal',N'numeric') THEN N'('+CONVERT(nvarchar(10),c.precision)")
-            .Append("+N','+CONVERT(nvarchar(10),c.scale)+N')' ")
-            .Append("WHEN ty.name IN (N'time',N'datetime2',N'datetimeoffset') ")
-            .Append("THEN N'('+CONVERT(nvarchar(10),c.scale)+N')' ")
-            .Append("WHEN ty.name=N'float' THEN N'('+CONVERT(nvarchar(10),c.precision)+N')' ELSE N'' END ")
+            .Append(
+                """
+                DECLARE @operands nvarchar(max), @identities nvarchar(max), @operand_count int;
+                WITH resolved AS (SELECT expected.ordinal, ROW_NUMBER() OVER(PARTITION BY
+                COALESCE(authored.name,c.name) COLLATE CATALOG_DEFAULT ORDER BY expected.ordinal) AS duplicate,
+                COALESCE(authored.name,c.name) AS physical_name, authored.ordinal AS authored_ordinal,
+                CASE WHEN authored.definition IS NOT NULL THEN authored.definition ELSE
+                QUOTENAME(c.name)+N' '+QUOTENAME(ty.name)+CASE
+                WHEN ty.name IN (N'varchar',N'char',N'varbinary',N'binary')
+                THEN N'('+CASE WHEN c.max_length=-1 THEN N'max'
+                ELSE CONVERT(nvarchar(10),c.max_length) END+N')'
+                WHEN ty.name IN (N'nvarchar',N'nchar') THEN N'('+CASE WHEN c.max_length=-1 THEN N'max'
+                ELSE CONVERT(nvarchar(10),c.max_length/2) END+N')'
+                WHEN ty.name IN (N'decimal',N'numeric') THEN
+                N'('+CONVERT(nvarchar(10),c.precision)+N','+CONVERT(nvarchar(10),c.scale)+N')'
+                WHEN ty.name IN (N'time',N'datetime2',N'datetimeoffset')
+                THEN N'('+CONVERT(nvarchar(10),c.scale)+N')'
+                WHEN ty.name=N'float' THEN N'('+CONVERT(nvarchar(10),c.precision)+N')' ELSE N'' END
+                """
+                + " ")
 
             // WHY: SQL Server owns these built-in catalog names. COLLATE needs
             // their literal-token spelling; QUOTENAME produces invalid grammar.
-            .Append("+CASE WHEN c.collation_name IS NULL THEN N'' ELSE N' COLLATE '+c.collation_name END ")
-            .Append("+CASE WHEN c.is_nullable=1 THEN N' NULL' ELSE N' NOT NULL' END END AS definition ")
-            .Append("FROM (VALUES ");
+            .Append(
+                """
+                +CASE WHEN c.collation_name IS NULL THEN N'' ELSE N' COLLATE '+c.collation_name END
+                +CASE WHEN c.is_nullable=1 THEN N' NULL' ELSE N' NOT NULL' END END AS definition
+                FROM (VALUES
+                """
+                + " ");
 
         // WHY: Keep operand names aligned with the emitted compiler-probe ordinals.
         // ReSharper disable once ForCanBeConvertedToForeach
@@ -575,41 +602,54 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
         else
         {
-            probe
-                .Append("(SELECT CONVERT(int,NULL) AS ordinal, CONVERT(nvarchar(128),NULL) AS name, ")
-                .Append("CONVERT(nvarchar(max),NULL) AS definition WHERE 1=0) authored");
+            probe.Append(
+                """
+                (SELECT CONVERT(int,NULL) AS ordinal, CONVERT(nvarchar(128),NULL) AS name,
+                CONVERT(nvarchar(max),NULL) AS definition WHERE 1=0) authored
+                """);
         }
 
         // WHY: Identifier aliases are resolved by the target database, not by
         // CLR casing rules. Count every resolved reference, but clone one field
         // per native identity; CS databases retain genuinely distinct operands.
         probe
-            .Append(" ON authored.name COLLATE CATALOG_DEFAULT=expected.name COLLATE CATALOG_DEFAULT ")
-            .Append("LEFT JOIN sys.columns c ON c.object_id=OBJECT_ID(")
+            .Append(" "
+                + """
+                ON authored.name COLLATE CATALOG_DEFAULT=expected.name COLLATE CATALOG_DEFAULT
+                LEFT JOIN sys.columns c ON c.object_id=OBJECT_ID(
+                """)
             .Append(RenderStringLiteral(QualifiedTable(table, schema)))
-            .Append(",N'U') AND c.name=expected.name COLLATE CATALOG_DEFAULT ")
-            .Append("LEFT JOIN sys.types ty ON ty.user_type_id=c.user_type_id ")
-            .Append("WHERE authored.definition IS NOT NULL OR (c.is_computed=0 AND c.is_hidden=0 ")
-            .Append("AND c.encryption_type IS NULL ")
-            .Append("AND ty.is_user_defined=0 AND ty.is_assembly_type=0 ")
-            .Append("AND ty.name IN (N'bigint',N'binary',N'bit',N'char',N'date',N'datetime', ")
-            .Append("N'datetime2',N'datetimeoffset',N'decimal',N'float',N'int',N'money',N'nchar',N'numeric', ")
-            .Append("N'nvarchar',N'real',N'smalldatetime',N'smallint',N'smallmoney',N'time',N'tinyint', ")
-            .Append("N'uniqueidentifier',N'varbinary',N'varchar'))) ")
-            .Append("SELECT @operand_count=COUNT(*), @operands=STRING_AGG(CONVERT(nvarchar(max), ")
-            .Append("CASE WHEN duplicate=1 THEN definition END),N',') ")
-            .Append("WITHIN GROUP(ORDER BY ordinal), @identities=STRING_AGG(CONVERT(nvarchar(max), ")
-            .Append("CASE WHEN duplicate=1 THEN N'('+QUOTENAME(physical_name,N'''' )+N')' END),N',') ")
-            .Append("WITHIN GROUP(ORDER BY ordinal)");
+            .Append(
+                """
+                ,N'U') AND c.name=expected.name COLLATE CATALOG_DEFAULT
+                LEFT JOIN sys.types ty ON ty.user_type_id=c.user_type_id
+                WHERE authored.definition IS NOT NULL OR (c.is_computed=0 AND c.is_hidden=0
+                AND c.encryption_type IS NULL
+                AND ty.is_user_defined=0 AND ty.is_assembly_type=0
+                AND ty.name IN (N'bigint',N'binary',N'bit',N'char',N'date',N'datetime',
+                N'datetime2',N'datetimeoffset',N'decimal',N'float',N'int',N'money',N'nchar',N'numeric',
+                N'nvarchar',N'real',N'smalldatetime',N'smallint',N'smallmoney',N'time',N'tinyint',
+                N'uniqueidentifier',N'varbinary',N'varchar')))
+                SELECT @operand_count=COUNT(*), @operands=STRING_AGG(CONVERT(nvarchar(max),
+                CASE WHEN duplicate=1 THEN definition END),N',')
+                WITHIN GROUP(ORDER BY ordinal), @identities=STRING_AGG(CONVERT(nvarchar(max),
+                CASE WHEN duplicate=1 THEN N'('+QUOTENAME(physical_name,N'''' )+N')' END),N',')
+                WITHIN GROUP(ORDER BY ordinal)
+                """);
 
         if (captureBindings)
         {
             // WHY: The native resolver owns identifier collation. Carry its
             // exact source identities and immutable authored ordinals back to
             // projection; CLR case folding cannot reproduce that binding.
+            // WHY: The length-prefixed binding expression has no separator at
+            // its middle boundary. Retain adjacent writes instead of adding one.
             probe
-                .Append(", @bindings=STRING_AGG(CONVERT(nvarchar(max), ")
-                .Append("CONVERT(nvarchar(12),COALESCE(authored_ordinal,-1))+N':'")
+                .Append(
+                    """
+                    , @bindings=STRING_AGG(CONVERT(nvarchar(max),
+                    CONVERT(nvarchar(12),COALESCE(authored_ordinal,-1))+N':'
+                    """)
                 .Append("+CONVERT(nvarchar(12),DATALENGTH(physical_name)/2)+N':'+physical_name),N'') ")
                 .Append("WITHIN GROUP(ORDER BY ordinal)");
         }

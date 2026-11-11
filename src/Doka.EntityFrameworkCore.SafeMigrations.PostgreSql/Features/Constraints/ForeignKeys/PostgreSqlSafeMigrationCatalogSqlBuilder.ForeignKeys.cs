@@ -40,9 +40,12 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 definition.PrincipalColumns,
                 (local, principal) => $"d.{Delimited(local)} = p.{Delimited(principal)}"));
 
-        return $"EXISTS (SELECT 1 FROM {Qualified(definition.Table, definition.Schema)} d "
-            + $"LEFT JOIN {Qualified(definition.PrincipalTable, definition.PrincipalSchema)} p ON {join} "
-            + $"WHERE {localNotNull} AND p.{Delimited(definition.PrincipalColumns[0])} IS NULL LIMIT 1)";
+        return $"""
+            EXISTS (SELECT 1 FROM {Qualified(definition.Table, definition.Schema)} d
+            LEFT JOIN {Qualified(definition.PrincipalTable, definition.PrincipalSchema)} p ON {join}
+            WHERE {localNotNull}
+            AND p.{Delimited(definition.PrincipalColumns[0])} IS NULL LIMIT 1)
+            """;
     }
 
     private string ForeignKeyMatches(
@@ -94,21 +97,23 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         string onUpdate,
         string onDelete,
         bool requireLocalIdentity = true
-    ) => StandardConstraintSemantics(requireLocalIdentity)
-        + " AND ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
-        + "JOIN pg_catalog.pg_attribute a ON a.attrelid = co.conrelid AND a.attnum = key.attnum "
-        + $"ORDER BY key.ord) = {columns} "
-        + $"AND co.confrelid = {principal} "
-        + "AND ARRAY(SELECT a.attname FROM unnest(co.confkey) WITH ORDINALITY AS key(attnum, ord) "
-        + "JOIN pg_catalog.pg_attribute a ON a.attrelid = co.confrelid AND a.attnum = key.attnum "
-        + $"ORDER BY key.ord) = {principalColumns} "
-        + $"AND co.confupdtype = {onUpdate} "
-        + $"AND co.confdeltype = {onDelete} "
-        + "AND co.confmatchtype = 's'::\"char\" "
-
+    )
+    {
         // A column-list SET NULL/DEFAULT action changes which dependent
         // columns are updated and is not expressible by the EF operation.
-        + "AND (to_jsonb(co) ->> 'confdelsetcols') IS NULL";
+        return $"""
+            {StandardConstraintSemantics(requireLocalIdentity)} AND ARRAY(
+            SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord)
+            JOIN pg_catalog.pg_attribute a ON a.attrelid = co.conrelid AND a.attnum = key.attnum
+            ORDER BY key.ord) = {columns}
+            AND co.confrelid = {principal}
+            AND ARRAY(SELECT a.attname FROM unnest(co.confkey) WITH ORDINALITY AS key(attnum, ord)
+            JOIN pg_catalog.pg_attribute a ON a.attrelid = co.confrelid AND a.attnum = key.attnum
+            ORDER BY key.ord) = {principalColumns}
+            AND co.confupdtype = {onUpdate} AND co.confdeltype = {onDelete}
+            AND co.confmatchtype = 's'::"char" AND (to_jsonb(co) ->> 'confdelsetcols') IS NULL
+            """;
+    }
 
     private string BuildForeignKeyDiagnosticEvidence(
         ExpectedForeignKeyDefinition definition
@@ -116,15 +121,19 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         var expectedColumns = string.Join(",", definition.Columns);
         var expectedPrincipalColumns = string.Join(",", definition.PrincipalColumns);
-        var actualColumns = "array_to_string(ARRAY(SELECT a.attname "
-            + "FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
-            + "JOIN pg_catalog.pg_attribute a "
-            + "ON a.attrelid = co.conrelid AND a.attnum = key.attnum ORDER BY key.ord), ',')";
+        var actualColumns = """
+            array_to_string(ARRAY(SELECT a.attname
+            FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord)
+            JOIN pg_catalog.pg_attribute a
+            ON a.attrelid = co.conrelid AND a.attnum = key.attnum ORDER BY key.ord), ',')
+            """;
 
-        var actualPrincipalColumns = "array_to_string(ARRAY(SELECT a.attname "
-            + "FROM unnest(co.confkey) WITH ORDINALITY AS key(attnum, ord) "
-            + "JOIN pg_catalog.pg_attribute a "
-            + "ON a.attrelid = co.confrelid AND a.attnum = key.attnum ORDER BY key.ord), ',')";
+        var actualPrincipalColumns = """
+            array_to_string(ARRAY(SELECT a.attname
+            FROM unnest(co.confkey) WITH ORDINALITY AS key(attnum, ord)
+            JOIN pg_catalog.pg_attribute a
+            ON a.attrelid = co.confrelid AND a.attnum = key.attnum ORDER BY key.ord), ',')
+            """;
 
         var columnDiagnostics = BoundedOrderedListDiagnostics(expectedColumns, actualColumns);
         var principalColumnDiagnostics = BoundedOrderedListDiagnostics(
@@ -134,18 +143,20 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var records = new[]
         {
             DiagnosticRecord(
-                "ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
-                + "JOIN pg_catalog.pg_attribute a "
-                + "ON a.attrelid = co.conrelid AND a.attnum = key.attnum "
-                + $"ORDER BY key.ord) <> {NameArray(definition.Columns)}",
+                $"""
+                ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord)
+                JOIN pg_catalog.pg_attribute a ON a.attrelid = co.conrelid AND a.attnum = key.attnum
+                ORDER BY key.ord) <> {NameArray(definition.Columns)}
+                """,
                 "foreign_key_column_order",
                 columnDiagnostics.Expected,
                 columnDiagnostics.Actual),
             DiagnosticRecord(
-                "ARRAY(SELECT a.attname FROM unnest(co.confkey) WITH ORDINALITY AS key(attnum, ord) "
-                + "JOIN pg_catalog.pg_attribute a "
-                + "ON a.attrelid = co.confrelid AND a.attnum = key.attnum "
-                + $"ORDER BY key.ord) <> {NameArray(definition.PrincipalColumns)}",
+                $"""
+                ARRAY(SELECT a.attname FROM unnest(co.confkey) WITH ORDINALITY AS key(attnum, ord)
+                JOIN pg_catalog.pg_attribute a ON a.attrelid = co.confrelid AND a.attnum = key.attnum
+                ORDER BY key.ord) <> {NameArray(definition.PrincipalColumns)}
+                """,
                 "foreign_key_principal_column_order",
                 principalColumnDiagnostics.Expected,
                 principalColumnDiagnostics.Actual),
@@ -161,14 +172,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 ReferentialDiagnosticSql("co.confupdtype")),
         };
 
-        return "(SELECT NULLIF(concat_ws(chr(30), "
-            + string.Join(", ", records)
-            + "), '') FROM pg_catalog.pg_constraint co "
-            + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-            + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-            + $"WHERE n.nspname = {SchemaExpression(definition.Schema)} "
-            + $"AND c.relname = {Literal(definition.Table)} "
-            + $"AND co.conname = {Literal(definition.Name)} AND co.contype = 'f'::\"char\" LIMIT 1)";
+        return $"""
+            (SELECT NULLIF(concat_ws(chr(30), {string.Join(", ", records)}), '')
+            FROM pg_catalog.pg_constraint co
+            JOIN pg_catalog.pg_class c ON c.oid = co.conrelid
+            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = {SchemaExpression(definition.Schema)}
+            AND c.relname = {Literal(definition.Table)}
+            AND co.conname = {Literal(definition.Name)}
+            AND co.contype = 'f'::"char" LIMIT 1)
+            """;
     }
 
     private (string Expected, string Actual) BoundedOrderedListDiagnostics(
@@ -194,9 +207,15 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
     private static string ReferentialDiagnosticSql(
         string expression
-    ) => $"CASE {expression} WHEN 'a'::\"char\" THEN 'no_action' WHEN 'r'::\"char\" THEN 'restrict' "
-        + "WHEN 'c'::\"char\" THEN 'cascade' WHEN 'n'::\"char\" THEN 'set_null' "
-        + "WHEN 'd'::\"char\" THEN 'set_default' ELSE 'unknown' END";
+    ) => $"""
+        CASE {expression}
+        WHEN 'a'::"char" THEN 'no_action'
+        WHEN 'r'::"char" THEN 'restrict'
+        WHEN 'c'::"char" THEN 'cascade'
+        WHEN 'n'::"char" THEN 'set_null'
+        WHEN 'd'::"char" THEN 'set_default'
+        ELSE 'unknown' END
+        """;
 
     /// <summary>Verifies every required foreign key of one table through three catalog scans.</summary>
     /// <remarks>
@@ -216,11 +235,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     )
     {
         var rows = required
-            .Select(value => $"(CAST({Literal(value.Name)} AS pg_catalog.name), {NameArray(value.Columns)}, "
-                + $"{Literal(Qualified(value.PrincipalTable, value.PrincipalSchema))}, "
-                + $"{NameArray(value.PrincipalColumns)}, "
-                + $"CAST({Literal(ReferentialCode(value.OnUpdate))} AS pg_catalog.\"char\"), "
-                + $"CAST({Literal(ReferentialCode(value.OnDelete))} AS pg_catalog.\"char\"))")
+            .Select(value => $"""
+                (CAST({Literal(value.Name)} AS pg_catalog.name), {NameArray(value.Columns)},
+                {Literal(Qualified(value.PrincipalTable, value.PrincipalSchema))},
+                {NameArray(value.PrincipalColumns)},
+                CAST({Literal(ReferentialCode(value.OnUpdate))} AS pg_catalog."char"),
+                CAST({Literal(ReferentialCode(value.OnDelete))} AS pg_catalog."char"))
+                """)
             .ToArray();
 
         var facets = ForeignKeyFacets(
@@ -235,9 +256,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var exists = $"EXISTS ({rowSource} AND co.conname = required.conname)";
         var alias = $"EXISTS ({rowSource} AND co.conname <> required.conname{facets})";
 
-        return $"NOT EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) AS required(conname, columns, "
-            + "principal, principal_columns, confupdtype, confdeltype) WHERE NOT COALESCE("
-            + $"({exact}) OR (NOT ({exists}) AND ({alias})), FALSE))";
+        return $"""
+            NOT EXISTS (SELECT 1 FROM (VALUES {string.Join(", ", rows)}) AS required(conname,
+            columns, principal, principal_columns, confupdtype, confdeltype)
+            WHERE NOT COALESCE(({exact})
+            OR (NOT ({exists})
+            AND ({alias})), FALSE))
+            """;
     }
 
     private static string ReferentialCode(

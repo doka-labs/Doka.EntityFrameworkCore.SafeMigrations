@@ -40,9 +40,12 @@ public sealed class MySqlColumnsNullDefaultIdentityIntegrationTests : MySqlSafeM
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `null_defaults` (`value` {storeType} NULL DEFAULT {defaultSql}) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `null_defaults` VALUES ('kept'), (NULL);",
+            $"""
+            CREATE TABLE `null_defaults` (`value` {storeType} NULL DEFAULT
+            {defaultSql}) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            INSERT INTO `null_defaults` VALUES ('kept'),
+            (NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         var operation = NullDefaultTransition(literalNull);
@@ -53,9 +56,13 @@ public sealed class MySqlColumnsNullDefaultIdentityIntegrationTests : MySqlSafeM
         var before = await analyzer.AnalyzeAsync(context, [operation], CancellationToken.None);
         var catalog = await ScalarStringAsync(
             connectionString,
-            "SELECT CONCAT(COLUMN_DEFAULT IS NULL, '|', COALESCE(HEX(COLUMN_DEFAULT), '-'), '|', EXTRA) "
-            + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'null_defaults' AND COLUMN_NAME = 'value';",
+            """
+            SELECT CONCAT(COLUMN_DEFAULT IS NULL, '|', COALESCE(HEX(COLUMN_DEFAULT),
+            '-'), '|', EXTRA) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'null_defaults'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
@@ -127,9 +134,11 @@ public sealed class MySqlColumnsNullDefaultIdentityIntegrationTests : MySqlSafeM
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `null_defaults` (`value` varchar({width}) NULL DEFAULT {defaultSql}) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `null_defaults` () VALUES ();",
+            $"""
+            CREATE TABLE `null_defaults` (`value` varchar({width})
+            NULL DEFAULT {defaultSql}) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            COLLATE=utf8mb4_unicode_ci; INSERT INTO `null_defaults` () VALUES ();
+            """,
             cancellationToken: CancellationToken.None);
 
         var operation = NullDefaultTransition(literalNull);
@@ -155,8 +164,13 @@ public sealed class MySqlColumnsNullDefaultIdentityIntegrationTests : MySqlSafeM
 
         var unchangedWidth = await ScalarIntAsync(
             connectionString,
-            "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'null_defaults' AND COLUMN_NAME = 'value';",
+            """
+            SELECT CHARACTER_MAXIMUM_LENGTH
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'null_defaults'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         var value = await ScalarStringAsync(
@@ -257,8 +271,10 @@ public sealed class MySqlColumnsNullDefaultIdentityIntegrationTests : MySqlSafeM
         // Act
         var creationFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `null_defaults` (`value` varchar(40) NOT NULL DEFAULT (NULL)); "
-            + "INSERT INTO `null_defaults` VALUES ('kept');",
+            """
+            CREATE TABLE `null_defaults` (`value` varchar(40) NOT NULL DEFAULT (NULL));
+            INSERT INTO `null_defaults` VALUES ('kept');
+            """,
             cancellationToken: CancellationToken.None));
 
         if (creationFailure is null)
@@ -283,8 +299,12 @@ public sealed class MySqlColumnsNullDefaultIdentityIntegrationTests : MySqlSafeM
 
         var required = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'null_defaults' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'null_defaults'
+            AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';
+            """,
             cancellationToken: CancellationToken.None);
 
         var tables = await ScalarIntAsync(

@@ -36,8 +36,13 @@ public sealed class SqliteSafeMigrationNativeCandidateKeySemanticsIntegrationTes
         // so collation and sort counterfactuals test real physical semantics.
         await ExecuteSqlAsync(
             connection,
-            $"CREATE TABLE constraint_parents (Id TEXT NOT NULL, CONSTRAINT {keyName} {keyKind}({keySql})); "
-            + "INSERT INTO constraint_parents(Id) VALUES(1);",
+            $"""
+            CREATE TABLE constraint_parents (
+                Id TEXT NOT NULL,
+                CONSTRAINT {keyName} {keyKind}({keySql})
+            );
+            INSERT INTO constraint_parents(Id) VALUES(1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);

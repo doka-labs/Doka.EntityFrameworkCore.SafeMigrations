@@ -276,7 +276,8 @@ public sealed class MySqlModelManagedDataJsonIntegrationTests : MySqlSafeMigrati
             );
             INSERT INTO `json_comparison_boundaries`
                 (`id`, `scalar_payload`, `object_payload`, `array_payload`,
-                 `duplicate_array_payload`, `json_null_payload`, `sql_null_payload`, `json_like_text`)
+                 `duplicate_array_payload`, `json_null_payload`, `sql_null_payload`,
+            `json_like_text`)
             VALUES
                 (1, '1', '{ "b": 2, "a": 1 }', '[ 1, 2 ]', '[ 1, 1 ]', 'null', NULL,
                  '{"a":1,"b":2}');

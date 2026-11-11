@@ -8,12 +8,14 @@ public sealed class SqlServerSafeMigrationPerformanceIntegrationTests : SqlServe
     private const int ForeignPerformanceTableCount = 1000;
 
     private const string MixedStressSchemaSql =
-        "CREATE TABLE dbo.sqlserver_stress_target (id int NOT NULL); "
-        + "INSERT INTO dbo.sqlserver_stress_target VALUES (1); "
-        + "CREATE TABLE dbo.sqlserver_stress_alter (caption varchar(10) NOT NULL); "
-        + "INSERT INTO dbo.sqlserver_stress_alter VALUES ('short'); "
-        + "CREATE TABLE dbo.sqlserver_stress_managed (id int NOT NULL PRIMARY KEY, "
-        + "managed_value nvarchar(32) NOT NULL);";
+        """
+        CREATE TABLE dbo.sqlserver_stress_target (id int NOT NULL); INSERT INTO
+        dbo.sqlserver_stress_target VALUES (1); CREATE TABLE dbo.sqlserver_stress_alter
+        (caption varchar(10) NOT NULL); INSERT INTO dbo.sqlserver_stress_alter VALUES
+        ('short'); CREATE TABLE dbo.sqlserver_stress_managed (id int NOT NULL PRIMARY
+        KEY,
+        managed_value nvarchar(32) NOT NULL);
+        """;
 
     /// <summary>Creates the feature suite with the assembly-owned SQL Server fixture.</summary>
     /// <param name="fixture">The shared fixture providing a database per test.</param>

@@ -48,11 +48,16 @@ public sealed class SqlServerSafeMigrationOrdinaryDropHistoryIntegrationTests : 
         var dependency = await ScalarIntAsync(
             connectionString,
             check
-                ? "SELECT COUNT(*) FROM sys.check_constraints "
-                + "WHERE parent_object_id=OBJECT_ID(N'dbo.ordinary_drop_history') "
-                + "AND name=N'CK_ordinary_drop_history_L';"
-                : "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ordinary_drop_history') "
-                + "AND name=N'IX_ordinary_drop_history_L';",
+                ? """
+                SELECT COUNT(*) FROM sys.check_constraints
+                WHERE parent_object_id=OBJECT_ID(N'dbo.ordinary_drop_history')
+                AND name=N'CK_ordinary_drop_history_L';
+                """
+                : """
+                SELECT COUNT(*) FROM sys.indexes
+                WHERE object_id=OBJECT_ID(N'dbo.ordinary_drop_history')
+                AND name=N'IX_ordinary_drop_history_L';
+                """,
             cancellationToken: CancellationToken.None);
 
         // Assert

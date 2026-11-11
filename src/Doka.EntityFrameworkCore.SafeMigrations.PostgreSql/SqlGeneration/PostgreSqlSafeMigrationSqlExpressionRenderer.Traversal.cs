@@ -136,6 +136,19 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
                     pending.Push(step with { Expression = flattened.Left });
                 }
+                else if (writer.PrettyIndexBooleanOperands
+                    && step.Expression is SafeMigrationSqlNullTestExpression nullTest)
+                {
+                    // WHY: pg_get_indexdef(pretty=true) removes these operand
+                    // parentheses only inside a Boolean chain. Mixed operators
+                    // and nested operand expressions retain their own tree shape.
+                    pending.Push(TextStep(writer,
+                        nullTest.Negated
+                            ? " IS NOT NULL"
+                            : " IS NULL"));
+
+                    pending.Push(new RenderStep(RenderStepKind.Expression, writer, nullTest.Operand));
+                }
                 else
                 {
                     pending.Push(

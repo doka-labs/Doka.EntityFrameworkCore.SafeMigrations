@@ -30,12 +30,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return plan;
         }
 
-        var blocked = "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS identity_source "
-            + "WHERE identity_source.TABLE_SCHEMA = DATABASE() "
-            + $"AND identity_source.TABLE_NAME = {Literal(target.Table)} "
-            + "AND identity_source.COLUMN_NAME IN ("
-            + string.Join(", ", sources.Select(Literal))
-            + ") AND LOCATE('auto_increment', LOWER(identity_source.EXTRA)) > 0)";
+        var blocked = $"""
+            EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS identity_source
+            WHERE identity_source.TABLE_SCHEMA = DATABASE()
+            AND identity_source.TABLE_NAME = {Literal(target.Table)}
+            AND identity_source.COLUMN_NAME IN ({string.Join(", ", sources.Select(Literal))})
+            AND LOCATE('auto_increment', LOWER(identity_source.EXTRA)) > 0)
+            """;
 
         // WHY: An integer column with AUTO_INCREMENT is not an ordinary integer
         // operand in MySQL's generated grammar. A live catalog guard and accepted
@@ -47,8 +48,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             $"CASE WHEN ({blocked}) THEN 'unsupported' "
             + $"ELSE ({plan.StateEvaluationGuardFailureExpression ?? "NULL"}) END",
             ClassificationCodeExpression =
-            $"CASE WHEN ({blocked}) THEN 'generated_column_identity_dependency' "
-            + $"ELSE ({plan.ClassificationCodeExpression ?? "NULL"}) END",
+            $"""
+            CASE WHEN ({blocked})
+            THEN 'generated_column_identity_dependency'
+            ELSE ({plan.ClassificationCodeExpression ?? "NULL"}) END
+            """,
             Postcondition = $"NOT ({blocked}) AND ({plan.Postcondition})",
             RepairPrecondition = $"NOT ({blocked}) AND ({plan.RepairPrecondition})",
             RequiresLazyStateEvaluation = true,

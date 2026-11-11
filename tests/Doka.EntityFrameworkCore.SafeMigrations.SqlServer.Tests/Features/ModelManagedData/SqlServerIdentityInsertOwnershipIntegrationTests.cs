@@ -3,9 +3,12 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// <summary>Verifies owned identity recovery against real retained SQL Server sessions.</summary>
 public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServerIntegrationTestBase
 {
-    private const string TablesSql = "CREATE TABLE dbo.identity_roles (Id int IDENTITY(1,1) NOT NULL "
-        + "CONSTRAINT PK_identity_roles PRIMARY KEY, Caption nvarchar(80) NOT NULL); "
-        + "CREATE TABLE dbo.identity_probe (Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_identity_probe PRIMARY KEY);";
+    private const string TablesSql = """
+        CREATE TABLE dbo.identity_roles (Id int IDENTITY(1,1) NOT NULL CONSTRAINT
+        PK_identity_roles PRIMARY KEY,
+        Caption nvarchar(80) NOT NULL); CREATE TABLE dbo.identity_probe (Id int
+        IDENTITY(1,1) NOT NULL CONSTRAINT PK_identity_probe PRIMARY KEY);
+        """;
 
     /// <summary>Creates the suite with an isolated database for each test.</summary>
     /// <param name="fixture">The shared native SQL Server container.</param>
@@ -28,14 +31,13 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            TablesSql
-            + "SET IDENTITY_INSERT dbo.identity_roles ON; "
-            + "INSERT INTO dbo.identity_roles (Id, Caption) VALUES (7, N'Actual'); "
-            + "SET IDENTITY_INSERT dbo.identity_roles OFF; "
-            + "CREATE USER identity_reader WITHOUT LOGIN; "
-            + "GRANT VIEW DEFINITION TO identity_reader; "
-            + "GRANT SELECT, INSERT ON dbo.identity_roles TO identity_reader; "
-            + "DENY ALTER ON dbo.identity_roles TO identity_reader;",
+            $"""
+            {TablesSql}SET IDENTITY_INSERT dbo.identity_roles ON; INSERT
+            INTO dbo.identity_roles (Id, Caption) VALUES (7, N'Actual'); SET IDENTITY_INSERT
+            dbo.identity_roles OFF; CREATE USER identity_reader WITHOUT LOGIN; GRANT
+            VIEW DEFINITION TO identity_reader; GRANT SELECT, INSERT ON dbo.identity_roles
+            TO identity_reader; DENY ALTER ON dbo.identity_roles TO identity_reader;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var session = new SqlConnection(connectionString);
@@ -105,11 +107,11 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            TablesSql
-            + "CREATE USER identity_reader WITHOUT LOGIN; "
-            + "GRANT VIEW DEFINITION TO identity_reader; "
-            + "GRANT SELECT, INSERT ON dbo.identity_roles TO identity_reader; "
-            + "DENY ALTER ON dbo.identity_roles TO identity_reader;",
+            $"""
+            {TablesSql}CREATE USER identity_reader WITHOUT LOGIN; GRANT
+            VIEW DEFINITION TO identity_reader; GRANT SELECT, INSERT ON dbo.identity_roles
+            TO identity_reader; DENY ALTER ON dbo.identity_roles TO identity_reader;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var session = new SqlConnection(connectionString);
@@ -165,9 +167,11 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
         var connection = context.GetService<IRelationalConnection>();
         await RunSessionSqlAsync(
             session,
-            "SET IDENTITY_INSERT dbo.identity_roles ON; "
-            + $"EXEC sys.sp_set_session_context @key = N'{SqlServerSafeMigrationIdentityInsertScope.ContextKey}', "
-            + "@value = N'caller-owned marker', @read_only = 1;",
+            $"""
+            SET IDENTITY_INSERT dbo.identity_roles ON; EXEC sys.sp_set_session_context
+            @key = N'{SqlServerSafeMigrationIdentityInsertScope.ContextKey}',
+            @value = N'caller-owned marker', @read_only = 1;
+            """,
             cancellationToken: CancellationToken.None);
 
         using var cancellation = new CancellationTokenSource();
@@ -266,12 +270,13 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
         var connection = context.GetService<IRelationalConnection>();
         await RunSessionSqlAsync(
             session,
-            "SET IDENTITY_INSERT dbo.identity_roles ON; "
-            + $"EXEC sys.sp_set_session_context @key = N'{SqlServerSafeMigrationIdentityInsertScope.ContextKey}', "
-            + "@value = N'caller-owned marker', @read_only = "
-            + (readOnly
+            $"""
+            SET IDENTITY_INSERT dbo.identity_roles ON; EXEC sys.sp_set_session_context
+            @key = N'{SqlServerSafeMigrationIdentityInsertScope.ContextKey}',
+            @value = N'caller-owned marker', @read_only = {(readOnly
                 ? "1;"
-                : "0;"),
+                : "0;")}
+            """,
             cancellationToken: CancellationToken.None);
 
         // Act
@@ -370,9 +375,12 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
             connectionString,
             TablesSql
             + (matching
-                ? "SET IDENTITY_INSERT dbo.identity_roles ON; "
-                + "INSERT INTO dbo.identity_roles (Id, Caption) VALUES (7, N'Expected'); "
-                + "SET IDENTITY_INSERT dbo.identity_roles OFF;"
+                ? """
+                SET IDENTITY_INSERT dbo.identity_roles ON; INSERT INTO dbo.identity_roles
+                (Id,
+                Caption) VALUES (7, N'Expected'); SET IDENTITY_INSERT dbo.identity_roles
+                OFF;
+                """
                 : string.Empty),
             cancellationToken: CancellationToken.None);
 
@@ -382,14 +390,13 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
         var script = CreateSeedScript(context);
         await RunSessionSqlAsync(
             session,
-            "SET IDENTITY_INSERT dbo.identity_roles ON; "
-            + $"EXEC sys.sp_set_session_context @key = N'{SqlServerSafeMigrationIdentityInsertScope.ContextKey}', "
-            + "@value = 0x"
-            + markerHex
-            + ", @read_only = "
-            + (readOnly
+            $"""
+            SET IDENTITY_INSERT dbo.identity_roles ON; EXEC sys.sp_set_session_context
+            @key = N'{SqlServerSafeMigrationIdentityInsertScope.ContextKey}',
+            @value = 0x{markerHex}, @read_only = {(readOnly
                 ? "1;"
-                : "0;"),
+                : "0;")}
+            """,
             cancellationToken: CancellationToken.None);
 
         // Act
@@ -442,8 +449,10 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
         var markerReleased = await ReadMarkerIsNullAsync(session, cancellationToken: CancellationToken.None);
         await RunSessionSqlAsync(
             session,
-            "SET IDENTITY_INSERT dbo.identity_probe ON; "
-            + "INSERT INTO dbo.identity_probe (Id) VALUES (8); SET IDENTITY_INSERT dbo.identity_probe OFF;",
+            """
+            SET IDENTITY_INSERT dbo.identity_probe ON; INSERT INTO dbo.identity_probe
+            (Id) VALUES (8); SET IDENTITY_INSERT dbo.identity_probe OFF;
+            """,
             cancellationToken: CancellationToken.None);
 
         var count = await ScalarIntAsync(

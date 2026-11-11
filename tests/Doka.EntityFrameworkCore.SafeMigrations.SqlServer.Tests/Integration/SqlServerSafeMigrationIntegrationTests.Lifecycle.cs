@@ -123,8 +123,11 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.column_orders (Id int NOT NULL, Caption nvarchar(80) NULL); "
-            + "INSERT INTO dbo.column_orders (Id, Caption) VALUES (1, N'kept');",
+            """
+            CREATE TABLE dbo.column_orders (Id int NOT NULL, Caption nvarchar(80) NULL);
+            INSERT INTO dbo.column_orders (Id,
+            Caption) VALUES (1, N'kept');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -179,8 +182,11 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
 
         var columnCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.rename_column_collision', N'U') "
-            + "AND name IN (N'OldValue', N'NewValue');",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id = OBJECT_ID(N'dbo.rename_column_collision', N'U')
+            AND name IN (N'OldValue', N'NewValue');
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -198,8 +204,11 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.drop_column_orders (Id int NOT NULL, Obsolete nvarchar(80) NULL); "
-            + "INSERT INTO dbo.drop_column_orders (Id, Obsolete) VALUES (1, N'old');",
+            """
+            CREATE TABLE dbo.drop_column_orders (Id int NOT NULL, Obsolete nvarchar(80)
+            NULL); INSERT INTO dbo.drop_column_orders (Id,
+            Obsolete) VALUES (1, N'old');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -250,14 +259,20 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
 
         var newIndexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes "
-            + "WHERE object_id = OBJECT_ID(N'dbo.rename_index_orders', N'U') AND name = N'IX_new_orders_Id';",
+            """
+            SELECT COUNT(*) FROM sys.indexes
+            WHERE object_id = OBJECT_ID(N'dbo.rename_index_orders', N'U')
+            AND name = N'IX_new_orders_Id';
+            """,
             cancellationToken: CancellationToken.None);
 
         var oldIndexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes "
-            + "WHERE object_id = OBJECT_ID(N'dbo.rename_index_orders', N'U') AND name = N'IX_old_orders_Id';",
+            """
+            SELECT COUNT(*) FROM sys.indexes
+            WHERE object_id = OBJECT_ID(N'dbo.rename_index_orders', N'U')
+            AND name = N'IX_old_orders_Id';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -275,9 +290,11 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.rename_index_collision (Id int NOT NULL); "
-            + "CREATE INDEX IX_old_collision ON dbo.rename_index_collision (Id); "
-            + "CREATE INDEX IX_new_collision ON dbo.rename_index_collision (Id);",
+            """
+            CREATE TABLE dbo.rename_index_collision (Id int NOT NULL); CREATE INDEX
+            IX_old_collision ON dbo.rename_index_collision (Id); CREATE INDEX IX_new_collision
+            ON dbo.rename_index_collision (Id);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -295,8 +312,11 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
 
         var indexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.rename_index_collision', N'U') "
-            + "AND name IN (N'IX_old_collision', N'IX_new_collision');",
+            """
+            SELECT COUNT(*) FROM sys.indexes
+            WHERE object_id = OBJECT_ID(N'dbo.rename_index_collision', N'U')
+            AND name IN (N'IX_old_collision', N'IX_new_collision');
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -314,8 +334,10 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.drop_index_orders (Id int NOT NULL); "
-            + "CREATE INDEX IX_drop_index_orders_Id ON dbo.drop_index_orders (Id);",
+            """
+            CREATE TABLE dbo.drop_index_orders (Id int NOT NULL); CREATE INDEX IX_drop_index_orders_Id
+            ON dbo.drop_index_orders (Id);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -328,8 +350,11 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
 
         var indexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.drop_index_orders', N'U') "
-            + "AND name = N'IX_drop_index_orders_Id';",
+            """
+            SELECT COUNT(*) FROM sys.indexes
+            WHERE object_id = OBJECT_ID(N'dbo.drop_index_orders', N'U')
+            AND name = N'IX_drop_index_orders_Id';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -346,8 +371,11 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.alter_orders (Id int NOT NULL, Caption nvarchar(80) NOT NULL); "
-            + "INSERT INTO dbo.alter_orders (Id, Caption) VALUES (1, N'longer-than-ten-characters');",
+            """
+            CREATE TABLE dbo.alter_orders (Id int NOT NULL, Caption nvarchar(80) NOT
+            NULL); INSERT INTO dbo.alter_orders (Id,
+            Caption) VALUES (1, N'longer-than-ten-characters');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -410,8 +438,11 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
 
         var requiredColumnCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.empty_add_orders', N'U') "
-            + "AND name = N'RequiredValue' AND is_nullable = 0;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id = OBJECT_ID(N'dbo.empty_add_orders', N'U')
+            AND name = N'RequiredValue' AND is_nullable = 0;
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -452,8 +483,11 @@ public sealed class SqlServerSafeMigrationLifecycleIntegrationTests : SqlServerS
 
         var requiredColumnCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.populated_add_orders', N'U') "
-            + "AND name = N'RequiredValue';",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id = OBJECT_ID(N'dbo.populated_add_orders', N'U')
+            AND name = N'RequiredValue';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert

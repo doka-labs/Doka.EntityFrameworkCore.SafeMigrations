@@ -34,11 +34,12 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE TABLE activation_dml_rows (id integer); "
-                + "CREATE FUNCTION activation_dml_noop() RETURNS trigger LANGUAGE plpgsql "
-                + "AS $$ BEGIN RETURN NEW; END; $$; "
-                + "CREATE TRIGGER activation_dml_noop BEFORE INSERT ON activation_dml_rows "
-                + "FOR EACH ROW EXECUTE FUNCTION activation_dml_noop();",
+                """
+                CREATE TABLE activation_dml_rows (id integer); CREATE FUNCTION activation_dml_noop()
+                RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END; $$; CREATE TRIGGER
+                activation_dml_noop BEFORE INSERT ON activation_dml_rows FOR EACH ROW EXECUTE
+                FUNCTION activation_dml_noop();
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -62,13 +63,11 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE ROLE "
-                + role
-                + "; "
-                + "GRANT USAGE, CREATE ON SCHEMA public TO "
-                + role
-                + "; "
-                + "REVOKE SELECT ON pg_catalog.pg_depend FROM PUBLIC;",
+                $"""
+                CREATE ROLE {role}; GRANT USAGE, CREATE ON SCHEMA public
+                TO {role}; REVOKE SELECT ON pg_catalog.pg_depend FROM
+                PUBLIC;
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -241,8 +240,10 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
-            + "CREATE INDEX ix_event_existing ON event_existing_values(id);",
+            """
+            CREATE TABLE event_existing_values(id integer NOT NULL, value integer);
+            CREATE INDEX ix_event_existing ON event_existing_values(id);
+            """,
             cancellationToken: CancellationToken.None);
 
         await InstallEventTriggerAsync(
@@ -559,13 +560,12 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE ROLE "
-            + role
-            + " LOGIN PASSWORD 'event-reader-fixture'; "
-            + "GRANT USAGE, CREATE ON SCHEMA public TO "
-            + role
-            + "; "
-            + "REVOKE SELECT ON pg_catalog.pg_event_trigger FROM PUBLIC;",
+            $"""
+            CREATE ROLE {role} LOGIN PASSWORD 'event-reader-fixture';
+            GRANT USAGE,
+            CREATE ON SCHEMA public TO {role}; REVOKE SELECT ON
+            pg_catalog.pg_event_trigger FROM PUBLIC;
+            """,
             cancellationToken: CancellationToken.None);
 
         var readerConnectionString = new NpgsqlConnectionStringBuilder(connectionString)
@@ -706,13 +706,15 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE event_drop_owner(id integer NOT NULL); "
-            + "CREATE FUNCTION event_drop_trigger_fixture() RETURNS event_trigger LANGUAGE plpgsql AS $$ BEGIN "
-            + "IF EXISTS (SELECT 1 FROM pg_catalog.pg_event_trigger_dropped_objects() "
-            + "WHERE object_type='table' AND schema_name='public' AND object_name='event_drop_owner') THEN "
-            + "CREATE TABLE event_drop_owner(id integer NOT NULL, recreated_value integer NULL); "
-            + "END IF; END; $$; CREATE EVENT TRIGGER event_drop_fixture ON sql_drop "
-            + "EXECUTE FUNCTION event_drop_trigger_fixture();",
+            $"""
+            CREATE TABLE event_drop_owner(id integer NOT NULL); CREATE FUNCTION event_drop_trigger_fixture()
+            {"RETURNS event_trigger LANGUAGE plpgsql AS $$ BEGIN IF EXISTS "
+                + "(SELECT 1 FROM pg_catalog.pg_event_trigger_dropped_objects() "
+                + "WHERE object_type='table' AND schema_name='public' AND object_name='event_drop_owner') "
+                + "THEN CREATE TABLE event_drop_owner(id integer NOT NULL, recreated_value integer NULL); "
+                + "END IF; END; $$;"}
+            CREATE EVENT TRIGGER event_drop_fixture ON sql_drop EXECUTE FUNCTION event_drop_trigger_fixture();
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -767,14 +769,12 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
         CancellationToken cancellationToken
     ) => ExecuteSqlAsync(
         connectionString,
-        "CREATE FUNCTION event_trigger_fixture() RETURNS event_trigger "
-        + "LANGUAGE plpgsql AS $$ BEGIN "
-        + effect
-        + " END; $$; "
-        + "CREATE EVENT TRIGGER event_fixture ON ddl_command_end WHEN TAG IN ('CREATE TABLE') "
-        + "EXECUTE FUNCTION event_trigger_fixture(); ALTER EVENT TRIGGER event_fixture "
-        + enabledMode
-        + ";",
+        $"""
+        CREATE FUNCTION event_trigger_fixture() RETURNS event_trigger LANGUAGE plpgsql AS
+        $$ BEGIN {effect} END; $$; CREATE EVENT TRIGGER event_fixture ON ddl_command_end
+        WHEN TAG IN ('CREATE TABLE') EXECUTE FUNCTION event_trigger_fixture(); ALTER EVENT TRIGGER
+        event_fixture {enabledMode};
+        """,
         cancellationToken: cancellationToken);
 
     /// <summary>Appends the structured CHECK whose row proof must survive only certified earlier effects.</summary>

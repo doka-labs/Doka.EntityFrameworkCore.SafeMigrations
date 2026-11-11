@@ -15,8 +15,11 @@ public sealed class PostgreSqlOpaqueSqlIntegrationTests : PostgreSqlSafeMigratio
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE mixed_records (id integer NOT NULL PRIMARY KEY, code text NOT NULL); "
-            + "INSERT INTO mixed_records VALUES (1, 'duplicate'), (2, 'duplicate');",
+            """
+            CREATE TABLE mixed_records (id integer NOT NULL PRIMARY KEY, code text NOT NULL); INSERT INTO
+            mixed_records VALUES (1,
+            'duplicate'), (2, 'duplicate');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -35,8 +38,12 @@ public sealed class PostgreSqlOpaqueSqlIntegrationTests : PostgreSqlSafeMigratio
 
         var indexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM pg_indexes WHERE schemaname = current_schema() "
-            + "AND tablename = 'mixed_records' AND indexname = 'ux_mixed_records_code';",
+            """
+            SELECT COUNT(*) FROM pg_indexes
+            WHERE schemaname = current_schema()
+            AND tablename = 'mixed_records'
+            AND indexname = 'ux_mixed_records_code';
+            """,
             cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
@@ -51,8 +58,11 @@ public sealed class PostgreSqlOpaqueSqlIntegrationTests : PostgreSqlSafeMigratio
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE mixed_records (id integer NOT NULL PRIMARY KEY, code text NOT NULL); "
-            + "INSERT INTO mixed_records VALUES (1, 'first'), (2, 'second');",
+            """
+            CREATE TABLE mixed_records (id integer NOT NULL PRIMARY KEY, code text NOT NULL); INSERT INTO
+            mixed_records VALUES (1,
+            'first'), (2, 'second');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -74,8 +84,12 @@ public sealed class PostgreSqlOpaqueSqlIntegrationTests : PostgreSqlSafeMigratio
 
         var indexCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM pg_indexes WHERE schemaname = current_schema() "
-            + "AND tablename = 'mixed_records' AND indexname = 'ux_mixed_records_code';",
+            """
+            SELECT COUNT(*) FROM pg_indexes
+            WHERE schemaname = current_schema()
+            AND tablename = 'mixed_records'
+            AND indexname = 'ux_mixed_records_code';
+            """,
             cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);

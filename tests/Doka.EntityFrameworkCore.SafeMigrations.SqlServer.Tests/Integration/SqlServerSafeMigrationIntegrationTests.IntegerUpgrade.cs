@@ -36,20 +36,32 @@ public sealed class SqlServerSafeMigrationIntegerUpgradeIntegrationTests : SqlSe
         await ExecuteOperationsAsync(context, upgrade.UpOperations, cancellationToken: CancellationToken.None);
         var widened = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.ordered_values') "
-            + "AND name IN(N'Lower',N'Upper',N'Depth',N'Position') AND system_type_id=127;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.ordered_values')
+            AND name IN(N'Lower',N'Upper',N'Depth',N'Position')
+            AND system_type_id=127;
+            """,
             cancellationToken: CancellationToken.None);
 
         var trusted = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID(N'dbo.ordered_values') "
-            + "AND is_disabled=0 AND is_not_trusted=0;",
+            """
+            SELECT COUNT(*) FROM sys.check_constraints
+            WHERE parent_object_id=OBJECT_ID(N'dbo.ordered_values')
+            AND is_disabled=0 AND is_not_trusted=0;
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM dbo.ordered_values WHERE (Id=1 AND Lower=1 AND Upper=2 AND Position IS NULL) "
-            + "OR (Id=2 AND Lower=2147483646 AND Upper=2147483647 AND Position=0);",
+            """
+            SELECT COUNT(*) FROM dbo.ordered_values
+            WHERE (Id=1 AND Lower=1 AND Upper=2
+            AND Position IS NULL) OR (Id=2
+            AND Lower=2147483646 AND Upper=2147483647
+            AND Position=0);
+            """,
             cancellationToken: CancellationToken.None);
 
         var history = await ScalarIntAsync(
@@ -130,15 +142,23 @@ public sealed class SqlServerSafeMigrationIntegerUpgradeIntegrationTests : SqlSe
         var failure = await Record.ExceptionAsync(() => context.Database.MigrateAsync());
         var sourceColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.ordered_values') "
-            + "AND name IN(N'Lower',N'Upper',N'Depth',N'Position') AND system_type_id=56;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.ordered_values')
+            AND name IN(N'Lower',N'Upper',N'Depth',N'Position')
+            AND system_type_id=56;
+            """,
             cancellationToken: CancellationToken.None);
 
         var oldDependencies = await ScalarIntAsync(
             connectionString,
-            "SELECT (SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ordered_values') "
-            + "AND name=N'IX_old_range') + (SELECT COUNT(*) FROM sys.check_constraints "
-            + "WHERE parent_object_id=OBJECT_ID(N'dbo.ordered_values') AND name=N'CK_lower_old');",
+            """
+            SELECT (SELECT COUNT(*) FROM sys.indexes
+            WHERE object_id=OBJECT_ID(N'dbo.ordered_values')
+            AND name=N'IX_old_range') + (SELECT COUNT(*)
+            FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID(N'dbo.ordered_values')
+            AND name=N'CK_lower_old');
+            """,
             cancellationToken: CancellationToken.None);
 
         var marker = await ScalarIntAsync(

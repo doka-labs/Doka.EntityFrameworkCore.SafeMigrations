@@ -341,11 +341,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     )
     {
         var sql = new StringBuilder(
-            "DECLARE @doka_key_tables TABLE (ordinal int NOT NULL, "
-            + "object_id int NULL, row_count int NOT NULL, primary_key_name nvarchar(128) NULL, "
-            + "physical_supported int NOT NULL, schema_name nvarchar(128) NOT NULL, "
-            + "table_name nvarchar(128) NOT NULL); "
-            + "DECLARE @doka_key_rows int;\n");
+            """
+            DECLARE @doka_key_tables TABLE (ordinal int NOT NULL, object_id int NULL,
+            row_count int NOT NULL, primary_key_name nvarchar(128) NULL, physical_supported
+            int NOT NULL,
+            schema_name nvarchar(128) NOT NULL, table_name nvarchar(128) NOT NULL);
+            DECLARE @doka_key_rows int;
+
+            """);
 
         // WHY: Keep bounded table positions aligned with the emitted snapshot ordinals.
         // ReSharper disable once ForCanBeConvertedToForeach
@@ -424,27 +427,28 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
     private static string BuildProjectedKeyColumnsSql(
         IEnumerable<string> requested
-    ) => "SELECT requested.ordinal, requested.name, ty.name, "
-        + "CONVERT(int, c.max_length), c.is_nullable, "
-        + "CASE WHEN "
-        + SqlServerSafeMigrationCatalogSqlBuilder.ComputedIndexColumnEligibility("c")
-        + " AND c.max_length > 0 AND ty.is_user_defined = 0 "
-        + "AND ty.name NOT IN (N'xml', N'text', N'ntext', N'image', "
-        + "N'sql_variant', N'geography', N'geometry', N'json') "
-        + "THEN 1 ELSE 0 END, CASE WHEN "
-        + SqlServerSafeMigrationCatalogSqlBuilder.ComputedIndexColumnEligibility("c", included: true)
-        + " AND ty.is_user_defined = 0 "
-        + "AND ty.name NOT IN (N'text', N'ntext', N'image') THEN 1 ELSE 0 END, c.collation_name, "
-        + "CASE WHEN c.collation_name = CONVERT(nvarchar(128), DATABASEPROPERTYEX(DB_NAME(), N'Collation')) "
-        + "THEN 1 ELSE 0 END, CASE WHEN ty.is_user_defined=0 AND ty.is_assembly_type=0 "
-        + "AND ty.name IN (N'tinyint',N'smallint',N'int',N'bigint') "
-        + "AND c.is_computed=0 AND c.is_sparse=0 AND c.is_column_set=0 AND c.is_hidden=0 "
-        + "AND c.generated_always_type=0 AND c.encryption_type IS NULL THEN 1 ELSE 0 END "
-        + "FROM (VALUES "
-        + string.Join(", ", requested)
-        + ") requested(ordinal, object_id, name) JOIN sys.columns c ON c.object_id = requested.object_id "
-        + "AND c.name COLLATE CATALOG_DEFAULT = requested.name COLLATE CATALOG_DEFAULT "
-        + "JOIN sys.types ty ON ty.user_type_id = c.user_type_id;";
+    ) => $"""
+        SELECT requested.ordinal, requested.name, ty.name, CONVERT(int, c.max_length),
+        c.is_nullable, CASE WHEN {SqlServerSafeMigrationCatalogSqlBuilder.ComputedIndexColumnEligibility("c")}
+        AND c.max_length > 0 AND ty.is_user_defined = 0
+        AND ty.name NOT IN (N'xml', N'text', N'ntext', N'image', N'sql_variant',
+        N'geography', N'geometry', N'json')
+        THEN 1 ELSE 0 END, CASE WHEN {SqlServerSafeMigrationCatalogSqlBuilder.ComputedIndexColumnEligibility(
+            "c", included: true)}
+        AND ty.is_user_defined = 0 AND ty.name NOT IN (N'text', N'ntext', N'image')
+        THEN 1 ELSE 0 END, c.collation_name, CASE WHEN c.collation_name = CONVERT(nvarchar(128),
+        DATABASEPROPERTYEX(DB_NAME(), N'Collation'))
+        THEN 1 ELSE 0 END, CASE WHEN ty.is_user_defined=0
+        AND ty.is_assembly_type=0 AND ty.name IN (N'tinyint',N'smallint',N'int',N'bigint')
+        AND c.is_computed=0 AND c.is_sparse=0
+        AND c.is_column_set=0 AND c.is_hidden=0
+        AND c.generated_always_type=0
+        AND c.encryption_type IS NULL
+        THEN 1 ELSE 0 END FROM (VALUES {string.Join(", ", requested)}) requested(ordinal,
+        object_id, name) JOIN sys.columns c ON c.object_id = requested.object_id
+        AND c.name COLLATE CATALOG_DEFAULT = requested.name COLLATE CATALOG_DEFAULT
+        JOIN sys.types ty ON ty.user_type_id = c.user_type_id;
+        """;
 
     private static string KeyLiteral(
         string value

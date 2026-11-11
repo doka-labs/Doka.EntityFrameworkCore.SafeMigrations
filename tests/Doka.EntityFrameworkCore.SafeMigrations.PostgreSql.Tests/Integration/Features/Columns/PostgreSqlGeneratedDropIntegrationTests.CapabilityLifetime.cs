@@ -31,17 +31,12 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE ROLE "
-            + role
-            + "; "
-            + "GRANT USAGE, CREATE ON SCHEMA public TO "
-            + role
-            + "; "
-            + "CREATE TABLE drop_capability(source integer, unrelated integer); "
-            + "INSERT INTO drop_capability VALUES(2,9); ALTER TABLE drop_capability OWNER TO "
-            + role
-            + "; "
-            + restrictionSql,
+            $"""
+            CREATE ROLE {role}; GRANT USAGE, CREATE ON SCHEMA public TO {role}; CREATE TABLE
+            drop_capability(source integer,
+            unrelated integer); INSERT INTO drop_capability VALUES(2,9); ALTER TABLE drop_capability OWNER
+            TO {role}; {restrictionSql}
+            """,
             cancellationToken: CancellationToken.None);
 
         try
@@ -86,12 +81,11 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "ALTER TABLE drop_capability OWNER TO postgres; "
-                + "REVOKE USAGE, CREATE ON SCHEMA public FROM "
-                + role
-                + "; DROP ROLE "
-                + role
-                + ";",
+                $"""
+                ALTER TABLE drop_capability OWNER TO postgres; REVOKE USAGE, CREATE ON SCHEMA
+                public
+                FROM {role}; DROP ROLE {role};
+                """,
                 cancellationToken: CancellationToken.None);
         }
     }

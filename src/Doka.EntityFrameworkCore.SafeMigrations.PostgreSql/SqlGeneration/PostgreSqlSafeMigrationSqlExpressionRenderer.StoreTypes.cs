@@ -3,7 +3,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 {
     /// <summary>Resolves a validated native catalog spelling or rejects an unsupported CAST target.</summary>
-    private string FindCanonicalStoreType(
+    internal string FindCanonicalStoreType(
         string storeType
     )
     {

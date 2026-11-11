@@ -52,8 +52,12 @@ public sealed class MySqlMemberIdentityIntegrationTests : MySqlSafeMigrationInte
 
         var indexes = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows';",
+            """
+            SELECT COUNT(DISTINCT INDEX_NAME)
+            FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'member_rows';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -88,8 +92,11 @@ public sealed class MySqlMemberIdentityIntegrationTests : MySqlSafeMigrationInte
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE member_rows (id int NOT NULL, Code int NULL, UNIQUE KEY UX_Code (Code)); "
-            + "INSERT INTO member_rows VALUES (7, 29);",
+            """
+            CREATE TABLE member_rows (id int NOT NULL, Code int NULL, UNIQUE KEY UX_Code
+            (Code)); INSERT INTO member_rows VALUES (7,
+            29);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -151,8 +158,13 @@ public sealed class MySqlMemberIdentityIntegrationTests : MySqlSafeMigrationInte
 
         var keys = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows' AND NON_UNIQUE = 0;",
+            """
+            SELECT COUNT(DISTINCT INDEX_NAME)
+            FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'member_rows'
+            AND NON_UNIQUE = 0;
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -267,9 +279,13 @@ public sealed class MySqlMemberIdentityIntegrationTests : MySqlSafeMigrationInte
 
         var foreignKeys = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'member_child' "
-            + "AND CONSTRAINT_NAME = 'fk_member_case' AND CONSTRAINT_TYPE = 'FOREIGN KEY';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'member_child'
+            AND CONSTRAINT_NAME = 'fk_member_case'
+            AND CONSTRAINT_TYPE = 'FOREIGN KEY';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -307,9 +323,12 @@ public sealed class MySqlMemberIdentityIntegrationTests : MySqlSafeMigrationInte
         // two exact case-distinct owners. Only member names may be folded.
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE member_rows (id int NOT NULL, Code int NULL, KEY IX_Code (Code)); "
-            + "CREATE TABLE Member_Rows (id int NOT NULL, Code int NULL, KEY IX_Code (Code)); "
-            + "INSERT INTO member_rows VALUES (7, 29); INSERT INTO Member_Rows VALUES (11, 41);",
+            """
+            CREATE TABLE member_rows (id int NOT NULL, Code int NULL, KEY IX_Code (Code));
+            CREATE TABLE Member_Rows (id int NOT NULL,
+            Code int NULL, KEY IX_Code (Code)); INSERT INTO member_rows VALUES (7,
+            29); INSERT INTO Member_Rows VALUES (11, 41);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -328,8 +347,12 @@ public sealed class MySqlMemberIdentityIntegrationTests : MySqlSafeMigrationInte
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var indexes = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(DISTINCT TABLE_NAME, INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('member_rows', 'Member_Rows');",
+            """
+            SELECT COUNT(DISTINCT TABLE_NAME, INDEX_NAME)
+            FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME IN ('member_rows', 'Member_Rows');
+            """,
             cancellationToken: CancellationToken.None);
 
         var firstRows = await ScalarIntAsync(

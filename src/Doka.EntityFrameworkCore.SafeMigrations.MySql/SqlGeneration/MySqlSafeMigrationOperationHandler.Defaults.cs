@@ -64,7 +64,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
             // guessing at opaque SQL or changing computed/check expressions.
             operation.DefaultValueSql = isMariaDb
                 && definition.ClrType == typeof(byte[])
-                && expression is SafeMigrationSqlLiteralExpression { Value: byte[] bytes, StoreType: null }
+                && expression is SafeMigrationSqlLiteralExpression { BorrowedValue: byte[] bytes, StoreType: null }
                     ? MySqlSafeMigrationSqlExpressionRenderer.RenderBinaryDefault(bytes)
                     : _expressionRenderer.RenderDefault(expression);
 

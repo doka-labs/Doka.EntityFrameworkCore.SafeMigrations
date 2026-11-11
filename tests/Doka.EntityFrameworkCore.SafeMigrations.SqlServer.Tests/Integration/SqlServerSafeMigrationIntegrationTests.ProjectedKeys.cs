@@ -186,13 +186,13 @@ public sealed class SqlServerSafeMigrationProjectedKeysIntegrationTests : SqlSer
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.projected_replace (Id int NOT NULL, Code int NOT NULL); "
-            + "INSERT dbo.projected_replace (Id, Code) VALUES (1, 10), (2, "
-            + (duplicates
+            $"""
+            CREATE TABLE dbo.projected_replace (Id int NOT NULL, Code int NOT NULL);
+            INSERT dbo.projected_replace (Id,
+            Code) VALUES (1, 10), (2, {(duplicates
                 ? "10"
-                : "20")
-            + "); "
-            + original,
+                : "20")}); {original}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -224,11 +224,15 @@ public sealed class SqlServerSafeMigrationProjectedKeysIntegrationTests : SqlSer
 
         var preservedOldKey = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.indexes i JOIN sys.index_columns ic "
-            + "ON ic.object_id = i.object_id AND ic.index_id = i.index_id "
-            + "JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
-            + "WHERE i.object_id = OBJECT_ID(N'dbo.projected_replace') AND i.name = N'K_projected_replace' "
-            + "AND ic.key_ordinal = 1 AND c.name = N'Id';",
+            """
+            SELECT COUNT(*) FROM sys.indexes i
+            JOIN sys.index_columns ic ON ic.object_id = i.object_id
+            AND ic.index_id = i.index_id JOIN sys.columns c ON c.object_id = ic.object_id
+            AND c.column_id = ic.column_id
+            WHERE i.object_id = OBJECT_ID(N'dbo.projected_replace')
+            AND i.name = N'K_projected_replace'
+            AND ic.key_ordinal = 1 AND c.name = N'Id';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -250,12 +254,12 @@ public sealed class SqlServerSafeMigrationProjectedKeysIntegrationTests : SqlSer
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.metadata_only_index (Code int NOT NULL); "
-            + "CREATE USER metadata_index_user WITHOUT LOGIN; "
-            + "GRANT CONNECT TO metadata_index_user; "
-            + "GRANT VIEW DEFINITION TO metadata_index_user; "
-            + "GRANT ALTER ON OBJECT::dbo.metadata_only_index TO metadata_index_user; "
-            + "DENY SELECT ON OBJECT::dbo.metadata_only_index TO metadata_index_user;",
+            """
+            CREATE TABLE dbo.metadata_only_index (Code int NOT NULL); CREATE USER metadata_index_user
+            WITHOUT LOGIN; GRANT CONNECT TO metadata_index_user; GRANT VIEW DEFINITION
+            TO metadata_index_user; GRANT ALTER ON OBJECT::dbo.metadata_only_index TO
+            metadata_index_user; DENY SELECT ON OBJECT::dbo.metadata_only_index TO metadata_index_user;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

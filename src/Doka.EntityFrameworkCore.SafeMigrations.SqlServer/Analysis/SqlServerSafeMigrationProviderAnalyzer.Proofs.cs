@@ -20,43 +20,23 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         {
             var escaped = statement.Replace("'", "''", StringComparison.Ordinal);
 
-            return "DECLARE "
-                + variable
-                + " "
-                + storeType
-                + "; EXEC sys.sp_executesql N'"
-                + escaped
-                + "', N'"
-                + definitions
-                + ", @doka_proof "
-                + storeType
-                + " OUTPUT', "
-                + "@doka_ordinal = @doka_ordinal"
-                + parameterArguments
-                + ", @doka_proof = "
-                + variable
-                + " OUTPUT; ";
+            return $"""
+                DECLARE {variable} {storeType}; EXEC sys.sp_executesql
+                N'{escaped}',
+                N'{definitions}, @doka_proof {storeType} OUTPUT',
+                @doka_ordinal = @doka_ordinal{parameterArguments}, @doka_proof =
+                {variable} OUTPUT;{"\u0020"}
+                """;
         }
 
         var scalar = SqlServerSqlStringLiteral.StatementArgument(statement, variable + "_sql", out var declaration);
 
-        return "DECLARE "
-            + variable
-            + " "
-            + storeType
-            + "; "
-            + declaration
-            + "EXEC sys.sp_executesql "
-            + scalar
-            + ", N'"
-            + definitions
-            + ", @doka_proof "
-            + storeType
-            + " OUTPUT', "
-            + "@doka_ordinal = @doka_ordinal"
-            + parameterArguments
-            + ", @doka_proof = "
-            + variable
-            + " OUTPUT; ";
+        return $"""
+            DECLARE {variable} {storeType}; {declaration}EXEC
+            sys.sp_executesql {scalar},
+            N'{definitions}, @doka_proof {storeType} OUTPUT',
+            @doka_ordinal = @doka_ordinal{parameterArguments}, @doka_proof =
+            {variable} OUTPUT;{"\u0020"}
+            """;
     }
 }

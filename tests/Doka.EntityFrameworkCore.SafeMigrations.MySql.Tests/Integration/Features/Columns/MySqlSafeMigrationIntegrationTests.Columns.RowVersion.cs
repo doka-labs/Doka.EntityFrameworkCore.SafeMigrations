@@ -84,8 +84,10 @@ public sealed class MySqlColumnsRowVersionIntegrationTests : MySqlSafeMigrationI
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "INSERT INTO `provider_artifacts` (`PublicId`, `Payload`) "
-            + "VALUES ('94b13fc0-e6fb-45ba-8b19-f241359d7258', '{\"valid\":true}');",
+            """
+            INSERT INTO `provider_artifacts` (`PublicId`, `Payload`) VALUES ('94b13fc0-e6fb-45ba-8b19-f241359d7258',
+            '{"valid":true}');
+            """,
             cancellationToken: CancellationToken.None);
 
         var postflight = await runner.VerifyAsync(
@@ -111,11 +113,13 @@ public sealed class MySqlColumnsRowVersionIntegrationTests : MySqlSafeMigrationI
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'provider_artifacts' "
-                + "AND COLUMN_NAME = 'Version' "
-                + "AND LOWER(COLUMN_DEFAULT) IN ('current_timestamp(6)', 'now(6)') "
-                + "AND LOWER(EXTRA) LIKE '%on update current_timestamp(6)%';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'provider_artifacts'
+                AND COLUMN_NAME = 'Version' AND LOWER(COLUMN_DEFAULT) IN ('current_timestamp(6)',
+                'now(6)') AND LOWER(EXTRA) LIKE '%on update current_timestamp(6)%';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -132,10 +136,11 @@ public sealed class MySqlColumnsRowVersionIntegrationTests : MySqlSafeMigrationI
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `row_version_drift` ("
-            + "`Id` int NOT NULL, "
-            + "`Version` timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), "
-            + "PRIMARY KEY (`Id`));",
+            """
+            CREATE TABLE `row_version_drift` (`Id` int NOT NULL, `Version` timestamp(6)
+            NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+            PRIMARY KEY (`Id`));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -172,9 +177,12 @@ public sealed class MySqlColumnsRowVersionIntegrationTests : MySqlSafeMigrationI
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'row_version_drift' "
-                + "AND COLUMN_NAME = 'Version' AND LOWER(EXTRA) LIKE '%on update%';",
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'row_version_drift'
+                AND COLUMN_NAME = 'Version' AND LOWER(EXTRA) LIKE '%on update%';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 }

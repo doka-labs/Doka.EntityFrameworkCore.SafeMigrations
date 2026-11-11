@@ -40,12 +40,29 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
     /// <returns>A stable rejection code, or null when every node is supported.</returns>
     public string? GetUnsupportedFeature(
         SafeMigrationSqlExpression expression
+    ) => GetUnsupportedFeature(expression, scalarContext: false);
+
+    /// <summary>Includes synthetic predicate-to-scalar CASE nodes in the native nesting limit.</summary>
+    /// <param name="expression">The immutable expression used as a scalar root.</param>
+    /// <returns>A rejection code, or null when the complete rendered tree is supported.</returns>
+    internal string? GetUnsupportedScalarFeature(
+        SafeMigrationSqlExpression expression
+    ) => GetUnsupportedFeature(expression, scalarContext: true);
+
+    /// <summary>Validates native roles without rendering or imposing a global expression depth limit.</summary>
+    private string? GetUnsupportedFeature(
+        SafeMigrationSqlExpression expression,
+        bool scalarContext
     )
     {
         ArgumentNullException.ThrowIfNull(expression);
 
         var pending = default(SafeMigrationWorkStack<ValidationFrame>);
-        var current = new ValidationFrame(expression, 0);
+        var current = new ValidationFrame(expression,
+            scalarContext && IsPredicate(expression)
+                ? 1
+                : 0);
+
         try
         {
             do
@@ -209,15 +226,16 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
             return false;
         }
 
-        var depth = frame.CaseDepth;
-        if (expression is SafeMigrationSqlCaseExpression @case)
-        {
-            var result = index % 2 != 0 || index == @case.WhenClauses.Count * 2;
-            depth += 1
-                + (result && IsPredicate(next)
-                    ? 1
-                    : 0);
-        }
+        // WHY: Every scalar predicate adds a real CASE, not only CASE result
+        // branches. Count it at the same edge where rendering performs it.
+        var role = ChildRole(expression, index);
+        var depth = frame.CaseDepth
+            + (expression is SafeMigrationSqlCaseExpression
+                ? 1
+                : 0)
+            + (role == RenderRole.Scalar && IsPredicate(next)
+                ? 1
+                : 0);
 
         child = new ValidationFrame(next, depth);
 
@@ -229,18 +247,34 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
     /// <returns>The SQL Server expression text.</returns>
     public string Render(
         SafeMigrationSqlExpression expression
+    ) => Render(expression, scalarContext: false);
+
+    /// <summary>Renders a native scalar root, including a three-valued predicate conversion when required.</summary>
+    /// <param name="expression">The immutable scalar expression.</param>
+    /// <returns>Native scalar SQL, preserving SQL NULL for predicate UNKNOWN.</returns>
+    internal string RenderScalar(
+        SafeMigrationSqlExpression expression
+    ) => Render(expression, scalarContext: true);
+
+    private string Render(
+        SafeMigrationSqlExpression expression,
+        bool scalarContext
     )
     {
         ArgumentNullException.ThrowIfNull(expression);
 
-        var feature = GetUnsupportedFeature(expression);
+        var feature = GetUnsupportedFeature(expression, scalarContext);
         if (feature is not null)
         {
             throw new NotSupportedException($"SQL Server cannot render expression feature '{feature}'.");
         }
 
         var builder = new StringBuilder();
-        Append(builder, expression);
+        Append(builder,
+            expression,
+            scalarContext
+                ? RenderRole.Scalar
+                : RenderRole.Node);
 
         return builder.ToString();
     }
@@ -255,9 +289,9 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
             return "structured_cast_type";
         }
 
-        if (expression.Value is not null
-            && (!SqlServerSafeMigrationCatalogSqlBuilder.IsSupportedScalarClrType(expression.Value.GetType())
-                || _typeMappingSource.FindMapping(expression.Value.GetType()) is null))
+        if (expression.BorrowedValue is not null
+            && (!SqlServerSafeMigrationCatalogSqlBuilder.IsSupportedScalarClrType(expression.BorrowedValue.GetType())
+                || _typeMappingSource.FindMapping(expression.BorrowedValue.GetType()) is null))
         {
             return "structured_literal_mapping";
         }
@@ -381,11 +415,12 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
 
     private void Append(
         StringBuilder builder,
-        SafeMigrationSqlExpression expression
+        SafeMigrationSqlExpression expression,
+        RenderRole role
     )
     {
         var pending = default(SafeMigrationWorkStack<RenderFrame>);
-        var current = new RenderFrame(expression);
+        var current = new RenderFrame(expression, Role: role);
         try
         {
             do
@@ -408,7 +443,7 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
                         }
 
                         pending.Push(current with { Index = current.Index + 1 });
-                        current = new RenderFrame(values[current.Index]);
+                        current = new RenderFrame(values[current.Index], Role: RenderRole.Scalar);
                         continue;
                     }
                 }
@@ -528,17 +563,17 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
                                     : "(-");
 
                             pending.Push(new RenderFrame(Text: ")"));
-                            current = new RenderFrame(value.Operand);
+                            current = new RenderFrame(value.Operand, Role: ChildRole(value, 0));
                             continue;
 
                         case SafeMigrationSqlBinaryExpression value:
                             builder.Append('(');
                             pending.Push(new RenderFrame(Text: ")"));
-                            pending.Push(new RenderFrame(value.Right));
+                            pending.Push(new RenderFrame(value.Right, Role: ChildRole(value, 1)));
                             pending.Push(new RenderFrame(Text: " "));
                             pending.Push(new RenderFrame(Text: BinaryOperator(value.Operator)));
                             pending.Push(new RenderFrame(Text: " "));
-                            current = new RenderFrame(value.Left);
+                            current = new RenderFrame(value.Left, Role: ChildRole(value, 0));
                             continue;
 
                         case SafeMigrationSqlNullTestExpression value:
@@ -549,22 +584,22 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
                                         ? " IS NOT NULL)"
                                         : " IS NULL)"));
 
-                            current = new RenderFrame(value.Operand);
+                            current = new RenderFrame(value.Operand, Role: RenderRole.Scalar);
                             continue;
 
                         case SafeMigrationSqlBetweenExpression value:
                             builder.Append('(');
                             pending.Push(new RenderFrame(Text: ")"));
-                            pending.Push(new RenderFrame(value.Upper));
+                            pending.Push(new RenderFrame(value.Upper, Role: RenderRole.Scalar));
                             pending.Push(new RenderFrame(Text: " AND "));
-                            pending.Push(new RenderFrame(value.Lower));
+                            pending.Push(new RenderFrame(value.Lower, Role: RenderRole.Scalar));
                             pending.Push(
                                 new RenderFrame(
                                     Text: value.Negated
                                         ? " NOT BETWEEN "
                                         : " BETWEEN "));
 
-                            current = new RenderFrame(value.Operand);
+                            current = new RenderFrame(value.Operand, Role: RenderRole.Scalar);
                             continue;
 
                         case SafeMigrationSqlInExpression value:
@@ -577,7 +612,7 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
                                         ? " NOT IN ("
                                         : " IN ("));
 
-                            current = new RenderFrame(value.Operand);
+                            current = new RenderFrame(value.Operand, Role: RenderRole.Scalar);
                             continue;
 
                         case SafeMigrationSqlFunctionExpression value:
@@ -599,7 +634,7 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
                             pending.Push(new RenderFrame(Text: ")"));
                             pending.Push(new RenderFrame(Text: value.StoreType));
                             pending.Push(new RenderFrame(Text: " AS "));
-                            current = new RenderFrame(value.Operand);
+                            current = new RenderFrame(value.Operand, Role: RenderRole.Scalar);
                             continue;
 
                         case SafeMigrationSqlCollateExpression value:
@@ -610,7 +645,7 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
                             pending.Push(new RenderFrame(Text: ")"));
                             pending.Push(new RenderFrame(Text: value.Name));
                             pending.Push(new RenderFrame(Text: " COLLATE "));
-                            current = new RenderFrame(value.Operand);
+                            current = new RenderFrame(value.Operand, Role: RenderRole.Scalar);
                             continue;
 
                         case SafeMigrationSqlCurrentValueExpression value:
@@ -650,6 +685,25 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
             Operator: >= SafeMigrationSqlBinaryOperator.And and <= SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
         };
 
+    /// <summary>Shares native operand roles between validation and stack-safe rendering.</summary>
+    /// <param name="expression">The parent whose child is being visited.</param>
+    /// <param name="index">The ordered child position, including CASE condition/result alternation.</param>
+    /// <returns>The native scalar or predicate role for that child.</returns>
+    private static RenderRole ChildRole(
+        SafeMigrationSqlExpression expression,
+        int index
+    ) => expression switch
+    {
+        SafeMigrationSqlUnaryExpression { Operator: SafeMigrationSqlUnaryOperator.Not } => RenderRole.Predicate,
+        SafeMigrationSqlBinaryExpression
+        {
+            Operator: SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or,
+        } => RenderRole.Predicate,
+        SafeMigrationSqlCaseExpression value when index % 2 == 0 && index < value.WhenClauses.Count * 2
+            => RenderRole.Predicate,
+        _ => RenderRole.Scalar,
+    };
+
     private void AppendLiteral(
         StringBuilder builder,
         SafeMigrationSqlLiteralExpression expression
@@ -660,7 +714,7 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
             builder.Append("CAST(");
         }
 
-        if (expression.Value is null)
+        if (expression.BorrowedValue is null)
         {
             builder.Append("NULL");
         }
@@ -670,10 +724,10 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
             // Asking EF for incompatible CLR/store pairs can invoke collection
             // mapping rather than return null. Bind the natural input literal
             // independently of the already validated SQL destination type.
-            var mapping = _typeMappingSource.FindMapping(expression.Value.GetType())
+            var mapping = _typeMappingSource.FindMapping(expression.BorrowedValue.GetType())
                 ?? throw new NotSupportedException("SQL Server cannot map the structured literal.");
 
-            var temporal = expression.Value is DateTime or DateTimeOffset or DateOnly or TimeOnly or TimeSpan;
+            var temporal = expression.BorrowedValue is DateTime or DateTimeOffset or DateOnly or TimeOnly or TimeSpan;
             if (temporal)
             {
                 // WHY: Temporal CLR literals must retain their natural source
@@ -682,7 +736,7 @@ internal sealed class SqlServerSafeMigrationSqlExpressionRenderer
                 builder.Append("CAST(");
             }
 
-            builder.Append(mapping.GenerateSqlLiteral(expression.Value));
+            builder.Append(mapping.GenerateSqlLiteral(expression.BorrowedValue));
             if (temporal)
             {
                 builder

@@ -41,8 +41,12 @@ public sealed class MySqlColumnsNullabilityConcurrencyIntegrationTests : MySqlSa
 
         var nullable = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'nullability_race_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'YES';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'nullability_race_items'
+            AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'YES';
+            """,
             cancellationToken: CancellationToken.None);
 
         var nullRows = await ScalarIntAsync(
@@ -113,15 +117,21 @@ public sealed class MySqlColumnsNullabilityConcurrencyIntegrationTests : MySqlSa
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         var required = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'nullability_race_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'nullability_race_items'
+            AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';
+            """,
             cancellationToken: CancellationToken.None);
 
         var preserved = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM `nullability_race_items` WHERE "
-            + "(`id` = 1 AND `value` = '00000000-0000-0000-0000-000000000001') "
-            + "OR (`id` = 2 AND `value` = '00000000-0000-0000-0000-000000000002');",
+            """
+            SELECT COUNT(*) FROM `nullability_race_items`
+            WHERE (`id` = 1 AND `value` = '00000000-0000-0000-0000-000000000001')
+            OR (`id` = 2 AND `value` = '00000000-0000-0000-0000-000000000002');
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -134,11 +144,12 @@ public sealed class MySqlColumnsNullabilityConcurrencyIntegrationTests : MySqlSa
 
     /// <summary>Creates a populated nullable source whose initial row domain contains no NULL values.</summary>
     /// <returns>The anonymous isolated fixture with one explicit GUID sentinel.</returns>
-    private static string NullabilityConcurrencyFixtureSql()
-        => "CREATE TABLE `nullability_race_items` (`id` int NOT NULL PRIMARY KEY, `value` char(36) NULL) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `nullability_race_items` (`id`, `value`) "
-            + "VALUES (1, '00000000-0000-0000-0000-000000000001');";
+    private static string NullabilityConcurrencyFixtureSql() => """
+        CREATE TABLE `nullability_race_items` (`id` int NOT NULL PRIMARY KEY,
+        `value` char(36) NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        INSERT INTO `nullability_race_items` (`id`,
+        `value`) VALUES (1, '00000000-0000-0000-0000-000000000001');
+        """;
 
     /// <summary>
     /// Captures both supported required-column APIs without declaring a replacement or default value.
@@ -247,10 +258,12 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
                 ?? throw new InvalidOperationException("The guarded body omitted its migration connection.");
 
             await using var checkpoint = migrationConnection.CreateCommand();
-            checkpoint.CommandText = "SELECT COALESCE(@doka_sm_state = 'different', FALSE) "
-                + "AND COALESCE(@doka_sm_action = 'repair', FALSE) "
-                + "AND COALESCE(@doka_sm_repair_ok, FALSE) "
-                + "AND NOT COALESCE(@doka_sm_nullability_blocked, TRUE);";
+            checkpoint.CommandText = """
+            SELECT COALESCE(@doka_sm_state = 'different', FALSE)
+            AND COALESCE(@doka_sm_action = 'repair', FALSE)
+            AND COALESCE(@doka_sm_repair_ok, FALSE)
+            AND NOT COALESCE(@doka_sm_nullability_blocked, TRUE);
+            """;
 
             ProvenRepairCheckpointObserved = Convert.ToBoolean(
                 await checkpoint.ExecuteScalarAsync(cancellationToken),

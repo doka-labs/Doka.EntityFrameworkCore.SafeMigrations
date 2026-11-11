@@ -78,17 +78,16 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
     }
 
     /// <summary>
-    /// Measures prepared rendering only, retaining the former exact-sized outer scope and product budgets.
+    /// Retains exact prepared rendering against the original action and scalar interpolation templates.
     /// </summary>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void PreparedGuard_AllocatesLessThanOriginalActionAndScalarIntermediates(
+    public void PreparedGuard_MatchesOriginalActionAndScalarIntermediates(
         bool delayed
     )
     {
         // Arrange
-        const int renderCount = 32;
         var operation = CreateOperation(SafeMigrationPolicy.RepairIfSafe, false);
         var expression = "CASE WHEN "
             + string.Join(" AND ", Enumerable.Repeat("N'O''Brien \uD83D\uDE80' = N'O''Brien \uD83D\uDE80'", 128))
@@ -100,27 +99,17 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
             ExecutionPostcondition = expression,
         };
 
-        var current = () => SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(operation, plan, [], []);
-        var original = () => SqlServerSafeMigrationsSqlGenerator.BuildIsolatedGuardSql(
-            OriginalGuardBody(operation, plan, [], []));
-
         var expected = ReferenceScope(OriginalGuardBody(operation, plan, [], [])
             .ToString());
 
-        // WHY: Both measurements begin with identical immutable prepared inputs.
-        // Warm rendering and the planner before excluding input preparation from
-        // the per-thread allocation count; no machine-specific timing is asserted.
-        current();
-        original();
-
         // Act
-        var currentResult = MeasureAllocations(current, renderCount);
-        var originalResult = MeasureAllocations(original, renderCount);
+        var currentResult = SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(operation, plan, [], []);
+        var originalResult = SqlServerSafeMigrationsSqlGenerator.BuildIsolatedGuardSql(
+            OriginalGuardBody(operation, plan, [], []));
 
         // Assert
-        Assert.Equal(expected, currentResult.Sql);
-        Assert.Equal(expected, originalResult.Sql);
-        Assert.InRange(currentResult.Bytes, 1, originalResult.Bytes - 1);
+        Assert.Equal(expected, currentResult);
+        Assert.Equal(expected, originalResult);
     }
 
     /// <summary>
@@ -237,32 +226,23 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
                 .ParamName);
     }
 
-    /// <summary>Counts prepared identifier composition against the former joined body and growing buffer.</summary>
+    /// <summary>Matches prepared identifier composition against the former joined body and literal buffer.</summary>
     [Fact]
-    public void IdentifierScope_AllocatesLessThanJoinedBodyAndLiteralBuffer()
+    public void IdentifierScope_MatchesJoinedBodyAndLiteralBuffer()
     {
         // Arrange
-        const int renderCount = 32;
         var statements = Enumerable
             .Repeat("SELECT N'O''Brien \uD83D\uDE80';\n", 4096)
             .ToArray();
 
         var expected = ReferenceScope(string.Join("\n", statements));
-        var current = () => SqlServerSafeMigrationsSqlGenerator.BuildIsolatedIdentifierGuardSql(statements);
-        var original = () => OriginalIdentifierScope(statements);
-
-        // WHY: The same completed statement list is prepared before counting.
-        // Only the removed joining and literal-buffer work differs between paths.
-        current();
-        original();
 
         // Act
-        var currentResult = MeasureAllocations(current, renderCount);
-        var originalResult = MeasureAllocations(original, renderCount);
+        var currentResult = SqlServerSafeMigrationsSqlGenerator.BuildIsolatedIdentifierGuardSql(statements);
+        var originalResult = OriginalIdentifierScope(statements);
 
         // Assert
-        Assert.Equal(expected, currentResult.Sql);
-        Assert.Equal(expected, originalResult.Sql);
-        Assert.InRange(currentResult.Bytes, 1, originalResult.Bytes - 1);
+        Assert.Equal(expected, currentResult);
+        Assert.Equal(expected, originalResult);
     }
 }

@@ -62,7 +62,7 @@ public sealed class SqlServerGuardScopeTests
             .ToArray();
 
         var guards = scopes
-            .Where(static body => body.Contains("DECLARE @doka_state", StringComparison.Ordinal))
+            .Where(static body => SqlServerGuardedSqlTestContract.CountStateDeclarations(body) > 0)
             .ToArray();
 
         // Assert
@@ -72,10 +72,7 @@ public sealed class SqlServerGuardScopeTests
             guards,
             static body =>
             {
-                Assert.Equal(1,
-                    body.Split("DECLARE @doka_state")
-                        .Length
-                    - 1);
+                Assert.Equal(1, SqlServerGuardedSqlTestContract.CountStateDeclarations(body));
 
                 Assert.Contains("DECLARE @doka_action", body, StringComparison.Ordinal);
                 Assert.Contains("DECLARE @doka_repair_ok", body, StringComparison.Ordinal);

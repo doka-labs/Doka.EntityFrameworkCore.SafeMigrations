@@ -668,7 +668,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         || defaultValue is
         {
             Kind: SafeMigrationDefaultValueKind.Sql,
-            StructuredExpression: SafeMigrationSqlLiteralExpression { Value: null },
+            StructuredExpression: SafeMigrationSqlLiteralExpression { BorrowedValue: null },
         };
 
     private static bool CanProjectProviderNeutralIndexReplacement(

@@ -15,14 +15,16 @@ public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE diagnostic_principal (id integer NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE diagnostic_dependent ("
-            + "id integer NOT NULL PRIMARY KEY, principal_id integer NULL, "
-            + "first_value character varying(40) NULL, second_value character varying(40) NULL, "
-            + "CONSTRAINT fk_diagnostic_dependent_principal FOREIGN KEY (principal_id) "
-            + "REFERENCES diagnostic_principal (id) ON UPDATE CASCADE ON DELETE CASCADE); "
-            + "CREATE INDEX ix_diagnostic_dependent_values "
-            + "ON diagnostic_dependent (second_value, first_value);",
+            """
+            CREATE TABLE diagnostic_principal (id integer NOT NULL PRIMARY KEY); CREATE TABLE
+            diagnostic_dependent (id integer NOT NULL PRIMARY KEY,
+            principal_id integer NULL, first_value character varying(40) NULL, second_value character
+            varying(40) NULL,
+            CONSTRAINT fk_diagnostic_dependent_principal FOREIGN KEY (principal_id) REFERENCES
+            diagnostic_principal (id) ON UPDATE CASCADE ON DELETE CASCADE); CREATE INDEX
+            ix_diagnostic_dependent_values ON diagnostic_dependent (second_value,
+            first_value);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -107,11 +109,13 @@ public sealed class PostgreSqlDiagnosticsIntegrationTests : PostgreSqlSafeMigrat
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE long_diagnostic_principal ({principalDefinitions}, PRIMARY KEY ({reversedPrincipalKeys})); "
-            + $"CREATE TABLE long_diagnostic_dependent (id integer NOT NULL PRIMARY KEY, {dependentDefinitions}, "
-            + "CONSTRAINT fk_long_diagnostic FOREIGN KEY "
-            + $"({reversedDependentKeys}) REFERENCES long_diagnostic_principal ({reversedPrincipalKeys})); "
-            + $"CREATE INDEX ix_long_diagnostic ON long_diagnostic_dependent ({reversedDependentKeys});",
+            $"""
+            CREATE TABLE long_diagnostic_principal ({principalDefinitions}, PRIMARY KEY
+            ({reversedPrincipalKeys})); CREATE TABLE long_diagnostic_dependent (id integer NOT NULL PRIMARY KEY,
+            {dependentDefinitions}, CONSTRAINT fk_long_diagnostic FOREIGN KEY ({reversedDependentKeys})
+            REFERENCES long_diagnostic_principal ({reversedPrincipalKeys})); CREATE INDEX
+            ix_long_diagnostic ON long_diagnostic_dependent ({reversedDependentKeys});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

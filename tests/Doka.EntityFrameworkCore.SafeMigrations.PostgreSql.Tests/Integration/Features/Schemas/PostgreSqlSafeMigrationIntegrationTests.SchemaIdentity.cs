@@ -167,8 +167,11 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'public' "
-                + "AND tablename = 'identity_target' AND indexname = 'ix_identity_added';",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'public'
+                AND tablename = 'identity_target'
+                AND indexname = 'ix_identity_added';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -232,8 +235,12 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' "
-                + "AND table_name = 'identity_target' AND column_name = 'restored';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = 'public'
+                AND table_name = 'identity_target'
+                AND column_name = 'restored';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -368,8 +375,12 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' "
-                + "AND table_name = 'identity_target' AND column_name = 'added';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = 'public'
+                AND table_name = 'identity_target'
+                AND column_name = 'added';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -424,8 +435,11 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA identity_foreign; CREATE TABLE identity_foreign.identity_target (id integer NULL); "
-            + "CREATE TABLE public.identity_target (id integer NULL, CONSTRAINT uq_identity_target UNIQUE (id));",
+            """
+            CREATE SCHEMA identity_foreign; CREATE TABLE identity_foreign.identity_target (id integer NULL);
+            CREATE TABLE public.identity_target (id integer NULL,
+            CONSTRAINT uq_identity_target UNIQUE (id));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -450,10 +464,13 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_constraint constraint_object "
-                + "JOIN pg_catalog.pg_class relation ON relation.oid = constraint_object.conrelid "
-                + "JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace "
-                + "WHERE namespace.nspname = 'identity_foreign' AND constraint_object.conname = 'uq_identity_target';",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_constraint constraint_object
+                JOIN pg_catalog.pg_class relation ON relation.oid = constraint_object.conrelid
+                JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace
+                WHERE namespace.nspname = 'identity_foreign'
+                AND constraint_object.conname = 'uq_identity_target';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -625,9 +642,11 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA identity_first; CREATE SCHEMA identity_second; "
-            + "CREATE TABLE identity_first.identity_target (id integer NULL); "
-            + "CREATE TABLE identity_second.identity_target (id integer NULL);",
+            """
+            CREATE SCHEMA identity_first; CREATE SCHEMA identity_second; CREATE TABLE
+            identity_first.identity_target (id integer NULL); CREATE TABLE identity_second.identity_target
+            (id integer NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         var configured = new NpgsqlConnectionStringBuilder(connectionString) { SearchPath = "identity_first" };
@@ -666,9 +685,10 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA \"Scope\"; CREATE SCHEMA \"scope\"; "
-            + "CREATE TABLE \"Scope\".identity_target (id integer NULL); "
-            + "CREATE TABLE \"scope\".identity_target (id integer NULL);",
+            """
+            CREATE SCHEMA "Scope"; CREATE SCHEMA "scope"; CREATE TABLE "Scope".identity_target
+            (id integer NULL); CREATE TABLE "scope".identity_target (id integer NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         var configured = new NpgsqlConnectionStringBuilder(connectionString) { SearchPath = "scope" };
@@ -697,8 +717,10 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA identity_final; CREATE TABLE public.identity_target (id integer NULL); "
-            + "CREATE TABLE identity_final.identity_target (id integer NULL);",
+            """
+            CREATE SCHEMA identity_final; CREATE TABLE public.identity_target (id integer
+            NULL); CREATE TABLE identity_final.identity_target (id integer NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         var configured = new NpgsqlConnectionStringBuilder(connectionString) { SearchPath = "identity_final" };
@@ -815,8 +837,11 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'public' "
-                + "AND tablename = 'identity_target' AND indexname = 'ix_identity_target';",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'public'
+                AND tablename = 'identity_target'
+                AND indexname = 'ix_identity_target';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -859,16 +884,24 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'identity_module' "
-                + "AND table_name = 'identity_target' AND column_name = 'added';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = 'identity_module'
+                AND table_name = 'identity_target'
+                AND column_name = 'added';
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' "
-                + "AND table_name = 'identity_target' AND column_name = 'added';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = 'public'
+                AND table_name = 'identity_target'
+                AND column_name = 'added';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -916,8 +949,11 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'identity_target' "
-                + "AND table_schema IN ('identity_new', 'public');",
+                """
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_name = 'identity_target'
+                AND table_schema IN ('identity_new', 'public');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -981,14 +1017,18 @@ public sealed class PostgreSqlSchemaIdentityIntegrationTests : PostgreSqlSafeMig
             "primary" => "ALTER TABLE public.identity_target ADD CONSTRAINT pk_identity_target PRIMARY KEY (id);",
             "unique" => "ALTER TABLE public.identity_target ADD CONSTRAINT uq_identity_target UNIQUE (code);",
             "check" => "ALTER TABLE public.identity_target ADD CONSTRAINT ck_identity_target CHECK (id >= 0);",
-            "foreign" => "ALTER TABLE public.identity_target ADD CONSTRAINT fk_identity_target "
-                + "FOREIGN KEY (parent_id) REFERENCES public.identity_parent (id);",
+            "foreign" => """
+                ALTER TABLE public.identity_target ADD CONSTRAINT fk_identity_target FOREIGN
+                KEY (parent_id) REFERENCES public.identity_parent (id);
+                """,
             _ => string.Empty,
         };
 
-        return "CREATE TABLE public.identity_parent (id integer NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE public.identity_target (id integer NOT NULL, parent_id integer NULL, code integer NULL); "
-            + resource;
+        return $"""
+            CREATE TABLE public.identity_parent (id integer NOT NULL PRIMARY KEY); CREATE TABLE
+            public.identity_target (id integer NOT NULL,
+            parent_id integer NULL, code integer NULL); {resource}
+            """;
     }
 
     /// <summary>Creates only the accepted drop and its exact replacement through the other schema spelling.</summary>

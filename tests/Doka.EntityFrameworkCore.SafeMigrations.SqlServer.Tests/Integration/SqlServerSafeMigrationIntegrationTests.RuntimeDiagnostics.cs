@@ -202,8 +202,11 @@ public sealed class SqlServerSafeMigrationRuntimeDiagnosticsIntegrationTests : S
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.native_parent (Id int PRIMARY KEY); "
-            + "CREATE TABLE dbo.native_child (Id int, ParentId int REFERENCES dbo.native_parent(Id));",
+            """
+            CREATE TABLE dbo.native_parent (Id int PRIMARY KEY); CREATE TABLE dbo.native_child
+            (Id int,
+            ParentId int REFERENCES dbo.native_parent(Id));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

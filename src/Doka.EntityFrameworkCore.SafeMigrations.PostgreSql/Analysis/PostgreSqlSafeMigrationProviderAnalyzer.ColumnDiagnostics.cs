@@ -47,7 +47,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
                     candidates.Count - offset);
 
-                var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
+                using var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
                 var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
                     _typeMappingSource,
                     _sqlGenerationHelper,

@@ -69,8 +69,12 @@ public sealed class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTests : MyS
 
         var physicalType = await ScalarStringAsync(
             connectionString,
-            "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'required_enum_domain_items' AND COLUMN_NAME = 'value';",
+            """
+            SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'required_enum_domain_items'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -157,8 +161,12 @@ public sealed class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTests : MyS
 
         var physicalType = await ScalarStringAsync(
             connectionString,
-            "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'required_enum_domain_items' AND COLUMN_NAME = 'value';",
+            """
+            SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'required_enum_domain_items'
+            AND COLUMN_NAME = 'value';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -249,16 +257,16 @@ public sealed class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTests : MyS
         // WHY: Binary column collation makes literal-case differences visible
         // in stored values as well as the ordered schema domain. An exact guard
         // name alone must not grant ownership of a different domain.
-        return "CREATE TABLE `required_enum_domain_items` (`key` int NOT NULL PRIMARY KEY, `value` "
-            + storeType
-            + (alreadyRequired
+        return $"""
+            CREATE TABLE `required_enum_domain_items` (`key` int NOT NULL PRIMARY KEY,
+            `value` {storeType}{(alreadyRequired
                 ? " NOT NULL"
                 : " NULL, CONSTRAINT "
                 + AtomicRequiredAddDelimited(AtomicRequiredAddGuardName(operation))
-                + " CHECK (`value` IS NOT NULL)")
-            + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin; "
-            + "INSERT INTO `required_enum_domain_items` (`key`, `value`) VALUES (1, "
-            + AtomicRequiredAddLiteral(storedValue)
-            + ");";
+                + " CHECK (`value` IS NOT NULL)")}) ENGINE=InnoDB
+            DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin; INSERT INTO `required_enum_domain_items`
+            (`key`,
+            `value`) VALUES (1, {AtomicRequiredAddLiteral(storedValue)});
+            """;
     }
 }

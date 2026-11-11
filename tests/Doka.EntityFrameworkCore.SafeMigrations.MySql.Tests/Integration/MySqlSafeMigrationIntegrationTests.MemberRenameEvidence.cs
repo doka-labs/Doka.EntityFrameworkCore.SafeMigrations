@@ -40,21 +40,18 @@ public sealed class MySqlMemberRenameEvidenceIntegrationTests : MySqlSafeMigrati
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE member_rows (id int NOT NULL, decoy int NULL"
-            + (!index && sourceExists
+            $"""
+            CREATE TABLE member_rows (id int NOT NULL, decoy int NULL{(!index && sourceExists
                 ? ", source_value int NULL"
-                : string.Empty)
-            + (!index && targetExists
+                : string.Empty)}{(!index && targetExists
                 ? ", target_value int NULL"
-                : string.Empty)
-            + "); "
-            + "INSERT INTO member_rows (id) VALUES (7); "
-            + (index && sourceExists
+                : string.Empty)});
+            INSERT INTO member_rows (id) VALUES (7); {(index && sourceExists
                 ? "CREATE INDEX source_index ON member_rows (id); "
-                : string.Empty)
-            + (index && targetExists
+                : string.Empty)}{(index && targetExists
                 ? "CREATE INDEX target_index ON member_rows (decoy); "
-                : string.Empty),
+                : string.Empty)}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -106,10 +103,19 @@ public sealed class MySqlMemberRenameEvidenceIntegrationTests : MySqlSafeMigrati
         var targetCount = await ScalarIntAsync(
             connectionString,
             index
-                ? "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows' AND INDEX_NAME = 'target_index';"
-                : "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows' AND COLUMN_NAME = 'target_value';",
+                ? """
+                SELECT COUNT(DISTINCT INDEX_NAME)
+                FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'member_rows'
+                AND INDEX_NAME = 'target_index';
+                """
+                : """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'member_rows'
+                AND COLUMN_NAME = 'target_value';
+                """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -172,8 +178,11 @@ public sealed class MySqlMemberRenameEvidenceIntegrationTests : MySqlSafeMigrati
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE member_rows (id int NOT NULL, target_value int NULL); "
-            + "INSERT INTO member_rows VALUES (7, 29); CREATE INDEX target_index ON member_rows (id);",
+            """
+            CREATE TABLE member_rows (id int NOT NULL, target_value int NULL); INSERT
+            INTO member_rows VALUES (7,
+            29); CREATE INDEX target_index ON member_rows (id);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -219,8 +228,10 @@ public sealed class MySqlMemberRenameEvidenceIntegrationTests : MySqlSafeMigrati
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE member_rows (id int NOT NULL); CREATE TABLE other_rows (id int NOT NULL); "
-            + "CREATE INDEX target_index ON other_rows (id);",
+            """
+            CREATE TABLE member_rows (id int NOT NULL); CREATE TABLE other_rows (id
+            int NOT NULL); CREATE INDEX target_index ON other_rows (id);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -246,8 +257,12 @@ public sealed class MySqlMemberRenameEvidenceIntegrationTests : MySqlSafeMigrati
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var targets = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(DISTINCT TABLE_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND INDEX_NAME = 'target_index';",
+            """
+            SELECT COUNT(DISTINCT TABLE_NAME)
+            FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND INDEX_NAME = 'target_index';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -269,8 +284,10 @@ public sealed class MySqlMemberRenameEvidenceIntegrationTests : MySqlSafeMigrati
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE member_rows (id int NOT NULL, decoy int NULL, Target_Value int NULL); "
-            + "CREATE INDEX Target_Index ON member_rows (decoy);",
+            """
+            CREATE TABLE member_rows (id int NOT NULL, decoy int NULL, Target_Value
+            int NULL); CREATE INDEX Target_Index ON member_rows (decoy);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -339,11 +356,12 @@ public sealed class MySqlMemberRenameEvidenceIntegrationTests : MySqlSafeMigrati
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE member_rows (id int NOT NULL, decoy int NULL, PRIMARY KEY (id)); "
-            + (primary
+            $"""
+            CREATE TABLE member_rows (id int NOT NULL, decoy int NULL, PRIMARY KEY (id));
+            {(primary
                 ? string.Empty
-                : "CREATE INDEX source_index ON member_rows (id); ")
-            + "CREATE INDEX target_index ON member_rows (decoy);",
+                : "CREATE INDEX source_index ON member_rows (id); ")}CREATE INDEX target_index ON member_rows (decoy);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -375,8 +393,13 @@ public sealed class MySqlMemberRenameEvidenceIntegrationTests : MySqlSafeMigrati
 
         var primaryCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows' AND INDEX_NAME = 'PRIMARY';",
+            """
+            SELECT COUNT(DISTINCT INDEX_NAME)
+            FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'member_rows'
+            AND INDEX_NAME = 'PRIMARY';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -461,8 +484,13 @@ public sealed class MySqlMemberRenameEvidenceIntegrationTests : MySqlSafeMigrati
 
         var sourceCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows' AND INDEX_NAME = 'source_index';",
+            """
+            SELECT COUNT(DISTINCT INDEX_NAME)
+            FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'member_rows'
+            AND INDEX_NAME = 'source_index';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -548,8 +576,13 @@ public sealed class MySqlMemberRenameEvidenceIntegrationTests : MySqlSafeMigrati
 
         var primaryCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows' AND INDEX_NAME = 'PRIMARY';",
+            """
+            SELECT COUNT(DISTINCT INDEX_NAME)
+            FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'member_rows'
+            AND INDEX_NAME = 'PRIMARY';
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(

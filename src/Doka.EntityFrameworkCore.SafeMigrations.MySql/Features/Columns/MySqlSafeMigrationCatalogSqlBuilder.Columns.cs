@@ -126,12 +126,20 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // materializes another complete state string for every operation.
         var plan =
             Plan(
-                    $"CASE WHEN NOT {tableExists} THEN 'prerequisite_missing' "
-                    + $"WHEN NOT {columnExists} AND {dataBlocked} THEN 'data_blocked' "
-                    + $"WHEN NOT {columnExists} THEN 'missing' "
-                    + $"WHEN {matching} THEN 'matching' "
-                    + $"WHEN ({classificationRepairInvariant}) AND "
-                    + $"({repairDataBlocked}) THEN 'data_blocked' ELSE 'different' END",
+                    $"""
+                    CASE WHEN NOT {tableExists}
+                    THEN 'prerequisite_missing'
+                    WHEN NOT {columnExists}
+                    AND {dataBlocked}
+                    THEN 'data_blocked'
+                    WHEN NOT {columnExists}
+                    THEN 'missing'
+                    WHEN {matching}
+                    THEN 'matching'
+                    WHEN ({classificationRepairInvariant})
+                    AND ({repairDataBlocked})
+                    THEN 'data_blocked' ELSE 'different' END
+                    """,
                     matching,
                     repairCapability,
                     repairPrecondition) with
@@ -194,16 +202,18 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         var tableExists = BuildRequiredColumnAddBaseTableExists(intent.Table);
         var columnExists = BuildRequiredColumnAddColumnExists(intent.Table, intent.Definition.Name);
-        var qualification = "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES sql_default_table "
-            + "WHERE sql_default_table.TABLE_SCHEMA = DATABASE() "
-            + $"AND sql_default_table.TABLE_NAME = {Literal(intent.Table)} "
-            + $"AND {BuildRequiredColumnAddOwnerMatches("sql_default_table.TABLE_SCHEMA", "DATABASE()")} "
-            + $"AND {BuildRequiredColumnAddOwnerMatches("sql_default_table.TABLE_NAME", Literal(intent.Table))} "
-            + "AND sql_default_table.TABLE_TYPE = 'BASE TABLE' AND UPPER(sql_default_table.ENGINE) = 'INNODB') "
-            + $"AND ({StrictSqlModeExpression})"
-            + (RequiresExplicitTimestampDefaults(intent.Definition)
+        var qualification = $"""
+            EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES sql_default_table
+            WHERE sql_default_table.TABLE_SCHEMA = DATABASE()
+            AND sql_default_table.TABLE_NAME = {Literal(intent.Table)}
+            AND {BuildRequiredColumnAddOwnerMatches("sql_default_table.TABLE_SCHEMA", "DATABASE()")}
+            AND {BuildRequiredColumnAddOwnerMatches("sql_default_table.TABLE_NAME", Literal(intent.Table))}
+            AND sql_default_table.TABLE_TYPE = 'BASE TABLE'
+            AND UPPER(sql_default_table.ENGINE) = 'INNODB')
+            AND ({StrictSqlModeExpression}){(RequiresExplicitTimestampDefaults(intent.Definition)
                 ? " AND @@SESSION.explicit_defaults_for_timestamp = 1"
-                : string.Empty);
+                : string.Empty)}
+            """;
 
         var ordinaryCode = plan.ClassificationCodeExpression ?? "NULL";
 
@@ -221,15 +231,23 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         return plan with
         {
             StateExpression =
-            $"CASE WHEN NOT {tableExists} THEN 'prerequisite_missing' "
-            + $"WHEN NOT {columnExists} AND NOT ({qualification}) THEN 'unsupported' "
-            + $"ELSE ({plan.StateExpression}) END",
+            $"""
+            CASE WHEN NOT {tableExists}
+            THEN 'prerequisite_missing'
+            WHEN NOT {columnExists}
+            AND NOT ({qualification})
+            THEN 'unsupported' ELSE ({plan.StateExpression}) END
+            """,
             StateEvaluationGuardExpression = columnExists,
             StateEvaluationGuardFailureExpression =
             $"CASE WHEN ({qualification}) THEN ({ordinaryMissing}) " + "ELSE 'unsupported' END",
-            ClassificationCodeExpression = $"CASE WHEN {tableExists} AND NOT {columnExists} "
-            + $"AND NOT ({qualification}) THEN 'column_required_sql_add_unavailable' "
-            + $"ELSE ({ordinaryCode}) END",
+            ClassificationCodeExpression = $"""
+            CASE WHEN {tableExists}
+            AND NOT {columnExists}
+            AND NOT ({qualification})
+            THEN 'column_required_sql_add_unavailable'
+            ELSE ({ordinaryCode}) END
+            """,
         };
     }
 
@@ -257,9 +275,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             : ColumnExists(intent.Table, intent.Name);
 
         var plan = Plan(
-            $"CASE WHEN NOT {objectExists} THEN 'missing' "
-            + $"WHEN NOT {tableExists} THEN 'different' "
-            + $"WHEN NOT {columnExists} THEN 'missing' ELSE 'matching' END",
+            $"""
+            CASE WHEN NOT {objectExists}
+            THEN 'missing'
+            WHEN NOT {tableExists}
+            THEN 'different'
+            WHEN NOT {columnExists}
+            THEN 'missing' ELSE 'matching' END
+            """,
             $"NOT {columnExists}");
 
         return QualifyGeneratedColumnDependency(
@@ -291,9 +314,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var targetExists = ColumnExists(intent.Table, intent.NewName);
 
         var plan = Plan(
-            $"CASE WHEN NOT {sourceExists} THEN 'missing' "
-            + $"WHEN NOT {tableExists} THEN 'different' "
-            + $"WHEN {targetExists} THEN 'different' ELSE 'matching' END",
+            $"""
+            CASE WHEN NOT {sourceExists}
+            THEN 'missing'
+            WHEN NOT {tableExists}
+            THEN 'different'
+            WHEN {targetExists}
+            THEN 'different' ELSE 'matching' END
+            """,
             $"NOT {sourceExists}");
 
         return isMariaDb
@@ -315,7 +343,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private string ColumnExists(
         string table,
         string column
-    ) => $"EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c "
-        + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(table)} "
-        + $"AND c.COLUMN_NAME = {Literal(column)})";
+    ) => $"""
+        EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c
+        WHERE c.TABLE_SCHEMA = DATABASE()
+        AND c.TABLE_NAME = {Literal(table)}
+        AND c.COLUMN_NAME = {Literal(column)})
+        """;
 }

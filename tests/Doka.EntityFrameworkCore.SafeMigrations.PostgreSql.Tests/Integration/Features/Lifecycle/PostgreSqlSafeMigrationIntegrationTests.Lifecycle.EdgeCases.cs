@@ -118,9 +118,12 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'missing_legacy_table' "
-                + "AND is_nullable = 'NO';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'missing_legacy_table'
+                AND is_nullable = 'NO';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -130,8 +133,10 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE column_prerequisite_child (id integer NOT NULL); "
-            + "CREATE TABLE column_prerequisite_parent (id integer NOT NULL);",
+            """
+            CREATE TABLE column_prerequisite_child (id integer NOT NULL); CREATE TABLE
+            column_prerequisite_parent (id integer NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -240,9 +245,11 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_indexes "
-                + "WHERE schemaname = current_schema() AND tablename = 'legacy_unique_users' "
-                + "AND indexname = 'ux_legacy_unique_users_email';",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE schemaname = current_schema()
+                AND tablename = 'legacy_unique_users'
+                AND indexname = 'ux_legacy_unique_users_email';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -292,9 +299,12 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'legacy_default_users' "
-                + "AND column_name = 'tenant_id';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'legacy_default_users'
+                AND column_name = 'tenant_id';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -370,9 +380,12 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'oversized_analysis' "
-                + "AND column_name = 'payload';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'oversized_analysis'
+                AND column_name = 'payload';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -413,8 +426,11 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.tables "
-                + "WHERE table_schema = current_schema() AND table_name = 'oversized_parameters';",
+                """
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema = current_schema()
+                AND table_name = 'oversized_parameters';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -657,8 +673,11 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.tables "
-                + "WHERE table_schema = current_schema() AND table_name = 'postflight_missing';",
+                """
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema = current_schema()
+                AND table_name = 'postflight_missing';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -678,9 +697,11 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.tables "
-                + "WHERE table_schema = current_schema() "
-                + "AND table_name = '__ApplicationDbContextMigrationsHistory';",
+                """
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema = current_schema()
+                AND table_name = '__ApplicationDbContextMigrationsHistory';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -733,8 +754,10 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
 
         await ExecuteSqlAsync(
             connectionString,
-            "INSERT INTO \"__ApplicationDbContextMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") "
-            + "VALUES ('209901010000_Future', '10.0.0');",
+            """
+            INSERT INTO "__ApplicationDbContextMigrationsHistory" ("MigrationId",
+            "ProductVersion") VALUES ('209901010000_Future', '10.0.0');
+            """,
             cancellationToken: CancellationToken.None);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => runner.AnalyzePendingMigrationsAsync(
@@ -759,10 +782,12 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE rename_source (source_column integer NULL, target_column integer NULL); "
-            + "CREATE TABLE rename_target (id integer NOT NULL); "
-            + "CREATE INDEX rename_source_index ON rename_source (source_column); "
-            + "CREATE INDEX rename_target_index ON rename_source (target_column);",
+            """
+            CREATE TABLE rename_source (source_column integer NULL, target_column integer
+            NULL); CREATE TABLE rename_target (id integer NOT NULL); CREATE INDEX rename_source_index
+            ON rename_source (source_column); CREATE INDEX rename_target_index ON rename_source
+            (target_column);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -803,26 +828,33 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.tables "
-                + "WHERE table_schema = current_schema() "
-                + "AND table_name IN ('rename_source', 'rename_target');",
+                """
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema = current_schema()
+                AND table_name IN ('rename_source', 'rename_target');
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'rename_source' "
-                + "AND column_name IN ('source_column', 'target_column');",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'rename_source'
+                AND column_name IN ('source_column', 'target_column');
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_class "
-                + "WHERE relkind = 'i' AND relname IN ('rename_source_index', 'rename_target_index');",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_class WHERE relkind = 'i'
+                AND relname IN ('rename_source_index', 'rename_target_index');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -832,13 +864,14 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE inventory_parent (id integer NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE inventory_constraints ("
-            + "id integer NOT NULL, parent_id integer NULL, code text NULL, quantity integer NOT NULL, "
-            + "CONSTRAINT pk_inventory_constraints PRIMARY KEY (id), "
-            + "CONSTRAINT uq_inventory_code UNIQUE (code), "
-            + "CONSTRAINT ck_inventory_quantity CHECK (quantity >= 0), "
-            + "CONSTRAINT fk_inventory_parent FOREIGN KEY (parent_id) REFERENCES inventory_parent (id));",
+            """
+            CREATE TABLE inventory_parent (id integer NOT NULL PRIMARY KEY); CREATE TABLE
+            inventory_constraints (id integer NOT NULL,
+            parent_id integer NULL, code text NULL, quantity integer NOT NULL, CONSTRAINT
+            pk_inventory_constraints PRIMARY KEY (id),
+            CONSTRAINT uq_inventory_code UNIQUE (code), CONSTRAINT ck_inventory_quantity CHECK (quantity >= 0),
+            CONSTRAINT fk_inventory_parent FOREIGN KEY (parent_id) REFERENCES inventory_parent (id));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -892,11 +925,13 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             4,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
-                + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-                + "WHERE c.relname = 'inventory_constraints' "
-                + "AND co.conname IN ('pk_inventory_constraints', 'uq_inventory_code', "
-                + "'ck_inventory_quantity', 'fk_inventory_parent');",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_constraint co
+                JOIN pg_catalog.pg_class c ON c.oid = co.conrelid
+                WHERE c.relname = 'inventory_constraints'
+                AND co.conname IN ('pk_inventory_constraints', 'uq_inventory_code', 'ck_inventory_quantity',
+                'fk_inventory_parent');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -934,9 +969,12 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM information_schema.columns "
-                + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state' "
-                + "AND column_name = 'payload';",
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                AND table_name = 'pipeline_state'
+                AND column_name = 'payload';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 

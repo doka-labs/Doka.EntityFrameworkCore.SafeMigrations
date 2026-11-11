@@ -148,6 +148,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 : null);
 
         var operations = new List<MigrationOperation> { standardOperation };
+        NormalizeOwnedIntervalDefaults(standardOperation);
         foreach (var (table, schema, definition) in QualifiedColumnCollations(operation.Intent))
         {
             operations.Add(
@@ -183,6 +184,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 : null,
             PostgreSqlSafeMigrationColumnMetadata.CanSafelyConverge);
 
+        NormalizeOwnedIntervalDefaults(repairOperation);
         if (intent.Definition.Collation?.Schema is null)
         {
             return _baselineGenerator.Generate([repairOperation], model, options);
@@ -197,6 +199,56 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         };
 
         return _baselineGenerator.Generate([repairOperation, collationOperation], model, options);
+    }
+
+    /// <summary>Corrects duration literals only on private operations synthesized from Safe intents.</summary>
+    private void NormalizeOwnedIntervalDefaults(
+        MigrationOperation operation
+    )
+    {
+        // WHY: Npgsql's multi-field negative duration literal can give the time
+        // field the opposite sign. These operations are fresh owned copies;
+        // native EF operations and caller-owned migration objects remain untouched.
+        if (operation is ColumnOperation column)
+        {
+            NormalizeColumn(column);
+            if (operation is AlterColumnOperation alter)
+            {
+                NormalizeColumn(alter.OldColumn);
+            }
+
+            return;
+        }
+
+        if (operation is CreateTableOperation table)
+        {
+            foreach (var member in table.Columns)
+            {
+                NormalizeColumn(member);
+            }
+        }
+
+        return;
+
+        void NormalizeColumn(
+            ColumnOperation definition
+        )
+        {
+            if (definition is not { DefaultValue: TimeSpan interval, DefaultValueSql: null })
+            {
+                return;
+            }
+
+            var mapping = _typeMappingSource.FindMapping(interval.GetType(), definition.ColumnType);
+            if (mapping is null
+                || !PostgreSqlTemporalLiteral.RequiresOwnedDefaultRendering(mapping, interval))
+            {
+                return;
+            }
+
+            definition.DefaultValue = null;
+            definition.DefaultValueSql = PostgreSqlTemporalLiteral.RenderMapped(mapping, interval);
+        }
     }
 
     private static IEnumerable<(string Table, string? Schema, ExpectedColumnDefinition Definition)>
@@ -247,15 +299,11 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
 
         var storeType = definition.StoreType ?? mapping.StoreType;
 
-        return "ALTER TABLE "
-            + Qualified(table, schema)
-            + " ALTER COLUMN "
-            + _sqlGenerationHelper.DelimitIdentifier(definition.Name)
-            + " TYPE "
-            + storeType
-            + " COLLATE "
-            + Delimited(definition.Collation!)
-            + ";";
+        return $"""
+            ALTER TABLE {Qualified(table, schema)}
+            ALTER COLUMN {_sqlGenerationHelper.DelimitIdentifier(definition.Name)}
+            TYPE {storeType} COLLATE {Delimited(definition.Collation!)};
+            """;
     }
 
     private static string BuildGuardedSql(
@@ -277,10 +325,14 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
     {
         const string dataBlockedExpression = "doka_data_blocked";
         const string transitionEligibleExpression = "doka_transition_eligible";
-        const string declarations = "\nDECLARE\n"
-            + "    doka_state text;\n"
-            + "    doka_action text;\n"
-            + "    doka_repair_ok boolean;\n";
+        const string declarations = """
+
+            DECLARE
+                doka_state text;
+                doka_action text;
+                doka_repair_ok boolean;
+
+            """;
 
         // WHY: Tag selection and the guarded row statement consume the same
         // immutable SQL text. Build it once without reusing observed evidence.
@@ -347,8 +399,11 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append(declarations)
             .Append(
                 hasObjectIdentityGuard
-                    ? "    doka_identity_schema pg_catalog.name := pg_catalog.current_schema();\n"
-                    + "    doka_identity_failure text;\n"
+                    ? """
+                        doka_identity_schema pg_catalog.name := pg_catalog.current_schema();
+                        doka_identity_failure text;
+
+                    """
                     : string.Empty)
             .Append(
                 proofTable is null
@@ -357,15 +412,21 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append(
                 runtimePlan.DataProbe is null
                     ? string.Empty
-                    : "    doka_data_probe_required boolean := FALSE;\n"
-                    + "    doka_data_blocked boolean := FALSE;\n"
-                    + "    doka_transition_eligible boolean := FALSE;\n")
+                    : """
+                        doka_data_probe_required boolean := FALSE;
+                        doka_data_blocked boolean := FALSE;
+                        doka_transition_eligible boolean := FALSE;
+
+                    """)
             .Append(
                 runtimePlan.NullabilityDataProbe is null
                     ? string.Empty
-                    : "    doka_nullability_blocked boolean := FALSE;\n"
-                    + "    doka_nullability_repair_eligible boolean := FALSE;\n"
-                    + "    doka_complete_not_null boolean := FALSE;\n")
+                    : """
+                        doka_nullability_blocked boolean := FALSE;
+                        doka_nullability_repair_eligible boolean := FALSE;
+                        doka_complete_not_null boolean := FALSE;
+
+                    """)
             .Append("BEGIN\n");
 
         if (requiresLockedRecheck)
@@ -685,10 +746,13 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append("            RAISE EXCEPTION USING ERRCODE = 'P1005', MESSAGE = ");
 
         diagnostic.AppendMessage(builder, "doka_sm_postcondition");
-        builder
-            .Append(";\n        END IF;\n")
-            .Append("    END IF;\n")
-            .Append("END\n");
+        builder.Append("""
+            ;
+                    END IF;
+                END IF;
+            END
+
+            """);
 
         if (escapeAnonymousBody)
         {

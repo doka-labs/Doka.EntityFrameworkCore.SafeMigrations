@@ -521,9 +521,11 @@ public sealed class PostgreSqlTransitionProbeWindowTests
                 .DataProbe
             ?? throw new InvalidOperationException("The test operation must have a narrowing proof.");
 
-        return $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
-            + $"COALESCE(({probe.TransitionInvariantExpression}), FALSE), "
-            + $"COALESCE(({probe.NarrowingExpression}), FALSE)";
+        return $"""
+            SELECT {ordinal.ToString(CultureInfo.InvariantCulture)},
+            COALESCE(({probe.TransitionInvariantExpression}),
+            FALSE), COALESCE(({probe.NarrowingExpression}), FALSE)
+            """;
     }
 
     private static DataTable EligibilityRows(

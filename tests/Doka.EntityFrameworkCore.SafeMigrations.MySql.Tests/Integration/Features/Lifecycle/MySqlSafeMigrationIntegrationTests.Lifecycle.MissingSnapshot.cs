@@ -4,8 +4,11 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 public sealed class MySqlLifecycleMissingSnapshotIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     private const string SnapshotFreeCatalogCountSql =
-        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-        + "AND TABLE_NAME IN ('snapshotless_items', '__EFMigrationsHistory');";
+        """
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME IN ('snapshotless_items', '__EFMigrationsHistory');
+        """;
 
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>

@@ -29,9 +29,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
     ) => ExecuteExists(
         connection,
         transaction,
-        $"SELECT 1 FROM {Delimit(table)} WHERE "
-        + string.Join(" OR ", columns.Select(column => $"{Delimit(column)} IS NULL"))
-        + " LIMIT 1;");
+        $"""
+        SELECT 1
+        FROM {Delimit(table)}
+        WHERE {string.Join(" OR ", columns.Select(column => $"{Delimit(column)} IS NULL"))}
+        LIMIT 1;
+        """);
 
     /// <summary>Checks ordered key uniqueness with the requested SQLite NULL semantics.</summary>
     private static bool HasDuplicateKey(
@@ -50,7 +53,13 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         return ExecuteExists(
             connection,
             transaction,
-            $"SELECT 1 FROM {Delimit(table)}{predicate} GROUP BY {identifiers} HAVING COUNT(*) > 1 LIMIT 1;");
+            $"""
+            SELECT 1
+            FROM {Delimit(table)}{predicate}
+            GROUP BY {identifiers}
+            HAVING COUNT(*) > 1
+            LIMIT 1;
+            """);
     }
 
     /// <summary>Checks unique index rows using the same expressions, collations and filter.</summary>
@@ -89,8 +98,14 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         return ExecuteExists(
             connection,
             transaction,
-            $"SELECT 1 FROM {Delimit(definition.Table)} WHERE {string.Join(" AND ", predicates)} "
-            + $"GROUP BY {string.Join(", ", expressions)} HAVING COUNT(*) > 1 LIMIT 1;");
+            $"""
+            SELECT 1
+            FROM {Delimit(definition.Table)}
+            WHERE {string.Join(" AND ", predicates)}
+            GROUP BY {string.Join(", ", expressions)}
+            HAVING COUNT(*) > 1
+            LIMIT 1;
+            """);
     }
 
     /// <summary>Checks whether any retained row violates the declared check expression.</summary>
@@ -102,7 +117,13 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
     ) => ExecuteExists(
         connection,
         transaction,
-        $"SELECT 1 FROM {Delimit(table)} WHERE NOT ({expression}) AND ({expression}) IS NOT NULL LIMIT 1;");
+        $"""
+        SELECT 1
+        FROM {Delimit(table)}
+        WHERE NOT ({expression})
+          AND ({expression}) IS NOT NULL
+        LIMIT 1;
+        """);
 
     /// <summary>Checks whether retained dependent values have a matching principal key.</summary>
     private static bool HasForeignKeyViolations(
@@ -195,9 +216,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         return ExecuteExists(
             connection,
             transaction,
-            $"SELECT 1 FROM {Delimit(table)} AS d "
-            + $"LEFT JOIN {Delimit(principalTable)} AS p ON {string.Join(" AND ", join)} "
-            + $"WHERE {nonNull} AND p.{Delimit(principalColumns[0])} IS NULL LIMIT 1;");
+            $"""
+            SELECT 1 FROM {Delimit(table)} AS d
+            LEFT JOIN {Delimit(principalTable)} AS p ON {string.Join(" AND ", join)}
+            WHERE {nonNull}
+            AND p.{Delimit(principalColumns[0])} IS NULL LIMIT 1;
+            """);
     }
 
     /// <summary>Checks whether a missing principal would orphan any fully populated dependent key.</summary>

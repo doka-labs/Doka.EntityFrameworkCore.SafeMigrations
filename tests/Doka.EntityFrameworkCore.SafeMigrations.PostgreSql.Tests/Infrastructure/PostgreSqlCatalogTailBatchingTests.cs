@@ -3,6 +3,73 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 /// <summary>Checks immutable PostgreSQL inventory scopes without reducing the 512-table statements.</summary>
 public sealed class PostgreSqlCatalogTailBatchingTests
 {
+    /// <summary>Measures dispatched SQL and bound UTF8 VALUE bytes rather than authoring-template characters.</summary>
+    /// <param name="native">Whether the connection exposes native batching.</param>
+    /// <param name="oversized">Whether the bound value exceeds the existing transport budget.</param>
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    public async Task RawCatalogTransportCountsUnicodeValuesAndRejectsOversizeBeforeDispatch(
+        bool native,
+        bool oversized
+    )
+    {
+        // Arrange
+        var name = "tail_quote' {$tag$}\r\n"
+            + new string('\u20ac',
+                oversized
+                    ? 1_400_000
+                    : 300_000);
+
+        var expected = new[]
+        {
+            new SafeMigrationExpectedTableInventory(name,
+                null,
+                [new KeyValuePair<string, string?>("id", "integer")],
+                [],
+                [],
+                [],
+                []),
+        };
+
+        await using var connection = new CatalogStatementTestConnection(native,
+            (sql, parameters) => Results(sql, parameters, false));
+
+        // Act
+        var failure = await Record.ExceptionAsync(() =>
+            PostgreSqlSafeMigrationProviderAnalyzer.ReadUnexpectedInventoryAsync(
+                connection,
+                expected,
+                71,
+                CancellationToken.None));
+
+        // Assert
+        if (oversized)
+        {
+            Assert.IsType<InvalidOperationException>(failure);
+            Assert.Empty(connection.Submissions);
+        }
+        else
+        {
+            Assert.Null(failure);
+            Assert.NotEmpty(connection.Submissions);
+            Assert.Contains(connection.Submissions,
+                submission =>
+                    submission.Parameters.Any(parameter => StringComparer.Ordinal.Equals(parameter.Value, name)));
+
+            Assert.All(connection.Submissions,
+                submission =>
+                {
+                    var actualBytes = Encoding.UTF8.GetByteCount(submission.Sql)
+                        + submission.Parameters.Sum(parameter => Encoding.UTF8.GetByteCount((string)parameter.Value!));
+
+                    Assert.InRange(actualBytes, 1, SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes);
+                });
+        }
+    }
+
     /// <summary>Explicit and default schemas pack complete inventory scopes without mixing statement results.</summary>
     /// <param name="native">Whether the connection exposes native batching.</param>
     /// <param name="distinctSchemas">Whether each expected table belongs to its own schema.</param>

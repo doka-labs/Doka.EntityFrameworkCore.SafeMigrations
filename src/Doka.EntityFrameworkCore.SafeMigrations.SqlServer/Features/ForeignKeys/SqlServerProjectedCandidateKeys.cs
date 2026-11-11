@@ -63,15 +63,18 @@ internal sealed class SqlServerProjectedCandidateKeys
             // WHY: Constraint and index names refer to the same backing index.
             // Keeping that identity makes either accepted DROP remove all aliases,
             // while an independent equivalent key remains valid FK evidence.
-            command.CommandText = "SELECT i.object_id, i.index_id, i.name, kc.name, c.name, c.column_id, kc.type "
-                + "FROM sys.indexes i JOIN sys.index_columns ic "
-                + "ON ic.object_id = i.object_id AND ic.index_id = i.index_id "
-                + "JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
-                + "LEFT JOIN sys.key_constraints kc "
-                + "ON kc.parent_object_id = i.object_id AND kc.unique_index_id = i.index_id "
-                + $"WHERE i.object_id IN ({tableIds}) AND i.is_unique = 1 AND i.is_disabled = 0 "
-                + "AND i.is_hypothetical = 0 AND i.has_filter = 0 AND ic.key_ordinal > 0 "
-                + "ORDER BY i.object_id, i.index_id, ic.key_ordinal;";
+            command.CommandText = $"""
+                SELECT i.object_id, i.index_id, i.name, kc.name, c.name, c.column_id,
+                kc.type FROM sys.indexes i JOIN sys.index_columns ic ON ic.object_id = i.object_id
+                AND ic.index_id = i.index_id JOIN sys.columns c ON c.object_id = ic.object_id
+                AND c.column_id = ic.column_id
+                LEFT JOIN sys.key_constraints kc ON kc.parent_object_id = i.object_id
+                AND kc.unique_index_id = i.index_id
+                WHERE i.object_id IN ({tableIds})
+                AND i.is_unique = 1 AND i.is_disabled = 0
+                AND i.is_hypothetical = 0 AND i.has_filter = 0
+                AND ic.key_ordinal > 0 ORDER BY i.object_id, i.index_id, ic.key_ordinal;
+                """;
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 

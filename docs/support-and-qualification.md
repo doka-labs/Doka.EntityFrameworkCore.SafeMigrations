@@ -2,15 +2,16 @@
 
 ## Support contract
 
-Version 10.7.1 corrects explicit InnoDB contracts and atomic SQLite
-retirement/rebuild behavior through the existing public APIs. It retains
-.NET/EF Core 10, public signatures, report schemas and fingerprint formats.
-Review the [10.7.1 upgrade](#upgrade-to-1071) for the provider boundaries.
+Version 10.7.2 corrects native expression identity, temporal values and catalog
+comparison through the existing public APIs. It retains .NET/EF Core 10,
+dependency floors, public signatures, report schemas and fingerprint formats.
+Review the [10.7.2 upgrade](#upgrade-to-1072), including affected numeric-default
+fingerprint approvals and the existing provider-specific rejection boundaries.
 
 Version 10.7.0 introduced required cancellation tokens on owned asynchronous
 APIs and BenchmarkDotNet for engineering measurements. Removing public optional-
 token defaults was an intentional source-breaking exception within 10.x, not a
-strictly SemVer-compatible change. Version 10.7.1 retains those requirements.
+strictly SemVer-compatible change. Version 10.7.2 retains those requirements.
 
 Version 10.6.0 introduced public CASE expressions, certified generated-column
 and CHECK support, lossless signed-integer upgrades, ordered projection/DROP
@@ -26,6 +27,56 @@ MySQL/MariaDB callers must account for the owned-guard outer exception type;
 see [diagnostic compatibility](diagnostics.md#runtime-provider-differences).
 Native qualification still requires the complete blocking matrix; ARM SQL Server
 skips and offline SQL-shape tests are not substitutes for its x64 cells.
+
+## Upgrade to 10.7.2
+
+Keep every installed SafeMigrations package on version 10.7.2 and install only
+the adapters needed by the application. Public APIs and shipped baselines,
+.NET/EF Core 10, dependency floors and provider isolation are unchanged from
+10.7.1. MySQL/MariaDB still requires Doka `[10.6.5,10.7.0)`; this patch introduces
+no new provider dependency, application option or migration policy.
+
+The fixes preserve native function/type/operator roles, exact numeric tokens,
+binary literal ownership and complete temporal values. Ambiguous SQL is no
+longer silently reinterpreted as a portable expression. It remains opaque and
+follows the provider's existing acceptance boundary; an unproved expression
+can still be rejected. Review intentional typed expressions or provider mappings
+rather than bypassing the guard or deleting native quoting blindly.
+
+Corrected capture of numeric SQL defaults can change the resulting operation-
+contract fingerprint even though its format is unchanged. Regenerate and review
+affected fingerprint-bound approvals against the immutable migration and the
+selected library version. Do not reuse an old digest to suppress a mismatch,
+rewrite historical migrations or disable fingerprint validation. Explicitly
+authored typed-expression identities are unchanged. See
+[captured SQL defaults and literal ownership](migration-authoring.md#generated-check-constraints).
+
+Binary literal inputs and the public `Value` result are defensive snapshots.
+Mutating either array no longer changes an existing expression, definition or
+fingerprint. Treat the value as data to inspect, not an API for mutating a
+previously constructed contract.
+
+- MySQL/MariaDB recognizes equivalent native nested AND/OR parentheses and
+  complete temporal/default spellings while retaining predicate order and real
+  literal drift. Functional-index comparison does not authorize unproved creation.
+- PostgreSQL resolves expression keys, partial predicates and collations against
+  native relation identity; finite temporal values cannot impersonate infinities.
+- SQLite reads quoted/depth-sensitive index, collation and constraint metadata
+  at its actual grammar positions, including rebuild and replay boundaries.
+- SQL Server renders scalar predicates without losing UNKNOWN or changing CHECK
+  semantics. Native dependency refusals and x64 qualification remain required.
+
+Report schema 4, view schema 3, diagnostic codes, relational model-fingerprint
+format and migration history remain unchanged. Updating packages alone requires
+no additional database migration. SQL layout changes retain native values,
+parameter ownership and byte/batch limits; no measured speedup is claimed.
+
+The inherited [10.7.1 table/rebuild fixes](#upgrade-to-1071) and
+[10.7.0 explicit-token requirements](#upgrade-to-1070) still apply. Required
+native, tooling, package, coverage and public-readback gates are unchanged;
+local ARM SQL Server skips never establish x64 qualification. Publication status
+and exact candidate evidence belong in the
+[release runbook](operations/release-publication.md), not product version claims.
 
 ## Upgrade to 10.7.1
 
@@ -140,7 +191,7 @@ gates remain mandatory; see the [publication runbook](operations/release-publica
 ## Upgrade to 10.6.0
 
 The 10.6.0 minor release introduced the following boundaries. They also apply
-when upgrading an older application directly to 10.7.1. Keep all installed
+when upgrading an older application directly to 10.7.2. Keep all installed
 SafeMigrations packages on the selected shared version and review newly
 scaffolded implicit index-length changes without rewriting historical migrations.
 
@@ -302,13 +353,13 @@ The SQL Server project supplies the fifth lockfile. Releases 10.4.2 through
 10.4.5 contain four package artifacts; their inventory remains unchanged.
 
 The five-package set began with stable 10.4.6, including the optional SQL Server
-provider. Version 10.7.1 retains that inventory and the SQL Server-only PKCS
+provider. Version 10.7.2 retains that inventory and the SQL Server-only PKCS
 minimum of 9.0.22. The Core API baseline includes the additive
 CASE surface introduced in 10.6.0; the diagnostic surface began in 10.5.0.
 Version 10.7.0 replaces ten optional-token declarations with required-token
 declarations in the shipped baseline; it does not add an overload or restore
-the removed defaults. Version 10.7.1 retains that shipped baseline exactly;
-its table metadata correction adds no public declaration.
+the removed defaults. Version 10.7.2 retains that shipped baseline exactly;
+its expression/catalog corrections add no public declaration.
 The current Doka
 dependency contract is the 10.6 line above. Qualification requires the blocking
 workflow, including all three native x86-64 SQL Server cells. The
@@ -751,8 +802,8 @@ used to hide an uncovered regression.
 ## Performance and memory
 
 Core, MySQL/MariaDB, PostgreSQL, SQLite and SQL Server each have an isolated
-BenchmarkDotNet 0.15.8 executable. The default workload families retain all 56
-parameterized cases, including operation-count parameters where applicable.
+BenchmarkDotNet 0.15.8 executable. The default workload families include all
+registered parameterized cases, including operation-count parameters where applicable.
 BenchmarkDotNet owns process isolation, warmup, timing, statistics, managed
 allocation diagnostics and native full JSON export. The former custom timer,
 median sampler, budget configuration and result schema are retired.
@@ -795,6 +846,36 @@ allocation and timing numbers are not methodologically comparable with the
 new engine, even when a workload name is unchanged. Managed bytes allocated
 are neither peak live managed memory nor native process/database memory.
 
+### Allocation-counter limitations
+
+Runtime allocation counters are not an exact object census in every execution
+window. In .NET 10, the [thread-local implementation][runtime-thread-allocation]
+subtracts the unused portion of the current allocation context from its charged
+bytes. The [background-GC accounting defect][runtime-bgc-accounting] can retire
+that context without retiring its unused-byte charge. A counter delta can then
+increase without a corresponding managed object. The related
+[runtime correction][runtime-bgc-correction] is a draft, not a released fix, as
+checked on 2026-11-11. The process-total counter also depends on allocation-context
+accounting; switching counters alone does not establish exact object attribution.
+
+For an unexplained delta, retain the source revision, exact runtime, collector
+configuration and measured-thread boundaries. Distinguish sampled allocation
+events from complete object events; check event loss, object-size alignment and
+known positive/empty controls before attributing bytes to a call stack. A new
+trace or a matching upstream mechanism does not retroactively identify an old
+untraced CI outlier. BenchmarkDotNet remains the informational measurement
+mechanism, not an exemption from these evidence limits.
+
+Do not disable background GC, introduce a no-GC region, subtract an estimated
+offset or add retry-until-pass behavior in functional qualification. Keep result,
+ownership, SQL and recovery assertions independent of observed heap-byte totals.
+
+[runtime-thread-allocation]: https://github.com/dotnet/runtime/blob/v10.0.0/src/coreclr/vm/comutilnative.cpp#L851-L865
+[runtime-bgc-accounting]: https://github.com/dotnet/runtime/issues/134724
+[runtime-bgc-correction]: https://github.com/dotnet/runtime/pull/134855
+
+### Provider attribution boundaries
+
 PostgreSQL eligibility attribution records exact SQL, transport and replay
 evidence during setup. Its measured deterministic transport disables diagnostic
 retention and disposal counters; no observation cleanup is included in each
@@ -804,9 +885,14 @@ client-side measurements are not native server timings.
 [bdn-json]: https://github.com/dotnet/BenchmarkDotNet/blob/v0.15.8/src/BenchmarkDotNet/Exporters/Json/JsonExporter.cs
 [bdn-gc]: https://github.com/dotnet/BenchmarkDotNet/blob/v0.15.8/src/BenchmarkDotNet/Engines/GcStats.cs#L126-L146
 
-Prepared-input CPU regressions separately bound shared seed and diagnostic
-evidence parsing, accepted-column projection, MySQL/MariaDB runtime generation
-and SQL Server catalog-string assembly allocations. Runtime-generation SQL
+Prepared-input BenchmarkDotNet workloads measure shared seed and diagnostic
+evidence parsing, accepted-column projection, no-FK dependency and certificate
+reuse, MySQL/MariaDB runtime generation, PostgreSQL table-definition composition
+and SQL Server catalog-string assembly allocations. Numeric allocation samples
+are informational, including absolute amounts, relative comparisons and
+zero-byte observations; none determines functional-test or coverage success.
+Functional regressions separately require exact results and reference ownership.
+Runtime-generation SQL
 fingerprints retain exact MySQL/MariaDB guards, statement order and cleanup;
 PostgreSQL text and SQLite catalog regressions cover whitespace, comments,
 quoted tokens and ordered keys. They exclude input construction and asynchronous
@@ -938,16 +1024,18 @@ Separate live execution tests apply and replay at least 50,000 mixed absent,
 source, and already-target row transitions using the production
 128-row/4,096-cell partitioning. Their JSON evidence records elapsed time,
 managed allocations, command count, maximum batch rows/cells, and maximum
-generated command bytes. These are scalability and allocation gates, not an
-absolute wall-clock promise across different runner hardware.
+generated command bytes. Semantic results, command counts and transport limits
+remain blocking contracts. Recorded duration and managed-allocation values are
+informational, not cross-machine or instrumented-run pass/fail budgets.
 
 SQLite has engine-appropriate gates instead of inheriting server-transport
 claims. Its live suite applies and replays 50,000 mixed model-managed row
-transitions. Its allocation and duration budgets analyze the same 384-row
+transitions. Its allocation and duration evidence analyzes the same 384-row
 operation set against both a 200-table catalog and a 1,000-table catalog whose
 foreign tables carry indexes and foreign keys. The latter intentionally
 measures whole-catalog discovery cost and prevents that cost from remaining
-outside the release budget.
+outside the retained release evidence. Numeric measurements are informational;
+state, scope, recovery and replay correctness remain blocking.
 
 After restoring the locked publishable package graphs, the quality workflow
 rejects warning-level Roslyn style violations and unnecessary imports.

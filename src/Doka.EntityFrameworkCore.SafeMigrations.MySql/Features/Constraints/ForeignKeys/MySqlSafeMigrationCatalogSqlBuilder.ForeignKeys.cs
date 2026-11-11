@@ -29,20 +29,21 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             definition,
             $"rc.CONSTRAINT_NAME <> {Literal(definition.Name)}");
 
+        // An exact-name collision remains authoritative. A second object
+        // must never hide drift on the identity owned by this operation.
         return Plan(
-                $"CASE WHEN NOT {BaseTableExists(definition.Table)} "
-                + $"OR NOT {BaseTableExists(definition.PrincipalTable)} THEN 'prerequisite_missing' "
-                + $"WHEN {nativeIndexRisk} THEN 'unsupported' "
-
-                // An exact-name collision remains authoritative. A second object
-                // must never hide drift on the identity owned by this operation.
-                + $"WHEN {exists} AND {matching} THEN 'matching' "
-                + $"WHEN {exists} THEN 'different' "
-                + $"WHEN {semanticAlias} THEN 'matching' "
-                + $"WHEN {nameCollision} THEN 'different' "
-                + $"WHEN {ForeignKeyAutoIndexNameCollision(definition, serverVersion.IsMariaDb)} THEN 'different' "
-                + $"WHEN NOT ({ForeignKeySetNullIsRepresentable(definition)}) THEN 'different' "
-                + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
+                $"""
+                CASE WHEN NOT {BaseTableExists(definition.Table)}
+                OR NOT {BaseTableExists(definition.PrincipalTable)} THEN 'prerequisite_missing'
+                WHEN {nativeIndexRisk} THEN 'unsupported'
+                WHEN {exists} AND {matching} THEN 'matching'
+                WHEN {exists} THEN 'different'
+                WHEN {semanticAlias} THEN 'matching'
+                WHEN {nameCollision} THEN 'different'
+                WHEN {ForeignKeyAutoIndexNameCollision(definition, serverVersion.IsMariaDb)} THEN 'different'
+                WHEN NOT ({ForeignKeySetNullIsRepresentable(definition)}) THEN 'different'
+                WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END
+                """,
                 satisfied) with
             {
                 UnsupportedCode = "foreign_key_multi_valued_supporting_index",
@@ -93,24 +94,25 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var updateRules = ReferentialRules(definition.OnUpdate);
         var deleteRules = ReferentialRules(definition.OnDelete);
 
-        return "SELECT rc.CONSTRAINT_NAME AS candidate_name FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc "
-            + "JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu "
-            + "ON kcu.CONSTRAINT_SCHEMA = rc.CONSTRAINT_SCHEMA "
-            + "AND kcu.TABLE_NAME = rc.TABLE_NAME AND kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME "
-            + $"WHERE rc.CONSTRAINT_SCHEMA = DATABASE() AND rc.TABLE_NAME = {Literal(definition.Table)} "
-            + $"AND {namePredicate} "
-
-            // Group every physical constraint independently. Without its
-            // identity in the group, two equivalent legacy constraints merge
-            // their key rows and can evade the semantic-candidate predicate.
-            + "GROUP BY rc.CONSTRAINT_NAME, rc.UPDATE_RULE, rc.DELETE_RULE, "
-            + "kcu.REFERENCED_TABLE_SCHEMA, kcu.REFERENCED_TABLE_NAME "
-            + $"HAVING {localColumnsMatch} "
-            + $"AND {principalColumnsMatch} "
-            + "AND kcu.REFERENCED_TABLE_SCHEMA = DATABASE() "
-            + $"AND kcu.REFERENCED_TABLE_NAME = {Literal(definition.PrincipalTable)} "
-            + $"AND rc.UPDATE_RULE IN ({string.Join(", ", updateRules.Select(Literal))}) "
-            + $"AND rc.DELETE_RULE IN ({string.Join(", ", deleteRules.Select(Literal))})";
+        // Group every physical constraint independently. Without its
+        // identity in the group, two equivalent legacy constraints merge
+        // their key rows and can evade the semantic-candidate predicate.
+        return $"""
+            SELECT rc.CONSTRAINT_NAME AS candidate_name FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+            JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+            ON kcu.CONSTRAINT_SCHEMA = rc.CONSTRAINT_SCHEMA
+            AND kcu.TABLE_NAME = rc.TABLE_NAME AND kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME
+            WHERE rc.CONSTRAINT_SCHEMA = DATABASE() AND rc.TABLE_NAME = {Literal(definition.Table)}
+            AND {namePredicate}
+            GROUP BY rc.CONSTRAINT_NAME, rc.UPDATE_RULE, rc.DELETE_RULE,
+            kcu.REFERENCED_TABLE_SCHEMA, kcu.REFERENCED_TABLE_NAME
+            HAVING {localColumnsMatch}
+            AND {principalColumnsMatch}
+            AND kcu.REFERENCED_TABLE_SCHEMA = DATABASE()
+            AND kcu.REFERENCED_TABLE_NAME = {Literal(definition.PrincipalTable)}
+            AND rc.UPDATE_RULE IN ({string.Join(", ", updateRules.Select(Literal))})
+            AND rc.DELETE_RULE IN ({string.Join(", ", deleteRules.Select(Literal))})
+            """;
     }
 
     private string ForeignKeySatisfied(
@@ -139,9 +141,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 (local,
                         principal) => $"d.{Delimited(local)} = p.{Delimited(principal)}"));
 
-        return $"EXISTS (SELECT 1 FROM {Delimited(definition.Table, definition.Schema)} d "
-            + $"LEFT JOIN {Delimited(definition.PrincipalTable, definition.PrincipalSchema)} p ON {join} "
-            + $"WHERE {localNotNull} AND p.{Delimited(definition.PrincipalColumns[0])} IS NULL LIMIT 1)";
+        return $"""
+            EXISTS (SELECT 1 FROM {Delimited(definition.Table, definition.Schema)} d
+            LEFT JOIN {Delimited(definition.PrincipalTable, definition.PrincipalSchema)} p ON {join}
+            WHERE {localNotNull}
+            AND p.{Delimited(definition.PrincipalColumns[0])} IS NULL LIMIT 1)
+            """;
     }
 
     private string BuildForeignKeyDiagnosticEvidence(
@@ -176,37 +181,35 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             definition.PrincipalColumns.Count,
             "kcu.REFERENCED_COLUMN_NAME");
 
-        return "(SELECT NULLIF(CONCAT_WS(CHAR(30), "
-            + DiagnosticRecord(
+        return $"""
+            (SELECT NULLIF(CONCAT_WS(CHAR(30), {DiagnosticRecord(
                 $"NOT ({localColumnsMatch})",
                 "foreign_key_column_order",
                 columnDiagnostics.Expected,
-                columnDiagnostics.Actual)
-            + ", "
-            + DiagnosticRecord(
+                columnDiagnostics.Actual)}, {DiagnosticRecord(
                 $"NOT ({principalColumnsMatch})",
                 "foreign_key_principal_column_order",
                 principalColumnDiagnostics.Expected,
-                principalColumnDiagnostics.Actual)
-            + ", "
-            + DiagnosticRecord(
+                principalColumnDiagnostics.Actual)},
+            {DiagnosticRecord(
                 $"rc.DELETE_RULE NOT IN ({string.Join(", ", expectedDeleteRules.Select(Literal))})",
                 "foreign_key_delete_behavior",
                 Literal(ReferentialDiagnosticCode(definition.OnDelete)),
-                "LOWER(REPLACE(rc.DELETE_RULE, ' ', '_'))")
-            + ", "
-            + DiagnosticRecord(
+                "LOWER(REPLACE(rc.DELETE_RULE, ' ', '_'))")}, {DiagnosticRecord(
                 $"rc.UPDATE_RULE NOT IN ({string.Join(", ", expectedUpdateRules.Select(Literal))})",
                 "foreign_key_update_behavior",
                 Literal(ReferentialDiagnosticCode(definition.OnUpdate)),
-                "LOWER(REPLACE(rc.UPDATE_RULE, ' ', '_'))")
-            + "), '') FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc "
-            + "JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu "
-            + "ON kcu.CONSTRAINT_SCHEMA = rc.CONSTRAINT_SCHEMA "
-            + "AND kcu.TABLE_NAME = rc.TABLE_NAME AND kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME "
-            + $"WHERE rc.CONSTRAINT_SCHEMA = DATABASE() AND rc.TABLE_NAME = {Literal(definition.Table)} "
-            + $"AND rc.CONSTRAINT_NAME = {Literal(definition.Name)} "
-            + "GROUP BY rc.CONSTRAINT_NAME, rc.UPDATE_RULE, rc.DELETE_RULE LIMIT 1)";
+                "LOWER(REPLACE(rc.UPDATE_RULE, ' ', '_'))")}), '')
+            FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+            JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu ON kcu.CONSTRAINT_SCHEMA =
+            rc.CONSTRAINT_SCHEMA
+            AND kcu.TABLE_NAME = rc.TABLE_NAME
+            AND kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME
+            WHERE rc.CONSTRAINT_SCHEMA = DATABASE()
+            AND rc.TABLE_NAME = {Literal(definition.Table)}
+            AND rc.CONSTRAINT_NAME = {Literal(definition.Name)} GROUP BY rc.CONSTRAINT_NAME,
+            rc.UPDATE_RULE, rc.DELETE_RULE LIMIT 1)
+            """;
     }
 
     private string OrderedConstraintColumnsMatch(
@@ -225,8 +228,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         for (var ordinal = 0; ordinal < columns.Count; ordinal++)
         {
             conditions.Add(
-                $"SUM(CASE WHEN kcu.ORDINAL_POSITION = {(ordinal + 1).ToString(CultureInfo.InvariantCulture)} "
-                + $"AND {columnExpression} = {Literal(columns[ordinal])} THEN 1 ELSE 0 END) = 1");
+                $"""
+                SUM(CASE WHEN kcu.ORDINAL_POSITION = {(ordinal + 1).ToString(CultureInfo.InvariantCulture)}
+                AND {columnExpression} = {Literal(columns[ordinal])}
+                THEN 1 ELSE 0 END) = 1
+                """);
         }
 
         // WHY: GROUP_CONCAT is bounded by the session's group_concat_max_len.

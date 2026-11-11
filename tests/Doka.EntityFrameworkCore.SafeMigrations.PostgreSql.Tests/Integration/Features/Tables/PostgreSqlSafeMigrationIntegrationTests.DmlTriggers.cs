@@ -3,6 +3,10 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 /// <summary>Runs the DmlTriggers PostgreSQL feature cases independently.</summary>
 public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    // WHY: Keep the native function body byte exact while making its enclosing command readable.
+    private const string TriggerDdlBody = " BEGIN DROP INDEX ix_event_existing; "
+        + "CREATE INDEX ix_event_existing ON event_existing_values(value); RETURN NULL; END; ";
+
     /// <summary>Uses the assembly-owned container for this feature.</summary>
     /// <param name="fixture">The shared PostgreSQL container fixture.</param>
     public PostgreSqlDmlTriggersIntegrationTests(
@@ -28,19 +32,18 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
-            + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
-            + "CREATE TABLE side_effect_writes(id integer NOT NULL PRIMARY KEY, "
-            + "managed_value character varying(64) NOT NULL); "
-            + (writeKind == "INSERT"
+            $"""
+            CREATE TABLE event_existing_values(id integer NOT NULL, value integer); CREATE INDEX
+            ix_event_existing ON event_existing_values(id); CREATE TABLE side_effect_writes(id integer NOT
+            NULL PRIMARY KEY,
+            managed_value character varying(64) NOT NULL); {(writeKind == "INSERT"
                 ? string.Empty
-                : "INSERT INTO side_effect_writes VALUES (1,'source'); ")
-            + "CREATE FUNCTION event_dml_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
-            + "BEGIN DROP INDEX ix_event_existing; CREATE INDEX ix_event_existing ON event_existing_values(value); "
-            + "RETURN NULL; END; $$; CREATE TRIGGER event_dml_fixture AFTER "
-            + writeKind
-            + " ON side_effect_writes "
-            + "FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture();",
+                : "INSERT INTO side_effect_writes VALUES (1,'source'); ")}CREATE FUNCTION
+            event_dml_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS
+            $${TriggerDdlBody}$$;
+            CREATE TRIGGER event_dml_fixture AFTER {writeKind} ON side_effect_writes
+            FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture();
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -99,16 +102,17 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
-            + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
-            + "CREATE TABLE event_dml_parents(id integer NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE event_dml_children(id integer NOT NULL PRIMARY KEY, parent_id integer NOT NULL "
-            + "REFERENCES event_dml_parents(id) ON DELETE CASCADE); "
-            + "INSERT INTO event_dml_parents VALUES (1); INSERT INTO event_dml_children VALUES (2,1); "
-            + "CREATE FUNCTION event_dml_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
-            + "BEGIN DROP INDEX ix_event_existing; CREATE INDEX ix_event_existing ON event_existing_values(value); "
-            + "RETURN NULL; END; $$; CREATE TRIGGER event_dml_fixture AFTER DELETE ON event_dml_children "
-            + "FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture();",
+            $"""
+            CREATE TABLE event_existing_values(id integer NOT NULL, value integer); CREATE INDEX
+            ix_event_existing ON event_existing_values(id); CREATE TABLE event_dml_parents(id integer NOT
+            NULL PRIMARY KEY); CREATE TABLE event_dml_children(id integer NOT NULL PRIMARY KEY,
+            parent_id integer NOT NULL REFERENCES event_dml_parents(id) ON DELETE CASCADE); INSERT INTO
+            event_dml_parents VALUES (1); INSERT INTO event_dml_children VALUES (2,1); CREATE FUNCTION
+            event_dml_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS
+            $${TriggerDdlBody}$$;
+            CREATE TRIGGER event_dml_fixture AFTER DELETE ON event_dml_children
+            FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture();
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -174,24 +178,25 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE event_existing_values(id integer NOT NULL PRIMARY KEY, value integer); "
-            + "INSERT INTO event_existing_values VALUES (1,0); "
-            + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
-            + "CREATE TABLE side_effect_writes(id integer NOT NULL PRIMARY KEY "
-            + "REFERENCES event_existing_values(id), managed_value character varying(64) NOT NULL);",
+            """
+            CREATE TABLE event_existing_values(id integer NOT NULL PRIMARY KEY, value integer); INSERT INTO
+            event_existing_values VALUES (1,0); CREATE INDEX ix_event_existing ON event_existing_values(id);
+            CREATE TABLE side_effect_writes(id integer NOT NULL PRIMARY KEY REFERENCES event_existing_values(id),
+            managed_value character varying(64) NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         if (activation is not null)
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE FUNCTION event_dml_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
-                + "BEGIN DROP INDEX ix_event_existing; RETURN NULL; END; $$; "
-                + "CREATE TRIGGER event_dml_fixture AFTER INSERT ON side_effect_writes "
-                + "FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture(); "
-                + "ALTER TABLE side_effect_writes "
-                + activation
-                + " TRIGGER event_dml_fixture;",
+                $"""
+                CREATE FUNCTION event_dml_trigger_fixture() RETURNS trigger LANGUAGE plpgsql
+                AS $$ BEGIN DROP INDEX ix_event_existing; RETURN NULL; END; $$; CREATE TRIGGER
+                event_dml_fixture AFTER INSERT ON side_effect_writes FOR EACH ROW EXECUTE
+                FUNCTION event_dml_trigger_fixture(); ALTER TABLE side_effect_writes {activation}
+                TRIGGER event_dml_fixture;
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -230,14 +235,15 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
-            + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
-            + "CREATE TABLE side_effect_writes(id integer NOT NULL PRIMARY KEY, "
-            + "managed_value character varying(64) NOT NULL); INSERT INTO side_effect_writes VALUES (1,'target'); "
-            + "CREATE FUNCTION event_dml_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
-            + "BEGIN DROP INDEX ix_event_existing; RETURN NULL; END; $$; "
-            + "CREATE TRIGGER event_dml_fixture AFTER INSERT ON side_effect_writes "
-            + "FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture();",
+            """
+            CREATE TABLE event_existing_values(id integer NOT NULL, value integer); CREATE INDEX
+            ix_event_existing ON event_existing_values(id); CREATE TABLE side_effect_writes(id integer NOT
+            NULL PRIMARY KEY,
+            managed_value character varying(64) NOT NULL); INSERT INTO side_effect_writes VALUES
+            (1,'target'); CREATE FUNCTION event_dml_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS
+            $$ BEGIN DROP INDEX ix_event_existing; RETURN NULL; END; $$; CREATE TRIGGER event_dml_fixture
+            AFTER INSERT ON side_effect_writes FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture();
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -287,16 +293,17 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
-            + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
-            + "CREATE TABLE side_effect_writes(id integer NOT NULL PRIMARY KEY, "
-            + "managed_value character varying(64) NOT NULL); "
-            + "CREATE FUNCTION event_dml_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
-            + "BEGIN DROP INDEX ix_event_existing; CREATE INDEX ix_event_existing ON event_existing_values(value); "
-            + "RETURN NULL; END; $$; CREATE TRIGGER event_dml_fixture AFTER INSERT ON side_effect_writes "
-            + "FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture(); ALTER TABLE side_effect_writes "
-            + activation
-            + " TRIGGER event_dml_fixture;",
+            $"""
+            CREATE TABLE event_existing_values(id integer NOT NULL, value integer); CREATE INDEX
+            ix_event_existing ON event_existing_values(id); CREATE TABLE side_effect_writes(id integer NOT
+            NULL PRIMARY KEY,
+            managed_value character varying(64) NOT NULL); CREATE FUNCTION event_dml_trigger_fixture()
+            RETURNS trigger LANGUAGE plpgsql AS
+            $${TriggerDdlBody}$$;
+            CREATE TRIGGER event_dml_fixture AFTER INSERT ON side_effect_writes
+            FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture();
+            ALTER TABLE side_effect_writes {activation} TRIGGER event_dml_fixture;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -362,21 +369,15 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
-            + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
-            + "CREATE TABLE side_effect_writes(id integer NOT NULL PRIMARY KEY, "
-            + "managed_value character varying(64) NOT NULL); CREATE ROLE "
-            + role
-            + " LOGIN PASSWORD 'dml-reader-fixture'; GRANT USAGE ON SCHEMA public TO "
-            + role
-            + "; "
-            + "GRANT SELECT, INSERT ON side_effect_writes TO "
-            + role
-            + "; "
-            + "GRANT SELECT ON event_existing_values TO "
-            + role
-            + "; "
-            + "REVOKE SELECT ON pg_catalog.pg_trigger FROM PUBLIC;",
+            $"""
+            CREATE TABLE event_existing_values(id integer NOT NULL, value integer); CREATE INDEX
+            ix_event_existing ON event_existing_values(id); CREATE TABLE side_effect_writes(id integer NOT
+            NULL PRIMARY KEY,
+            managed_value character varying(64) NOT NULL); CREATE ROLE {role} LOGIN PASSWORD
+            'dml-reader-fixture'; GRANT USAGE ON SCHEMA public TO {role}; GRANT SELECT,
+            INSERT ON side_effect_writes TO {role}; GRANT SELECT ON event_existing_values TO {role};
+            REVOKE SELECT ON pg_catalog.pg_trigger FROM PUBLIC;
+            """,
             cancellationToken: CancellationToken.None);
 
         var readerConnectionString = new NpgsqlConnectionStringBuilder(connectionString)
@@ -429,14 +430,16 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
-            + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
-            + "CREATE TABLE side_effect_writes(id integer NOT NULL PRIMARY KEY, "
-            + "managed_value character varying(64) NOT NULL); "
-            + "CREATE FUNCTION event_dml_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
-            + "BEGIN DROP INDEX ix_event_existing; RETURN NULL; END; $$; "
-            + "CREATE TRIGGER event_dml_fixture AFTER INSERT OR UPDATE OR DELETE ON side_effect_writes "
-            + "FOR EACH STATEMENT EXECUTE FUNCTION event_dml_trigger_fixture();",
+            """
+            CREATE TABLE event_existing_values(id integer NOT NULL, value integer); CREATE INDEX
+            ix_event_existing ON event_existing_values(id); CREATE TABLE side_effect_writes(id integer NOT
+            NULL PRIMARY KEY,
+            managed_value character varying(64) NOT NULL); CREATE FUNCTION event_dml_trigger_fixture()
+            RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN DROP INDEX ix_event_existing; RETURN NULL; END; $$;
+            CREATE TRIGGER event_dml_fixture AFTER INSERT
+            OR UPDATE OR DELETE ON side_effect_writes FOR EACH STATEMENT EXECUTE FUNCTION
+            event_dml_trigger_fixture();
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -479,14 +482,15 @@ public sealed class PostgreSqlDmlTriggersIntegrationTests : PostgreSqlSafeMigrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
-            + "CREATE INDEX ix_event_existing ON event_existing_values(id); "
-            + "CREATE TABLE side_effect_writes(id integer NOT NULL PRIMARY KEY, "
-            + "managed_value character varying(64) NOT NULL); "
-            + "CREATE FUNCTION event_dml_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
-            + "BEGIN DROP INDEX ix_event_existing; RETURN NULL; END; $$; "
-            + "CREATE TRIGGER event_dml_fixture AFTER INSERT ON side_effect_writes "
-            + "FOR EACH ROW EXECUTE FUNCTION event_dml_trigger_fixture();",
+            """
+            CREATE TABLE event_existing_values(id integer NOT NULL, value integer); CREATE INDEX
+            ix_event_existing ON event_existing_values(id); CREATE TABLE side_effect_writes(id integer NOT
+            NULL PRIMARY KEY,
+            managed_value character varying(64) NOT NULL); CREATE FUNCTION event_dml_trigger_fixture()
+            RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN DROP INDEX ix_event_existing; RETURN NULL; END; $$;
+            CREATE TRIGGER event_dml_fixture AFTER INSERT ON side_effect_writes FOR EACH ROW EXECUTE
+            FUNCTION event_dml_trigger_fixture();
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

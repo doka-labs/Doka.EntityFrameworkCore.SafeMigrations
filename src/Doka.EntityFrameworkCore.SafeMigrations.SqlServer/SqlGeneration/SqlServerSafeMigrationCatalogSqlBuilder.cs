@@ -7,8 +7,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 {
     /// <summary>Proves both permissions required by the protected expression-dependency view.</summary>
     internal const string ExpressionDependencyReadPermission =
-        "COALESCE(HAS_PERMS_BY_NAME(DB_NAME(),N'DATABASE',N'VIEW DEFINITION'),0)=1 "
-        + "AND COALESCE(HAS_PERMS_BY_NAME(N'sys.sql_expression_dependencies',N'OBJECT',N'SELECT'),0)=1";
+        """
+        COALESCE(HAS_PERMS_BY_NAME(DB_NAME(),N'DATABASE',N'VIEW DEFINITION'),0)=1
+        AND COALESCE(HAS_PERMS_BY_NAME(N'sys.sql_expression_dependencies',N'OBJECT',N'SELECT'),0)=1
+        """;
 
     private readonly SqlServerSafeMigrationSqlExpressionRenderer _expressionRenderer;
     private readonly Func<string, string> _literal;
@@ -741,9 +743,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 .Distinct(StringComparer.Ordinal)
                 .Select((column, index) => $"({index + 1}, {Literal(column)})"));
 
-        return $"({TableExists(table, schema)}) AND NOT EXISTS (SELECT 1 FROM (VALUES {values}) "
-            + $"expected(ordinal, name) WHERE NOT EXISTS (SELECT 1 FROM sys.columns c "
-            + $"WHERE c.object_id = {id} AND c.name = expected.name))";
+        return $"""
+            ({TableExists(table, schema)}) AND NOT EXISTS (SELECT 1
+            FROM (VALUES {values}) expected(ordinal, name)
+            WHERE NOT EXISTS (SELECT 1 FROM sys.columns c
+            WHERE c.object_id = {id}
+            AND c.name = expected.name))
+            """;
     }
 
     private string TableExists(
@@ -754,28 +760,41 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private string ObjectExists(
         string table,
         string? schema
-    ) => $"EXISTS (SELECT 1 FROM sys.objects o WHERE o.schema_id = SCHEMA_ID({Literal(EffectiveSchema(schema))}) "
-        + $"AND o.name = {Literal(table)})";
+    ) => $"""
+        EXISTS (SELECT 1 FROM sys.objects o
+        WHERE o.schema_id = SCHEMA_ID({Literal(EffectiveSchema(schema))})
+        AND o.name = {Literal(table)})
+        """;
 
     private string ColumnExists(
         string table,
         string? schema,
         string column
-    ) => $"EXISTS (SELECT 1 FROM sys.columns c WHERE c.object_id = {TableId(table, schema)} "
-        + $"AND c.name = {Literal(column)})";
+    ) => $"""
+        EXISTS (SELECT 1 FROM sys.columns c
+        WHERE c.object_id = {TableId(table, schema)}
+        AND c.name = {Literal(column)})
+        """;
 
     private string ConstraintNameExists(
         string table,
         string? schema,
         string name
-    ) => $"EXISTS (SELECT 1 FROM sys.objects o WHERE o.parent_object_id = {TableId(table, schema)} "
-        + $"AND o.name = {Literal(name)} AND o.type IN ('PK', 'UQ', 'C', 'F'))";
+    ) => $"""
+        EXISTS (SELECT 1 FROM sys.objects o
+        WHERE o.parent_object_id = {TableId(table, schema)}
+        AND o.name = {Literal(name)}
+        AND o.type IN ('PK', 'UQ', 'C', 'F'))
+        """;
 
     private string ConstraintNameOccupiedInSchema(
         string? schema,
         string name
-    ) => $"EXISTS (SELECT 1 FROM sys.objects o WHERE o.schema_id = SCHEMA_ID({Literal(EffectiveSchema(schema))}) "
-        + $"AND o.name = {Literal(name)})";
+    ) => $"""
+        EXISTS (SELECT 1 FROM sys.objects o
+        WHERE o.schema_id = SCHEMA_ID({Literal(EffectiveSchema(schema))})
+        AND o.name = {Literal(name)})
+        """;
 
     private string TableId(
         string table,

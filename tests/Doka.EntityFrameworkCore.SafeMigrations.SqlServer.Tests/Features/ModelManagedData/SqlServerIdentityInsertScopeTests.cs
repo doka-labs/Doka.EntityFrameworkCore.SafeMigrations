@@ -18,13 +18,13 @@ public sealed class SqlServerIdentityInsertScopeTests
             "SET IDENTITY_INSERT [dbo].[roles] OFF;");
 
         var off = sql.IndexOf("SET IDENTITY_INSERT", StringComparison.Ordinal);
-        var tokenProof = sql.IndexOf("<> 0x" + token + " RETURN;", StringComparison.Ordinal);
+        var tokenProof = sql.IndexOf("<> 0x" + token + "\nRETURN;", StringComparison.Ordinal);
         var acquiredProof = sql.IndexOf("SUBSTRING(@doka_identity_scope, 1, 1) = 0x02", StringComparison.Ordinal);
 
         // Assert
         Assert.Contains("N'BaseType') <> N'varbinary' RETURN;", sql, StringComparison.Ordinal);
         Assert.Contains(
-            "DATALENGTH(CONVERT(varbinary(max), @doka_identity_owner)) <> 17 RETURN;",
+            "DATALENGTH(CONVERT(varbinary(max),\n@doka_identity_owner)) <> 17 RETURN;",
             sql,
             StringComparison.Ordinal);
 
@@ -69,7 +69,7 @@ public sealed class SqlServerIdentityInsertScopeTests
 
         // Assert
         Assert.DoesNotContain("SET IDENTITY_INSERT", sql, StringComparison.Ordinal);
-        Assert.Contains("SUBSTRING(@doka_identity_scope, 1, 1) <> 0x00", sql, StringComparison.Ordinal);
+        Assert.Contains("SUBSTRING(@doka_identity_scope,\n1, 1) <> 0x00", sql, StringComparison.Ordinal);
         Assert.Contains("@value = NULL", sql, StringComparison.Ordinal);
     }
 
@@ -85,14 +85,14 @@ public sealed class SqlServerIdentityInsertScopeTests
         // Act
         var sql = SqlServerSafeMigrationIdentityInsertScope.BuildAcquisitionSql(table);
         var attempting = sql.IndexOf("@value = @doka_identity_attempt;", StringComparison.Ordinal);
-        var on = sql.IndexOf("SET IDENTITY_INSERT " + table + " ON;", StringComparison.Ordinal);
+        var on = sql.IndexOf("SET IDENTITY_INSERT " + table + "\nON;", StringComparison.Ordinal);
         var acquired = sql.IndexOf("@value = @doka_identity_acquired;", StringComparison.Ordinal);
 
         // Assert
         Assert.True(attempting >= 0 && attempting < on && on < acquired);
-        Assert.Contains("@doka_identity_scope = 0x00 + CONVERT(binary(16), NEWID())", sql, StringComparison.Ordinal);
-        Assert.Contains("@doka_identity_attempt varbinary(17) = 0x01", sql, StringComparison.Ordinal);
-        Assert.Contains("@doka_identity_acquired varbinary(17) = 0x02", sql, StringComparison.Ordinal);
+        Assert.Contains("@doka_identity_scope\n= 0x00 + CONVERT(binary(16),\nNEWID())", sql, StringComparison.Ordinal);
+        Assert.Contains("@doka_identity_attempt varbinary(17)\n= 0x01", sql, StringComparison.Ordinal);
+        Assert.Contains("@doka_identity_acquired\nvarbinary(17) = 0x02", sql, StringComparison.Ordinal);
         Assert.Contains("@value = @doka_identity_scope; THROW; END CATCH;", sql, StringComparison.Ordinal);
         Assert.DoesNotContain(" OFF", sql, StringComparison.Ordinal);
     }

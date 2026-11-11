@@ -864,9 +864,9 @@ public sealed class MySqlForeignKeyDropColumnProofTests
         Assert.NotEqual(SafeMigrationRepairCapability.Safe, result.RepairCapability);
     }
 
-    /// <summary>Repeated exact certificate reuse does not clone the column or projected table shape.</summary>
+    /// <summary>Repeated projection retains the exact live certificate and its safe-repair decision.</summary>
     [Fact]
-    public void ForeignKeyDropColumnCertificateReuseAvoidsPerOperationShapeCopies()
+    public void ForeignKeyDropColumnCertificateReusePreservesProofAndDecision()
     {
         // Arrange
         using var context = CreateContext();
@@ -874,22 +874,31 @@ public sealed class MySqlForeignKeyDropColumnProofTests
         Accept(projection, new DropForeignKeyIntent("fk_reference", "items"));
         var operation = Relaxation();
         var live = ColumnProof();
-        for (var iteration = 0; iteration < 100; iteration++)
-        {
-            projection.Project(operation, live);
-        }
+        var results = new SafeMigrationProviderAnalysis[100];
 
         // Act
-        var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
-        for (var iteration = 0; iteration < 100; iteration++)
+        for (var iteration = 0; iteration < results.Length; iteration++)
         {
-            projection.Project(operation, live);
+            results[iteration] = projection.Project(operation, live);
         }
 
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
-
         // Assert
-        Assert.InRange(allocated, 0, 1_024);
+        Assert.All(results,
+            result =>
+            {
+                Assert.Same(live, result);
+                Assert.Equal(SafeMigrationObservedState.Different, result.ObservedState);
+                Assert.Equal(SafeMigrationRepairCapability.Safe, result.RepairCapability);
+                Assert.False(result.PostconditionSatisfied);
+                Assert.Equal(
+                    SafeMigrationAction.Repair,
+                    SafeMigrationDecisionPlanner.Plan(
+                            operation.Intent.Kind,
+                            result.ObservedState,
+                            operation.Policy,
+                            result.RepairCapability)
+                        .Action);
+            });
     }
 
     /// <summary>Authored source facets cannot substitute for a provider's current live source certificate.</summary>

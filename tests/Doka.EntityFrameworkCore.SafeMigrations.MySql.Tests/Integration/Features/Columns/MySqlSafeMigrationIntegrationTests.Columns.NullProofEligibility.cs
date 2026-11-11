@@ -42,9 +42,13 @@ public sealed partial class MySqlColumnsNullProofEligibilityIntegrationTests : M
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `eligibility_rows` (`id` int PRIMARY KEY, `value` {storeType} NOT NULL{defaultClause} "
-            + $"COMMENT '{comment}') ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + $"INSERT INTO `eligibility_rows` VALUES (1, {value});",
+            $"""
+            CREATE TABLE `eligibility_rows` (`id` int PRIMARY KEY, `value` {storeType}
+            NOT NULL{defaultClause} COMMENT '{comment}')
+            ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+            INSERT INTO `eligibility_rows` VALUES (1,
+            {value});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -83,9 +87,13 @@ public sealed partial class MySqlColumnsNullProofEligibilityIntegrationTests : M
 
         var canonicalColumns = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'eligibility_rows' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO' "
-            + "AND COLUMN_COMMENT = 'canonical';",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'eligibility_rows'
+            AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO'
+            AND COLUMN_COMMENT = 'canonical';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -139,9 +147,12 @@ public sealed partial class MySqlColumnsNullProofEligibilityIntegrationTests : M
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `eligibility_rows` (`id` int PRIMARY KEY, `value` {storeType} NULL COMMENT 'canonical') "
-            + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + $"INSERT INTO `eligibility_rows` VALUES (1, {value});",
+            $"""
+            CREATE TABLE `eligibility_rows` (`id` int PRIMARY KEY, `value` {storeType}
+            NULL COMMENT 'canonical') ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE
+            utf8mb4_unicode_ci; INSERT INTO `eligibility_rows` VALUES (1,
+            {value});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -223,8 +234,11 @@ public sealed partial class MySqlColumnsNullProofEligibilityIntegrationTests : M
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `eligibility_rows` (`id` int PRIMARY KEY, `value` datetime(6) NULL COMMENT 'canonical'); "
-            + "INSERT INTO `eligibility_rows` VALUES (1, '2026-01-02 03:04:05.123456');",
+            """
+            CREATE TABLE `eligibility_rows` (`id` int PRIMARY KEY, `value` datetime(6)
+            NULL COMMENT 'canonical'); INSERT INTO `eligibility_rows` VALUES (1,
+            '2026-01-02 03:04:05.123456');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

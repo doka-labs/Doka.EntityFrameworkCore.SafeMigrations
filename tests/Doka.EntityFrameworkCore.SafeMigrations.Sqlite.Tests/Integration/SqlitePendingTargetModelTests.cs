@@ -9,9 +9,10 @@ public sealed class SqlitePendingTargetModelTests
         await connection.OpenAsync(CancellationToken.None);
         await using (var command = connection.CreateCommand())
         {
-            command.CommandText = "CREATE TABLE target_model_entities ("
-                + "Id INTEGER NOT NULL, Code TEXT NOT NULL, "
-                + "CONSTRAINT pk_target_model_entities PRIMARY KEY (Id));";
+            command.CommandText = """
+            CREATE TABLE target_model_entities (Id INTEGER NOT NULL, Code TEXT NOT NULL,
+            CONSTRAINT pk_target_model_entities PRIMARY KEY (Id));
+            """;
 
             _ = await command.ExecuteNonQueryAsync(CancellationToken.None);
         }

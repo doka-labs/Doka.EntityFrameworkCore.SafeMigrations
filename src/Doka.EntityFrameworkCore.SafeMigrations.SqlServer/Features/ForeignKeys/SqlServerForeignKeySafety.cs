@@ -31,9 +31,13 @@ internal static class SqlServerForeignKeySafety
             var principalColumns = string.Join(", ", definition.PrincipalColumns.Select(literal));
 
             predicates.Add(
-                "NOT EXISTS (SELECT 1 FROM sys.columns c WHERE c.system_type_id = 189 "
-                + $"AND ((c.object_id = {dependent} AND c.name IN ({dependentColumns})) "
-                + $"OR (c.object_id = {principal} AND c.name IN ({principalColumns}))))");
+                $"""
+                NOT EXISTS (SELECT 1 FROM sys.columns c
+                WHERE c.system_type_id = 189 AND ((c.object_id = {dependent}
+                AND c.name IN ({dependentColumns}))
+                OR (c.object_id = {principal}
+                AND c.name IN ({principalColumns}))))
+                """);
         }
 
         if (definition.OnDelete == ReferentialAction.Cascade)
@@ -55,8 +59,12 @@ internal static class SqlServerForeignKeySafety
             var columns = string.Join(", ", definition.Columns.Select(literal));
 
             predicates.Add(
-                $"NOT EXISTS (SELECT 1 FROM sys.columns c WHERE c.object_id = {dependent} "
-                + $"AND c.name IN ({columns}) AND c.is_nullable = 0 AND c.default_object_id = 0)");
+                $"""
+                NOT EXISTS (SELECT 1 FROM sys.columns c
+                WHERE c.object_id = {dependent}
+                AND c.name IN ({columns})
+                AND c.is_nullable = 0 AND c.default_object_id = 0)
+                """);
         }
 
         return predicates.Count == 0
@@ -88,11 +96,11 @@ internal static class SqlServerForeignKeySafety
         var missingCandidates = string.Join(
             " OR ",
             candidates.Select(candidate =>
-                "NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE parent_object_id = "
-                + TableId(candidate.Table, candidate.Schema, literal)
-                + " AND name = "
-                + literal(candidate.Name)
-                + ")"));
+                $"""
+                NOT EXISTS (SELECT 1 FROM sys.foreign_keys
+                WHERE parent_object_id = {TableId(candidate.Table, candidate.Schema, literal)}
+                AND name = {literal(candidate.Name)})
+                """));
 
         sql.AppendLine("DECLARE @doka_fk_graph_safe bit = 1;");
 
@@ -115,14 +123,20 @@ internal static class SqlServerForeignKeySafety
 
         sql
             .AppendLine(
-                "DECLARE @doka_fk_edges TABLE (principal int NOT NULL, source_event tinyint NOT NULL, "
-                + "dependent int NOT NULL, target_event tinyint NOT NULL);")
+                """
+                DECLARE @doka_fk_edges TABLE (principal int NOT NULL, source_event tinyint
+                NOT NULL,
+                dependent int NOT NULL, target_event tinyint NOT NULL);
+                """)
             .AppendLine(
-                "INSERT INTO @doka_fk_edges SELECT referenced_object_id, 1, parent_object_id, "
-                + "CASE WHEN delete_referential_action = 1 THEN 1 ELSE 2 END "
-                + "FROM sys.foreign_keys WHERE delete_referential_action <> 0 "
-                + "UNION ALL SELECT referenced_object_id, 2, parent_object_id, 2 "
-                + "FROM sys.foreign_keys WHERE update_referential_action <> 0;");
+                """
+                INSERT INTO @doka_fk_edges SELECT referenced_object_id, 1, parent_object_id,
+                CASE WHEN delete_referential_action = 1
+                THEN 1 ELSE 2 END FROM sys.foreign_keys
+                WHERE delete_referential_action <> 0 UNION ALL SELECT referenced_object_id,
+                2, parent_object_id, 2 FROM sys.foreign_keys
+                WHERE update_referential_action <> 0;
+                """);
 
         foreach (var candidate in candidates)
         {
@@ -171,16 +185,25 @@ internal static class SqlServerForeignKeySafety
             .AppendLine("WHILE @doka_fk_graph_safe = 1 AND EXISTS (SELECT 1 FROM @doka_fk_frontier) BEGIN")
             .AppendLine("DELETE FROM @doka_fk_next;")
             .AppendLine(
-                "INSERT INTO @doka_fk_next SELECT e.dependent, e.target_event FROM @doka_fk_edges e "
-                + "JOIN @doka_fk_frontier f ON f.table_id = e.principal AND f.event_id = e.source_event;")
+                """
+                INSERT INTO @doka_fk_next SELECT e.dependent, e.target_event
+                FROM @doka_fk_edges e JOIN @doka_fk_frontier f ON f.table_id = e.principal
+                AND f.event_id = e.source_event;
+                """)
             .AppendLine(
-                "IF EXISTS (SELECT 1 FROM @doka_fk_next GROUP BY table_id HAVING COUNT(*) > 1) "
-                + "OR EXISTS (SELECT 1 FROM @doka_fk_next n JOIN @doka_fk_seen s ON s.table_id = n.table_id) "
-                + "SET @doka_fk_graph_safe = 0;")
+                """
+                IF EXISTS (SELECT 1 FROM @doka_fk_next GROUP BY table_id HAVING COUNT(*)
+                > 1)
+                OR EXISTS (SELECT 1 FROM @doka_fk_next n
+                JOIN @doka_fk_seen s ON s.table_id = n.table_id) SET @doka_fk_graph_safe
+                = 0;
+                """)
             .AppendLine(
-                "ELSE BEGIN INSERT INTO @doka_fk_seen SELECT table_id FROM @doka_fk_next; "
-                + "DELETE FROM @doka_fk_frontier; "
-                + "INSERT INTO @doka_fk_frontier SELECT table_id, event_id FROM @doka_fk_next; END;")
+                """
+                ELSE BEGIN INSERT INTO @doka_fk_seen SELECT table_id
+                FROM @doka_fk_next; DELETE FROM @doka_fk_frontier; INSERT INTO @doka_fk_frontier
+                SELECT table_id, event_id FROM @doka_fk_next; END;
+                """)
             .AppendLine("END; END;");
 
         sql.AppendLine("END;");
@@ -238,10 +261,12 @@ internal static class SqlServerForeignKeySafety
                     var principalColumns = string.Join(", ", foreignKey.PrincipalColumns.Select(literal));
 
                     predicates.Add(
-                        "NOT EXISTS (SELECT 1 FROM sys.columns c WHERE c.system_type_id = 189 "
-                        + $"AND c.object_id = {TableId(foreignKey.PrincipalTable, foreignKey.PrincipalSchema, literal)}"
-                        + " "
-                        + $"AND c.name IN ({principalColumns}))");
+                        $"""
+                        NOT EXISTS (SELECT 1 FROM sys.columns c
+                        WHERE c.system_type_id = 189 AND c.object_id = {TableId(
+                            foreignKey.PrincipalTable, foreignKey.PrincipalSchema, literal)}
+                        AND c.name IN ({principalColumns}))
+                        """);
                 }
             }
         }
@@ -292,8 +317,13 @@ internal static class SqlServerForeignKeySafety
     private static string TriggerAbsent(
         string tableId,
         string eventName
-    ) => "NOT EXISTS (SELECT 1 FROM sys.triggers tr JOIN sys.trigger_events te ON te.object_id = tr.object_id "
-        + $"WHERE tr.parent_id = {tableId} AND tr.is_instead_of_trigger = 1 AND te.type_desc = N'{eventName}')";
+    ) => $"""
+        NOT EXISTS (SELECT 1 FROM sys.triggers tr
+        JOIN sys.trigger_events te ON te.object_id = tr.object_id
+        WHERE tr.parent_id = {tableId}
+        AND tr.is_instead_of_trigger = 1
+        AND te.type_desc = N'{eventName}')
+        """;
 
     private static string TableId(
         string table,

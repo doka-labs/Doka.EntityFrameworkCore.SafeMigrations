@@ -273,14 +273,14 @@ internal static class SqlServerIdentifierContract
 
         var commands = new List<string>();
         commands.Add(
-            $"IF OBJECT_ID(N'tempdb..{temporaryTable}') IS NOT NULL "
-            + "THROW 51002, N'"
-            + ScratchScopeFailureMessage
-            + "', 1; "
-            + $"CREATE TABLE {temporaryTable} (scope tinyint NOT NULL, "
-            + "schema_name nvarchar(128) COLLATE CATALOG_DEFAULT NOT NULL, "
-            + "table_name nvarchar(128) COLLATE CATALOG_DEFAULT NOT NULL, "
-            + "name nvarchar(128) COLLATE CATALOG_DEFAULT NOT NULL);");
+            $"""
+            IF OBJECT_ID(N'tempdb..{temporaryTable}') IS NOT NULL THROW 51002,
+            N'{ScratchScopeFailureMessage}', 1; CREATE TABLE {temporaryTable}
+            (scope tinyint NOT NULL,
+            schema_name nvarchar(128) COLLATE CATALOG_DEFAULT NOT NULL, table_name nvarchar(128)
+            COLLATE CATALOG_DEFAULT NOT NULL,
+            name nvarchar(128) COLLATE CATALOG_DEFAULT NOT NULL);
+            """);
 
         var batch = new StringBuilder(4096);
         var batchBytes = 0;
@@ -326,25 +326,24 @@ internal static class SqlServerIdentifierContract
         // WHY: CATALOG_DEFAULT, not DATABASE_DEFAULT, is the physical name
         // collation in a contained database. BIN2 plus DATALENGTH detects
         // distinct spellings that catalog collation or padding equates.
-        var check = $"EXISTS (SELECT 1 FROM {temporaryTable} "
-            + "GROUP BY scope, schema_name, table_name, name "
-            + "HAVING MIN(name COLLATE Latin1_General_100_BIN2) "
-            + "<> MAX(name COLLATE Latin1_General_100_BIN2) "
-            + "OR MIN(DATALENGTH(name)) <> MAX(DATALENGTH(name)) "
-            + "OR MIN(schema_name COLLATE Latin1_General_100_BIN2) "
-            + "<> MAX(schema_name COLLATE Latin1_General_100_BIN2) "
-            + "OR MIN(DATALENGTH(schema_name)) <> MAX(DATALENGTH(schema_name)) "
-            + "OR MIN(table_name COLLATE Latin1_General_100_BIN2) "
-            + "<> MAX(table_name COLLATE Latin1_General_100_BIN2) "
-            + "OR MIN(DATALENGTH(table_name)) <> MAX(DATALENGTH(table_name)))";
+        var check = $"""
+            EXISTS (SELECT 1 FROM {temporaryTable} GROUP BY scope, schema_name,
+            table_name, name HAVING MIN(name COLLATE Latin1_General_100_BIN2) <> MAX(name
+            COLLATE Latin1_General_100_BIN2)
+            OR MIN(DATALENGTH(name)) <> MAX(DATALENGTH(name))
+            OR MIN(schema_name COLLATE Latin1_General_100_BIN2) <> MAX(schema_name COLLATE
+            Latin1_General_100_BIN2)
+            OR MIN(DATALENGTH(schema_name)) <> MAX(DATALENGTH(schema_name))
+            OR MIN(table_name COLLATE Latin1_General_100_BIN2) <> MAX(table_name COLLATE
+            Latin1_General_100_BIN2)
+            OR MIN(DATALENGTH(table_name)) <> MAX(DATALENGTH(table_name)))
+            """;
 
         commands.Add(
-            "DECLARE "
-            + ResultVariable
-            + " int = CASE WHEN "
-            + check
-            + $" THEN 0 ELSE 1 END; DROP TABLE {temporaryTable}; "
-            + EndGuard(throwOnCollision, safe: null));
+            $"""
+            DECLARE {ResultVariable} int = CASE WHEN {check}
+            THEN 0 ELSE 1 END; DROP TABLE {temporaryTable}; {EndGuard(throwOnCollision, safe: null)}
+            """);
 
         return commands;
     }

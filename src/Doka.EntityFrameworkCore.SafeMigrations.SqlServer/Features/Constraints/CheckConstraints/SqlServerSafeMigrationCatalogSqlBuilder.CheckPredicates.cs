@@ -39,48 +39,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 ? parsed
                 : null);
 
+    // WHY: The shared parser recognizes multiple identifier dialects.
+    // Keep native bracket roles but ignore delimiter characters inside
+    // literal values; the shared quote-aware scan owns those boundaries.
+    /// <summary>Certifies native identifier delimiters without reading string contents as syntax.</summary>
     private static bool HasSupportedRawCheckQuoting(
         string sql
-    )
-    {
-        // WHY: The shared parser recognizes multiple identifier dialects.
-        // Raw SQL is preserved, so backticks are invalid and double quotes
-        // depend on unproved QUOTED_IDENTIFIER session state. Bracketed names
-        // may contain either character and must retain their exact identity.
-        var bracketed = false;
-
-        // WHY: Track bracket escape lookahead without treating quoted content as syntax.
-        // ReSharper disable once ForCanBeConvertedToForeach
-        // ReSharper disable once LoopCanBeConvertedToQuery
-        for (var index = 0; index < sql.Length; index++)
-        {
-            if (bracketed)
-            {
-                if (sql[index] == ']')
-                {
-                    if (index + 1 < sql.Length
-                        && sql[index + 1] == ']')
-                    {
-                        index++;
-                    }
-                    else
-                    {
-                        bracketed = false;
-                    }
-                }
-            }
-            else if (sql[index] == '[')
-            {
-                bracketed = true;
-            }
-            else if (sql[index] is '`' or '"')
-            {
-                return false;
-            }
-        }
-
-        return !bracketed;
-    }
+    ) => SafeMigrationSqlExpressionParser.IsCapturedSourceDialectCompatible(sql, '[');
 
     /// <summary>Recognizes nonthrowing integer comparisons, Boolean composition, and null tests only.</summary>
     /// <param name="expression">The bounded expression AST.</param>
@@ -180,7 +145,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // direct comparison remains exact because every built-in integer fits
         // the literal's decimal domain. No arithmetic or narrowing CAST is
         // admitted, including the signed-minimum unary literal boundary.
-        switch (literal.Value)
+        switch (literal.BorrowedValue)
         {
             case byte number:
                 value = number;
@@ -223,13 +188,18 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         IEnumerable<string> columns
     )
     {
-        var proofs = columns.Select(column => "EXISTS(SELECT 1 FROM sys.columns c JOIN sys.types ty "
-            + "ON ty.user_type_id=c.user_type_id "
-            + $"WHERE c.object_id={TableId(definition.Table, definition.Schema)} AND c.name={Literal(column)} "
-            + "AND ty.is_user_defined = 0 AND ty.is_assembly_type = 0 "
-            + "AND ty.name IN (N'tinyint', N'smallint', N'int', N'bigint') "
-            + "AND c.is_computed=0 AND c.is_sparse=0 AND c.is_column_set=0 AND c.is_hidden=0 "
-            + "AND c.generated_always_type=0 AND c.encryption_type IS NULL)");
+        var proofs = columns.Select(column => $"""
+            EXISTS(SELECT 1 FROM sys.columns c
+            JOIN sys.types ty ON ty.user_type_id=c.user_type_id
+            WHERE c.object_id={TableId(definition.Table, definition.Schema)}
+            AND c.name={Literal(column)}
+            AND ty.is_user_defined = 0 AND ty.is_assembly_type = 0
+            AND ty.name IN (N'tinyint', N'smallint', N'int', N'bigint')
+            AND c.is_computed=0 AND c.is_sparse=0
+            AND c.is_column_set=0 AND c.is_hidden=0
+            AND c.generated_always_type=0
+            AND c.encryption_type IS NULL)
+            """);
 
         var predicate = string.Join(" AND ", proofs);
 

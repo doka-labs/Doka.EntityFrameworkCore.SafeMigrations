@@ -9,11 +9,13 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE composite_managed_rows ("
-            + "tenant_id INTEGER NOT NULL, id INTEGER NOT NULL, code TEXT NULL, managed_value TEXT NOT NULL, "
-            + "PRIMARY KEY (tenant_id, id), UNIQUE (code)); "
-            + "INSERT INTO composite_managed_rows (tenant_id, id, code, managed_value) VALUES "
-            + "(1, 1, 'updated', 'source'), (2, 1, 'removed', 'source');",
+            """
+            CREATE TABLE composite_managed_rows (tenant_id INTEGER NOT NULL, id INTEGER
+            NOT NULL,
+            code TEXT NULL, managed_value TEXT NOT NULL, PRIMARY KEY (tenant_id, id),
+            UNIQUE (code)); INSERT INTO composite_managed_rows (tenant_id, id, code,
+            managed_value) VALUES (1, 1, 'updated', 'source'), (2, 1, 'removed', 'source');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -97,8 +99,11 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE managed_drift (id INTEGER NOT NULL PRIMARY KEY, managed_value TEXT NOT NULL); "
-            + "INSERT INTO managed_drift (id, managed_value) VALUES (1, 'operator-change');",
+            """
+            CREATE TABLE managed_drift (id INTEGER NOT NULL PRIMARY KEY, managed_value
+            TEXT NOT NULL); INSERT INTO managed_drift (id,
+            managed_value) VALUES (1, 'operator-change');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -297,13 +302,17 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
         CancellationToken cancellationToken
     ) => ExecuteSqlAsync(
         connection,
-        "CREATE TABLE managed_roles ("
-        + "Id INTEGER NOT NULL PRIMARY KEY, Code TEXT NOT NULL, CONSTRAINT uq_managed_roles_code UNIQUE (Code)); "
-        + "CREATE TABLE managed_assignments ("
-        + "Id INTEGER NOT NULL PRIMARY KEY, RoleId INTEGER NOT NULL, "
-        + "CONSTRAINT fk_managed_assignments_role FOREIGN KEY (RoleId) REFERENCES managed_roles (Id)); "
-        + "INSERT INTO managed_roles (Id, Code) VALUES (1, 'administrator'), (2, 'member'); "
-        + "INSERT INTO managed_assignments (Id, RoleId) VALUES (11, 1);",
+        """
+        CREATE TABLE managed_roles (Id INTEGER NOT NULL PRIMARY KEY, Code TEXT NOT
+        NULL,
+        CONSTRAINT uq_managed_roles_code UNIQUE (Code)); CREATE TABLE managed_assignments
+        (Id INTEGER NOT NULL PRIMARY KEY,
+        RoleId INTEGER NOT NULL, CONSTRAINT fk_managed_assignments_role FOREIGN
+        KEY (RoleId) REFERENCES managed_roles (Id)); INSERT INTO managed_roles (Id,
+        Code) VALUES (1, 'administrator'), (2, 'member'); INSERT INTO managed_assignments
+        (Id,
+        RoleId) VALUES (11, 1);
+        """,
         cancellationToken: cancellationToken);
 
     [Fact]
@@ -312,13 +321,15 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE managed_roles (Id INTEGER NOT NULL PRIMARY KEY, Code TEXT NOT NULL); "
-            + "CREATE TABLE managed_assignments ("
-            + "Id INTEGER NOT NULL PRIMARY KEY, RoleId INTEGER NOT NULL, "
-            + "CONSTRAINT fk_managed_assignments_role FOREIGN KEY (RoleId) "
-            + "REFERENCES managed_roles (Id) ON DELETE CASCADE); "
-            + "INSERT INTO managed_roles (Id, Code) VALUES (1, 'administrator'); "
-            + "INSERT INTO managed_assignments (Id, RoleId) VALUES (11, 1);",
+            """
+            CREATE TABLE managed_roles (Id INTEGER NOT NULL PRIMARY KEY, Code TEXT NOT
+            NULL); CREATE TABLE managed_assignments (Id INTEGER NOT NULL PRIMARY KEY,
+            RoleId INTEGER NOT NULL, CONSTRAINT fk_managed_assignments_role FOREIGN
+            KEY (RoleId) REFERENCES managed_roles (Id) ON DELETE CASCADE); INSERT INTO
+            managed_roles (Id,
+            Code) VALUES (1, 'administrator'); INSERT INTO managed_assignments (Id,
+            RoleId) VALUES (11, 1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -391,12 +402,14 @@ public sealed class SqliteSafeMigrationModelManagedDataIntegrationTests : Sqlite
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE managed_roles (Id INTEGER NOT NULL PRIMARY KEY, Code TEXT NOT NULL); "
-            + "CREATE TABLE managed_assignments ("
-            + "Id INTEGER NOT NULL PRIMARY KEY, RoleId INTEGER NOT NULL, "
-            + "FOREIGN KEY (RoleId) REFERENCES managed_roles (Id) ON DELETE CASCADE); "
-            + "INSERT INTO managed_roles (Id, Code) VALUES (1, 'administrator'); "
-            + "INSERT INTO managed_assignments (Id, RoleId) VALUES (11, 1);",
+            """
+            CREATE TABLE managed_roles (Id INTEGER NOT NULL PRIMARY KEY, Code TEXT NOT
+            NULL); CREATE TABLE managed_assignments (Id INTEGER NOT NULL PRIMARY KEY,
+            RoleId INTEGER NOT NULL, FOREIGN KEY (RoleId) REFERENCES managed_roles (Id)
+            ON DELETE CASCADE); INSERT INTO managed_roles (Id,
+            Code) VALUES (1, 'administrator'); INSERT INTO managed_assignments (Id,
+            RoleId) VALUES (11, 1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);

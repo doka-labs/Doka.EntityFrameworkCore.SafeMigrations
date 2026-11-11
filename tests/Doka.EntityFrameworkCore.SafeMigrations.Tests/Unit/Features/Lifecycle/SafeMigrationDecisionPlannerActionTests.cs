@@ -1,6 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
-/// <summary>Verifies that allocation-free action rendering shares the public planner's complete contract.</summary>
+/// <summary>Verifies that action-only rendering shares the public planner's complete contract.</summary>
 public sealed class SafeMigrationDecisionPlannerActionTests
 {
     /// <summary>Gets every defined policy-table input without relying on a provider-specific subset.</summary>
@@ -112,54 +112,47 @@ public sealed class SafeMigrationDecisionPlannerActionTests
                 .ParamName);
     }
 
-    /// <summary>Does not allocate a public decision when generation consumes only the canonical action.</summary>
+    /// <summary>Repeated public and action-only planning preserve the canonical repair action.</summary>
     [Fact]
-    public void ActionOnly_AvoidsDiscardedDecisionAllocations()
+    public void ActionOnly_RepeatedPlanningMatchesPublicRepair()
     {
         // Arrange
         const int count = 1000;
-        var publicPlan = static () => SafeMigrationDecisionPlanner.Plan(
+
+        static SafeMigrationAction PublicPlan() => SafeMigrationDecisionPlanner.Plan(
                 SafeMigrationOperationKind.EnsureColumn,
                 SafeMigrationObservedState.Different,
                 SafeMigrationPolicy.RepairIfSafe,
                 SafeMigrationRepairCapability.Safe)
             .Action;
 
-        var actionPlan = static () => SafeMigrationDecisionPlanner.PlanAction(
+        static SafeMigrationAction ActionPlan() => SafeMigrationDecisionPlanner.PlanAction(
             SafeMigrationOperationKind.EnsureColumn,
             SafeMigrationObservedState.Different,
             SafeMigrationPolicy.RepairIfSafe,
             SafeMigrationRepairCapability.Safe);
 
-        // WHY: Warm the same validated table and prepare delegates before the
-        // measurement. Only discarded public results differ; no timing is asserted.
-        _ = publicPlan();
-        _ = actionPlan();
-
         // Act
-        var publicResult = Measure(publicPlan, count);
-        var actionResult = Measure(actionPlan, count);
+        var publicResult = RepeatPlanning(PublicPlan, count);
+        var actionResult = RepeatPlanning(ActionPlan, count);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.Repair, publicResult.Action);
-        Assert.Equal(publicResult.Action, actionResult.Action);
-        Assert.Equal(0, actionResult.Bytes);
-        Assert.InRange(publicResult.Bytes, count, long.MaxValue);
+        Assert.All(publicResult, action => Assert.Equal(SafeMigrationAction.Repair, action));
+        Assert.Equal(publicResult, actionResult);
     }
 
-    /// <summary>Counts only prepared synchronous planning on the current thread.</summary>
-    private static (SafeMigrationAction Action, long Bytes) Measure(
+    /// <summary>Captures each repeated synchronous planning result.</summary>
+    private static SafeMigrationAction[] RepeatPlanning(
         Func<SafeMigrationAction> planner,
         int count
     )
     {
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        var action = default(SafeMigrationAction);
+        var actions = new SafeMigrationAction[count];
         for (var index = 0; index < count; index++)
         {
-            action = planner();
+            actions[index] = planner();
         }
 
-        return (action, GC.GetAllocatedBytesForCurrentThread() - before);
+        return actions;
     }
 }

@@ -76,8 +76,12 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         // Act
         await migrator.MigrateAsync(SqliteRetirementCycleMigration.MigrationIdentifier, CancellationToken.None);
         await ExecuteSqlAsync(database.Connection,
-            "INSERT INTO retiring_parent VALUES (1, NULL); INSERT INTO retiring_child VALUES (2, 1); "
-            + "UPDATE retiring_parent SET child_id = 2 WHERE id = 1;",
+            """
+            INSERT INTO retiring_parent VALUES (1, NULL); INSERT INTO retiring_child
+            VALUES (2,
+            1); UPDATE retiring_parent SET child_id = 2
+            WHERE id = 1;
+            """,
             CancellationToken.None);
 
         await migrator.MigrateAsync(SqliteRetirementBaselineMigration.MigrationIdentifier, CancellationToken.None);
@@ -265,9 +269,12 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         await using var context = new RetirementTargetContext(database.Connection, _internalServices);
         await CreateCycleAsync(database.Connection, CancellationToken.None);
         await ExecuteSqlAsync(database.Connection,
-            $"CREATE TABLE surviving_child (id INTEGER PRIMARY KEY, parent_id INTEGER NULL "
-            + $"REFERENCES retiring_parent(id) ON DELETE {action}); "
-            + "INSERT INTO surviving_child VALUES (7, 1);",
+            $"""
+            CREATE TABLE surviving_child (id INTEGER PRIMARY KEY, parent_id INTEGER
+            NULL REFERENCES retiring_parent(id) ON DELETE {action});
+            INSERT INTO surviving_child VALUES (7,
+            1);
+            """,
             CancellationToken.None);
 
         if (!foreignKeysEnabled)
@@ -738,8 +745,12 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         await using var context = new RenamedHostTargetContext(database.Connection, _internalServices);
         await CreateRetainedPrincipalAsync(database.Connection, CancellationToken.None);
         await ExecuteSqlAsync(database.Connection,
-            "CREATE TABLE surviving_child (id INTEGER PRIMARY KEY, parent_id INTEGER "
-            + "REFERENCES retiring_parent(id) ON DELETE CASCADE); INSERT INTO surviving_child VALUES (7, 1);",
+            """
+            CREATE TABLE surviving_child (id INTEGER PRIMARY KEY, parent_id INTEGER
+            REFERENCES retiring_parent(id) ON DELETE CASCADE); INSERT INTO surviving_child
+            VALUES (7,
+            1);
+            """,
             CancellationToken.None);
 
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.Sqlite");
@@ -845,11 +856,15 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
         CancellationToken cancellationToken
     ) => ExecuteSqlAsync(connection,
         """
-        CREATE TABLE retained_host (id INTEGER NOT NULL PRIMARY KEY, marker TEXT NOT NULL);
+        CREATE TABLE retained_host (id INTEGER NOT NULL PRIMARY KEY, marker TEXT
+        NOT NULL);
         INSERT INTO retained_host VALUES (42, 'retained');
-        CREATE VIEW retained_view AS SELECT marker FROM retained_host;
-        CREATE TABLE retiring_parent (id INTEGER NOT NULL PRIMARY KEY, host_id INTEGER NOT NULL,
-            CONSTRAINT fk_retiring_parent_host FOREIGN KEY (host_id) REFERENCES retained_host(id));
+        CREATE VIEW retained_view AS SELECT marker
+        FROM retained_host;
+        CREATE TABLE retiring_parent (id INTEGER NOT NULL PRIMARY KEY, host_id INTEGER
+        NOT NULL,
+            CONSTRAINT fk_retiring_parent_host FOREIGN KEY (host_id) REFERENCES
+        retained_host(id));
         INSERT INTO retiring_parent VALUES (1, 42);
         """,
         cancellationToken);
@@ -906,22 +921,22 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
             : string.Empty;
 
         await ExecuteSqlAsync(connection,
-            $$"""
+            $"""
             CREATE TABLE retained_host (id INTEGER NOT NULL PRIMARY KEY, marker TEXT NOT NULL);
             CREATE INDEX ix_retained_host_marker ON retained_host(marker);
             INSERT INTO retained_host VALUES (42, 'retained');
             CREATE TABLE retiring_parent (
                 id INTEGER NOT NULL PRIMARY KEY,
                 child_id INTEGER NULL,
-                {{parentGenerated}}
+                {parentGenerated}
                 CONSTRAINT fk_retiring_parent_child FOREIGN KEY (child_id)
-                    REFERENCES retiring_child(id){{parentForeignKeyOptions}}){{parentOptions}};
+                    REFERENCES retiring_child(id){parentForeignKeyOptions}){parentOptions};
             CREATE TABLE retiring_child (
                 id INTEGER NOT NULL PRIMARY KEY,
                 parent_id INTEGER NULL,
-                {{childGenerated}}
+                {childGenerated}
                 CONSTRAINT fk_retiring_child_parent FOREIGN KEY (parent_id)
-                    REFERENCES retiring_parent(id){{childForeignKeyOptions}}){{childOptions}};
+                    REFERENCES retiring_parent(id){childForeignKeyOptions}){childOptions};
             INSERT INTO retiring_parent (id, child_id) VALUES (1, NULL);
             INSERT INTO retiring_child (id, parent_id) VALUES (2, 1);
             UPDATE retiring_parent SET child_id = 2 WHERE id = 1;
@@ -938,12 +953,23 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
 
         var artifactSql = shape switch
         {
-            "trigger" => $"CREATE TRIGGER retirement_trigger BEFORE UPDATE ON {artifactOwner} BEGIN SELECT 1; END;",
-            "external-trigger" => "CREATE TRIGGER retirement_trigger AFTER INSERT ON retained_host "
-                + $"BEGIN UPDATE {artifactOwner} SET {artifactColumn} = NULL; END;",
+            "trigger" => $"""
+                CREATE TRIGGER retirement_trigger BEFORE UPDATE ON {artifactOwner}
+                BEGIN
+                    SELECT 1;
+                END;
+                """,
+            "external-trigger" => $"""
+                CREATE TRIGGER retirement_trigger AFTER INSERT ON retained_host
+                BEGIN
+                    UPDATE {artifactOwner} SET {artifactColumn} = NULL;
+                END;
+                """,
             "view" => $"CREATE VIEW retirement_view AS SELECT id FROM {artifactOwner};",
-            "partial-index" => $"CREATE INDEX retirement_index ON {artifactOwner}({artifactColumn}) "
-                + $"WHERE {artifactColumn} IS NOT NULL;",
+            "partial-index" => $"""
+                CREATE INDEX retirement_index ON {artifactOwner}({artifactColumn})
+                WHERE {artifactColumn} IS NOT NULL;
+                """,
             "expression-index" => $"CREATE INDEX retirement_index ON {artifactOwner}(id + 1);",
             _ => null,
         };
@@ -961,8 +987,10 @@ public sealed class SqliteCyclicTableRetirementTests : SqliteIntegrationTestBase
     )
     {
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT group_concat(type || ':' || name || ':' || sql, char(10)) "
-            + "FROM (SELECT type, name, sql FROM sqlite_schema ORDER BY type, name);";
+        command.CommandText = """
+        SELECT group_concat(type || ':' || name || ':' || sql, char(10))
+        FROM (SELECT type, name, sql FROM sqlite_schema ORDER BY type, name);
+        """;
 
         return Convert.ToString(await command.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture)
             ?? string.Empty;

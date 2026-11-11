@@ -141,8 +141,10 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         }
 
         return builder
-            .Append("ELSE NULL END AS message WHERE @doka_sm_action IN ")
-            .Append("('reject_different', 'reject_unsupported', 'reject_data_blocked', 'reject_prerequisite_missing');")
+            .Append("""
+                ELSE NULL END AS message WHERE @doka_sm_action IN
+                ('reject_different', 'reject_unsupported', 'reject_data_blocked', 'reject_prerequisite_missing');
+                """)
             .ToString();
     }
 

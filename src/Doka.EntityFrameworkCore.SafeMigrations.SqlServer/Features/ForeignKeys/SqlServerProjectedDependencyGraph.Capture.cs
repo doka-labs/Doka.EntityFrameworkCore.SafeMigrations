@@ -205,8 +205,11 @@ internal sealed partial class SqlServerProjectedDependencyGraph
 
         // WHY: Cascade topology is global, but one compact edge per FK is
         // sufficient. Unrelated column/table metadata is never materialized.
-        command.CommandText = "SELECT object_id, parent_object_id, referenced_object_id, name, "
-            + "delete_referential_action, update_referential_action, key_index_id FROM sys.foreign_keys;";
+        command.CommandText = """
+        SELECT object_id, parent_object_id, referenced_object_id, name, delete_referential_action,
+        update_referential_action, key_index_id
+        FROM sys.foreign_keys;
+        """;
 
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
@@ -295,33 +298,40 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                     + Literal(request.ForeignKey)
                     + ")"));
 
-            command.CommandText = "SELECT requested.schema_name, requested.table_name, requested.column_name, "
-                + "requested.fk_name, s.schema_id, t.object_id, c.system_type_id, c.is_nullable, "
-                + "c.default_object_id, fk.object_id, "
-                + "CONVERT(bit, CASE WHEN EXISTS (SELECT 1 FROM sys.triggers tr JOIN sys.trigger_events te "
-                + "ON te.object_id = tr.object_id WHERE tr.parent_id = t.object_id "
-                + "AND tr.is_instead_of_trigger = 1 AND te.type_desc = N'DELETE') THEN 1 ELSE 0 END), "
-                + "CONVERT(bit, CASE WHEN EXISTS (SELECT 1 FROM sys.triggers tr JOIN sys.trigger_events te "
-                + "ON te.object_id = tr.object_id WHERE tr.parent_id = t.object_id "
-                + "AND tr.is_instead_of_trigger = 1 AND te.type_desc = N'UPDATE') THEN 1 ELSE 0 END), "
-                + "ix.index_id, kc.unique_index_id, c.column_id, occupied.object_id, "
-                + "named.object_id, named.parent_object_id, named.type "
-                + $"FROM (VALUES {values}) requested(schema_name, table_name, column_name, fk_name) "
-                + "LEFT JOIN sys.schemas s ON s.name = requested.schema_name COLLATE CATALOG_DEFAULT "
-                + "LEFT JOIN sys.tables t ON t.schema_id = s.schema_id "
-                + "AND t.name = requested.table_name COLLATE CATALOG_DEFAULT "
-                + "LEFT JOIN sys.objects occupied ON occupied.schema_id = s.schema_id "
-                + "AND occupied.name = requested.table_name COLLATE CATALOG_DEFAULT "
-                + "LEFT JOIN sys.objects named ON named.schema_id = s.schema_id "
-                + "AND named.name = requested.fk_name COLLATE CATALOG_DEFAULT "
-                + "LEFT JOIN sys.columns c ON c.object_id = t.object_id "
-                + "AND c.name = requested.column_name COLLATE CATALOG_DEFAULT "
-                + "LEFT JOIN sys.foreign_keys fk ON fk.parent_object_id = t.object_id "
-                + "AND fk.name = requested.fk_name COLLATE CATALOG_DEFAULT "
-                + "LEFT JOIN sys.indexes ix ON ix.object_id = t.object_id "
-                + "AND ix.name = requested.fk_name COLLATE CATALOG_DEFAULT "
-                + "LEFT JOIN sys.key_constraints kc ON kc.parent_object_id = t.object_id "
-                + "AND kc.name = requested.fk_name COLLATE CATALOG_DEFAULT;";
+            command.CommandText = $"""
+                SELECT requested.schema_name, requested.table_name, requested.column_name,
+                requested.fk_name, s.schema_id, t.object_id, c.system_type_id, c.is_nullable,
+                c.default_object_id, fk.object_id, CONVERT(bit, CASE WHEN EXISTS (SELECT
+                1
+                FROM sys.triggers tr JOIN sys.trigger_events te ON te.object_id = tr.object_id
+                WHERE tr.parent_id = t.object_id
+                AND tr.is_instead_of_trigger = 1
+                AND te.type_desc = N'DELETE')
+                THEN 1 ELSE 0 END), CONVERT(bit, CASE WHEN EXISTS (SELECT 1
+                FROM sys.triggers tr JOIN sys.trigger_events te ON te.object_id = tr.object_id
+                WHERE tr.parent_id = t.object_id
+                AND tr.is_instead_of_trigger = 1
+                AND te.type_desc = N'UPDATE')
+                THEN 1 ELSE 0 END), ix.index_id, kc.unique_index_id, c.column_id, occupied.object_id,
+                named.object_id, named.parent_object_id, named.type
+                FROM (VALUES {values}) requested(schema_name, table_name,
+                column_name, fk_name) LEFT JOIN sys.schemas s ON s.name = requested.schema_name
+                COLLATE CATALOG_DEFAULT
+                LEFT JOIN sys.tables t ON t.schema_id = s.schema_id
+                AND t.name = requested.table_name COLLATE CATALOG_DEFAULT
+                LEFT JOIN sys.objects occupied ON occupied.schema_id = s.schema_id
+                AND occupied.name = requested.table_name COLLATE CATALOG_DEFAULT
+                LEFT JOIN sys.objects named ON named.schema_id = s.schema_id
+                AND named.name = requested.fk_name COLLATE CATALOG_DEFAULT
+                LEFT JOIN sys.columns c ON c.object_id = t.object_id
+                AND c.name = requested.column_name COLLATE CATALOG_DEFAULT
+                LEFT JOIN sys.foreign_keys fk ON fk.parent_object_id = t.object_id
+                AND fk.name = requested.fk_name COLLATE CATALOG_DEFAULT
+                LEFT JOIN sys.indexes ix ON ix.object_id = t.object_id
+                AND ix.name = requested.fk_name COLLATE CATALOG_DEFAULT
+                LEFT JOIN sys.key_constraints kc ON kc.parent_object_id = t.object_id
+                AND kc.name = requested.fk_name COLLATE CATALOG_DEFAULT;
+                """;
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
@@ -637,14 +647,19 @@ internal sealed partial class SqlServerProjectedDependencyGraph
             // WHY: A schema DROP needs all resident tables, not just requested
             // ones. Other top-level objects/types stay conservatively present;
             // table-owned constraints and triggers disappear with their table.
-            command.CommandText = "SELECT s.schema_id, CONVERT(bit, CASE WHEN "
-                + "EXISTS (SELECT 1 FROM sys.objects o WHERE o.schema_id = s.schema_id "
-                + "AND o.type <> N'U' AND o.parent_object_id = 0) "
-                + "OR EXISTS (SELECT 1 FROM sys.types t WHERE t.schema_id = s.schema_id AND t.is_user_defined = 1) "
-                + "OR EXISTS (SELECT 1 FROM sys.xml_schema_collections x WHERE x.schema_id = s.schema_id) "
-                + "THEN 1 ELSE 0 END) FROM sys.schemas s "
-                + $"WHERE s.schema_id IN ({ids}); "
-                + $"SELECT object_id, schema_id FROM sys.tables WHERE schema_id IN ({ids});";
+            command.CommandText = $"""
+                SELECT s.schema_id, CONVERT(bit, CASE WHEN EXISTS (SELECT 1
+                FROM sys.objects o WHERE o.schema_id = s.schema_id
+                AND o.type <> N'U' AND o.parent_object_id = 0)
+                OR EXISTS (SELECT 1 FROM sys.types t
+                WHERE t.schema_id = s.schema_id
+                AND t.is_user_defined = 1) OR EXISTS (SELECT 1
+                FROM sys.xml_schema_collections x
+                WHERE x.schema_id = s.schema_id)
+                THEN 1 ELSE 0 END) FROM sys.schemas s
+                WHERE s.schema_id IN ({ids}); SELECT object_id, schema_id
+                FROM sys.tables WHERE schema_id IN ({ids});
+                """;
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 

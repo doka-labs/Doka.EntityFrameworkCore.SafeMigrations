@@ -10,26 +10,33 @@ internal static partial class SafeMigrationStandardOperationFactory
     /// <param name="intent">The immutable provider-neutral operation intent.</param>
     /// <param name="renderExpression">The provider expression renderer, when expressions are present.</param>
     /// <param name="renderCollation">The provider collation renderer, when collations are present.</param>
+    /// <param name="renderScalarExpression">The scalar value renderer, or the legacy expression renderer.</param>
     /// <returns>The equivalent ordinary EF Core migration operation.</returns>
     public static MigrationOperation Create(
         SafeMigrationIntent intent,
         Func<SafeMigrationSqlExpression, string>? renderExpression = null,
-        Func<SafeMigrationCollationIdentifier, string?>? renderCollation = null
+        Func<SafeMigrationCollationIdentifier, string?>? renderCollation = null,
+        Func<SafeMigrationSqlExpression, string>? renderScalarExpression = null
     )
     {
         ArgumentNullException.ThrowIfNull(intent);
+
+        // WHY: T-SQL predicates cannot be used directly as scalar column
+        // values. Keep CHECK/index predicates on their original role while
+        // allowing a provider to lower only default/computed roots to scalars.
+        var scalarRenderer = renderScalarExpression ?? renderExpression;
 
         return intent switch
         {
             EnsureSchemaIntent value => CreateOperation(value),
             DropSchemaIntent value => CreateOperation(value),
-            EnsureTableIntent value => CreateOperation(value, renderExpression, renderCollation),
+            EnsureTableIntent value => CreateOperation(value, renderExpression, renderCollation, scalarRenderer),
             DropTableIntent value => CreateOperation(value),
             RenameTableIntent value => CreateOperation(value),
-            EnsureColumnIntent value => CreateOperation(value, renderExpression, renderCollation),
+            EnsureColumnIntent value => CreateOperation(value, scalarRenderer, renderCollation),
             DropColumnIntent value => CreateOperation(value),
             RenameColumnIntent value => CreateOperation(value),
-            AlterColumnIntent value => CreateOperation(value, renderExpression, renderCollation),
+            AlterColumnIntent value => CreateOperation(value, scalarRenderer, renderCollation),
             EnsureIndexIntent value => CreateOperation(value, renderExpression),
             DropIndexIntent value => CreateOperation(value),
             RenameIndexIntent value => CreateOperation(value),
@@ -59,19 +66,21 @@ internal static partial class SafeMigrationStandardOperationFactory
     /// <param name="providerRepairValidator">
     /// The provider-owned metadata validator, or null when no provider annotations are permitted.
     /// </param>
+    /// <param name="renderScalarExpression">The scalar default renderer, or the legacy expression renderer.</param>
     /// <returns>An ordinary EF Core alter-column operation.</returns>
     public static MigrationOperation CreateRepair(
         EnsureColumnIntent intent,
         Func<SafeMigrationSqlExpression, string>? renderExpression = null,
         Func<SafeMigrationCollationIdentifier, string?>? renderCollation = null,
-        Func<ExpectedColumnDefinition, bool>? providerRepairValidator = null
+        Func<ExpectedColumnDefinition, bool>? providerRepairValidator = null,
+        Func<SafeMigrationSqlExpression, string>? renderScalarExpression = null
     )
     {
         ValidateRepairIntent(intent, providerRepairValidator);
 
         return CreateRepairOperation(
             intent,
-            renderExpression,
+            renderScalarExpression ?? renderExpression,
             renderCollation,
             declareNullabilityDifference: true,
             previousStoreType: null);
@@ -88,13 +97,15 @@ internal static partial class SafeMigrationStandardOperationFactory
     /// <param name="providerRepairValidator">
     /// The provider-owned metadata validator, or null when no provider annotations are permitted.
     /// </param>
+    /// <param name="renderScalarExpression">The scalar default renderer, or the legacy expression renderer.</param>
     /// <returns>An ordinary EF Core alter-column operation.</returns>
     public static MigrationOperation CreateStoreTypeRepair(
         EnsureColumnIntent intent,
         string previousStoreType,
         Func<SafeMigrationSqlExpression, string>? renderExpression = null,
         Func<SafeMigrationCollationIdentifier, string?>? renderCollation = null,
-        Func<ExpectedColumnDefinition, bool>? providerRepairValidator = null
+        Func<ExpectedColumnDefinition, bool>? providerRepairValidator = null,
+        Func<SafeMigrationSqlExpression, string>? renderScalarExpression = null
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(previousStoreType);
@@ -102,7 +113,7 @@ internal static partial class SafeMigrationStandardOperationFactory
 
         return CreateRepairOperation(
             intent,
-            renderExpression,
+            renderScalarExpression ?? renderExpression,
             renderCollation,
             declareNullabilityDifference: true,
             previousStoreType);
@@ -118,19 +129,21 @@ internal static partial class SafeMigrationStandardOperationFactory
     /// <param name="providerRepairValidator">
     /// The provider-owned metadata validator, or null when no provider annotations are permitted.
     /// </param>
+    /// <param name="renderScalarExpression">The scalar default renderer, or the legacy expression renderer.</param>
     /// <returns>An ordinary EF Core alter-column operation.</returns>
     public static MigrationOperation CreateFullDefinitionRepair(
         EnsureColumnIntent intent,
         Func<SafeMigrationSqlExpression, string>? renderExpression = null,
         Func<SafeMigrationCollationIdentifier, string?>? renderCollation = null,
-        Func<ExpectedColumnDefinition, bool>? providerRepairValidator = null
+        Func<ExpectedColumnDefinition, bool>? providerRepairValidator = null,
+        Func<SafeMigrationSqlExpression, string>? renderScalarExpression = null
     )
     {
         ValidateRepairIntent(intent, providerRepairValidator);
 
         return CreateRepairOperation(
             intent,
-            renderExpression,
+            renderScalarExpression ?? renderExpression,
             renderCollation,
             declareNullabilityDifference: false,
             previousStoreType: null);

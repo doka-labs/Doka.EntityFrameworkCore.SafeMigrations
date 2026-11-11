@@ -3,7 +3,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 /// <summary>Locks the scheduling and ownership boundaries without constructing a native engine.</summary>
 public sealed class MySqlParallelTestStructureTests
 {
-    /// <summary>The runnable families are independent collections, not inherited copies of abstract-base facts.</summary>
+    /// <summary>
+    /// The runnable families are independent collections, not inherited copies of abstract-base facts.
+    /// </summary>
     [Fact]
     public void FeatureClassesRetainFixtureContractWithoutInheritedRunnableMethods()
     {
@@ -44,12 +46,12 @@ public sealed class MySqlParallelTestStructureTests
         Assert.Empty(inheritedTests);
 
         // WHY: Exact feature-family coverage includes custom Fact subclasses; approximate counts can hide omissions.
-        Assert.Equal(80, featureClasses.Length);
+        Assert.Equal(84, featureClasses.Length);
 
         // WHY: Serialization/independent admission and transitions/drift each have their own selectable fact.
         // Generated tooling facts are not integration-helper subclasses and do not belong to this count.
-        Assert.Equal(647, declaredTests.Length);
-        Assert.Equal(647,
+        Assert.Equal(658, declaredTests.Length);
+        Assert.Equal(658,
             declaredTests
                 .Select(method => method.Name)
                 .Distinct(StringComparer.Ordinal)
@@ -86,7 +88,9 @@ public sealed class MySqlParallelTestStructureTests
             });
     }
 
-    /// <summary>Selected runnable fixture consumers activate the engine; skipped, offline and abstract cases do not.</summary>
+    /// <summary>
+    /// Selected runnable fixture consumers activate the engine; skipped, offline and abstract cases do not.
+    /// </summary>
     /// <param name="testClass">The candidate selected class.</param>
     /// <param name="skipReason">The actual selected case's skip reason.</param>
     /// <param name="expected">Whether this selection owns a native startup.</param>
@@ -118,7 +122,9 @@ public sealed class MySqlParallelTestStructureTests
         Assert.Equal(expected, required);
     }
 
-    /// <summary>Only process-wide retention and process-total measurement contracts opt out of class parallelism.</summary>
+    /// <summary>
+    /// Only process-wide retention and process-total measurement contracts opt out of class parallelism.
+    /// </summary>
     [Fact]
     public void OnlyProvenProcessWideContractsUseExclusiveCollection()
     {

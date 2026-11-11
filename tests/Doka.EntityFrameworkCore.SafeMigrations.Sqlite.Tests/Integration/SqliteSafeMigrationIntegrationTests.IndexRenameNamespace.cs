@@ -17,12 +17,14 @@ public sealed class SqliteSafeMigrationIndexRenameNamespaceIntegrationTests : Sq
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE namespace_source (Id INTEGER NOT NULL, Code TEXT NULL); "
-            + "CREATE INDEX rename_source ON namespace_source (Code); "
-            + "CREATE TABLE namespace_other (Id INTEGER NOT NULL, Code TEXT NULL); "
-            + "INSERT INTO namespace_source (Id, Code) VALUES (1, 'source'); "
-            + "INSERT INTO namespace_other (Id, Code) VALUES (2, 'other'); "
-            + createOccupant,
+            $"""
+            CREATE TABLE namespace_source (Id INTEGER NOT NULL, Code TEXT NULL); CREATE
+            INDEX rename_source ON namespace_source (Code); CREATE TABLE namespace_other
+            (Id INTEGER NOT NULL,
+            Code TEXT NULL); INSERT INTO namespace_source (Id, Code) VALUES (1, 'source');
+            INSERT INTO namespace_other (Id,
+            Code) VALUES (2, 'other'); {createOccupant}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -97,12 +99,16 @@ public sealed class SqliteSafeMigrationIndexRenameNamespaceIntegrationTests : Sq
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE namespace_source (Id INTEGER NOT NULL, Code TEXT NULL); "
-            + "CREATE INDEX rename_source ON namespace_source (Code); "
-            + "CREATE TABLE namespace_other (Id INTEGER NOT NULL, Code TEXT NULL); "
-            + "CREATE INDEX rename_destination ON namespace_other (Code); "
-            + "INSERT INTO namespace_source (Id, Code) VALUES (1, 'source'); "
-            + "INSERT INTO namespace_other (Id, Code) VALUES (2, 'other');",
+            """
+            CREATE TABLE namespace_source (Id INTEGER NOT NULL, Code TEXT NULL); CREATE
+            INDEX rename_source ON namespace_source (Code); CREATE TABLE namespace_other
+            (Id INTEGER NOT NULL,
+            Code TEXT NULL); CREATE INDEX rename_destination ON namespace_other (Code);
+            INSERT INTO namespace_source (Id,
+            Code) VALUES (1, 'source'); INSERT INTO namespace_other (Id, Code) VALUES
+            (2,
+            'other');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -163,12 +169,16 @@ public sealed class SqliteSafeMigrationIndexRenameNamespaceIntegrationTests : Sq
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE namespace_source (Id INTEGER NOT NULL, Code TEXT NULL); "
-            + "CREATE INDEX rename_source ON namespace_source (Code); "
-            + "CREATE TABLE namespace_other (Id INTEGER NOT NULL, Code TEXT NULL); "
-            + "CREATE INDEX rename_destination ON namespace_other (Id); "
-            + "INSERT INTO namespace_source (Id, Code) VALUES (1, 'source'); "
-            + "INSERT INTO namespace_other (Id, Code) VALUES (2, 'other');",
+            """
+            CREATE TABLE namespace_source (Id INTEGER NOT NULL, Code TEXT NULL); CREATE
+            INDEX rename_source ON namespace_source (Code); CREATE TABLE namespace_other
+            (Id INTEGER NOT NULL,
+            Code TEXT NULL); CREATE INDEX rename_destination ON namespace_other (Id);
+            INSERT INTO namespace_source (Id,
+            Code) VALUES (1, 'source'); INSERT INTO namespace_other (Id, Code) VALUES
+            (2,
+            'other');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -240,12 +250,16 @@ public sealed class SqliteSafeMigrationIndexRenameNamespaceIntegrationTests : Sq
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE namespace_source (Id INTEGER NOT NULL, Code TEXT NOT NULL, "
-            + "CONSTRAINT uq_namespace_source UNIQUE (Code)); "
-            + "CREATE TABLE namespace_other (Id INTEGER NOT NULL, Code TEXT NULL); "
-            + "CREATE INDEX rename_destination ON namespace_other (Code); "
-            + "INSERT INTO namespace_source (Id, Code) VALUES (1, 'source'); "
-            + "INSERT INTO namespace_other (Id, Code) VALUES (2, 'other');",
+            """
+            CREATE TABLE namespace_source (Id INTEGER NOT NULL, Code TEXT NOT NULL,
+            CONSTRAINT uq_namespace_source UNIQUE (Code)); CREATE TABLE namespace_other
+            (Id INTEGER NOT NULL,
+            Code TEXT NULL); CREATE INDEX rename_destination ON namespace_other (Code);
+            INSERT INTO namespace_source (Id,
+            Code) VALUES (1, 'source'); INSERT INTO namespace_other (Id, Code) VALUES
+            (2,
+            'other');
+            """,
             cancellationToken: CancellationToken.None);
 
         var sourceSnapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);

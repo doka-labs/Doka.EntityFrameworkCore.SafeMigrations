@@ -3,12 +3,13 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 {
     /// <summary>Preserves the effective indexed-computed SET contract and SqlClient's implicit ARITHABORT.</summary>
-    internal const string ComputedIndexSessionPredicate =
-        "SESSIONPROPERTY(N'ANSI_NULLS')=1 AND SESSIONPROPERTY(N'ANSI_PADDING')=1 "
-        + "AND SESSIONPROPERTY(N'ANSI_WARNINGS')=1 AND SESSIONPROPERTY(N'CONCAT_NULL_YIELDS_NULL')=1 "
-        + "AND SESSIONPROPERTY(N'QUOTED_IDENTIFIER')=1 AND SESSIONPROPERTY(N'NUMERIC_ROUNDABORT')=0 "
-        + "AND (SESSIONPROPERTY(N'ARITHABORT')=1 OR (SESSIONPROPERTY(N'ANSI_WARNINGS')=1 "
-        + "AND (SELECT compatibility_level FROM sys.databases WHERE database_id=DB_ID())>=90))";
+    internal const string ComputedIndexSessionPredicate = """
+        SESSIONPROPERTY(N'ANSI_NULLS')=1 AND SESSIONPROPERTY(N'ANSI_PADDING')=1
+        AND SESSIONPROPERTY(N'ANSI_WARNINGS')=1 AND SESSIONPROPERTY(N'CONCAT_NULL_YIELDS_NULL')=1
+        AND SESSIONPROPERTY(N'QUOTED_IDENTIFIER')=1 AND SESSIONPROPERTY(N'NUMERIC_ROUNDABORT')=0
+        AND (SESSIONPROPERTY(N'ARITHABORT')=1 OR (SESSIONPROPERTY(N'ANSI_WARNINGS')=1
+        AND (SELECT compatibility_level FROM sys.databases WHERE database_id=DB_ID())>=90))
+        """;
 
     private SqlServerSafeMigrationRuntimePlan BuildEnsureIndex(
         EnsureIndexIntent intent
@@ -37,10 +38,18 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             : "1 = 0";
 
         return Plan(
-                $"CASE WHEN NOT {table} THEN N'prerequisite_missing' "
-                + $"WHEN {matching} THEN N'matching' WHEN {exists} THEN N'different' "
-                + $"WHEN NOT ({supported}) THEN N'unsupported' "
-                + $"WHEN {duplicate} THEN N'data_blocked' ELSE N'missing' END",
+                $"""
+                CASE WHEN NOT {table}
+                THEN N'prerequisite_missing'
+                WHEN {matching}
+                THEN N'matching'
+                WHEN {exists}
+                THEN N'different'
+                WHEN NOT ({supported})
+                THEN N'unsupported'
+                WHEN {duplicate}
+                THEN N'data_blocked' ELSE N'missing' END
+                """,
                 Bit(matching)) with
             {
                 RequiresDelayedBinding = definition.Unique,
@@ -48,9 +57,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 // WHY: A dropped same-name index is absent in the projected stream,
                 // but its target rows still need an independent uniqueness proof.
                 ClassificationCodeExpression = definition.Unique
-                    ? $"CASE WHEN {exists} AND NOT ({matching}) THEN "
-                    + $"CASE WHEN {duplicate} THEN N'index_replacement_data_blocked' "
-                    + "ELSE N'key_replacement_data_safe' END ELSE NULL END"
+                    ? $"""
+                    CASE WHEN {exists}
+                    AND NOT ({matching})
+                    THEN CASE WHEN {duplicate}
+                    THEN N'index_replacement_data_blocked'
+                    ELSE N'key_replacement_data_safe' END
+                    ELSE NULL END
+                    """
                     : null,
                 StateEvaluationGuardExpression = Bit(supported),
                 StateEvaluationGuardFailureExpression = "N'unsupported'",
@@ -71,8 +85,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var referenced = IndexIsReferenced(intent.Name, intent.Table, intent.Schema);
 
         return Plan(
-                $"CASE WHEN NOT {exists} THEN N'missing' WHEN {independent} AND NOT {referenced} "
-                + "THEN N'matching' ELSE N'different' END",
+                $"""
+                CASE WHEN NOT {exists}
+                THEN N'missing'
+                WHEN {independent}
+                AND NOT {referenced}
+                THEN N'matching' ELSE N'different' END
+                """,
                 Bit($"NOT {exists}")) with
             {
                 // WHY: Ordered projection distinguishes a removed native physical
@@ -91,8 +110,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var target = IndexExists(intent.NewName, intent.Table, intent.Schema);
 
         return Plan(
-            $"CASE WHEN NOT {source} THEN N'missing' WHEN NOT {independent} OR {target} "
-            + "THEN N'different' ELSE N'matching' END",
+            $"""
+            CASE WHEN NOT {source}
+            THEN N'missing'
+            WHEN NOT {independent}
+            OR {target}
+            THEN N'different' ELSE N'matching' END
+            """,
             Bit($"NOT {source} AND {target}"));
     }
 
@@ -102,11 +126,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     {
         var id = TableId(definition.Table, definition.Schema);
         var filter = HasIndexFilter(definition)
-            ? "i.has_filter = 1 AND EXISTS (SELECT 1 FROM sys.extended_properties ep "
-            + "WHERE ep.class = 7 AND ep.major_id = i.object_id AND ep.minor_id = i.index_id "
-            + "AND ep.name = N'Doka:SafeMigrations:Contract' "
-            + $"AND CONVERT(nvarchar(64), ep.value) = {Literal(IndexFilterFingerprint(definition))} "
-            + "COLLATE Latin1_General_100_BIN2)"
+            ? $"""
+            i.has_filter = 1 AND EXISTS (SELECT 1
+            FROM sys.extended_properties ep
+            WHERE ep.class = 7 AND ep.major_id = i.object_id
+            AND ep.minor_id = i.index_id AND ep.name = N'Doka:SafeMigrations:Contract'
+            AND CONVERT(nvarchar(64), ep.value) = {Literal(IndexFilterFingerprint(definition))}
+            COLLATE Latin1_General_100_BIN2)
+            """
             : "i.has_filter = 0";
 
         var values = string.Join(
@@ -116,30 +143,44 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 + $"{(key.SortOrder == SafeMigrationIndexSortOrder.Descending ? 1 : 0)})"));
 
         var included = definition.IncludedColumns.Count == 0
-            ? "NOT EXISTS (SELECT 1 FROM sys.index_columns ic WHERE ic.object_id = i.object_id "
-            + "AND ic.index_id = i.index_id AND ic.is_included_column = 1)"
-            : $"(SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id = i.object_id "
-            + $"AND ic.index_id = i.index_id AND ic.is_included_column = 1) = {definition.IncludedColumns.Count} "
-            + "AND NOT EXISTS (SELECT 1 FROM sys.index_columns ic "
-            + "JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
-            + "WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id "
-            + "AND ic.is_included_column = 1 "
-            + $"AND c.name NOT IN ({string.Join(", ", definition.IncludedColumns.Select(Literal))}))";
+            ? """
+            NOT EXISTS (SELECT 1 FROM sys.index_columns ic
+            WHERE ic.object_id = i.object_id
+            AND ic.index_id = i.index_id AND ic.is_included_column = 1)
+            """
+            : $"""
+            (SELECT COUNT(*) FROM sys.index_columns ic
+            WHERE ic.object_id = i.object_id
+            AND ic.index_id = i.index_id AND ic.is_included_column = 1) = {definition.IncludedColumns.Count}
+            AND NOT EXISTS (SELECT 1 FROM sys.index_columns ic
+            JOIN sys.columns c ON c.object_id = ic.object_id
+            AND c.column_id = ic.column_id
+            WHERE ic.object_id = i.object_id
+            AND ic.index_id = i.index_id AND ic.is_included_column = 1
+            AND c.name NOT IN ({string.Join(", ", definition.IncludedColumns.Select(Literal))}))
+            """;
 
-        return "EXISTS (SELECT 1 FROM sys.indexes i "
-            + $"WHERE i.object_id = {id} AND i.name = {Literal(definition.Name)} "
-            + "AND i.type = 2 AND i.is_primary_key = 0 AND i.is_unique_constraint = 0 "
-            + $"AND i.is_disabled = 0 AND i.is_hypothetical = 0 AND i.ignore_dup_key = 0 AND {filter} "
-            + $"AND i.is_unique = {(definition.Unique ? 1 : 0)} "
-            + "AND (SELECT COUNT(*) FROM sys.index_columns ic WHERE ic.object_id = i.object_id "
-            + $"AND ic.index_id = i.index_id AND ic.key_ordinal > 0) = {definition.Keys.Count} "
-            + $"AND {included} "
-            + $"AND NOT EXISTS (SELECT 1 FROM (VALUES {values}) expected(ordinal, name, descending) "
-            + "WHERE NOT EXISTS (SELECT 1 FROM sys.index_columns ic "
-            + "JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
-            + "WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id "
-            + "AND ic.key_ordinal = expected.ordinal AND c.name = expected.name "
-            + "AND ic.is_descending_key = expected.descending)))";
+        return $"""
+            EXISTS (SELECT 1 FROM sys.indexes i
+            WHERE i.object_id = {id}
+            AND i.name = {Literal(definition.Name)}
+            AND i.type = 2 AND i.is_primary_key = 0
+            AND i.is_unique_constraint = 0
+            AND i.is_disabled = 0 AND i.is_hypothetical = 0
+            AND i.ignore_dup_key = 0 AND {filter}
+            AND i.is_unique = {(definition.Unique ? 1 : 0)}
+            AND (SELECT COUNT(*) FROM sys.index_columns ic
+            WHERE ic.object_id = i.object_id
+            AND ic.index_id = i.index_id AND ic.key_ordinal > 0) = {definition.Keys.Count}
+            AND {included}
+            AND NOT EXISTS (SELECT 1 FROM (VALUES {values}) expected(ordinal,
+            name, descending) WHERE NOT EXISTS (SELECT 1
+            FROM sys.index_columns ic JOIN sys.columns c ON c.object_id = ic.object_id
+            AND c.column_id = ic.column_id
+            WHERE ic.object_id = i.object_id
+            AND ic.index_id = i.index_id AND ic.key_ordinal = expected.ordinal
+            AND c.name = expected.name AND ic.is_descending_key = expected.descending)))
+            """;
     }
 
     private string IndexKeysWithinLimit(
@@ -158,27 +199,22 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // WHY: Declared key width, rather than present row values, determines
         // whether a future insert could exceed the active physical key limit.
 
-        return "EXISTS (SELECT 1 FROM (VALUES "
-            + values
-            + ") expected(ordinal, name) "
-            + "JOIN sys.columns c ON c.object_id = "
-            + TableId(table, schema)
-            + " AND c.name = expected.name "
-            + "JOIN sys.types ty ON ty.user_type_id = c.user_type_id "
-            + "AND ty.is_user_defined = 0 AND ty.is_assembly_type = 0 "
-            + "AND ty.name IN (N'bigint', N'binary', N'bit', N'char', N'date', N'datetime', "
-            + "N'datetime2', N'datetimeoffset', N'decimal', N'float', N'int', N'money', "
-            + "N'nchar', N'numeric', N'nvarchar', N'real', N'smalldatetime', N'smallint', "
-            + "N'smallmoney', N'time', N'timestamp', N'tinyint', N'uniqueidentifier', "
-            + "N'varbinary', N'varchar') "
-            + "AND "
-            + (allowComputed
+        return $"""
+            EXISTS (SELECT 1 FROM (VALUES {values}) expected(ordinal,
+            name) JOIN sys.columns c ON c.object_id = {TableId(table, schema)}
+            AND c.name = expected.name JOIN sys.types ty ON ty.user_type_id = c.user_type_id
+            AND ty.is_user_defined = 0 AND ty.is_assembly_type = 0
+            AND ty.name IN (N'bigint', N'binary', N'bit', N'char', N'date', N'datetime',
+            N'datetime2', N'datetimeoffset', N'decimal', N'float', N'int', N'money',
+            N'nchar', N'numeric', N'nvarchar', N'real', N'smalldatetime', N'smallint',
+            N'smallmoney', N'time', N'timestamp', N'tinyint', N'uniqueidentifier',
+            N'varbinary', N'varchar') AND {(allowComputed
                 ? ComputedIndexColumnEligibility("c")
-                : "c.is_computed = 0")
-            + " "
-            + $"HAVING COUNT(*) = {columns.Count} "
-            + "AND MIN(CONVERT(int, c.max_length)) > 0 "
-            + $"AND SUM(CONVERT(bigint, c.max_length)) <= {maximumBytes})";
+                : "c.is_computed = 0")} HAVING COUNT(*)
+            = {columns.Count}
+            AND MIN(CONVERT(int, c.max_length)) > 0
+            AND SUM(CONVERT(bigint, c.max_length)) <= {maximumBytes})
+            """;
     }
 
     /// <summary>Qualifies native key and INCLUDE admission without confusing their precision requirements.</summary>
@@ -192,10 +228,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // precise expression or the engine's persisted-value contract.
         + (included
             ? string.Empty
-            : $"AND COLUMNPROPERTY({alias}.object_id,{alias}.name,N'IsIndexable')=1 "
-            + $"AND (COLUMNPROPERTY({alias}.object_id,{alias}.name,N'IsPrecise')=1 "
-            + $"OR EXISTS(SELECT 1 FROM sys.computed_columns cc WHERE cc.object_id={alias}.object_id "
-            + $"AND cc.column_id={alias}.column_id AND cc.is_persisted=1)) ")
+            : $"""
+            AND COLUMNPROPERTY({alias}.object_id,{alias}.name,N'IsIndexable')=1
+            AND (COLUMNPROPERTY({alias}.object_id,{alias}.name,N'IsPrecise')=1
+            OR EXISTS(SELECT 1 FROM sys.computed_columns cc
+            WHERE cc.object_id={alias}.object_id
+            AND cc.column_id={alias}.column_id
+            AND cc.is_persisted=1)){"\u0020"}
+            """)
         + "AND ("
         + ComputedIndexSessionPredicate
         + ")))";
@@ -209,13 +249,15 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return "1 = 1";
         }
 
-        return "(SELECT COUNT(*) FROM sys.columns c JOIN sys.types ty ON ty.user_type_id=c.user_type_id "
-            + $"WHERE c.object_id={TableId(definition.Table, definition.Schema)} AND c.name IN ("
-            + string.Join(", ", definition.IncludedColumns.Select(Literal))
-            + ") AND ty.is_user_defined=0 AND ty.is_assembly_type=0 "
-            + "AND ty.name NOT IN (N'text',N'ntext',N'image') AND "
-            + ComputedIndexColumnEligibility("c", included: true)
-            + $")={definition.IncludedColumns.Count}";
+        return $"""
+            (SELECT COUNT(*) FROM sys.columns c
+            JOIN sys.types ty ON ty.user_type_id=c.user_type_id
+            WHERE c.object_id={TableId(definition.Table, definition.Schema)}
+            AND c.name IN ({string.Join(", ", definition.IncludedColumns.Select(Literal))})
+            AND ty.is_user_defined=0 AND ty.is_assembly_type=0
+            AND ty.name NOT IN (N'text',N'ntext',N'image')
+            AND {ComputedIndexColumnEligibility("c", included: true)})={definition.IncludedColumns.Count}
+            """;
     }
 
     private string ComputedIndexSettingsAreSupported(
@@ -230,13 +272,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // WHY: Ordinary indexes keep their existing session contract. A computed
         // key or INCLUDE requires all native settings, without changing the caller's
         // session. ANSI_WARNINGS supplies effective ARITHABORT at compatibility 90+.
-        return "(NOT EXISTS(SELECT 1 FROM sys.columns c WHERE c.object_id="
-            + TableId(definition.Table, definition.Schema)
-            + " AND c.is_computed=1 AND c.name IN ("
-            + string.Join(", ", columns.Select(Literal))
-            + ")) OR ("
-            + ComputedIndexSessionPredicate
-            + "))";
+        return $"""
+            (NOT EXISTS(SELECT 1 FROM sys.columns c
+            WHERE c.object_id={TableId(definition.Table, definition.Schema)}
+            AND c.is_computed=1 AND c.name IN ({string.Join(", ", columns.Select(Literal))}))
+            OR ({ComputedIndexSessionPredicate}))
+            """;
     }
 
     private string DuplicateIndexKeyExists(
@@ -249,8 +290,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             ? string.Empty
             : $" WHERE ({filter})";
 
-        return $"EXISTS (SELECT TOP (1) 1 FROM {QualifiedTable(definition.Table, definition.Schema)}"
-            + $"{where} GROUP BY {keys} HAVING COUNT_BIG(*) > 1)";
+        return $"""
+            EXISTS (SELECT TOP (1) 1 FROM {QualifiedTable(definition.Table, definition.Schema)}{where}
+            GROUP BY {keys} HAVING COUNT_BIG(*) > 1)
+            """;
     }
 
     private static bool HasIndexFilter(
@@ -311,43 +354,52 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 : variable + "_name",
             out var nameDeclaration);
 
-        return $"IF NOT {index} THROW 51004, N'SafeMigrations index contract was not created', 1; "
-
-            // WHY: Bind expression-rendered names before EXEC, without
-            // changing ordinary literal arguments or their parameter order.
-            + schemaDeclaration
-            + tableDeclaration
-            + nameDeclaration
-            + "EXEC sys.sp_addextendedproperty "
-            + "@name = N'Doka:SafeMigrations:Contract', "
-            + $"@value = {contractValue}, "
-            + "@level0type = N'SCHEMA', "
-            + $"@level0name = {schemaArgument}, "
-            + "@level1type = N'TABLE', "
-            + $"@level1name = {tableArgument}, "
-            + "@level2type = N'INDEX', "
-            + $"@level2name = {nameArgument}";
+        // WHY: Bind expression-rendered names before EXEC, without
+        // changing ordinary literal arguments or their parameter order.
+        return $"""
+            IF NOT {index} THROW 51004, N'SafeMigrations index contract was not created', 1;
+            {schemaDeclaration}{tableDeclaration}{nameDeclaration}EXEC sys.sp_addextendedproperty
+            @name = N'Doka:SafeMigrations:Contract',
+            @value = {contractValue},
+            @level0type = N'SCHEMA',
+            @level0name = {schemaArgument},
+            @level1type = N'TABLE',
+            @level1name = {tableArgument},
+            @level2type = N'INDEX',
+            @level2name = {nameArgument}
+            """;
     }
 
     private string IndexExists(
         string name,
         string table,
         string? schema
-    ) => $"EXISTS (SELECT 1 FROM sys.indexes i WHERE i.object_id = {TableId(table, schema)} "
-        + $"AND i.name = {Literal(name)})";
+    ) => $"""
+        EXISTS (SELECT 1 FROM sys.indexes i
+        WHERE i.object_id = {TableId(table, schema)}
+        AND i.name = {Literal(name)})
+        """;
 
     private string IndependentIndexExists(
         string name,
         string table,
         string? schema
-    ) => $"EXISTS (SELECT 1 FROM sys.indexes i WHERE i.object_id = {TableId(table, schema)} "
-        + $"AND i.name = {Literal(name)} AND i.is_primary_key = 0 AND i.is_unique_constraint = 0)";
+    ) => $"""
+        EXISTS (SELECT 1 FROM sys.indexes i
+        WHERE i.object_id = {TableId(table, schema)}
+        AND i.name = {Literal(name)}
+        AND i.is_primary_key = 0 AND i.is_unique_constraint = 0)
+        """;
 
     private string IndexIsReferenced(
         string name,
         string table,
         string? schema
-    ) => "EXISTS (SELECT 1 FROM sys.indexes i JOIN sys.foreign_keys fk "
-        + "ON fk.referenced_object_id = i.object_id AND fk.key_index_id = i.index_id "
-        + $"WHERE i.object_id = {TableId(table, schema)} AND i.name = {Literal(name)})";
+    ) => $"""
+        EXISTS (SELECT 1 FROM sys.indexes i
+        JOIN sys.foreign_keys fk ON fk.referenced_object_id = i.object_id
+        AND fk.key_index_id = i.index_id
+        WHERE i.object_id = {TableId(table, schema)}
+        AND i.name = {Literal(name)})
+        """;
 }

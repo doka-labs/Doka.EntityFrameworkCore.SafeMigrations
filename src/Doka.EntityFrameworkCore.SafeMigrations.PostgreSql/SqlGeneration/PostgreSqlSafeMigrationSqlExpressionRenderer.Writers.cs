@@ -11,6 +11,9 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         /// <summary>Whether this catalog candidate uses native literal and SQL special-form spelling.</summary>
         bool NativeLiteralForms { get; }
 
+        /// <summary>Whether native index pretty output omits redundant Boolean operand parentheses.</summary>
+        bool PrettyIndexBooleanOperands { get; }
+
         /// <summary>Gets or sets the nesting local to this one render, never shared across callers.</summary>
         int CaseDepth { get; set; }
 
@@ -113,6 +116,9 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         public bool NativeLiteralForms => false;
 
         /// <inheritdoc />
+        public bool PrettyIndexBooleanOperands => false;
+
+        /// <inheritdoc />
         public int CaseDepth { get; set; }
 
         /// <inheritdoc />
@@ -206,12 +212,16 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         /// <param name="nativeLiteralForms">Whether to use the native deparser's literal forms.</param>
         /// <param name="relationOid">The independently resolved physical source owner, when present.</param>
         /// <param name="capturedSourceRoles">Whether all authored source qualifiers have been certified.</param>
+        /// <param name="prettyIndexBooleanOperands">Whether to retain the index-only pretty operand form.</param>
+        /// <param name="retainTemporalPrecision">Whether constant labels retain temporal precision.</param>
         public CatalogExpressionTextWriter(
             Func<string, string> literal,
             bool parenthesizeCollations = true,
             bool nativeLiteralForms = false,
             string? relationOid = null,
-            bool capturedSourceRoles = false
+            bool capturedSourceRoles = false,
+            bool prettyIndexBooleanOperands = false,
+            bool retainTemporalPrecision = false
         )
         {
             _literal = literal;
@@ -222,13 +232,21 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             NativeLiteralForms = nativeLiteralForms;
             _relationOid = relationOid;
             _capturedSourceRoles = capturedSourceRoles;
+            PrettyIndexBooleanOperands = prettyIndexBooleanOperands;
+            RetainTemporalPrecision = retainTemporalPrecision;
         }
+
+        /// <summary>Gets whether this finite candidate keeps temporal type modifiers on constant labels.</summary>
+        internal bool RetainTemporalPrecision { get; }
 
         /// <inheritdoc />
         public bool ParenthesizeCollations { get; }
 
         /// <inheritdoc />
         public bool NativeLiteralForms { get; }
+
+        /// <inheritdoc />
+        public bool PrettyIndexBooleanOperands { get; }
 
         /// <inheritdoc />
         public int CaseDepth { get; set; }
@@ -261,13 +279,10 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             {
                 _parts.Add(
                     negate
-                        ? "(CASE WHEN pg_catalog.left("
-                        + text
-                        + ", 1) = '-' THEN pg_catalog.quote_literal("
-                        + text
-                        + ") || '::integer' ELSE "
-                        + text
-                        + " END)"
+                        ? $"""
+                        (CASE WHEN pg_catalog.left({text}, 1) = '-'
+                        THEN pg_catalog.quote_literal({text}) || '::integer' ELSE {text} END)
+                        """
                         : text);
             }
             else if (type == "numeric")
@@ -277,15 +292,10 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 // Let PostgreSQL normalize the exact token and scale rather
                 // than round-trip its potentially approximate CLR value.
                 _parts.Add(
-                    "(CASE WHEN pg_catalog.strpos("
-                    + text
-                    + ", '.') > 0 AND pg_catalog.left("
-                    + text
-                    + ", 1) <> '-' THEN "
-                    + text
-                    + " ELSE pg_catalog.quote_literal("
-                    + text
-                    + ") || '::numeric' END)");
+                    $"""
+                    (CASE WHEN pg_catalog.strpos({text}, '.') > 0 AND pg_catalog.left({text}, 1) <> '-'
+                    THEN {text} ELSE pg_catalog.quote_literal({text}) || '::numeric' END)
+                    """);
             }
             else
             {
@@ -342,7 +352,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         {
             if (!NativeLiteralForms
                 || _relationOid is null
-                || literal is not { Value: string value, StoreType: null })
+                || literal is not { BorrowedValue: string value, StoreType: null })
             {
                 return false;
             }
@@ -426,23 +436,11 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             _parts.Add(
                 counterpart is null
                     ? "(CASE WHEN (" + type + ") = 1043 THEN " + text + " ELSE " + identifier + " END)"
-                    : "(CASE WHEN ("
-                    + type
-                    + ") = 1043 AND ("
-                    + counterpart
-                    + ") = 1042 THEN "
-                    + bpchar
-                    + " WHEN ("
-                    + type
-                    + ") = 1043 OR (("
-                    + type
-                    + ") = 1042 AND ("
-                    + counterpart
-                    + ") = 25) THEN "
-                    + text
-                    + " ELSE "
-                    + identifier
-                    + " END)");
+                    : $"""
+                    (CASE WHEN ({type}) = 1043 AND ({counterpart}) = 1042 THEN {bpchar}
+                    WHEN ({type}) = 1043 OR (({type}) = 1042 AND ({counterpart}) = 25)
+                    THEN {text} ELSE {identifier} END)
+                    """);
 
             return true;
         }
@@ -462,40 +460,37 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
             var identifier = NativeColumnText(column);
 
-            var nativeBuiltin = "EXISTS (SELECT 1 FROM pg_catalog.pg_proc p "
-                + "JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace "
-                + "WHERE n.nspname = 'pg_catalog' AND p.proname = 'lower' "
-                + "AND p.pronargs = 1 AND p.proargtypes[0] = 25 AND p.prorettype = 25 "
-                + "AND pg_catalog.pg_function_is_visible(p.oid))";
+            const string nativeBuiltin = """
+                EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
+                JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+                WHERE n.nspname = 'pg_catalog' AND p.proname = 'lower'
+                AND p.pronargs = 1 AND p.proargtypes[0] = 25 AND p.prorettype = 25
+                AND pg_catalog.pg_function_is_visible(p.oid))
+                """;
 
-            var competingOverload = "EXISTS (SELECT 1 FROM pg_catalog.pg_proc p "
-                + "WHERE p.proname = 'lower' AND p.pronargs >= 1 "
-                + "AND p.pronargs - p.pronargdefaults <= 1 "
-                + "AND p.proargtypes[0] IN (1043, 2283, 5077) "
-                + "AND pg_catalog.pg_function_is_visible(p.oid))";
+            const string competingOverload = """
+                EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
+                WHERE p.proname = 'lower' AND p.pronargs >= 1
+                AND p.pronargs - p.pronargdefaults <= 1
+                AND p.proargtypes[0] IN (1043, 2283, 5077)
+                AND pg_catalog.pg_function_is_visible(p.oid))
+                """;
 
-            var varchar = "EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a WHERE a.attrelid = "
-                + _relationOid
-                + " AND a.attname = "
-                + _literal(column.Parts[^1])
-                + " AND a.attnum > 0 AND NOT a.attisdropped AND a.atttypid = 1043)";
+            var varchar = $"""
+                EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a WHERE a.attrelid = {_relationOid}
+                AND a.attname = {_literal(column.Parts[^1])}
+                AND a.attnum > 0 AND NOT a.attisdropped AND a.atttypid = 1043)
+                """;
 
             // WHY: Native LOWER(VARCHAR) records its implicit TEXT conversion.
             // Use the actual owning attribute and visible builtin signature;
             // a custom exact or scalar-polymorphic overload must not acquire this candidate.
             FlushText();
             _parts.Add(
-                "(CASE WHEN "
-                + varchar
-                + " AND "
-                + nativeBuiltin
-                + " AND NOT "
-                + competingOverload
-                + " THEN '(' || "
-                + identifier
-                + " || ')::text' ELSE "
-                + identifier
-                + " END)");
+                $"""
+                (CASE WHEN {varchar} AND {nativeBuiltin} AND NOT {competingOverload}
+                THEN '(' || {identifier} || ')::text' ELSE {identifier} END)
+                """);
 
             return true;
         }
@@ -539,6 +534,26 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 : $"pg_catalog.quote_ident({_literal(schema)}) || '.' || pg_catalog.quote_ident({_literal(name)})";
 
             _parts.Add($"(pg_catalog.to_regcollation({identifier})::text)");
+        }
+
+        /// <summary>Formats a provider-owned temporal constant with native output functions.</summary>
+        /// <param name="sqlLiteral">The validated native scalar literal, never catalog text.</param>
+        /// <param name="storeType">The validated native type spelling of that scalar.</param>
+        internal void AppendNativeTemporalLiteral(
+            string sqlLiteral,
+            string storeType
+        )
+        {
+            // WHY: Native catalogs store typed constant output, not the input's
+            // DATE/TIME/INTERVAL keyword form. Only this already validated
+            // immutable literal is evaluated; no catalog SQL or application row.
+            FlushText();
+            _parts.Add("(pg_catalog.quote_literal(("
+                + sqlLiteral
+                + ")::pg_catalog.text) "
+                + "OPERATOR(pg_catalog.||) "
+                + _literal("::" + storeType)
+                + ")");
         }
 
         /// <summary>Shares the same native operand type proof without rendering or evaluating the expression.</summary>
@@ -594,7 +609,9 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 ParenthesizeCollations,
                 nativeLiteralForms: true,
                 _relationOid,
-                _capturedSourceRoles)
+                _capturedSourceRoles,
+                PrettyIndexBooleanOperands,
+                RetainTemporalPrecision)
             {
                 CaseDepth = CaseDepth,
                 _caseResultTypes = _caseResultTypes,
@@ -635,19 +652,16 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 // insert these exact casts. Keep each metadata/type/text
                 // candidate once so nested CASE SQL does not grow by copies.
                 _parts.Add(
-                    "(SELECT CASE WHEN v.input_type IN (20,21,23,1700) "
-                    + "AND v.other_type IN (700,701) THEN '(' || v.input_sql || ')::double precision' "
-                    + "WHEN v.input_type IN (20,21,23) AND v.other_type = 1700 "
-                    + "THEN '(' || v.input_sql || ')::numeric' "
-                    + "WHEN v.input_type = 1043 AND v.other_type = 1042 THEN '(' || v.input_sql || ')::bpchar' "
-                    + "WHEN v.input_type = 1043 OR (v.input_type = 1042 AND v.other_type = 25) "
-                    + "THEN '(' || v.input_sql || ')::text' ELSE v.input_sql END FROM (VALUES (("
-                    + step.Input
-                    + ")::pg_catalog.oid,("
-                    + step.Common
-                    + ")::pg_catalog.oid,"
-                    + rendered
-                    + ")) AS v(input_type,other_type,input_sql))");
+                    $"""
+                    (SELECT CASE WHEN v.input_type IN (20,21,23,1700)
+                    AND v.other_type IN (700,701) THEN '(' || v.input_sql || ')::double precision'
+                    WHEN v.input_type IN (20,21,23) AND v.other_type = 1700 THEN '(' || v.input_sql || ')::numeric'
+                    WHEN v.input_type = 1043 AND v.other_type = 1042 THEN '(' || v.input_sql || ')::bpchar'
+                    WHEN v.input_type = 1043 OR (v.input_type = 1042 AND v.other_type = 25)
+                    THEN '(' || v.input_sql || ')::text' ELSE v.input_sql END
+                    FROM (VALUES (({step.Input})::pg_catalog.oid,({step.Common})::pg_catalog.oid,{rendered}))
+                    AS v(input_type,other_type,input_sql))
+                    """);
             }
         }
 
@@ -662,7 +676,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 return "numeric";
             }
 
-            return literal.Value switch
+            return literal.BorrowedValue switch
             {
                 int => "integer",
                 long number when negate && number == 2_147_483_648L => "integer",
@@ -679,7 +693,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             ref SafeMigrationWorkStack<RenderStep> pending
         )
         {
-            if (result is SafeMigrationSqlLiteralExpression { Value: null })
+            if (result is SafeMigrationSqlLiteralExpression { BorrowedValue: null })
             {
                 AppendImplicitCaseNull(expression);
 
@@ -695,7 +709,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 return false;
             }
 
-            if (result is SafeMigrationSqlLiteralExpression { Value: string text, StoreType: null })
+            if (result is SafeMigrationSqlLiteralExpression { BorrowedValue: string text, StoreType: null })
             {
                 FlushText();
                 _parts.Add(
@@ -718,7 +732,9 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 ParenthesizeCollations,
                 nativeLiteralForms: true,
                 _relationOid,
-                _capturedSourceRoles)
+                _capturedSourceRoles,
+                PrettyIndexBooleanOperands,
+                RetainTemporalPrecision)
             {
                 CaseDepth = CaseDepth,
                 _caseResultTypes = _caseResultTypes,
@@ -750,17 +766,10 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             // a folded explicit literal CAST. Match only this exact typed
             // branch representation, never strip casts from the stored SQL.
             _parts.Add(
-                "(CASE WHEN ("
-                + step.Common
-                + ") = ("
-                + step.Input
-                + ") THEN "
-                + rendered
-                + " ELSE '(' || "
-                + rendered
-                + " || ')::' || pg_catalog.format_type(("
-                + step.Common
-                + ")::pg_catalog.oid, NULL) END)");
+                $"""
+                (CASE WHEN ({step.Common}) = ({step.Input}) THEN {rendered}
+                ELSE '(' || {rendered} || ')::' || pg_catalog.format_type(({step.Common})::pg_catalog.oid, NULL) END)
+                """);
         }
 
         /// <summary>Resolves native built-in CASE result types without evaluating application rows.</summary>
@@ -926,23 +935,21 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 },
             SafeMigrationSqlLiteralExpression { StoreType: { } storeType } =>
                 "pg_catalog.to_regtype(" + _literal(storeType) + ")::pg_catalog.oid",
-            SafeMigrationSqlLiteralExpression { Value: null or string } => "705",
-            SafeMigrationSqlLiteralExpression { Value: bool } => "16",
-            SafeMigrationSqlLiteralExpression { Value: sbyte or byte or short or ushort or int } => "23",
-            SafeMigrationSqlLiteralExpression { Value: uint or long } => "20",
-            SafeMigrationSqlLiteralExpression { Value: decimal or ulong } => "1700",
-            SafeMigrationSqlLiteralExpression { Value: float } => "700",
-            SafeMigrationSqlLiteralExpression { Value: double } => "701",
+            SafeMigrationSqlLiteralExpression { BorrowedValue: null or string } => "705",
+            SafeMigrationSqlLiteralExpression { BorrowedValue: bool } => "16",
+            SafeMigrationSqlLiteralExpression { BorrowedValue: sbyte or byte or short or ushort or int } => "23",
+            SafeMigrationSqlLiteralExpression { BorrowedValue: uint or long } => "20",
+            SafeMigrationSqlLiteralExpression { BorrowedValue: decimal or ulong } => "1700",
+            SafeMigrationSqlLiteralExpression { BorrowedValue: float } => "700",
+            SafeMigrationSqlLiteralExpression { BorrowedValue: double } => "701",
             SafeMigrationSqlIdentifierExpression column when _relationOid is not null =>
-                "(SELECT a.atttypid FROM pg_catalog.pg_attribute a WHERE a.attrelid OPERATOR(pg_catalog.=) "
-                + _relationOid
-                + " AND a.attname OPERATOR(pg_catalog.=) "
-                + _literal(column.Parts[^1])
-                + " AND a.attnum OPERATOR(pg_catalog.>) 0 AND NOT a.attisdropped"
-                + (_capturedSourceRoles
+                $"""
+                (SELECT a.atttypid FROM pg_catalog.pg_attribute a WHERE a.attrelid OPERATOR(pg_catalog.=) {_relationOid}
+                AND a.attname OPERATOR(pg_catalog.=) {_literal(column.Parts[^1])}
+                AND a.attnum OPERATOR(pg_catalog.>) 0 AND NOT a.attisdropped{(_capturedSourceRoles
                     ? " AND " + CapturedOwnerProof(column)
-                    : string.Empty)
-                + ")",
+                    : string.Empty)})
+                """,
             SafeMigrationSqlUnaryExpression { Operator: SafeMigrationSqlUnaryOperator.Not } => "16",
             SafeMigrationSqlUnaryExpression unary when TryGetCapturedNumericUnary(
                 unary,
@@ -979,15 +986,13 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             // WHY: REAL combined with an integer/NUMERIC operand selects a
             // DOUBLE PRECISION operator, unlike two REAL inputs. A generic
             // common-type rank cannot represent that native operator rule.
-            return "(SELECT CASE WHEN l = 700 AND r = 700 THEN 700 "
-                + "WHEN l IN (700,701) OR r IN (700,701) THEN 701 "
-                + "WHEN l = 1700 OR r = 1700 THEN 1700 WHEN l = 20 OR r = 20 THEN 20 "
-                + "WHEN l = 23 OR r = 23 THEN 23 WHEN l = 21 AND r = 21 THEN 21 ELSE NULL END "
-                + "FROM (VALUES (("
-                + left
-                + ")::pg_catalog.oid,("
-                + right
-                + ")::pg_catalog.oid)) AS t(l,r))";
+            return $"""
+                (SELECT CASE WHEN l = 700 AND r = 700 THEN 700
+                WHEN l IN (700,701) OR r IN (700,701) THEN 701
+                WHEN l = 1700 OR r = 1700 THEN 1700 WHEN l = 20 OR r = 20 THEN 20
+                WHEN l = 23 OR r = 23 THEN 23 WHEN l = 21 AND r = 21 THEN 21 ELSE NULL END
+                FROM (VALUES (({left})::pg_catalog.oid,({right})::pg_catalog.oid)) AS t(l,r))
+                """;
         }
 
         /// <summary>Applies native builtin common-type selection conservatively to a bounded result list.</summary>
@@ -1030,14 +1035,14 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             // WHY: UNKNOWN literals do not select a type. Numeric builtins
             // widen in the native implicit-cast order; other families retain
             // the first typed result, with ELSE considered before WHENs.
-            return "(SELECT CASE WHEN COUNT(*) FILTER (WHERE t <> 705) = 0 THEN 25::pg_catalog.oid "
-                + "WHEN BOOL_AND(t IN (20, 21, 23, 700, 701, 1700, 705)) THEN "
-                + "(ARRAY_AGG(t ORDER BY CASE t WHEN 701 THEN 6 WHEN 700 THEN 5 WHEN 1700 THEN 4 "
-                + "WHEN 20 THEN 3 WHEN 23 THEN 2 WHEN 21 THEN 1 ELSE 0 END DESC))[1] "
-                + "ELSE (ARRAY_AGG(t ORDER BY i) FILTER (WHERE t <> 705))[1] END "
-                + "FROM (VALUES "
-                + rows
-                + ") result_types(i,t))";
+            return $"""
+                (SELECT CASE WHEN COUNT(*) FILTER (WHERE t <> 705) = 0 THEN 25::pg_catalog.oid
+                WHEN BOOL_AND(t IN (20, 21, 23, 700, 701, 1700, 705)) THEN
+                (ARRAY_AGG(t ORDER BY CASE t WHEN 701 THEN 6 WHEN 700 THEN 5 WHEN 1700 THEN 4
+                WHEN 20 THEN 3 WHEN 23 THEN 2 WHEN 21 THEN 1 ELSE 0 END DESC))[1]
+                ELSE (ARRAY_AGG(t ORDER BY i) FILTER (WHERE t <> 705))[1] END
+                FROM (VALUES {rows}) result_types(i,t))
+                """;
         }
 
         /// <summary>Strips only a complete independently proven native owner, never arbitrary qualifier text.</summary>
@@ -1069,15 +1074,13 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             ? "TRUE"
             : _relationOid is null || column.Parts.Count > 3
                 ? "FALSE"
-                : "EXISTS (SELECT 1 FROM pg_catalog.pg_class own JOIN pg_catalog.pg_namespace ns "
-                + "ON ns.oid OPERATOR(pg_catalog.=) own.relnamespace WHERE own.oid OPERATOR(pg_catalog.=) "
-                + _relationOid
-                + " AND own.relname OPERATOR(pg_catalog.=) "
-                + _literal(column.Parts[^2])
-                + (column.Parts.Count == 3
+                : $"""
+                EXISTS (SELECT 1 FROM pg_catalog.pg_class own JOIN pg_catalog.pg_namespace ns
+                ON ns.oid OPERATOR(pg_catalog.=) own.relnamespace WHERE own.oid OPERATOR(pg_catalog.=) {_relationOid}
+                AND own.relname OPERATOR(pg_catalog.=) {_literal(column.Parts[^2])}{(column.Parts.Count == 3
                     ? " AND ns.nspname OPERATOR(pg_catalog.=) " + _literal(column.Parts[0])
-                    : string.Empty)
-                + ")";
+                    : string.Empty)})
+                """;
 
         /// <summary>Flushes the final ordered segment and returns the candidate-producing SQL expression.</summary>
         /// <returns>

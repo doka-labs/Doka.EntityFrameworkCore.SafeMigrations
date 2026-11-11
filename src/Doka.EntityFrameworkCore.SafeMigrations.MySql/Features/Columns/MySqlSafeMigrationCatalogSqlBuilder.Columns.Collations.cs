@@ -33,9 +33,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // diagnostics. Retaining the table name avoids materializing a second
         // catalog subquery for every comparison-only operation.
         return new CollationContract(
-            "(c.COLLATION_NAME IS NULL OR c.COLLATION_NAME <=> "
-            + "(SELECT t.TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES t "
-            + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(table)}))",
+            $"""
+            (c.COLLATION_NAME IS NULL OR c.COLLATION_NAME <=>
+            (SELECT t.TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES t
+            WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(table)}))
+            """,
             CollationExpectationKind.InheritedTableDefault,
             table);
     }
@@ -46,8 +48,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         CollationExpectationKind.Expression => contract.ExpectationSource,
         CollationExpectationKind.InheritedTableDefault =>
-            "COALESCE((SELECT t.TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES t "
-            + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(contract.ExpectationSource)}), 'none')",
+            $"""
+            COALESCE((SELECT t.TABLE_COLLATION FROM INFORMATION_SCHEMA.TABLES t
+            WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(contract.ExpectationSource)}), 'none')
+            """,
         _ => throw new InvalidOperationException(
             $"Unsupported collation expectation kind '{contract.ExpectationKind}'."),
     };

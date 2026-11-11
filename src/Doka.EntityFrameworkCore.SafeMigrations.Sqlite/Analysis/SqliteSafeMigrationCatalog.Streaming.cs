@@ -12,8 +12,11 @@ internal static partial class SqliteSafeMigrationCatalog
         using var command = CreateCommand(
             connection,
             transaction,
-            "SELECT sqlite_version(), f.foreign_keys, l.legacy_alter_table "
-            + "FROM pragma_foreign_keys() AS f CROSS JOIN pragma_legacy_alter_table() AS l;");
+            """
+            SELECT sqlite_version(), f.foreign_keys, l.legacy_alter_table
+            FROM pragma_foreign_keys() AS f
+            CROSS JOIN pragma_legacy_alter_table() AS l;
+            """);
 
         using var reader = command.ExecuteReader();
         if (!reader.Read())
@@ -39,10 +42,13 @@ internal static partial class SqliteSafeMigrationCatalog
         using var command = CreateCommand(
             connection,
             transaction,
-            "SELECT type, name, tbl_name, COALESCE(sql, '') FROM main.sqlite_schema "
-            + "WHERE name NOT LIKE 'sqlite\\_%' ESCAPE '\\' "
-            + "OR (type = 'index' AND tbl_name NOT LIKE 'sqlite\\_%' ESCAPE '\\') "
-            + "ORDER BY type = 'table' DESC, type, name;");
+            """
+            SELECT type, name, tbl_name, COALESCE(sql, '')
+            FROM main.sqlite_schema
+            WHERE name NOT LIKE 'sqlite\_%' ESCAPE '\'
+               OR (type = 'index' AND tbl_name NOT LIKE 'sqlite\_%' ESCAPE '\')
+            ORDER BY type = 'table' DESC, type, name;
+            """);
 
         using var reader = command.ExecuteReader();
         var result = new List<SqliteSchemaObjectSnapshot>();
@@ -90,11 +96,13 @@ internal static partial class SqliteSafeMigrationCatalog
         using var command = CreateCommand(
             connection,
             transaction,
-            "SELECT t.name, c.cid, c.name, c.type, c.\"notnull\", c.dflt_value, c.pk, c.hidden "
-            + "FROM main.sqlite_schema AS t LEFT JOIN pragma_table_xinfo(t.name, 'main') AS c ON 1 = 1 "
-            + "WHERE "
-            + MainTablesPredicate
-            + "ORDER BY t.name, c.cid;");
+            $"""
+            SELECT t.name, c.cid, c.name, c.type, c."notnull", c.dflt_value, c.pk, c.hidden
+            FROM main.sqlite_schema AS t
+            LEFT JOIN pragma_table_xinfo(t.name, 'main') AS c ON 1 = 1
+            WHERE {MainTablesPredicate}
+            ORDER BY t.name, c.cid;
+            """);
 
         using var reader = command.ExecuteReader();
         var seen = new HashSet<string>(s_identifierComparer);
@@ -147,14 +155,16 @@ internal static partial class SqliteSafeMigrationCatalog
         using var command = CreateCommand(
             connection,
             transaction,
-            "SELECT t.name, i.seq, i.name, i.\"unique\", i.origin, i.partial, s.name, s.tbl_name, s.sql, "
-            + "k.seqno, k.cid, k.name, k.\"desc\", k.coll, k.\"key\" "
-            + "FROM main.sqlite_schema AS t LEFT JOIN pragma_index_list(t.name, 'main') AS i ON 1 = 1 "
-            + "LEFT JOIN main.sqlite_schema AS s ON s.type = 'index' AND s.name = i.name "
-            + "LEFT JOIN pragma_index_xinfo(i.name, 'main') AS k ON 1 = 1 "
-            + "WHERE "
-            + MainTablesPredicate
-            + "ORDER BY t.name, i.seq, k.seqno;");
+            $"""
+            SELECT t.name, i.seq, i.name, i."unique", i.origin, i.partial, s.name,
+                s.tbl_name, s.sql, k.seqno, k.cid, k.name, k."desc", k.coll, k."key"
+            FROM main.sqlite_schema AS t
+            LEFT JOIN pragma_index_list(t.name, 'main') AS i ON 1 = 1
+            LEFT JOIN main.sqlite_schema AS s ON s.type = 'index' AND s.name = i.name
+            LEFT JOIN pragma_index_xinfo(i.name, 'main') AS k ON 1 = 1
+            WHERE {MainTablesPredicate}
+            ORDER BY t.name, i.seq, k.seqno;
+            """);
 
         using var reader = command.ExecuteReader();
         var seen = new HashSet<string>(s_identifierComparer);
@@ -297,12 +307,14 @@ internal static partial class SqliteSafeMigrationCatalog
         using var command = CreateCommand(
             connection,
             transaction,
-            "SELECT t.name, f.id, f.seq, f.\"table\", f.\"from\", f.\"to\", "
-            + "f.on_update, f.on_delete, f.\"match\" "
-            + "FROM main.sqlite_schema AS t LEFT JOIN pragma_foreign_key_list(t.name, 'main') AS f ON 1 = 1 "
-            + "WHERE "
-            + MainTablesPredicate
-            + "ORDER BY t.name, f.id, f.seq;");
+            $"""
+            SELECT t.name, f.id, f.seq, f."table", f."from", f."to", f.on_update,
+                f.on_delete, f."match"
+            FROM main.sqlite_schema AS t
+            LEFT JOIN pragma_foreign_key_list(t.name, 'main') AS f ON 1 = 1
+            WHERE {MainTablesPredicate}
+            ORDER BY t.name, f.id, f.seq;
+            """);
 
         using var reader = command.ExecuteReader();
         var seen = new HashSet<string>(s_identifierComparer);

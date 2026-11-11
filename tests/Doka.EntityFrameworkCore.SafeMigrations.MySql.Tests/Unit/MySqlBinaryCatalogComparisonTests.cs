@@ -16,11 +16,15 @@ public sealed class MySqlBinaryCatalogComparisonTests
 
         // Assert
         Assert.Equal(
-            "(CASE WHEN @@lower_case_table_names = 0 THEN "
-            + "CAST(physical_owner.TABLE_NAME AS BINARY) = CAST(source_owner.owner AS BINARY) "
-            + "WHEN @@lower_case_table_names IN (1, 2) THEN "
-            + "CAST(LOWER(physical_owner.TABLE_NAME) AS BINARY) = CAST(LOWER(source_owner.owner) AS BINARY) "
-            + "ELSE FALSE END)",
+            """
+            (CASE WHEN @@lower_case_table_names = 0
+            THEN CAST(physical_owner.TABLE_NAME AS BINARY) = CAST(source_owner.owner
+            AS BINARY)
+            WHEN @@lower_case_table_names IN (1, 2)
+            THEN CAST(LOWER(physical_owner.TABLE_NAME) AS BINARY) = CAST(LOWER(source_owner.owner)
+            AS BINARY)
+            ELSE FALSE END)
+            """,
             sql);
 
         Assert.DoesNotContain("BINARY ", sql, StringComparison.Ordinal);

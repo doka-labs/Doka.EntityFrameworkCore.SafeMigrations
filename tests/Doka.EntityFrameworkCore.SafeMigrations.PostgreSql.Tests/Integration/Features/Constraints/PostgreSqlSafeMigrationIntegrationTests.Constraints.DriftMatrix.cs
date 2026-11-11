@@ -15,19 +15,23 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE constraint_identity ("
-            + "code integer NULL, tenant_id integer NULL, quantity integer NOT NULL, "
-            + "CONSTRAINT uq_constraint_identity_legacy_a UNIQUE (code, tenant_id), "
-            + "CONSTRAINT uq_constraint_identity_legacy_b UNIQUE (code, tenant_id), "
-            + "CONSTRAINT ck_constraint_identity_legacy_a CHECK (quantity >= 0), "
-            + "CONSTRAINT ck_constraint_identity_legacy_b CHECK (quantity >= 0));",
+            """
+            CREATE TABLE constraint_identity (code integer NULL, tenant_id integer NULL,
+            quantity integer NOT NULL, CONSTRAINT uq_constraint_identity_legacy_a UNIQUE (code,
+            tenant_id), CONSTRAINT uq_constraint_identity_legacy_b UNIQUE (code, tenant_id),
+            CONSTRAINT ck_constraint_identity_legacy_a CHECK (quantity >= 0), CONSTRAINT
+            ck_constraint_identity_legacy_b CHECK (quantity >= 0));
+            """,
             cancellationToken: CancellationToken.None);
 
         var legacyConstraintCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
-            + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-            + "WHERE c.relname = 'constraint_identity' AND co.contype IN ('u', 'c');",
+            """
+            SELECT COUNT(*) FROM pg_catalog.pg_constraint co
+            JOIN pg_catalog.pg_class c ON c.oid = co.conrelid
+            WHERE c.relname = 'constraint_identity'
+            AND co.contype IN ('u', 'c');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -73,20 +77,24 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
-                + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-                + "WHERE c.relname = 'constraint_identity' "
-                + "AND co.conname IN ('uq_constraint_identity_expected', "
-                + "'ck_constraint_identity_expected');",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_constraint co
+                JOIN pg_catalog.pg_class c ON c.oid = co.conrelid
+                WHERE c.relname = 'constraint_identity'
+                AND co.conname IN ('uq_constraint_identity_expected', 'ck_constraint_identity_expected');
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             legacyConstraintCount,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
-                + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-                + "WHERE c.relname = 'constraint_identity' AND co.contype IN ('u', 'c');",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_constraint co
+                JOIN pg_catalog.pg_class c ON c.oid = co.conrelid
+                WHERE c.relname = 'constraint_identity'
+                AND co.contype IN ('u', 'c');
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.True(legacyConstraintCount >= 3);
@@ -98,10 +106,13 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE constraint_nonidentity ("
-            + "code integer NULL, alternate_code integer NULL, quantity integer NOT NULL, "
-            + "CONSTRAINT uq_constraint_nonidentity_legacy UNIQUE (code), "
-            + "CONSTRAINT ck_constraint_nonidentity_legacy CHECK (quantity >= 0));",
+            """
+            CREATE TABLE constraint_nonidentity (code integer NULL, alternate_code integer
+            NULL,
+            quantity integer NOT NULL, CONSTRAINT uq_constraint_nonidentity_legacy UNIQUE
+            (code),
+            CONSTRAINT ck_constraint_nonidentity_legacy CHECK (quantity >= 0));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -156,9 +167,11 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE primary_key_identity ("
-            + "id integer NOT NULL, tenant_id integer NOT NULL, "
-            + "CONSTRAINT pk_primary_key_legacy PRIMARY KEY (id, tenant_id));",
+            """
+            CREATE TABLE primary_key_identity (id integer NOT NULL, tenant_id integer
+            NOT NULL,
+            CONSTRAINT pk_primary_key_legacy PRIMARY KEY (id, tenant_id));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -192,9 +205,12 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
-                + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-                + "WHERE c.relname = 'primary_key_identity' AND co.contype = 'p';",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_constraint co
+                JOIN pg_catalog.pg_class c ON c.oid = co.conrelid
+                WHERE c.relname = 'primary_key_identity'
+                AND co.contype = 'p';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -204,9 +220,11 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE primary_key_singleton ("
-            + "id integer NOT NULL, alternate_id integer NOT NULL, "
-            + "CONSTRAINT pk_primary_key_singleton_legacy PRIMARY KEY (id));",
+            """
+            CREATE TABLE primary_key_singleton (id integer NOT NULL, alternate_id integer
+            NOT NULL,
+            CONSTRAINT pk_primary_key_singleton_legacy PRIMARY KEY (id));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -238,9 +256,12 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
-                + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-                + "WHERE c.relname = 'primary_key_singleton' AND co.contype = 'p';",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_constraint co
+                JOIN pg_catalog.pg_class c ON c.oid = co.conrelid
+                WHERE c.relname = 'primary_key_singleton'
+                AND co.contype = 'p';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -250,10 +271,13 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE constraint_namespace_owner (id integer NOT NULL, code integer NULL);"
-            + "CREATE INDEX pk_constraint_namespace_target ON constraint_namespace_owner (id);"
-            + "CREATE INDEX uq_constraint_namespace_target ON constraint_namespace_owner (code);"
-            + "CREATE TABLE constraint_namespace_target (id integer NOT NULL, code integer NULL);",
+            """
+            CREATE TABLE constraint_namespace_owner (id integer NOT NULL, code integer NULL);CREATE INDEX
+            pk_constraint_namespace_target ON constraint_namespace_owner (id);CREATE INDEX
+            uq_constraint_namespace_target ON constraint_namespace_owner (code);CREATE TABLE
+            constraint_namespace_target (id integer NOT NULL,
+            code integer NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -298,18 +322,22 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
-                + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-                + "WHERE c.relname = 'constraint_namespace_target' AND co.contype IN ('p', 'u');",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_constraint co
+                JOIN pg_catalog.pg_class c ON c.oid = co.conrelid
+                WHERE c.relname = 'constraint_namespace_target'
+                AND co.contype IN ('p', 'u');
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_class c "
-                + "WHERE c.relname IN ('pk_constraint_namespace_target', "
-                + "'uq_constraint_namespace_target');",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_class c
+                WHERE c.relname IN ('pk_constraint_namespace_target', 'uq_constraint_namespace_target');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -325,18 +353,21 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         var secondLegacyName = new string('s', 63);
         var expectedName = new string('e', 63);
         var secondConstraint = legacyConstraintCount == 2
-            ? $", CONSTRAINT \"{secondLegacyName}\" FOREIGN KEY (parent_id, tenant_id) "
-            + "REFERENCES identity_parents (id, tenant_id) ON DELETE CASCADE"
+            ? $"""
+            , CONSTRAINT "{secondLegacyName}" FOREIGN KEY (parent_id, tenant_id)
+            REFERENCES identity_parents (id, tenant_id) ON DELETE CASCADE
+            """
             : string.Empty;
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE identity_parents (id integer NOT NULL, tenant_id integer NOT NULL, "
-            + "PRIMARY KEY (id, tenant_id));"
-            + "CREATE TABLE identity_children ("
-            + "id integer NOT NULL PRIMARY KEY, parent_id integer NOT NULL, tenant_id integer NOT NULL, "
-            + $"CONSTRAINT \"{legacyName}\" FOREIGN KEY (parent_id, tenant_id) "
-            + $"REFERENCES identity_parents (id, tenant_id) ON DELETE CASCADE{secondConstraint});",
+            $"""
+            CREATE TABLE identity_parents (id integer NOT NULL, tenant_id integer NOT NULL,
+            PRIMARY KEY (id, tenant_id));CREATE TABLE identity_children (id integer NOT NULL PRIMARY KEY,
+            parent_id integer NOT NULL, tenant_id integer NOT NULL, CONSTRAINT "{legacyName}" FOREIGN KEY
+            (parent_id,
+            tenant_id) REFERENCES identity_parents (id, tenant_id) ON DELETE CASCADE{secondConstraint});
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -370,9 +401,12 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             legacyConstraintCount,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
-                + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-                + "WHERE c.relname = 'identity_children' AND co.contype = 'f';",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_constraint co
+                JOIN pg_catalog.pg_class c ON c.oid = co.conrelid
+                WHERE c.relname = 'identity_children'
+                AND co.contype = 'f';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -382,21 +416,21 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE identity_precedence_parents (id integer NOT NULL PRIMARY KEY);"
-            + "CREATE TABLE identity_precedence_children ("
-            + "id integer NOT NULL PRIMARY KEY, code integer NULL, alternate_code integer NULL, "
-            + "quantity integer NOT NULL, parent_id integer NULL, "
-            + "CONSTRAINT uq_identity_precedence_expected UNIQUE (alternate_code), "
-            + "CONSTRAINT uq_identity_precedence_legacy UNIQUE (code), "
-            + "CONSTRAINT ck_identity_precedence_expected CHECK (quantity <= 100), "
-            + "CONSTRAINT ck_identity_precedence_legacy CHECK (quantity >= 0), "
-            + "CONSTRAINT fk_identity_precedence_expected FOREIGN KEY (parent_id) "
-            + "REFERENCES identity_precedence_parents (id) ON DELETE RESTRICT, "
-            + "CONSTRAINT fk_identity_precedence_legacy FOREIGN KEY (parent_id) "
-            + "REFERENCES identity_precedence_parents (id) ON DELETE CASCADE);"
-            + "CREATE INDEX ix_identity_precedence_expected "
-            + "ON identity_precedence_children (alternate_code);"
-            + "CREATE INDEX ix_identity_precedence_legacy ON identity_precedence_children (code);",
+            """
+            CREATE TABLE identity_precedence_parents (id integer NOT NULL PRIMARY KEY);CREATE TABLE
+            identity_precedence_children (id integer NOT NULL PRIMARY KEY,
+            code integer NULL, alternate_code integer NULL, quantity integer NOT NULL,
+            parent_id integer NULL, CONSTRAINT uq_identity_precedence_expected UNIQUE (alternate_code),
+            CONSTRAINT uq_identity_precedence_legacy UNIQUE (code), CONSTRAINT
+            ck_identity_precedence_expected CHECK (quantity <= 100),
+            CONSTRAINT ck_identity_precedence_legacy CHECK (quantity >= 0), CONSTRAINT
+            fk_identity_precedence_expected FOREIGN KEY (parent_id) REFERENCES identity_precedence_parents
+            (id) ON DELETE RESTRICT,
+            CONSTRAINT fk_identity_precedence_legacy FOREIGN KEY (parent_id) REFERENCES
+            identity_precedence_parents (id) ON DELETE CASCADE);CREATE INDEX ix_identity_precedence_expected
+            ON identity_precedence_children (alternate_code);CREATE INDEX ix_identity_precedence_legacy ON
+            identity_precedence_children (code);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -456,9 +490,12 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
-                + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-                + "WHERE c.relname = 'identity_precedence_children' AND co.contype = 'f';",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_constraint co
+                JOIN pg_catalog.pg_class c ON c.oid = co.conrelid
+                WHERE c.relname = 'identity_precedence_children'
+                AND co.contype = 'f';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -473,11 +510,12 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE identity_action_parents (id integer NOT NULL PRIMARY KEY);"
-            + "CREATE TABLE identity_action_children ("
-            + "id integer NOT NULL PRIMARY KEY, parent_id integer NULL, "
-            + "CONSTRAINT fk_identity_action_legacy FOREIGN KEY (parent_id) "
-            + "REFERENCES identity_action_parents (id) ON DELETE CASCADE);",
+            """
+            CREATE TABLE identity_action_parents (id integer NOT NULL PRIMARY KEY);CREATE TABLE
+            identity_action_children (id integer NOT NULL PRIMARY KEY,
+            parent_id integer NULL, CONSTRAINT fk_identity_action_legacy FOREIGN KEY (parent_id) REFERENCES
+            identity_action_parents (id) ON DELETE CASCADE);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -511,9 +549,12 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
-                + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-                + "WHERE c.relname = 'identity_action_children' AND co.contype = 'f';",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_constraint co
+                JOIN pg_catalog.pg_class c ON c.oid = co.conrelid
+                WHERE c.relname = 'identity_action_children'
+                AND co.contype = 'f';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -523,21 +564,19 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE semantic_primary_key ("
-            + "id integer NOT NULL, "
-            + "CONSTRAINT pk_semantic_primary_key PRIMARY KEY (id) DEFERRABLE INITIALLY DEFERRED);"
-            + "CREATE TABLE semantic_unique ("
-            + "code integer NULL, "
-            + "CONSTRAINT uq_semantic_unique UNIQUE (code) DEFERRABLE INITIALLY DEFERRED);"
-            + "CREATE TABLE semantic_check ("
-            + "quantity integer NOT NULL, "
-            + "CONSTRAINT ck_semantic_check CHECK (quantity >= 0) NO INHERIT);"
-            + "CREATE TABLE semantic_parent ("
-            + "id integer NOT NULL, alternate_id integer NOT NULL, PRIMARY KEY (id, alternate_id));"
-            + "CREATE TABLE semantic_child ("
-            + "parent_id integer NULL, alternate_parent_id integer NULL, "
-            + "CONSTRAINT fk_semantic_child FOREIGN KEY (parent_id, alternate_parent_id) "
-            + "REFERENCES semantic_parent (id, alternate_id) MATCH FULL DEFERRABLE INITIALLY DEFERRED);",
+            """
+            CREATE TABLE semantic_primary_key (id integer NOT NULL, CONSTRAINT pk_semantic_primary_key
+            PRIMARY KEY (id) DEFERRABLE INITIALLY DEFERRED);CREATE TABLE semantic_unique (code integer NULL,
+            CONSTRAINT uq_semantic_unique UNIQUE (code) DEFERRABLE INITIALLY DEFERRED);CREATE TABLE
+            semantic_check (quantity integer NOT NULL,
+            CONSTRAINT ck_semantic_check CHECK (quantity >= 0) NO INHERIT);CREATE TABLE semantic_parent (id
+            integer NOT NULL,
+            alternate_id integer NOT NULL, PRIMARY KEY (id, alternate_id));CREATE TABLE semantic_child
+            (parent_id integer NULL,
+            alternate_parent_id integer NULL, CONSTRAINT fk_semantic_child FOREIGN KEY (parent_id,
+            alternate_parent_id) REFERENCES semantic_parent (id, alternate_id) MATCH FULL DEFERRABLE
+            INITIALLY DEFERRED);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -600,17 +639,19 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE partition_identity_parents ("
-            + "tenant_id integer NOT NULL, id integer NOT NULL, PRIMARY KEY (tenant_id, id));"
-            + "CREATE TABLE partition_identity_root ("
-            + "tenant_id integer NOT NULL, id integer NOT NULL, code integer NULL, parent_id integer NULL, "
-            + "CONSTRAINT pk_partition_identity PRIMARY KEY (tenant_id, id), "
-            + "CONSTRAINT uq_partition_identity UNIQUE (tenant_id, code), "
-            + "CONSTRAINT ck_partition_identity CHECK (id >= 0), "
-            + "CONSTRAINT fk_partition_identity FOREIGN KEY (tenant_id, parent_id) "
-            + "REFERENCES partition_identity_parents (tenant_id, id)) PARTITION BY RANGE (tenant_id);"
-            + "CREATE TABLE partition_identity_leaf PARTITION OF partition_identity_root "
-            + "FOR VALUES FROM (0) TO (100);",
+            """
+            CREATE TABLE partition_identity_parents (tenant_id integer NOT NULL, id integer NOT NULL,
+            PRIMARY KEY (tenant_id, id));CREATE TABLE partition_identity_root (tenant_id integer NOT NULL,
+            id integer NOT NULL, code integer NULL, parent_id integer NULL, CONSTRAINT pk_partition_identity
+            PRIMARY KEY (tenant_id,
+            id), CONSTRAINT uq_partition_identity UNIQUE (tenant_id, code), CONSTRAINT ck_partition_identity
+            CHECK (id >= 0),
+            CONSTRAINT fk_partition_identity FOREIGN KEY (tenant_id, parent_id) REFERENCES
+            partition_identity_parents (tenant_id,
+            id)) PARTITION BY RANGE (tenant_id);CREATE TABLE partition_identity_leaf PARTITION OF
+            partition_identity_root FOR VALUES
+            FROM (0) TO (100);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -672,15 +713,16 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE partition_drop_parents (tenant_id integer NOT NULL, id integer NOT NULL, "
-            + "PRIMARY KEY (tenant_id, id));"
-            + "CREATE TABLE partition_drop_root ("
-            + "tenant_id integer NOT NULL, id integer NOT NULL, parent_id integer NULL, "
-            + "CONSTRAINT ck_partition_drop CHECK (id >= 0), "
-            + "CONSTRAINT fk_partition_drop FOREIGN KEY (tenant_id, parent_id) "
-            + "REFERENCES partition_drop_parents (tenant_id, id)) PARTITION BY RANGE (tenant_id);"
-            + "CREATE TABLE partition_drop_leaf PARTITION OF partition_drop_root "
-            + "FOR VALUES FROM (0) TO (100);",
+            """
+            CREATE TABLE partition_drop_parents (tenant_id integer NOT NULL, id integer NOT NULL,
+            PRIMARY KEY (tenant_id, id));CREATE TABLE partition_drop_root (tenant_id integer NOT NULL,
+            id integer NOT NULL, parent_id integer NULL, CONSTRAINT ck_partition_drop CHECK (id >= 0),
+            CONSTRAINT fk_partition_drop FOREIGN KEY (tenant_id, parent_id) REFERENCES
+            partition_drop_parents (tenant_id,
+            id)) PARTITION BY RANGE (tenant_id);CREATE TABLE partition_drop_leaf PARTITION OF
+            partition_drop_root FOR VALUES
+            FROM (0) TO (100);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -726,9 +768,10 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE unique_null_semantics ("
-            + "code integer NULL, "
-            + "CONSTRAINT uq_unique_null_semantics UNIQUE NULLS NOT DISTINCT (code));",
+            """
+            CREATE TABLE unique_null_semantics (code integer NULL, CONSTRAINT uq_unique_null_semantics
+            UNIQUE NULLS NOT DISTINCT (code));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -769,11 +812,15 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE partial_set_parent ("
-            + "tenant_id integer NOT NULL, id integer NOT NULL, PRIMARY KEY (tenant_id, id));"
-            + "CREATE TABLE partial_set_child (tenant_id integer NULL, parent_id integer NULL, "
-            + "CONSTRAINT fk_partial_set_child FOREIGN KEY (tenant_id, parent_id) "
-            + "REFERENCES partial_set_parent (tenant_id, id) ON DELETE SET NULL (parent_id));",
+            """
+            CREATE TABLE partial_set_parent (tenant_id integer NOT NULL, id integer
+            NOT NULL,
+            PRIMARY KEY (tenant_id, id));CREATE TABLE partial_set_child (tenant_id integer
+            NULL,
+            parent_id integer NULL, CONSTRAINT fk_partial_set_child FOREIGN KEY (tenant_id,
+            parent_id) REFERENCES partial_set_parent (tenant_id, id) ON DELETE SET NULL
+            (parent_id));
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -817,12 +864,15 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE EXTENSION btree_gist;"
-            + "CREATE TABLE temporal_primary_key ("
-            + "id integer NOT NULL, validity daterange NOT NULL, "
-            + "CONSTRAINT pk_temporal_primary_key PRIMARY KEY (id, validity WITHOUT OVERLAPS));"
-            + "CREATE TABLE non_enforced_check (quantity integer NOT NULL, "
-            + "CONSTRAINT ck_non_enforced_check CHECK (quantity >= 0) NOT ENFORCED);",
+            """
+            CREATE EXTENSION btree_gist;CREATE TABLE temporal_primary_key (id integer
+            NOT NULL,
+            validity daterange NOT NULL, CONSTRAINT pk_temporal_primary_key PRIMARY
+            KEY (id,
+            validity WITHOUT OVERLAPS));CREATE TABLE non_enforced_check (quantity integer
+            NOT NULL,
+            CONSTRAINT ck_non_enforced_check CHECK (quantity >= 0) NOT ENFORCED);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -1011,14 +1061,15 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         var connectionString = await CreateDatabaseAsync(cancellationToken);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE constraint_matrix_parents ("
-            + "id integer NOT NULL, alternate_id integer NOT NULL, PRIMARY KEY (id, alternate_id)); "
-            + "CREATE TABLE constraint_matrix_other_parents ("
-            + "id integer NOT NULL, alternate_id integer NOT NULL, PRIMARY KEY (id, alternate_id)); "
-            + "CREATE TABLE constraint_matrix_children ("
-            + "id integer NOT NULL, alternate_id integer NOT NULL, "
-            + "code character varying(30) NULL, alternate_code character varying(30) NULL, "
-            + "quantity integer NOT NULL, parent_id integer NULL, alternate_parent_id integer NULL);",
+            """
+            CREATE TABLE constraint_matrix_parents (id integer NOT NULL, alternate_id integer NOT NULL,
+            PRIMARY KEY (id, alternate_id)); CREATE TABLE constraint_matrix_other_parents (id integer NOT NULL,
+            alternate_id integer NOT NULL, PRIMARY KEY (id, alternate_id)); CREATE TABLE
+            constraint_matrix_children (id integer NOT NULL,
+            alternate_id integer NOT NULL, code character varying(30) NULL, alternate_code character
+            varying(30) NULL,
+            quantity integer NOT NULL, parent_id integer NULL, alternate_parent_id integer NULL);
+            """,
             cancellationToken: cancellationToken);
 
         return connectionString;
@@ -1079,12 +1130,13 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
 
         await ExecuteSqlAsync(
             connectionString,
-            "ALTER TABLE constraint_matrix_children "
-            + "ADD CONSTRAINT uq_constraint_matrix_duplicate UNIQUE (code, alternate_code), "
-            + "ADD CONSTRAINT ck_constraint_matrix_duplicate CHECK (quantity >= 0), "
-            + "ADD CONSTRAINT fk_constraint_matrix_duplicate "
-            + "FOREIGN KEY (parent_id, alternate_parent_id) "
-            + "REFERENCES constraint_matrix_parents (id, alternate_id) ON UPDATE CASCADE ON DELETE SET NULL;",
+            """
+            ALTER TABLE constraint_matrix_children ADD CONSTRAINT uq_constraint_matrix_duplicate UNIQUE (code,
+            alternate_code), ADD CONSTRAINT ck_constraint_matrix_duplicate CHECK (quantity >= 0),
+            ADD CONSTRAINT fk_constraint_matrix_duplicate FOREIGN KEY (parent_id,
+            alternate_parent_id) REFERENCES constraint_matrix_parents (id, alternate_id) ON UPDATE CASCADE
+            ON DELETE SET NULL;
+            """,
             cancellationToken: cancellationToken);
     }
 

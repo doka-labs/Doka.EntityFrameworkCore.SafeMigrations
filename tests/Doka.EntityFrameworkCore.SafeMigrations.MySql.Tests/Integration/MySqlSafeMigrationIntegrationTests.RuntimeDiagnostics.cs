@@ -272,10 +272,12 @@ public sealed class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);"
-            + "CREATE TABLE `diagnostic_duplicates` (`value` int NOT NULL, CONSTRAINT `"
-            + name
-            + "` UNIQUE (`value`)); INSERT INTO `diagnostic_duplicates` VALUES (1);",
+            $"""
+            CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);CREATE TABLE
+            `diagnostic_duplicates` (`value` int NOT NULL,
+            CONSTRAINT `{name}` UNIQUE (`value`)); INSERT INTO `diagnostic_duplicates`
+            VALUES (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         var observer = new MySqlRuntimeCommandInterceptor();
@@ -413,18 +415,23 @@ public sealed class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeMigration
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `diagnostic_parents` (`id` int NOT NULL PRIMARY KEY);"
-            + "CREATE TABLE `diagnostic_children` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, "
-            + "`private_value` varchar(40) NULL); INSERT INTO `diagnostic_parents` VALUES (1);"
-            + "INSERT INTO `diagnostic_children` VALUES (7, "
-            + (orphan
+            $"""
+            {
+                "CREATE TABLE `diagnostic_parents` (`id` int NOT NULL PRIMARY KEY);"
+                + "CREATE TABLE `diagnostic_children` (`id` int NOT NULL PRIMARY KEY,"}
+            {
+                "`parent_id` int NULL, `private_value` varchar(40) NULL); "
+                + "INSERT INTO `diagnostic_parents` VALUES (1);INSERT INTO `diagnostic_children` VALUES (7,"}
+            {(orphan
                 ? "2"
-                : "1")
-            + ", 'private-row-never-for-diagnostics');"
-            + (orphan
+                : "1")}, 'private-row-never-for-diagnostics');{(orphan
                 ? string.Empty
-                : "ALTER TABLE `diagnostic_children` ADD CONSTRAINT `fk_diagnostic_parent` "
-                + "FOREIGN KEY (`parent_id`) REFERENCES `diagnostic_parents` (`id`) ON DELETE RESTRICT;"),
+                : """
+                ALTER TABLE `diagnostic_children` ADD CONSTRAINT `fk_diagnostic_parent`
+                FOREIGN KEY (`parent_id`) REFERENCES `diagnostic_parents` (`id`) ON DELETE
+                RESTRICT;
+                """)}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

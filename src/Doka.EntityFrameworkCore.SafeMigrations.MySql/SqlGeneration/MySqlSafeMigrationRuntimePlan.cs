@@ -153,11 +153,12 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
     internal string RenderProjectedIndexIdentityExpression(
         Func<MySqlCatalogParameterValue, string> renderValue
     ) => IndexNameExistsExpression is { } exists
-        ? "CASE WHEN ("
-        + RenderPostcondition(renderValue)
-        + ") THEN 'matching' WHEN ("
-        + RenderTemplate(exists, ParameterValues, renderValue)
-        + ") THEN 'different' ELSE 'missing' END"
+        ? $"""
+        CASE WHEN ({RenderPostcondition(renderValue)})
+        THEN 'matching'
+        WHEN ({RenderTemplate(exists, ParameterValues, renderValue)})
+        THEN 'different' ELSE 'missing' END
+        """
         : throw new InvalidOperationException("The generated-key identity capture requires an index-name predicate.");
 
     /// <summary>Renders the prerequisite expression with provider literals.</summary>
@@ -649,11 +650,12 @@ internal sealed record MySqlSafeMigrationRuntimePlan(
         // as prepared execution, including repair-invariant qualification.
         var nullabilityReplacement = NullabilityDataProbe is null
             ? "FALSE"
-            : "CASE WHEN ("
-            + RenderTemplate(NullabilityDataProbe.NullableColumnExpression, ParameterValues, renderValue)
-            + $") AND ({repairInvariantReplacement}) THEN ("
-            + RenderTemplate(NullabilityDataProbe.BlockedExpression, ParameterValues, renderValue)
-            + ") ELSE FALSE END";
+            : $"""
+            CASE WHEN ({RenderTemplate(NullabilityDataProbe.NullableColumnExpression, ParameterValues, renderValue)})
+            AND ({repairInvariantReplacement})
+            THEN ({RenderTemplate(NullabilityDataProbe.BlockedExpression, ParameterValues, renderValue)})
+            ELSE FALSE END
+            """;
 
         return ReplaceTransitionPlaceholders(
             rendered,
@@ -1064,7 +1066,10 @@ internal sealed record MySqlSafeMigrationDataProbe(
 {
     /// <summary>Builds the bounded row probe used only after catalog qualification.</summary>
     /// <returns>The provider-delimited Boolean SQL expression.</returns>
-    public string BuildBlockedExpression() => "EXISTS(SELECT 1 FROM "
-        + $"{DelimitedTable} WHERE {DelimitedColumn} IS NOT NULL "
-        + $"AND CHAR_LENGTH({DelimitedColumn}) > {TargetLength.ToString(CultureInfo.InvariantCulture)} LIMIT 1)";
+    public string BuildBlockedExpression() => $"""
+        EXISTS(SELECT 1 FROM {DelimitedTable}
+        WHERE {DelimitedColumn} IS NOT NULL
+        AND CHAR_LENGTH({DelimitedColumn}) > {TargetLength.ToString(CultureInfo.InvariantCulture)}
+        LIMIT 1)
+        """;
 }

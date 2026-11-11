@@ -10,9 +10,12 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE column_transition (Id INTEGER NOT NULL, old_code TEXT NULL, "
-            + "LegacyCode INTEGER NULL, CONSTRAINT PK_column_transition PRIMARY KEY (Id)); "
-            + "INSERT INTO column_transition (Id, old_code, LegacyCode) VALUES (1, 'kept', 7);",
+            """
+            CREATE TABLE column_transition (Id INTEGER NOT NULL, old_code TEXT NULL,
+            LegacyCode INTEGER NULL, CONSTRAINT PK_column_transition PRIMARY KEY (Id));
+            INSERT INTO column_transition (Id,
+            old_code, LegacyCode) VALUES (1, 'kept', 7);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteColumnTransitionTestContext(connection);
@@ -132,11 +135,15 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE rebuild_entities (Id INTEGER NOT NULL, Code TEXT NULL, Legacy TEXT NULL, "
-            + "CONSTRAINT pk_rebuild_entities PRIMARY KEY (Id), "
-            + "CONSTRAINT uq_rebuild_entities_code UNIQUE (Code), "
-            + "CONSTRAINT ck_rebuild_entities_code CHECK (length(\"Code\") > 0)); "
-            + "INSERT INTO rebuild_entities (Id, Code, Legacy) VALUES (1, 'existing', 'remove');",
+            """
+            CREATE TABLE rebuild_entities (Id INTEGER NOT NULL, Code TEXT NULL, Legacy
+            TEXT NULL,
+            CONSTRAINT pk_rebuild_entities PRIMARY KEY (Id), CONSTRAINT uq_rebuild_entities_code
+            UNIQUE (Code),
+            CONSTRAINT ck_rebuild_entities_code CHECK (length("Code") > 0)); INSERT
+            INTO rebuild_entities (Id,
+            Code, Legacy) VALUES (1, 'existing', 'remove');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);

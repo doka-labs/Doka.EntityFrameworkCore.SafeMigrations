@@ -49,9 +49,11 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         var nulls = string.Join(" OR ", definition.Columns.Select(column => $"{Delimited(column)} IS NULL"));
 
-        return $"(EXISTS (SELECT 1 FROM {Qualified(definition.Table, definition.Schema)} "
-            + $"WHERE {nulls} LIMIT 1) OR "
-            + DuplicateDataExists(definition.Table, definition.Schema, definition.Columns.Select(Delimited), "TRUE")
-            + ")";
+        return $"""
+            (EXISTS (SELECT 1 FROM {Qualified(definition.Table, definition.Schema)}
+            WHERE {nulls} LIMIT 1)
+            OR {DuplicateDataExists(
+                definition.Table, definition.Schema, definition.Columns.Select(Delimited), "TRUE")})
+            """;
     }
 }

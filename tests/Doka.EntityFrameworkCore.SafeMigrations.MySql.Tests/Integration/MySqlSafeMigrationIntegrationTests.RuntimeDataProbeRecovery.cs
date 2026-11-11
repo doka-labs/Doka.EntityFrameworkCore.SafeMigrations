@@ -3,18 +3,28 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 /// <summary>Exercises the RuntimeDataProbeRecovery migration contracts in an independent class collection.</summary>
 public sealed class MySqlRuntimeDataProbeRecoveryIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
-    private const string RuntimeProbeColumnLengthSql = "SELECT CHARACTER_MAXIMUM_LENGTH "
-        + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-        + "AND TABLE_NAME = 'runtime_probe_rows' AND COLUMN_NAME = 'Code';";
+    private const string RuntimeProbeColumnLengthSql = """
+        SELECT CHARACTER_MAXIMUM_LENGTH
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'runtime_probe_rows'
+        AND COLUMN_NAME = 'Code';
+        """;
 
-    private const string RuntimeProbeColumnNullableSql = "SELECT IS_NULLABLE = 'YES' "
-        + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-        + "AND TABLE_NAME = 'runtime_probe_rows' AND COLUMN_NAME = 'Code';";
+    private const string RuntimeProbeColumnNullableSql = """
+        SELECT IS_NULLABLE = 'YES' FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'runtime_probe_rows'
+        AND COLUMN_NAME = 'Code';
+        """;
 
     // WHY: Binary equality and byte length also detect changes hidden by case-insensitive or padded comparisons.
-    private const string RuntimeProbePreservedRowsSql = "SELECT COUNT(*) FROM `runtime_probe_rows` "
-        + "WHERE (`Id` = 1 AND BINARY `Code` = BINARY 'preserved') OR (`Id` = 2 AND `Code` IS NULL) "
-        + "OR (`Id` = 3 AND OCTET_LENGTH(`Code`) = 0);";
+    private const string RuntimeProbePreservedRowsSql = """
+        SELECT COUNT(*) FROM `runtime_probe_rows`
+        WHERE (`Id` = 1 AND BINARY `Code` = BINARY 'preserved')
+        OR (`Id` = 2 AND `Code` IS NULL)
+        OR (`Id` = 3 AND OCTET_LENGTH(`Code`) = 0);
+        """;
 
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
@@ -38,9 +48,13 @@ public sealed class MySqlRuntimeDataProbeRecoveryIntegrationTests : MySqlSafeMig
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `runtime_probe_rows` (`Id` int NOT NULL, `Code` varchar(20) NULL, "
-            + "PRIMARY KEY (`Id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `runtime_probe_rows` VALUES (1, 'preserved'), (2, NULL), (3, '');",
+            """
+            CREATE TABLE `runtime_probe_rows` (`Id` int NOT NULL, `Code` varchar(20)
+            NULL,
+            PRIMARY KEY (`Id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE
+            utf8mb4_unicode_ci; INSERT INTO `runtime_probe_rows` VALUES (1,
+            'preserved'), (2, NULL), (3, '');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var blocker = failureMode == "error"

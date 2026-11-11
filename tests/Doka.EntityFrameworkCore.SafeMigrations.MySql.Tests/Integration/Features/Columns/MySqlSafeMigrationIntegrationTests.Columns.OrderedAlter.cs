@@ -24,10 +24,14 @@ public sealed class MySqlColumnsOrderedAlterIntegrationTests : MySqlSafeMigratio
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE TABLE `ordered_source` (`id` char(36) NOT NULL, `value` longtext NOT NULL, "
-                + "`other_value` longtext NOT NULL) ENGINE=InnoDB ROW_FORMAT=DYNAMIC "
-                + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-                + "INSERT INTO `ordered_source` VALUES ('id', 'preserved', 'second');",
+                """
+                CREATE TABLE `ordered_source` (`id` char(36) NOT NULL, `value` longtext
+                NOT NULL,
+                `other_value` longtext NOT NULL) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT
+                CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; INSERT INTO `ordered_source`
+                VALUES ('id',
+                'preserved', 'second');
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -59,15 +63,22 @@ public sealed class MySqlColumnsOrderedAlterIntegrationTests : MySqlSafeMigratio
 
         var varcharCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'ordered_target' AND DATA_TYPE = 'varchar' "
-            + "AND CHARACTER_MAXIMUM_LENGTH = 500;",
+            """
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'ordered_target'
+            AND DATA_TYPE = 'varchar' AND CHARACTER_MAXIMUM_LENGTH = 500;
+            """,
             cancellationToken: CancellationToken.None);
 
         var indexPrefixLength = await ScalarIntAsync(
             connectionString,
-            "SELECT SUB_PART FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'ordered_target' AND INDEX_NAME = 'ix_ordered_target_value';",
+            """
+            SELECT SUB_PART FROM INFORMATION_SCHEMA.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'ordered_target'
+            AND INDEX_NAME = 'ix_ordered_target_value';
+            """,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -110,14 +121,16 @@ public sealed class MySqlColumnsOrderedAlterIntegrationTests : MySqlSafeMigratio
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `ordered_source` (`id` char(36) NOT NULL, `value` {sourceType} NOT NULL, "
-            + $"`other_value` longtext NOT NULL) ENGINE=InnoDB ROW_FORMAT={rowFormat} "
-            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `ordered_source` VALUES ('id', "
-            + (failure == "overlength"
+            $"""
+            CREATE TABLE `ordered_source` (`id` char(36) NOT NULL, `value` {sourceType}
+            NOT NULL,
+            `other_value` longtext NOT NULL) ENGINE=InnoDB ROW_FORMAT={rowFormat}
+            DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; INSERT INTO `ordered_source`
+            VALUES ('id',
+            {(failure == "overlength"
                 ? "REPEAT('x', 501)"
-                : "'preserved'")
-            + ", 'second');",
+                : "'preserved'")}, 'second');
+            """,
             cancellationToken: CancellationToken.None);
 
         if (failure == "rename_collision")
@@ -174,9 +187,12 @@ public sealed class MySqlColumnsOrderedAlterIntegrationTests : MySqlSafeMigratio
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `ordered_source` (`id` char(36) NOT NULL, `value` longtext NOT NULL, "
-            + "`other_value` longtext NOT NULL) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 "
-            + "COLLATE utf8mb4_unicode_ci;",
+            """
+            CREATE TABLE `ordered_source` (`id` char(36) NOT NULL, `value` longtext
+            NOT NULL,
+            `other_value` longtext NOT NULL) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4
+            COLLATE utf8mb4_unicode_ci;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -303,8 +319,10 @@ public sealed class MySqlColumnsOrderedAlterIntegrationTests : MySqlSafeMigratio
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `fk_source` (`value` varchar(100) NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-            + "CREATE TABLE `fk_dependent` (`value` varchar(100) NOT NULL) ENGINE=InnoDB;",
+            """
+            CREATE TABLE `fk_source` (`value` varchar(100) NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+            CREATE TABLE `fk_dependent` (`value` varchar(100) NOT NULL) ENGINE=InnoDB;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -473,9 +491,11 @@ public sealed class MySqlColumnsOrderedAlterIntegrationTests : MySqlSafeMigratio
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `composite_alter` (`left_value` varchar(100) NOT NULL, "
-            + "`right_value` varchar(100) NOT NULL) ENGINE=InnoDB ROW_FORMAT=DYNAMIC "
-            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;",
+            """
+            CREATE TABLE `composite_alter` (`left_value` varchar(100) NOT NULL, `right_value`
+            varchar(100) NOT NULL) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARACTER
+            SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -585,9 +605,12 @@ public sealed class MySqlColumnsOrderedAlterIntegrationTests : MySqlSafeMigratio
         {
             await ExecuteSqlAsync(
                 connectionString,
-                "CREATE TABLE `ordered_source` (`id` char(36) NOT NULL, `value` longtext NOT NULL, "
-                + "`other_value` longtext NOT NULL) ENGINE=InnoDB ROW_FORMAT=DYNAMIC "
-                + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;",
+                """
+                CREATE TABLE `ordered_source` (`id` char(36) NOT NULL, `value` longtext
+                NOT NULL,
+                `other_value` longtext NOT NULL) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT
+                CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -637,10 +660,11 @@ public sealed class MySqlColumnsOrderedAlterIntegrationTests : MySqlSafeMigratio
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `converged_source` (`value` varchar({originalLength}) NOT NULL) "
-            + "ENGINE=InnoDB ROW_FORMAT=DYNAMIC "
-            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `converged_source` VALUES ('preserved');",
+            $"""
+            CREATE TABLE `converged_source` (`value` varchar({originalLength})
+            NOT NULL) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARACTER SET utf8mb4
+            COLLATE utf8mb4_unicode_ci; INSERT INTO `converged_source` VALUES ('preserved');
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -717,8 +741,12 @@ public sealed class MySqlColumnsOrderedAlterIntegrationTests : MySqlSafeMigratio
             {
                 indexPrefixLength = await ScalarIntAsync(
                     connectionString,
-                    "SELECT SUB_PART FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() "
-                    + "AND TABLE_NAME = 'converged_target' AND INDEX_NAME = 'ix_value';",
+                    """
+                    SELECT SUB_PART FROM INFORMATION_SCHEMA.STATISTICS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME = 'converged_target'
+                    AND INDEX_NAME = 'ix_value';
+                    """,
                     cancellationToken: CancellationToken.None);
             }
         }
@@ -753,12 +781,14 @@ public sealed class MySqlColumnsOrderedAlterIntegrationTests : MySqlSafeMigratio
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `trigger_target` (`value` longtext NOT NULL) ENGINE=InnoDB; "
-            + "INSERT INTO `trigger_target` VALUES ('short'); "
-            + "CREATE TABLE `backfill_source` (`value` int NULL) ENGINE=InnoDB; "
-            + "INSERT INTO `backfill_source` VALUES (NULL); "
-            + "CREATE TRIGGER `backfill_rows` BEFORE UPDATE ON `backfill_source` FOR EACH ROW "
-            + "UPDATE `trigger_target` SET `value` = REPEAT('x', 501);",
+            """
+            CREATE TABLE `trigger_target` (`value` longtext NOT NULL) ENGINE=InnoDB;
+            INSERT INTO `trigger_target` VALUES ('short'); CREATE TABLE `backfill_source`
+            (`value` int NULL) ENGINE=InnoDB; INSERT INTO `backfill_source` VALUES (NULL);
+            CREATE TRIGGER `backfill_rows` BEFORE UPDATE ON `backfill_source` FOR EACH
+            ROW UPDATE `trigger_target` SET `value` = REPEAT('x',
+            501);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -828,14 +858,17 @@ public sealed class MySqlColumnsOrderedAlterIntegrationTests : MySqlSafeMigratio
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `managed_target` (`value` varchar(200) NOT NULL) ENGINE=InnoDB; "
-            + "INSERT INTO `managed_target` VALUES ('short'); "
-            + "CREATE TABLE `managed_source` (`id` int NOT NULL PRIMARY KEY, `value` int NOT NULL) ENGINE=InnoDB; "
-            + (kind == "INSERT"
+            $"""
+            CREATE TABLE `managed_target` (`value` varchar(200) NOT NULL) ENGINE=InnoDB;
+            INSERT INTO `managed_target` VALUES ('short'); CREATE TABLE `managed_source`
+            (`id` int NOT NULL PRIMARY KEY,
+            `value` int NOT NULL) ENGINE=InnoDB; {(kind == "INSERT"
                 ? string.Empty
-                : "INSERT INTO `managed_source` VALUES (1, 1); ")
-            + $"CREATE TRIGGER `managed_rows` AFTER {kind} ON `managed_source` FOR EACH ROW "
-            + "UPDATE `managed_target` SET `value` = REPEAT('x', 501);",
+                : "INSERT INTO `managed_source` VALUES (1, 1); ")}CREATE TRIGGER
+            `managed_rows` AFTER {kind} ON `managed_source` FOR
+            EACH ROW UPDATE `managed_target` SET `value` = REPEAT('x',
+            501);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

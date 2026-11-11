@@ -15,10 +15,12 @@ public sealed class PostgreSqlIndexesReplacementIntegrationTests : PostgreSqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE blocked_index_replacement (code integer NOT NULL); "
-            + "CREATE INDEX ix_blocked_index_replacement "
-            + "ON blocked_index_replacement (code); "
-            + "INSERT INTO blocked_index_replacement (code) VALUES (1), (1);",
+            """
+            CREATE TABLE blocked_index_replacement (code integer NOT NULL); CREATE INDEX
+            ix_blocked_index_replacement ON blocked_index_replacement (code); INSERT INTO
+            blocked_index_replacement (code) VALUES (1),
+            (1);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -45,11 +47,13 @@ public sealed class PostgreSqlIndexesReplacementIntegrationTests : PostgreSqlSaf
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_class i "
-                + "INNER JOIN pg_catalog.pg_namespace n ON n.oid = i.relnamespace "
-                + "WHERE n.nspname = current_schema() "
-                + "AND i.relname = 'ix_blocked_index_replacement' "
-                + "AND i.relkind = 'i';",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_class i
+                INNER JOIN pg_catalog.pg_namespace n ON n.oid = i.relnamespace
+                WHERE n.nspname = current_schema()
+                AND i.relname = 'ix_blocked_index_replacement'
+                AND i.relkind = 'i';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 }

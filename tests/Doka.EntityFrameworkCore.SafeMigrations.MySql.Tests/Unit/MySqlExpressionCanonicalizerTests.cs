@@ -2,6 +2,25 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 public sealed class MySqlExpressionCanonicalizerTests
 {
+    /// <summary>AND must not remove parentheses that determine the meaning of an inner OR group.</summary>
+    [Fact]
+    public void CatalogDisplayCandidatesRetainRequiredOrGroupsUnderAnd()
+    {
+        // Arrange
+        const string expression = "(`a` IS NULL OR `b` IS NULL OR `c` IS NULL) AND (`d` IS NULL OR `e` IS NULL)";
+        const string different = "`a` is null or `b` is null or `c` is null and `d` is null or `e` is null";
+
+        // Act
+        var candidates = MySqlExpressionCanonicalizer.BuildCatalogDisplayCandidates(expression,
+            includeMySqlEncodedDisplay: false);
+
+        // Assert
+        Assert.DoesNotContain(different, candidates, StringComparer.Ordinal);
+        Assert.Contains("(`a` is null or `b` is null or `c` is null) and (`d` is null or `e` is null)",
+            candidates,
+            StringComparer.Ordinal);
+    }
+
     /// <summary>CASE conditions retain Boolean boundaries, including nested and quoted keyword tokens.</summary>
     [Fact]
     public void CatalogDisplayCandidatesDoNotRegroupBooleanConditionsInsideCase()

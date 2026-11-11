@@ -296,6 +296,8 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
                     SafeMigrationAction.RejectUnsupported => "reject_unsupported",
                     SafeMigrationAction.RejectDataBlocked => "reject_data_blocked",
                     SafeMigrationAction.RejectPrerequisiteMissing => "reject_prerequisite_missing",
+                    SafeMigrationAction.Repair or SafeMigrationAction.ValidateAtRuntime =>
+                        throw new UnreachableException(),
                     _ => throw new UnreachableException(),
                 };
 
@@ -312,7 +314,7 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
     }
 
     /// <summary>
-    /// Retains the original scalar interpolation and streamed literal work for allocation comparison.
+    /// Retains the original scalar interpolation and streamed literal work for SQL equivalence comparison.
     /// </summary>
     private static void OriginalScalar(
         StringBuilder builder,
@@ -384,10 +386,10 @@ public sealed partial class SqlServerGuardRenderingAllocationTests
         while ((offset = sql.IndexOf('\'')) >= 0)
         {
             builder
-                .Append(sql.Slice(0, offset))
+                .Append(sql[..offset])
                 .Append("''");
 
-            sql = sql.Slice(offset + 1);
+            sql = sql[(offset + 1)..];
         }
 
         builder.Append(sql);

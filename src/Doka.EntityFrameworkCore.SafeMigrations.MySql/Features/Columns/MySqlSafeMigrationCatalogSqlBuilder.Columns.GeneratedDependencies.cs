@@ -20,11 +20,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // WHY: Bare schema/table filters let native metadata lookup avoid
         // enumerating unrelated databases. They are coarse prefilters only;
         // the native-case binary proofs still decide the exact owner identity.
-        var owner = "c.TABLE_SCHEMA = DATABASE() "
-            + $"AND c.TABLE_NAME = {Literal(table)} AND "
-            + BuildRequiredColumnAddOwnerMatches("c.TABLE_SCHEMA", "DATABASE()")
-            + " AND "
-            + BuildRequiredColumnAddOwnerMatches("c.TABLE_NAME", Literal(table));
+        var owner = $"""
+            c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(table)}
+            AND {BuildRequiredColumnAddOwnerMatches("c.TABLE_SCHEMA", "DATABASE()")}
+            AND {BuildRequiredColumnAddOwnerMatches("c.TABLE_NAME", Literal(table))}
+            """;
 
         var generated = "c.GENERATION_EXPRESSION IS NOT NULL AND c.GENERATION_EXPRESSION <> ''";
         if (isDrop)
@@ -78,8 +78,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     ? foldedModelCertificate
                     : "FALSE");
 
-            permit = $"{count} = 0 OR CASE WHEN @@lower_case_table_names <> 0 THEN ({foldedPermit}) "
-                + $"ELSE ({ordinaryPermit}) END";
+            permit = $"""
+                {count} = 0
+                OR CASE WHEN @@lower_case_table_names <> 0
+                THEN ({foldedPermit})
+                ELSE ({ordinaryPermit}) END
+                """;
 
             dependent = $"CASE WHEN @@lower_case_table_names <> 0 THEN "
                 + $"({foldedDependent})"
@@ -108,8 +112,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         return plan with
         {
             StateExpression = $"CASE WHEN NOT ({guard}) THEN 'unsupported' ELSE ({plan.StateExpression}) END",
-            ClassificationCodeExpression = $"CASE WHEN NOT ({guard}) THEN CASE WHEN ({dependent}) "
-            + $"THEN '{codePrefix}dependency' ELSE '{codePrefix}unproven' END ELSE NULL END",
+            ClassificationCodeExpression = $"""
+            CASE WHEN NOT ({guard})
+            THEN CASE WHEN ({dependent})
+            THEN '{codePrefix}dependency'
+            ELSE '{codePrefix}unproven' END
+            ELSE NULL END
+            """,
             DropLeavesNoGeneratedColumnsExpression = isDrop
                 ? $"{count} = 0"
                 : null,
@@ -165,19 +174,20 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string source
     )
     {
-        var sourceOwner = "native_source.TABLE_SCHEMA = DATABASE() "
-            + $"AND native_source.TABLE_NAME = {Literal(table)} AND "
-            + BuildRequiredColumnAddOwnerMatches("native_source.TABLE_SCHEMA", "DATABASE()")
-            + " AND "
-            + BuildRequiredColumnAddOwnerMatches("native_source.TABLE_NAME", Literal(table));
+        var sourceOwner = $"""
+            native_source.TABLE_SCHEMA = DATABASE()
+            AND native_source.TABLE_NAME = {Literal(table)}
+            AND {BuildRequiredColumnAddOwnerMatches("native_source.TABLE_SCHEMA", "DATABASE()")}
+            AND {BuildRequiredColumnAddOwnerMatches("native_source.TABLE_NAME", Literal(table))}
+            """;
 
-        var generatedOwner = "c.TABLE_SCHEMA = DATABASE() "
-            + $"AND c.TABLE_NAME = {Literal(table)} "
-            + "AND c.TABLE_SCHEMA = native_source.TABLE_SCHEMA AND c.TABLE_NAME = native_source.TABLE_NAME "
-            + "AND "
-            + BuildRequiredColumnAddOwnerMatches("c.TABLE_SCHEMA", "native_source.TABLE_SCHEMA")
-            + " AND "
-            + BuildRequiredColumnAddOwnerMatches("c.TABLE_NAME", "native_source.TABLE_NAME");
+        var generatedOwner = $"""
+            c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(table)}
+            AND c.TABLE_SCHEMA = native_source.TABLE_SCHEMA
+            AND c.TABLE_NAME = native_source.TABLE_NAME
+            AND {BuildRequiredColumnAddOwnerMatches("c.TABLE_SCHEMA", "native_source.TABLE_SCHEMA")}
+            AND {BuildRequiredColumnAddOwnerMatches("c.TABLE_NAME", "native_source.TABLE_NAME")}
+            """;
 
         const string name = "CAST(native_source.COLUMN_NAME AS BINARY)";
         const string expression = "CAST(c.GENERATION_EXPRESSION AS BINARY)";
@@ -197,13 +207,18 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // WHY: The explicit source existence prevents a vacuous proof. Native
         // generated membership is captured afresh, independently of optional
         // model facets. Only a true absence result authorizes the fallback.
-        return "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS native_source "
-            + $"WHERE {sourceOwner} AND native_source.COLUMN_NAME = {Literal(source)} "
-            + $"AND CAST(LOWER(native_source.COLUMN_NAME) AS BINARY) = CAST(LOWER({Literal(source)}) AS BINARY) "
-            + "AND NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c "
-            + $"WHERE {generatedOwner} AND c.GENERATION_EXPRESSION IS NOT NULL "
-            + "AND c.GENERATION_EXPRESSION <> '' "
-            + "AND CAST(c.COLUMN_NAME AS BINARY) <> CAST(native_source.COLUMN_NAME AS BINARY) "
-            + $"AND NOT COALESCE(({absent}), FALSE)))";
+        return $"""
+            EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS native_source
+            WHERE {sourceOwner}
+            AND native_source.COLUMN_NAME = {Literal(source)}
+            AND CAST(LOWER(native_source.COLUMN_NAME) AS BINARY) = CAST(LOWER({Literal(source)})
+            AS BINARY)
+            AND NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c
+            WHERE {generatedOwner}
+            AND c.GENERATION_EXPRESSION IS NOT NULL
+            AND c.GENERATION_EXPRESSION <> ''
+            AND CAST(c.COLUMN_NAME AS BINARY) <> CAST(native_source.COLUMN_NAME AS BINARY)
+            AND NOT COALESCE(({absent}), FALSE)))
+            """;
     }
 }

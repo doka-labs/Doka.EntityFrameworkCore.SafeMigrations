@@ -15,9 +15,12 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE index_identity (code integer NOT NULL, tenant_id integer NOT NULL);"
-            + "CREATE INDEX ix_index_identity_legacy_a ON index_identity (code, tenant_id);"
-            + "CREATE INDEX ix_index_identity_legacy_b ON index_identity (code, tenant_id);",
+            """
+            CREATE TABLE index_identity (code integer NOT NULL, tenant_id integer NOT NULL);CREATE INDEX
+            ix_index_identity_legacy_a ON index_identity (code,
+            tenant_id);CREATE INDEX ix_index_identity_legacy_b ON index_identity (code,
+            tenant_id);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -62,9 +65,10 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_class "
-                + "WHERE relname IN ('ix_index_identity_legacy_a', "
-                + "'ix_index_identity_legacy_b', 'ix_index_identity_expected');",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_class WHERE relname IN ('ix_index_identity_legacy_a',
+                'ix_index_identity_legacy_b', 'ix_index_identity_expected');
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -74,8 +78,11 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE index_nonidentity (code integer NOT NULL, alternate_code integer NOT NULL);"
-            + "CREATE INDEX ix_index_nonidentity_legacy ON index_nonidentity (code);",
+            """
+            CREATE TABLE index_nonidentity (code integer NOT NULL, alternate_code integer
+            NOT NULL);CREATE INDEX ix_index_nonidentity_legacy ON index_nonidentity
+            (code);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -121,8 +128,11 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE invalid_index_drift (id integer NOT NULL, code integer NOT NULL);"
-            + "INSERT INTO invalid_index_drift VALUES (1, 7), (2, 7);",
+            """
+            CREATE TABLE invalid_index_drift (id integer NOT NULL, code integer NOT NULL);INSERT INTO
+            invalid_index_drift VALUES (1,
+            7), (2, 7);
+            """,
             cancellationToken: CancellationToken.None);
 
         _ = await Assert.ThrowsAsync<PostgresException>(() =>
@@ -135,9 +145,12 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_index i "
-                + "JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid "
-                + "WHERE idx.relname = 'ix_invalid_index_drift' AND NOT i.indisvalid;",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_index i
+                JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid
+                WHERE idx.relname = 'ix_invalid_index_drift'
+                AND NOT i.indisvalid;
+                """,
                 cancellationToken: CancellationToken.None));
 
         await using var context = CreateContext(connectionString);
@@ -174,8 +187,11 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE invalid_index_identity (id integer NOT NULL, code integer NOT NULL);"
-            + "INSERT INTO invalid_index_identity VALUES (1, 7), (2, 7);",
+            """
+            CREATE TABLE invalid_index_identity (id integer NOT NULL, code integer NOT NULL);INSERT INTO
+            invalid_index_identity VALUES (1,
+            7), (2, 7);
+            """,
             cancellationToken: CancellationToken.None);
 
         _ = await Assert.ThrowsAsync<PostgresException>(() =>
@@ -233,19 +249,21 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE partitioned_index_root (bucket integer NOT NULL, code integer NOT NULL) "
-            + "PARTITION BY RANGE (bucket);"
-            + "CREATE TABLE partitioned_index_leaf PARTITION OF partitioned_index_root "
-            + "FOR VALUES FROM (0) TO (100);"
-            + "CREATE INDEX ix_partitioned_index_root_code ON partitioned_index_root (code);",
+            """
+            CREATE TABLE partitioned_index_root (bucket integer NOT NULL, code integer NOT NULL) PARTITION
+            BY RANGE (bucket);CREATE TABLE partitioned_index_leaf PARTITION OF partitioned_index_root FOR VALUES
+            FROM (0) TO (100);CREATE INDEX ix_partitioned_index_root_code ON partitioned_index_root (code);
+            """,
             cancellationToken: CancellationToken.None);
 
         var childIndex = await ScalarStringAsync(
             connectionString,
-            "SELECT child.relname FROM pg_catalog.pg_inherits inh "
-            + "JOIN pg_catalog.pg_class child ON child.oid = inh.inhrelid "
-            + "JOIN pg_catalog.pg_class parent ON parent.oid = inh.inhparent "
-            + "WHERE parent.relname = 'ix_partitioned_index_root_code';",
+            """
+            SELECT child.relname FROM pg_catalog.pg_inherits inh
+            JOIN pg_catalog.pg_class child ON child.oid = inh.inhrelid
+            JOIN pg_catalog.pg_class parent ON parent.oid = inh.inhparent
+            WHERE parent.relname = 'ix_partitioned_index_root_code';
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -540,11 +558,13 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE index_namespace_owner (code integer NOT NULL);"
-            + "CREATE TABLE ix_index_namespace_target (id integer NOT NULL);"
-            + "CREATE TABLE rename_index_owner (code integer NOT NULL);"
-            + "CREATE INDEX rename_index_source ON rename_index_owner (code);"
-            + "CREATE TABLE rename_index_relation_target (id integer NOT NULL);",
+            """
+            CREATE TABLE index_namespace_owner (code integer NOT NULL);
+            CREATE TABLE ix_index_namespace_target (id integer NOT NULL);
+            CREATE TABLE rename_index_owner (code integer NOT NULL);
+            CREATE INDEX rename_index_source ON rename_index_owner (code);
+            CREATE TABLE rename_index_relation_target (id integer NOT NULL);
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -589,9 +609,10 @@ public sealed class PostgreSqlIndexesDriftMatrixIntegrationTests : PostgreSqlSaf
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_class "
-                + "WHERE relkind IN ('r', 'p') "
-                + "AND relname IN ('ix_index_namespace_target', 'rename_index_relation_target');",
+                """
+                SELECT COUNT(*) FROM pg_catalog.pg_class WHERE relkind IN ('r', 'p')
+                AND relname IN ('ix_index_namespace_target', 'rename_index_relation_target');
+                """,
                 cancellationToken: CancellationToken.None));
 
         Assert.Equal(

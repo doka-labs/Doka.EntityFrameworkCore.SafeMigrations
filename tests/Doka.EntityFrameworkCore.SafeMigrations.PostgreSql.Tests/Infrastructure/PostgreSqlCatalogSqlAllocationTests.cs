@@ -1,73 +1,47 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-/// <summary>
-/// Bounds what composing one table-definition classifier allocates per expected column.
-/// </summary>
-/// <remarks>
-/// This test exists because the classifier's cost per column was never bounded by anything. A
-/// measured run over the hundred-thousand-operation contract attributed 36.4 GB of allocation to
-/// one analysis while the dispatched SQL text accounted for 6 percent of it. The bound below is
-/// deliberately loose: it is a regression fence against reintroducing per-column composition, not
-/// a performance claim, and the absolute figure moves with the runtime and the type mappings.
-/// The measured figure at the time of writing is about 2 500 bytes per column. The bound sits
-/// well above it so ordinary drift does not fail the suite, while a return to composing the
-/// table match twice per build, or to one string fragment per column, exceeds it.
-/// </remarks>
+/// <summary>Protects complete table-definition predicates at narrow and wide column counts.</summary>
 public sealed class PostgreSqlCatalogSqlAllocationTests
 {
     private const string OfflineConnectionString =
         "Host=127.0.0.1;Port=1;Database=allocation_bound;Username=test;Password=test";
 
-    /// <summary>Composition allocates a bounded amount for each additional expected column.</summary>
-    [Fact]
-    public void TableDefinitionComposition_AllocatesABoundedAmountPerColumn()
+    /// <summary>Composition includes every column and shares the exact execution postcondition.</summary>
+    /// <param name="columnCount">The number of independently named expected columns.</param>
+    [Theory]
+    [InlineData(4)]
+    [InlineData(64)]
+    public void TableDefinitionComposition_PreservesEveryExpectedColumn(
+        int columnCount
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(OfflineConnectionString, registerSafeMigrations: false);
         var mappings = context.GetService<IRelationalTypeMappingSource>();
         var helper = context.GetService<ISqlGenerationHelper>();
-        var narrow = BuildOperation(context, 4);
-        var wide = BuildOperation(context, 64);
-
-        // WHY: The first builds populate the type-mapping and renderer caches, which would
-        // otherwise be charged to whichever size runs first.
-        for (var warmup = 0; warmup < 20; warmup++)
-        {
-            _ = new PostgreSqlSafeMigrationCatalogSqlBuilder(mappings, helper).Build(narrow);
-            _ = new PostgreSqlSafeMigrationCatalogSqlBuilder(mappings, helper).Build(wide);
-        }
+        var operation = BuildOperation(context, columnCount);
 
         // Act
-        var narrowBytes = MeasureAllocation(mappings, helper, narrow);
-        var wideBytes = MeasureAllocation(mappings, helper, wide);
+        var plan = new PostgreSqlSafeMigrationCatalogSqlBuilder(mappings, helper).Build(operation);
 
         // Assert
-        var bytesPerColumn = (wideBytes - narrowBytes) / 60;
+        Assert.Same(plan.Postcondition, plan.ExecutionPostcondition);
+        Assert.Contains(plan.Postcondition, plan.StateExpression, StringComparison.Ordinal);
+        Assert.Contains(
+            "AND a.attnum > 0 AND NOT a.attisdropped) = " + columnCount.ToString(CultureInfo.InvariantCulture),
+            plan.Postcondition,
+            StringComparison.Ordinal);
 
-        Assert.InRange(bytesPerColumn, 1, 4_000);
-    }
-
-    private static long MeasureAllocation(
-        IRelationalTypeMappingSource mappings,
-        ISqlGenerationHelper helper,
-        SafeMigrationOperation operation
-    )
-    {
-        const int iterations = 200;
-
-        // WHY: GetTotalAllocatedBytes counts the whole process, so a live test allocating on
-        // another thread lands inside this window and fails the bound at random. The loop below
-        // never awaits, so it stays on one thread and the thread-local counter measures it alone.
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var iteration = 0; iteration < iterations; iteration++)
+        for (var index = 0; index < columnCount; index++)
         {
-            _ = new PostgreSqlSafeMigrationCatalogSqlBuilder(mappings, helper).Build(operation)
-                .StateExpression;
+            Assert.Contains(
+                "'column_" + index.ToString(CultureInfo.InvariantCulture) + "'",
+                plan.Postcondition,
+                StringComparison.Ordinal);
         }
-
-        return (GC.GetAllocatedBytesForCurrentThread() - before) / iterations;
     }
 
+    /// <summary>Creates the strict immutable table contract without opening a connection.</summary>
     private static SafeMigrationOperation BuildOperation(
         SafeMigrationDbContext context,
         int columnCount

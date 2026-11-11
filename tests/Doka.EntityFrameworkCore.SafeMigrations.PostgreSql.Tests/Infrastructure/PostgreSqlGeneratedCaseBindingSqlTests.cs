@@ -111,14 +111,20 @@ public sealed class PostgreSqlGeneratedCaseBindingSqlTests
         Assert.False(plan.IsStaticallyUnsupported);
         Assert.Equal("generated_case_operand_type", plan.UnsupportedCode);
         Assert.Contains(
-            "a.attname OPERATOR(pg_catalog.=) 'left_bound' "
-            + "AND a.atttypid OPERATOR(pg_catalog.=) ANY(ARRAY[20, 21, 23]::pg_catalog.oid[])",
+            """
+            a.attname OPERATOR(pg_catalog.=) 'left_bound'
+            AND a.atttypid OPERATOR(pg_catalog.=)
+            ANY(ARRAY[20, 21, 23]::pg_catalog.oid[])
+            """,
             plan.StateExpression,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "a.attname OPERATOR(pg_catalog.=) 'right_bound' "
-            + "AND a.atttypid OPERATOR(pg_catalog.=) ANY(ARRAY[20, 21, 23, 700, 701, 1700]::pg_catalog.oid[])",
+            """
+            a.attname OPERATOR(pg_catalog.=) 'right_bound'
+            AND a.atttypid OPERATOR(pg_catalog.=)
+            ANY(ARRAY[20, 21, 23, 700, 701, 1700]::pg_catalog.oid[])
+            """,
             plan.StateExpression,
             StringComparison.Ordinal);
 

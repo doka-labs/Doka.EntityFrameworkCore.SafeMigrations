@@ -253,8 +253,11 @@ public sealed class SqlServerSafeMigrationColumnLayoutIntegrationTests : SqlServ
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.layout_probe (Id int NOT NULL, Removed char(5000) NULL); "
-            + "INSERT dbo.layout_probe(Id) VALUES(7); ALTER TABLE dbo.layout_probe DROP COLUMN Removed;",
+            """
+            CREATE TABLE dbo.layout_probe (Id int NOT NULL, Removed char(5000) NULL);
+            INSERT dbo.layout_probe(Id) VALUES(7); ALTER TABLE dbo.layout_probe DROP
+            COLUMN Removed;
+            """,
             cancellationToken: CancellationToken.None);
 
         await CreateColumnLayoutAuditAsync(connectionString, cancellationToken: CancellationToken.None);
@@ -371,9 +374,14 @@ public sealed class SqlServerSafeMigrationColumnLayoutIntegrationTests : SqlServ
 
         var existingBindings = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U') "
-            + "AND name=N'Existing' AND column_id=1 AND system_type_id=TYPE_ID(N'char') "
-            + "AND user_type_id=TYPE_ID(N'char') AND max_length=4000 AND is_nullable=1;",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U')
+            AND name=N'Existing' AND column_id=1
+            AND system_type_id=TYPE_ID(N'char')
+            AND user_type_id=TYPE_ID(N'char')
+            AND max_length=4000 AND is_nullable=1;
+            """,
             cancellationToken: CancellationToken.None);
 
         var added = await ScalarIntAsync(
@@ -496,11 +504,18 @@ public sealed class SqlServerSafeMigrationColumnLayoutIntegrationTests : SqlServ
 
         var bindings = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U') "
-            + "AND ((name=N'Id' AND column_id=1 AND system_type_id=TYPE_ID(N'int') "
-            + "AND user_type_id=TYPE_ID(N'int') AND max_length=4 AND is_nullable=0) "
-            + "OR (name=N'Removed' AND column_id=2 AND system_type_id=TYPE_ID(N'char') "
-            + "AND user_type_id=TYPE_ID(N'char') AND max_length=5000 AND is_nullable=1));",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U')
+            AND ((name=N'Id' AND column_id=1
+            AND system_type_id=TYPE_ID(N'int')
+            AND user_type_id=TYPE_ID(N'int')
+            AND max_length=4 AND is_nullable=0)
+            OR (name=N'Removed' AND column_id=2
+            AND system_type_id=TYPE_ID(N'char')
+            AND user_type_id=TYPE_ID(N'char')
+            AND max_length=5000 AND is_nullable=1));
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -584,10 +599,16 @@ public sealed class SqlServerSafeMigrationColumnLayoutIntegrationTests : SqlServ
 
         var bindings = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U') "
-            + "AND system_type_id=TYPE_ID(N'int') AND user_type_id=TYPE_ID(N'int') AND max_length=4 "
-            + "AND ((name=N'Id' AND column_id=1 AND is_nullable=0) "
-            + "OR (name=N'Removed' AND column_id=2 AND is_nullable=1));",
+            """
+            SELECT COUNT(*) FROM sys.columns
+            WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U')
+            AND system_type_id=TYPE_ID(N'int')
+            AND user_type_id=TYPE_ID(N'int')
+            AND max_length=4 AND ((name=N'Id'
+            AND column_id=1 AND is_nullable=0)
+            OR (name=N'Removed' AND column_id=2
+            AND is_nullable=1));
+            """,
             cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(
@@ -686,9 +707,10 @@ public sealed class SqlServerSafeMigrationColumnLayoutIntegrationTests : SqlServ
                 + "INSERT dbo.layout_probe VALUES('a','x');",
             "variable-default" => "CREATE TABLE dbo.layout_probe (A char(8000) NOT NULL,B char(53) NOT NULL); "
                 + "INSERT dbo.layout_probe VALUES('a','b');",
-            "clustered" => "CREATE TABLE dbo.layout_probe (A char(7500) NOT NULL,"
-                + "B varchar(900) NOT NULL PRIMARY KEY CLUSTERED); "
-                + "INSERT dbo.layout_probe VALUES('a',REPLICATE('b',500));",
+            "clustered" => """
+                CREATE TABLE dbo.layout_probe (A char(7500) NOT NULL,B varchar(900) NOT
+                NULL PRIMARY KEY CLUSTERED); INSERT dbo.layout_probe VALUES('a',REPLICATE('b',500));
+                """,
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
 
@@ -992,12 +1014,13 @@ public sealed class SqlServerSafeMigrationColumnLayoutIntegrationTests : SqlServ
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.layout_probe (A char(8000) NOT NULL,B varchar(1) NOT NULL); "
-            + "INSERT dbo.layout_probe VALUES('a','x'); "
-            + "CREATE USER layout_no_select WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; "
-            + "GRANT VIEW DEFINITION TO layout_no_select; "
-            + "GRANT ALTER ON OBJECT::dbo.layout_probe TO layout_no_select; "
-            + "DENY SELECT ON OBJECT::dbo.layout_probe TO layout_no_select;",
+            """
+            CREATE TABLE dbo.layout_probe (A char(8000) NOT NULL,B varchar(1) NOT NULL);
+            INSERT dbo.layout_probe VALUES('a','x'); CREATE USER layout_no_select WITHOUT
+            LOGIN WITH DEFAULT_SCHEMA=dbo; GRANT VIEW DEFINITION TO layout_no_select;
+            GRANT ALTER ON OBJECT::dbo.layout_probe TO layout_no_select; DENY SELECT
+            ON OBJECT::dbo.layout_probe TO layout_no_select;
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);

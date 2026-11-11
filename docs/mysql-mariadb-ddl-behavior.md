@@ -1,10 +1,11 @@
 # MySQL and MariaDB DDL behavior
 
-Version 10.7.1 preserves explicit InnoDB table contracts through existing typed
-table callbacks and retains the certified generated/CHECK contracts
-and native independent DROP proofs introduced in 10.6.0. Review the
-[current upgrade notes](support-and-qualification.md#upgrade-to-1071) for table
-metadata, required cancellation arguments and dependency floors, and the earlier
+Version 10.7.2 corrects native nested Boolean, temporal and expression-index
+comparisons while retaining explicit InnoDB contracts, certified generated/CHECK
+boundaries and native independent DROP proofs. Review the
+[current upgrade notes](support-and-qualification.md#upgrade-to-1072) for captured
+numeric-default approvals, required cancellation arguments and dependency floors,
+and the earlier
 [10.6.0 contract changes](support-and-qualification.md#upgrade-to-1060) for
 conditional fingerprint approvals and conservative boundaries.
 
@@ -1217,6 +1218,22 @@ heuristically. Parsing alone is not a non-null backfill proof. Required
 SQL-default ADD eligibility, atomic native validation and matching exemptions
 follow [the column contract](#explicit-backfill-metadata).
 
+Captured default source preserves the same native token roles as CHECK and
+computed source. In particular, a quoted function name cannot be silently
+rewritten as an unquoted built-in. See the shared
+[capture and approval contract](migration-authoring.md#generated-check-constraints).
+Typed duration-default comparisons derive native spellings from Doka's complete
+literal, retaining total hours, negative signs and declared fractional precision.
+A `TimeSpan` containing two days cannot match only its time-of-day remainder.
+Exact `time(0)`, `datetime(0)` and `timestamp(0)` contracts recognize the native
+type spelling without `(0)`; nonzero precision remains an independent facet.
+Temporal aliases may omit trailing zero digits, but never a nonzero fraction.
+This also applies to native typed TIME expression defaults. DateTime fractions
+exceeding the physical precision are compared using the same native target
+conversion as DDL, respecting the engine's current rounding/truncation mode.
+SafeMigrations neither guesses that conversion in CLR arithmetic nor changes
+the session's SQL mode.
+
 For a supported uncast structured ISO date-time string default on TIMESTAMP or
 DATETIME, MySQL compares two independent catalog paths. With DEFAULT_GENERATED,
 the expected `_utf8mb4` serialized expression display is matched byte-exactly,
@@ -1249,6 +1266,24 @@ actions, ordering, prefixes, methods, uniqueness, visibility, or other modeled
 facets remain independent and do not suppress safe creation. Multiple semantic
 aliases remain a deterministic no-op and are reconciled from unexpected-object
 inventory through the same provider comparator.
+
+CHECK comparison recognizes native associative AND/OR chains inside nested
+groups, not just at the expression root. MySQL can print a three-term AND as
+one flat group instead of the authored binary AST grouping. MariaDB can retain
+Boolean-group parentheses while omitting per-predicate parentheses. The adapter
+derives these finite spelling candidates from the expected expression tree;
+it does not rewrite arbitrary catalog SQL or enumerate grouping permutations.
+Strict table completeness, individual CHECK operations and generated columns
+share this comparison. Operand order, predicate identity, literal contents and
+mixed-operator binding remain mandatory. In particular, parentheses around an
+OR group cannot be discarded under AND: a differently associated CHECK remains
+`Different` and cannot be accepted as an equivalent object.
+
+Existing MySQL functional indexes use the same finite native-display and
+byte-exact literal comparison. Compact argument separators, escaped literal
+delimiters and native character encoding are display differences; changed
+literal case or content is not. This does not remove MariaDB's functional-key
+capability refusal or MySQL's missing-key physical-width proof requirement.
 
 Ordered preflight resolves a semantic no-op to one physical catalog name before
 retaining it as prerequisite evidence. A later drop invalidates every semantic

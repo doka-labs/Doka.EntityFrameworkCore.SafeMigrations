@@ -287,7 +287,7 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
                 }
                 else
                 {
-                    AppendLiteral(builder, value.Value, value.StoreType, defaultContext);
+                    AppendLiteral(builder, value.BorrowedValue, value.StoreType, defaultContext);
                 }
 
                 break;
@@ -522,9 +522,9 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
             return "structured_cast_type";
         }
 
-        if (expression.Value is not null
-            && _typeMappingSource.FindMapping(expression.Value.GetType(), expression.StoreType) is null
-            && _typeMappingSource.FindMapping(expression.Value.GetType()) is null)
+        if (expression.BorrowedValue is { } literal
+            && _typeMappingSource.FindMapping(literal.GetType(), expression.StoreType) is null
+            && _typeMappingSource.FindMapping(literal.GetType()) is null)
         {
             return "structured_literal_mapping";
         }

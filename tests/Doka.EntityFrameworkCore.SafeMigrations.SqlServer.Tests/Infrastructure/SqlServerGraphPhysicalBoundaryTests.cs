@@ -55,19 +55,19 @@ public sealed class SqlServerGraphPhysicalBoundaryTests
         Assert.Contains("N'[dbo].[" + table + "]'", physicalGate, StringComparison.Ordinal);
         Assert.DoesNotContain("sys.edge_constraints", physicalGate, StringComparison.Ordinal);
         Assert.StartsWith(
-            "DECLARE @doka_physical int; EXEC sys.sp_executesql N'SELECT @doka_proof = ("
+            "DECLARE @doka_physical int; EXEC sys.sp_executesql\nN'SELECT @doka_proof = ("
             + physicalGate.Replace("'", "''", StringComparison.Ordinal)
             + ");'",
             classifier,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "@doka_proof = @doka_physical OUTPUT; IF COALESCE(@doka_physical, 0) <> 1 ",
+            "@doka_proof =\n@doka_physical OUTPUT; IF COALESCE(@doka_physical, 0) <> 1\n",
             classifier,
             StringComparison.Ordinal);
 
         Assert.Contains(
-            "@doka_ordinal, N'unsupported', 0, 0, N'physical_table_unproven'",
+            "@doka_ordinal,\nN'unsupported', 0, 0, N'physical_table_unproven'",
             classifier,
             StringComparison.Ordinal);
 

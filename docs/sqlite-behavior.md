@@ -1,10 +1,11 @@
 # SQLite behavior
 
-Version 10.7.1 corrects atomic retiring-table FK removal and safe rebuild column
-order while retaining the generated-column creation/rebuild facets and
-independent DROP/identifier proofs introduced in 10.6.0. Review the
-[current upgrade notes](support-and-qualification.md#upgrade-to-1071) for retirement,
-rebuild order, required cancellation arguments and dependency floors, and the earlier
+Version 10.7.2 corrects quoted/depth-sensitive index, collation, constraint and
+default-value catalog interpretation. It retains atomic retiring-table FK removal,
+safe rebuild column order and generated-column/DROP proofs. Review the
+[current upgrade notes](support-and-qualification.md#upgrade-to-1072) for catalog
+and literal-ownership corrections, required cancellation arguments and dependency
+floors, and the earlier
 [10.6.0 contract changes](support-and-qualification.md#upgrade-to-1060) for
 conditional computed/CHECK fingerprint approvals and conservative boundaries.
 
@@ -242,6 +243,24 @@ the check against a column that has not been materialized yet, and the provider
 operation does not carry a general proof of every resulting row value. Split
 the column materialization and the check into ordered migrations, then analyze
 the check against the resulting live data.
+
+## Catalog expression identity
+
+Native catalog extraction retains SQL grammar roles. Quoted index names cannot
+stand in for the index owner's key list, and single-quoted constraint names are
+decoded only at their identifier positions. Generated/default expression
+collations remain separate from a column's declared collation.
+
+Structured expression-index keys and partial predicates use the same bounded,
+source-preserving comparison as structured CHECK/generated expressions. Identifier
+delimiters and harmless trivia may differ; literal bytes, numeric source forms,
+operators and grouping remain part of the contract. Opaque definitions do not
+gain structural equivalence. DEFAULT comparison preserves double-quoted string
+payloads instead of applying ordinary identifier case folding, independently of
+the current connection's double-quoted-string parsing configuration.
+
+Quoted function names, CAST type names and COLLATE names retain their proven
+identifier-role case equivalence; value tokens inside those expressions do not.
 
 ## Generated columns
 

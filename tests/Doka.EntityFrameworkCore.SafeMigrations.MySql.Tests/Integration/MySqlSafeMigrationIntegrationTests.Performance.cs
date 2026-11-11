@@ -94,9 +94,11 @@ public sealed partial class MySqlProcessWidePerformanceIntegrationTests : MySqlS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `large_model_managed_rows` ("
-            + "`id` int NOT NULL, `managed_value` varchar(32) NOT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB;"
-            + BuildMySqlModelManagedInitialRows(),
+            $"""
+            CREATE TABLE `large_model_managed_rows` (`id` int NOT NULL, `managed_value`
+            varchar(32) NOT NULL,
+            PRIMARY KEY (`id`)) ENGINE=InnoDB;{BuildMySqlModelManagedInitialRows()}
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -306,46 +308,48 @@ public sealed partial class MySqlPerformanceIntegrationTests
         return builder.Operations.ToList();
     }
 
-    private static string BuildLargeMigrationStressCatalog() => "CREATE TABLE `large_migration_parent` ("
-        + "`id` int NOT NULL, `tenant_id` int NOT NULL, "
-        + "CONSTRAINT `pk_large_migration_parent` PRIMARY KEY (`id`, `tenant_id`)); "
-        + "CREATE TABLE `large_migration_secondary_parent` ("
-        + "`id` int NOT NULL, `tenant_id` int NOT NULL, "
-        + "CONSTRAINT `pk_large_migration_secondary_parent` PRIMARY KEY (`id`, `tenant_id`)); "
-        + "CREATE TABLE `large_migration_target` ("
-        + "`id` int NOT NULL, `matching_value` int NULL, "
-        + "`repair_value` varchar(40) NULL DEFAULT 'legacy', "
-        + "`blocked_value` varchar(40) NULL, `widening_value` varchar(40) NULL, "
-        + "`narrowing_value` varchar(40) NULL, `blocked_narrowing_value` varchar(40) NULL, "
-        + "`boolean_value` bit(1) NULL, `indexed_value` int NOT NULL, "
-        + "`unique_value` int NOT NULL, `check_value` int NOT NULL, "
-        + "`parent_id` int NOT NULL, `parent_tenant_id` int NOT NULL, "
-        + "`secondary_parent_id` int NOT NULL, `secondary_parent_tenant_id` int NOT NULL, "
-        + "CONSTRAINT `pk_large_migration_target` PRIMARY KEY (`id`), "
-        + "CONSTRAINT `uq_large_migration_target_value` UNIQUE (`unique_value`, `matching_value`), "
-        + "CONSTRAINT `ck_large_migration_target_value` CHECK (`check_value` >= 0), "
-        + "INDEX `ix_large_migration_target_indexed` (`indexed_value`, `matching_value`), "
-        + "INDEX `ix_large_migration_target_parent` (`parent_id`, `parent_tenant_id`), "
-        + "INDEX `ix_large_migration_target_secondary_parent` "
-        + "(`secondary_parent_id`, `secondary_parent_tenant_id`), "
-        + "CONSTRAINT `fk_large_migration_target_parent` "
-        + "FOREIGN KEY (`parent_id`, `parent_tenant_id`) "
-        + "REFERENCES `large_migration_parent` (`id`, `tenant_id`)); "
-        + "INSERT INTO `large_migration_parent` (`id`, `tenant_id`) VALUES (1, 1); "
-        + "INSERT INTO `large_migration_secondary_parent` (`id`, `tenant_id`) VALUES (1, 1); "
-        + "INSERT INTO `large_migration_target` ("
-        + "`id`, `matching_value`, `repair_value`, `blocked_value`, `widening_value`, "
-        + "`narrowing_value`, `blocked_narrowing_value`, `boolean_value`, `indexed_value`, "
-        + "`unique_value`, `check_value`, `parent_id`, `parent_tenant_id`, "
-        + "`secondary_parent_id`, `secondary_parent_tenant_id`) "
-        + "VALUES (1, 1, 'legacy', NULL, 'wide', 'fits', 'too-long-value', b'1', 1, 1, 1, 1, 1, 1, 1);"
-        + BuildLargeMigrationModelManagedRows();
+    private static string BuildLargeMigrationStressCatalog() => $"""
+        CREATE TABLE `large_migration_parent` (`id` int NOT NULL, `tenant_id` int
+        NOT NULL,
+        CONSTRAINT `pk_large_migration_parent` PRIMARY KEY (`id`, `tenant_id`));
+        CREATE TABLE `large_migration_secondary_parent` (`id` int NOT NULL,
+        `tenant_id` int NOT NULL, CONSTRAINT `pk_large_migration_secondary_parent`
+        PRIMARY KEY (`id`,
+        `tenant_id`)); CREATE TABLE `large_migration_target` (`id` int NOT NULL,
+        `matching_value` int NULL, `repair_value` varchar(40) NULL DEFAULT 'legacy',
+        `blocked_value` varchar(40) NULL, `widening_value` varchar(40) NULL, `narrowing_value`
+        varchar(40) NULL,
+        `blocked_narrowing_value` varchar(40) NULL, `boolean_value` bit(1) NULL,
+        `indexed_value` int NOT NULL, `unique_value` int NOT NULL, `check_value`
+        int NOT NULL,
+        `parent_id` int NOT NULL, `parent_tenant_id` int NOT NULL, `secondary_parent_id`
+        int NOT NULL,
+        `secondary_parent_tenant_id` int NOT NULL, CONSTRAINT `pk_large_migration_target`
+        PRIMARY KEY (`id`),
+        CONSTRAINT `uq_large_migration_target_value` UNIQUE (`unique_value`, `matching_value`),
+        CONSTRAINT `ck_large_migration_target_value` CHECK (`check_value` >= 0),
+        INDEX `ix_large_migration_target_indexed` (`indexed_value`, `matching_value`),
+        INDEX `ix_large_migration_target_parent` (`parent_id`, `parent_tenant_id`),
+        INDEX `ix_large_migration_target_secondary_parent` (`secondary_parent_id`,
+        `secondary_parent_tenant_id`), CONSTRAINT `fk_large_migration_target_parent`
+        FOREIGN KEY (`parent_id`,
+        `parent_tenant_id`) REFERENCES `large_migration_parent` (`id`, `tenant_id`));
+        INSERT INTO `large_migration_parent` (`id`,
+        `tenant_id`) VALUES (1, 1); INSERT INTO `large_migration_secondary_parent`
+        (`id`,
+        `tenant_id`) VALUES (1, 1); INSERT INTO `large_migration_target` (`id`,
+        `matching_value`, `repair_value`, `blocked_value`, `widening_value`, `narrowing_value`,
+        `blocked_narrowing_value`, `boolean_value`, `indexed_value`, `unique_value`,
+        `check_value`, `parent_id`, `parent_tenant_id`, `secondary_parent_id`,
+        `secondary_parent_tenant_id`) VALUES (1, 1, 'legacy', NULL, 'wide', 'fits',
+        'too-long-value', b'1', 1, 1, 1, 1, 1, 1, 1);{BuildLargeMigrationModelManagedRows()}
+        """;
 
-    private static string BuildLargeMigrationModelManagedRows() => "INSERT INTO `large_migration_target` ("
-        + "`id`, `matching_value`, `repair_value`, `blocked_value`, `indexed_value`, "
-        + "`unique_value`, `check_value`, `parent_id`, `parent_tenant_id`, "
-        + "`secondary_parent_id`, `secondary_parent_tenant_id`) VALUES "
-        + string.Join(
+    private static string BuildLargeMigrationModelManagedRows() => $"""
+        INSERT INTO `large_migration_target` (`id`, `matching_value`, `repair_value`,
+        `blocked_value`, `indexed_value`, `unique_value`, `check_value`, `parent_id`,
+        `parent_tenant_id`, `secondary_parent_id`, `secondary_parent_tenant_id`)
+        VALUES {string.Join(
             ", ",
             LargeMigrationStressContract
                 .ModelManagedUpdateOrdinals(LargeMigrationStressDialect.MySql)
@@ -358,8 +362,8 @@ public sealed partial class MySqlPerformanceIntegrationTests
                     var value = ordinal.ToString(CultureInfo.InvariantCulture);
 
                     return $"({key}, {value}, 'canonical', NULL, {value}, {key}, {value}, 1, 1, 1, 1)";
-                }))
-        + ";";
+                }))};
+        """;
 
     private static string BuildMySqlPerformanceTables(
         string prefix,

@@ -14,12 +14,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         if (TryParseVarcharLength(storeType, out var targetLength)
             && definition.ClrType == typeof(string))
         {
-            var narrowing = "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS narrowing_column "
-                + "WHERE narrowing_column.TABLE_SCHEMA = DATABASE() "
-                + $"AND narrowing_column.TABLE_NAME = {Literal(table)} "
-                + $"AND narrowing_column.COLUMN_NAME = {Literal(definition.Name)} "
-                + "AND (LOWER(narrowing_column.DATA_TYPE) <> 'varchar' "
-                + $"OR narrowing_column.CHARACTER_MAXIMUM_LENGTH > {targetLength}))";
+            var narrowing = $"""
+                EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS narrowing_column
+                WHERE narrowing_column.TABLE_SCHEMA = DATABASE()
+                AND narrowing_column.TABLE_NAME = {Literal(table)}
+                AND narrowing_column.COLUMN_NAME = {Literal(definition.Name)}
+                AND (LOWER(narrowing_column.DATA_TYPE) <> 'varchar'
+                OR narrowing_column.CHARACTER_MAXIMUM_LENGTH > {targetLength}))
+                """;
 
             var strictMode = $"NOT ({narrowing}) OR {StrictSqlModeExpression}";
 
@@ -150,9 +152,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string table,
         string column,
         string invariant
-    ) => "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c "
-        + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(table)} "
-        + $"AND c.COLUMN_NAME = {Literal(column)} AND ({invariant}))";
+    ) => $"""
+        EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c
+        WHERE c.TABLE_SCHEMA = DATABASE()
+        AND c.TABLE_NAME = {Literal(table)}
+        AND c.COLUMN_NAME = {Literal(column)}
+        AND ({invariant}))
+        """;
 
     private string BuildVarcharTransitionColumnExists(
         string table,
@@ -270,15 +276,23 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         return builder.ToString();
     }
 
+    // WHY: Boundary spaces remain explicit compile-time constants so cleanup cannot trim a separator;
+    // appending raw constant chunks still writes directly into the existing builder without an intermediate.
     private void AppendSupportedStringRepairTable(
         StringBuilder builder,
         string table
     ) => builder
-        .Append("EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES repair_table ")
-        .Append("WHERE repair_table.TABLE_SCHEMA = DATABASE() AND repair_table.TABLE_NAME = ")
+        .Append("""
+            EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES repair_table
+            WHERE repair_table.TABLE_SCHEMA = DATABASE() AND repair_table.TABLE_NAME =
+            """
+            + " ")
         .Append(Literal(table))
-        .Append(" AND repair_table.TABLE_TYPE = 'BASE TABLE' ")
-        .Append("AND UPPER(repair_table.ENGINE) = 'INNODB')");
+        .Append(" "
+            + """
+            AND repair_table.TABLE_TYPE = 'BASE TABLE'
+            AND UPPER(repair_table.ENGINE) = 'INNODB')
+            """);
 
     private void AppendTargetDeclaredRowSizeFits(
         StringBuilder builder,
@@ -320,36 +334,34 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         }
 
         builder
-            .Append("WHEN LOWER(row_column.DATA_TYPE) IN ('varchar', 'varbinary') ")
-            .Append("THEN row_column.CHARACTER_OCTET_LENGTH ")
-            .Append("+ CASE WHEN row_column.CHARACTER_OCTET_LENGTH <= 255 THEN 1 ELSE 2 END ")
-            .Append("WHEN LOWER(row_column.DATA_TYPE) IN ('char', 'binary') ")
-            .Append("THEN row_column.CHARACTER_OCTET_LENGTH ")
-            .Append("WHEN LOWER(row_column.DATA_TYPE) IN ('tinyblob', 'tinytext', 'blob', 'text', ")
-            .Append("'mediumblob', 'mediumtext', 'longblob', 'longtext', 'json', 'geometry') THEN 12 ")
-            .Append("WHEN LOWER(row_column.DATA_TYPE) = 'uuid' THEN 16 ")
-            .Append("WHEN LOWER(row_column.DATA_TYPE) = 'tinyint' THEN 1 ")
-            .Append("WHEN LOWER(row_column.DATA_TYPE) = 'smallint' THEN 2 ")
-            .Append("WHEN LOWER(row_column.DATA_TYPE) = 'mediumint' THEN 3 ")
-            .Append("WHEN LOWER(row_column.DATA_TYPE) IN ('int', 'integer') THEN 4 ")
-            .Append("WHEN LOWER(row_column.DATA_TYPE) = 'float' ")
-            .Append("THEN CASE WHEN row_column.NUMERIC_PRECISION <= 24 THEN 4 ELSE 8 END ")
-            .Append("WHEN LOWER(row_column.DATA_TYPE) IN ('bigint', 'double') THEN 8 ")
-            .Append("WHEN LOWER(row_column.DATA_TYPE) = 'decimal' ")
-            .Append("THEN CEIL(COALESCE(row_column.NUMERIC_PRECISION, 65) / 2) ")
-            .Append("WHEN LOWER(row_column.DATA_TYPE) = 'bit' ")
-            .Append("THEN CEIL(COALESCE(row_column.NUMERIC_PRECISION, 64) / 8) ")
-            .Append("WHEN LOWER(row_column.DATA_TYPE) = 'date' THEN 3 ")
-            .Append("WHEN LOWER(row_column.DATA_TYPE) IN ('time', 'datetime', 'timestamp') THEN 8 ")
-            .Append("WHEN LOWER(row_column.DATA_TYPE) = 'year' THEN 1 ")
-            .Append("WHEN LOWER(row_column.DATA_TYPE) = 'enum' THEN 2 ")
-            .Append("WHEN LOWER(row_column.DATA_TYPE) = 'set' THEN 8 ")
-            .Append("ELSE 65536 END) ")
-            .Append("+ CEIL(SUM(CASE WHEN row_column.IS_NULLABLE = 'YES' THEN 1 ELSE 0 END) / 8) ")
-            .Append("FROM INFORMATION_SCHEMA.COLUMNS row_column ")
-            .Append("LEFT JOIN INFORMATION_SCHEMA.CHARACTER_SETS character_set ")
-            .Append("ON character_set.CHARACTER_SET_NAME = row_column.CHARACTER_SET_NAME ")
-            .Append("WHERE row_column.TABLE_SCHEMA = DATABASE() AND row_column.TABLE_NAME = ")
+            .Append("""
+                WHEN LOWER(row_column.DATA_TYPE) IN ('varchar', 'varbinary') THEN row_column.CHARACTER_OCTET_LENGTH
+                + CASE WHEN row_column.CHARACTER_OCTET_LENGTH <= 255 THEN 1 ELSE 2 END
+                WHEN LOWER(row_column.DATA_TYPE) IN ('char', 'binary') THEN row_column.CHARACTER_OCTET_LENGTH
+                WHEN LOWER(row_column.DATA_TYPE) IN ('tinyblob', 'tinytext', 'blob', 'text',
+                'mediumblob', 'mediumtext', 'longblob', 'longtext', 'json', 'geometry') THEN 12
+                WHEN LOWER(row_column.DATA_TYPE) = 'uuid' THEN 16
+                WHEN LOWER(row_column.DATA_TYPE) = 'tinyint' THEN 1
+                WHEN LOWER(row_column.DATA_TYPE) = 'smallint' THEN 2
+                WHEN LOWER(row_column.DATA_TYPE) = 'mediumint' THEN 3
+                WHEN LOWER(row_column.DATA_TYPE) IN ('int', 'integer') THEN 4
+                WHEN LOWER(row_column.DATA_TYPE) = 'float'
+                THEN CASE WHEN row_column.NUMERIC_PRECISION <= 24 THEN 4 ELSE 8 END
+                WHEN LOWER(row_column.DATA_TYPE) IN ('bigint', 'double') THEN 8
+                WHEN LOWER(row_column.DATA_TYPE) = 'decimal' THEN CEIL(COALESCE(row_column.NUMERIC_PRECISION, 65) / 2)
+                WHEN LOWER(row_column.DATA_TYPE) = 'bit' THEN CEIL(COALESCE(row_column.NUMERIC_PRECISION, 64) / 8)
+                WHEN LOWER(row_column.DATA_TYPE) = 'date' THEN 3
+                WHEN LOWER(row_column.DATA_TYPE) IN ('time', 'datetime', 'timestamp') THEN 8
+                WHEN LOWER(row_column.DATA_TYPE) = 'year' THEN 1
+                WHEN LOWER(row_column.DATA_TYPE) = 'enum' THEN 2
+                WHEN LOWER(row_column.DATA_TYPE) = 'set' THEN 8 ELSE 65536 END)
+                + CEIL(SUM(CASE WHEN row_column.IS_NULLABLE = 'YES' THEN 1 ELSE 0 END) / 8)
+                FROM INFORMATION_SCHEMA.COLUMNS row_column
+                LEFT JOIN INFORMATION_SCHEMA.CHARACTER_SETS character_set
+                ON character_set.CHARACTER_SET_NAME = row_column.CHARACTER_SET_NAME
+                WHERE row_column.TABLE_SCHEMA = DATABASE() AND row_column.TABLE_NAME =
+                """
+                + " ")
             .Append(Literal(table))
             .Append("), 65536) <= 65535");
     }
@@ -383,11 +395,14 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         }
 
         builder
-            .Append(" AND ti.SUB_PART IS NULL ")
-            .Append("AND UPPER(COALESCE(ti.INDEX_TYPE, '')) <> 'FULLTEXT' ")
-            .Append("AND (SELECT COALESCE(SUM(CASE ")
-            .Append("WHEN ip.COLUMN_NAME IS NULL THEN 3073 ")
-            .Append("WHEN ip.COLUMN_NAME = ")
+            .Append(" "
+                + """
+                AND ti.SUB_PART IS NULL
+                AND UPPER(COALESCE(ti.INDEX_TYPE, '')) <> 'FULLTEXT'
+                AND (SELECT COALESCE(SUM(CASE WHEN ip.COLUMN_NAME IS NULL THEN 3073
+                WHEN ip.COLUMN_NAME =
+                """
+                + " ")
             .Append(Literal(column))
             .Append(" AND ip.SUB_PART IS NULL THEN ")
             .Append(
@@ -395,45 +410,43 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     ? scalarBytes.ToString(CultureInfo.InvariantCulture)
                     : targetLength!.Value.ToString(CultureInfo.InvariantCulture) + " * COALESCE(cs.MAXLEN, 1)")
             .Append(' ')
-            .Append("WHEN ip.SUB_PART IS NOT NULL ")
-            .Append("THEN ip.SUB_PART * CASE WHEN ic.COLLATION_NAME IS NULL ")
-            .Append("THEN 1 ELSE COALESCE(cs.MAXLEN, 1) END ")
-            .Append("WHEN ic.CHARACTER_OCTET_LENGTH IS NOT NULL ")
-            .Append("THEN ic.CHARACTER_OCTET_LENGTH ")
+            .Append("""
+                WHEN ip.SUB_PART IS NOT NULL THEN ip.SUB_PART * CASE WHEN ic.COLLATION_NAME IS NULL
+                THEN 1 ELSE COALESCE(cs.MAXLEN, 1) END
+                WHEN ic.CHARACTER_OCTET_LENGTH IS NOT NULL THEN ic.CHARACTER_OCTET_LENGTH
+                """
+                + " ")
 
             // WHY: A native UUID key retains its full sixteen-byte value; it
             // must not inherit an unknown-family overflow during sibling repair.
-            .Append("WHEN LOWER(ic.DATA_TYPE) = 'uuid' THEN 16 ")
-            .Append("WHEN LOWER(ic.DATA_TYPE) = 'tinyint' THEN 1 ")
-            .Append("WHEN LOWER(ic.DATA_TYPE) = 'smallint' THEN 2 ")
-            .Append("WHEN LOWER(ic.DATA_TYPE) = 'mediumint' THEN 3 ")
-            .Append("WHEN LOWER(ic.DATA_TYPE) IN ('int', 'integer') THEN 4 ")
-            .Append("WHEN LOWER(ic.DATA_TYPE) = 'float' ")
-            .Append("THEN CASE WHEN ic.NUMERIC_PRECISION <= 24 THEN 4 ELSE 8 END ")
-            .Append("WHEN LOWER(ic.DATA_TYPE) ")
-            .Append("IN ('bigint', 'double', 'datetime', 'timestamp') THEN 8 ")
-            .Append("WHEN LOWER(ic.DATA_TYPE) = 'date' THEN 3 ")
-            .Append("WHEN LOWER(ic.DATA_TYPE) = 'time' THEN 6 ")
-            .Append("WHEN LOWER(ic.DATA_TYPE) = 'year' THEN 1 ")
-            .Append("WHEN LOWER(ic.DATA_TYPE) = 'decimal' ")
-            .Append("THEN CEIL(COALESCE(ic.NUMERIC_PRECISION, 65) / 2) ")
-            .Append("ELSE 3073 END), 0) FROM INFORMATION_SCHEMA.STATISTICS ip ")
-            .Append("LEFT JOIN INFORMATION_SCHEMA.COLUMNS ic ")
-            .Append("ON ic.TABLE_SCHEMA = ip.TABLE_SCHEMA ")
-            .Append("AND ic.TABLE_NAME = ip.TABLE_NAME ")
-            .Append("AND ic.COLUMN_NAME = ip.COLUMN_NAME ")
-            .Append("LEFT JOIN INFORMATION_SCHEMA.COLLATIONS co ")
-            .Append("ON co.COLLATION_NAME = ic.COLLATION_NAME ")
-            .Append("LEFT JOIN INFORMATION_SCHEMA.CHARACTER_SETS cs ")
-            .Append("ON cs.CHARACTER_SET_NAME = co.CHARACTER_SET_NAME ")
-            .Append("WHERE ip.TABLE_SCHEMA = ti.TABLE_SCHEMA ")
-            .Append("AND ip.TABLE_NAME = ti.TABLE_NAME ")
-            .Append("AND ip.INDEX_NAME = ti.INDEX_NAME) > ")
-            .Append("COALESCE((SELECT CASE WHEN UPPER(dt.ENGINE) = 'INNODB' THEN ")
+            .Append("""
+                WHEN LOWER(ic.DATA_TYPE) = 'uuid' THEN 16
+                WHEN LOWER(ic.DATA_TYPE) = 'tinyint' THEN 1
+                WHEN LOWER(ic.DATA_TYPE) = 'smallint' THEN 2
+                WHEN LOWER(ic.DATA_TYPE) = 'mediumint' THEN 3
+                WHEN LOWER(ic.DATA_TYPE) IN ('int', 'integer') THEN 4
+                WHEN LOWER(ic.DATA_TYPE) = 'float' THEN CASE WHEN ic.NUMERIC_PRECISION <= 24 THEN 4 ELSE 8 END
+                WHEN LOWER(ic.DATA_TYPE) IN ('bigint', 'double', 'datetime', 'timestamp') THEN 8
+                WHEN LOWER(ic.DATA_TYPE) = 'date' THEN 3
+                WHEN LOWER(ic.DATA_TYPE) = 'time' THEN 6
+                WHEN LOWER(ic.DATA_TYPE) = 'year' THEN 1
+                WHEN LOWER(ic.DATA_TYPE) = 'decimal' THEN CEIL(COALESCE(ic.NUMERIC_PRECISION, 65) / 2)
+                ELSE 3073 END), 0) FROM INFORMATION_SCHEMA.STATISTICS ip
+                LEFT JOIN INFORMATION_SCHEMA.COLUMNS ic
+                ON ic.TABLE_SCHEMA = ip.TABLE_SCHEMA AND ic.TABLE_NAME = ip.TABLE_NAME
+                AND ic.COLUMN_NAME = ip.COLUMN_NAME
+                LEFT JOIN INFORMATION_SCHEMA.COLLATIONS co ON co.COLLATION_NAME = ic.COLLATION_NAME
+                LEFT JOIN INFORMATION_SCHEMA.CHARACTER_SETS cs ON cs.CHARACTER_SET_NAME = co.CHARACTER_SET_NAME
+                WHERE ip.TABLE_SCHEMA = ti.TABLE_SCHEMA AND ip.TABLE_NAME = ti.TABLE_NAME
+                AND ip.INDEX_NAME = ti.INDEX_NAME) > COALESCE((SELECT CASE WHEN UPPER(dt.ENGINE) = 'INNODB' THEN
+                """
+                + " ")
             .Append(BuildMaximumIndexKeyWidth("dt"))
-            .Append(" ELSE 0 END FROM INFORMATION_SCHEMA.TABLES dt ")
-            .Append("WHERE dt.TABLE_SCHEMA = ti.TABLE_SCHEMA ")
-            .Append("AND dt.TABLE_NAME = ti.TABLE_NAME LIMIT 1), 0))");
+            .Append(" "
+                + """
+                ELSE 0 END FROM INFORMATION_SCHEMA.TABLES dt
+                WHERE dt.TABLE_SCHEMA = ti.TABLE_SCHEMA AND dt.TABLE_NAME = ti.TABLE_NAME LIMIT 1), 0))
+                """);
     }
 
     private string ResolveStoreType(
@@ -535,9 +548,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             // default and an ON UPDATE expression. Comparing the complete
             // normalized EXTRA value prevents an unrelated provider modifier
             // from being accepted as part of that owned contract.
-            return "LOCATE('auto_increment', LOWER(c.EXTRA)) = 0 "
-                + "AND TRIM(REPLACE(LOWER(COALESCE(c.EXTRA, '')), "
-                + "'default_generated', '')) = 'on update current_timestamp(6)'";
+            // WHY: Both chunks fold at compile time; source wrapping must not alter the qualified SQL bytes.
+            return """
+                LOCATE('auto_increment', LOWER(c.EXTRA)) = 0
+                AND TRIM(REPLACE(LOWER(COALESCE(c.EXTRA, '')),
+                """ + " 'default_generated', '')) = 'on update current_timestamp(6)'";
         }
 
         return "LOCATE('auto_increment', LOWER(c.EXTRA)) = 0";

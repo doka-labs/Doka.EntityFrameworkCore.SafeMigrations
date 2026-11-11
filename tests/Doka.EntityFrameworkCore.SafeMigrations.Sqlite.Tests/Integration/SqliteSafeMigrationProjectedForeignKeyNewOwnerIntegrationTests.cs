@@ -23,7 +23,12 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, CONSTRAINT pk_constraint_parents PRIMARY KEY(Id));",
+            """
+            CREATE TABLE constraint_parents (
+                Id INTEGER NOT NULL,
+                CONSTRAINT pk_constraint_parents PRIMARY KEY(Id)
+            );
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteProjectedSeparateAddContext(connection, _constraintShapeServices.Provider);
@@ -67,8 +72,11 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
             1,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM pragma_foreign_key_list('constraint_children') "
-                + "WHERE \"table\" = 'constraint_parents' AND \"from\" = 'ParentId' AND \"to\" = 'Id';",
+                """
+                SELECT COUNT(*) FROM pragma_foreign_key_list('constraint_children')
+                WHERE "table" = 'constraint_parents'
+                AND "from" = 'ParentId' AND "to" = 'Id';
+                """,
                 cancellationToken: CancellationToken.None));
     }
 
@@ -79,7 +87,12 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, CONSTRAINT pk_constraint_parents PRIMARY KEY(Id));",
+            """
+            CREATE TABLE constraint_parents (
+                Id INTEGER NOT NULL,
+                CONSTRAINT pk_constraint_parents PRIMARY KEY(Id)
+            );
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteProjectedSeparateAddContext(connection, _constraintShapeServices.Provider);
@@ -120,7 +133,12 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, CONSTRAINT pk_constraint_parents PRIMARY KEY(Id));",
+            """
+            CREATE TABLE constraint_parents (
+                Id INTEGER NOT NULL,
+                CONSTRAINT pk_constraint_parents PRIMARY KEY(Id)
+            );
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
@@ -184,8 +202,12 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
         {
             await ExecuteSqlAsync(
                 connection,
-                "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, "
-                + "CONSTRAINT pk_constraint_parents PRIMARY KEY(Id));",
+                """
+                CREATE TABLE constraint_parents (
+                    Id INTEGER NOT NULL,
+                    CONSTRAINT pk_constraint_parents PRIMARY KEY(Id)
+                );
+                """,
                 cancellationToken: CancellationToken.None);
         }
 
@@ -234,7 +256,12 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, CONSTRAINT pk_constraint_parents PRIMARY KEY(Id));",
+            """
+            CREATE TABLE constraint_parents (
+                Id INTEGER NOT NULL,
+                CONSTRAINT pk_constraint_parents PRIMARY KEY(Id)
+            );
+            """,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);

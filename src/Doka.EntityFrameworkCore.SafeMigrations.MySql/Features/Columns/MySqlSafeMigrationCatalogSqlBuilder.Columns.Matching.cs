@@ -240,12 +240,15 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         // WHY: The ordinal bound is implied by the arms, which yield NULL beyond the expected
         // count, but it lets the engine drop surplus columns before evaluating any facet.
-        return "(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c WHERE c.TABLE_SCHEMA = DATABASE() "
-            + $"AND c.TABLE_NAME = {Literal(table)} AND c.ORDINAL_POSITION <= {columnCount} "
-            + (sharedCollation is null
+        return $"""
+            (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c
+            WHERE c.TABLE_SCHEMA = DATABASE()
+            AND c.TABLE_NAME = {Literal(table)}
+            AND c.ORDINAL_POSITION <= {columnCount} {(sharedCollation is null
                 ? string.Empty
-                : $"AND {sharedCollation} ")
-            + $"AND (CASE c.ORDINAL_POSITION{arms} END)) = {columnCount}";
+                : $"AND {sharedCollation} ")}AND
+            (CASE c.ORDINAL_POSITION{arms} END)) = {columnCount}
+            """;
     }
 
     /// <summary>Builds the column facets whose SQL shape depends on the expected column itself.</summary>
@@ -336,6 +339,24 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return "LOWER(c.DATA_TYPE) = 'longtext'";
         }
 
+        if (memberStart > 0
+            && typeExpression[memberStart..]
+                .Equals("(0)", StringComparison.Ordinal)
+            && (typeExpression[..memberStart]
+                    .TrimEnd()
+                    .Equals("time", StringComparison.OrdinalIgnoreCase)
+                || typeExpression[..memberStart]
+                    .TrimEnd()
+                    .Equals("datetime", StringComparison.OrdinalIgnoreCase)
+                || typeExpression[..memberStart]
+                    .TrimEnd()
+                    .Equals("timestamp", StringComparison.OrdinalIgnoreCase)))
+        {
+            // WHY: Native catalogs omit a zero temporal fractional precision.
+            // This exact alias does not erase a nonzero precision or another type's facets.
+            return $"LOWER(c.COLUMN_TYPE) = LOWER({Literal(typeExpression[..memberStart].TrimEnd().ToString())})";
+        }
+
         if (!isMariaDb
             && typeExpression.Equals("integer", StringComparison.OrdinalIgnoreCase))
         {
@@ -392,9 +413,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             ? $"{canonicalType} unsigned"
             : canonicalType;
 
-        return $"CONCAT(LOWER(c.DATA_TYPE), "
-            + $"CASE WHEN LOCATE('unsigned', LOWER(c.COLUMN_TYPE)) > 0 "
-            + $"THEN ' unsigned' ELSE '' END) = {Literal(expected)}";
+        return $"""
+            CONCAT(LOWER(c.DATA_TYPE), CASE WHEN LOCATE('unsigned', LOWER(c.COLUMN_TYPE)) > 0
+            THEN ' unsigned' ELSE '' END) = {Literal(expected)}
+            """;
     }
 
     private string BuildComputedMatches(

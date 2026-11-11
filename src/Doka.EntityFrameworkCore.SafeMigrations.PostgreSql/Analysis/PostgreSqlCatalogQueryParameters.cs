@@ -1,9 +1,10 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 /// <summary>Interns bounded catalog parameters and restores provider bindings across statement rollback.</summary>
-internal sealed class PostgreSqlCatalogQueryParameters
+internal sealed class PostgreSqlCatalogQueryParameters : IDisposable
 {
     private readonly Func<DbParameter> _createParameter;
+    private readonly bool _ownsParameterFactory;
     private readonly Dictionary<string, string> _parameters = new(StringComparer.Ordinal);
     private readonly DbParameterCollection _parametersCollection;
     private readonly IRelationalTypeMappingSource? _typeMappingSource;
@@ -12,6 +13,8 @@ internal sealed class PostgreSqlCatalogQueryParameters
         PostgreSqlCatalogParameterValueComparer.Instance);
 
     private readonly List<string> _values = [];
+    private bool _disposed;
+    private DbCommand? _parameterFactory;
 
     /// <summary>Creates parameter accounting for a caller-owned sequential catalog command.</summary>
     /// <param name="command">The command supplying provider parameters and their physical collection.</param>
@@ -26,6 +29,7 @@ internal sealed class PostgreSqlCatalogQueryParameters
         _createParameter = command.CreateParameter;
         _parametersCollection = command.Parameters;
         _typeMappingSource = typeMappingSource;
+        _parameterFactory = command;
     }
 
     /// <summary>Creates parameter accounting for a native or fallback catalog transport statement.</summary>
@@ -41,6 +45,8 @@ internal sealed class PostgreSqlCatalogQueryParameters
         _createParameter = command.CreateParameter;
         _parametersCollection = command.Parameters;
         _typeMappingSource = typeMappingSource;
+        _parameterFactory = command.SequentialCommand;
+        _ownsParameterFactory = command.SequentialCommand is null;
     }
 
     /// <summary>Gets the number of physical parameters retained by this statement.</summary>
@@ -49,9 +55,34 @@ internal sealed class PostgreSqlCatalogQueryParameters
     /// <summary>Gets the estimated UTF-8 parameter payload including per-binding metadata.</summary>
     public int Utf8PayloadBytes { get; private set; }
 
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        if (_ownsParameterFactory)
+        {
+            // WHY: This factory never executes and never owns the created
+            // parameters. Synchronous disposal releases only its local buffer;
+            // the real catalog command retains all physical bindings.
+            _parameterFactory?.Dispose();
+        }
+
+        _parameterFactory = null;
+    }
+
     /// <summary>Captures the parameter count and payload before one candidate statement is built.</summary>
     /// <returns>The exact prefix retained if the candidate exceeds a query bound.</returns>
-    public Checkpoint Capture() => new(_values.Count, Utf8PayloadBytes);
+    public Checkpoint Capture()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        return new Checkpoint(_values.Count, Utf8PayloadBytes);
+    }
 
     /// <summary>Restores the captured prefix without changing retained parameter identities or mappings.</summary>
     /// <param name="checkpoint">The earlier parameter count and payload to restore.</param>
@@ -59,6 +90,7 @@ internal sealed class PostgreSqlCatalogQueryParameters
         Checkpoint checkpoint
     )
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if ((uint)checkpoint.Count > (uint)_values.Count
             || (uint)checkpoint.Utf8PayloadBytes > (uint)Utf8PayloadBytes
             || (checkpoint.Count == _values.Count && checkpoint.Utf8PayloadBytes != Utf8PayloadBytes))
@@ -104,6 +136,7 @@ internal sealed class PostgreSqlCatalogQueryParameters
         string value
     )
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (_parameters.TryGetValue(value, out var existing))
         {
             return existing;
@@ -130,6 +163,7 @@ internal sealed class PostgreSqlCatalogQueryParameters
         string storeType
     )
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var candidate = new PostgreSqlCatalogParameterValue(value, storeType);
         if (_typedParameters.TryGetValue(candidate, out var existing))
         {
@@ -151,13 +185,13 @@ internal sealed class PostgreSqlCatalogQueryParameters
         }
 
         var name = $"@doka_sm_p{_parametersCollection.Count.ToString(CultureInfo.InvariantCulture)}";
-        var parameter = _createParameter();
-        parameter.ParameterName = name;
-        parameter.Value = mapping.Converter?.ConvertToProvider(value) ?? value ?? DBNull.Value;
-        if (mapping.DbType is { } dbType)
-        {
-            parameter.DbType = dbType;
-        }
+
+        // WHY: DbType alone omits NpgsqlDbType, native type names and facets.
+        // In particular TimeSpan otherwise binds as INTERVAL even for TIME,
+        // changing the valid 24:00 endpoint into midnight after a cast. Let the
+        // official mapping configure one unregistered provider parameter. Borrow
+        // sequential commands; native batches need one lazy non-executing factory.
+        var parameter = mapping.CreateParameter(_parameterFactory ??= new NpgsqlCommand(), name, value);
 
         _parametersCollection.Add(parameter);
         _typedParameters.Add(candidate, name);
