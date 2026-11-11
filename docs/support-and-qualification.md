@@ -2,15 +2,16 @@
 
 ## Support contract
 
-Version 10.7.1 corrects explicit InnoDB contracts and atomic SQLite
-retirement/rebuild behavior through the existing public APIs. It retains
-.NET/EF Core 10, public signatures, report schemas and fingerprint formats.
-Review the [10.7.1 upgrade](#upgrade-to-1071) for the provider boundaries.
+Version 10.7.2 corrects native expression identity, temporal values and catalog
+comparison through the existing public APIs. It retains .NET/EF Core 10,
+dependency floors, public signatures, report schemas and fingerprint formats.
+Review the [10.7.2 upgrade](#upgrade-to-1072), including affected numeric-default
+fingerprint approvals and the existing provider-specific rejection boundaries.
 
 Version 10.7.0 introduced required cancellation tokens on owned asynchronous
 APIs and BenchmarkDotNet for engineering measurements. Removing public optional-
 token defaults was an intentional source-breaking exception within 10.x, not a
-strictly SemVer-compatible change. Version 10.7.1 retains those requirements.
+strictly SemVer-compatible change. Version 10.7.2 retains those requirements.
 
 Version 10.6.0 introduced public CASE expressions, certified generated-column
 and CHECK support, lossless signed-integer upgrades, ordered projection/DROP
@@ -26,6 +27,56 @@ MySQL/MariaDB callers must account for the owned-guard outer exception type;
 see [diagnostic compatibility](diagnostics.md#runtime-provider-differences).
 Native qualification still requires the complete blocking matrix; ARM SQL Server
 skips and offline SQL-shape tests are not substitutes for its x64 cells.
+
+## Upgrade to 10.7.2
+
+Keep every installed SafeMigrations package on version 10.7.2 and install only
+the adapters needed by the application. Public APIs and shipped baselines,
+.NET/EF Core 10, dependency floors and provider isolation are unchanged from
+10.7.1. MySQL/MariaDB still requires Doka `[10.6.5,10.7.0)`; this patch introduces
+no new provider dependency, application option or migration policy.
+
+The fixes preserve native function/type/operator roles, exact numeric tokens,
+binary literal ownership and complete temporal values. Ambiguous SQL is no
+longer silently reinterpreted as a portable expression. It remains opaque and
+follows the provider's existing acceptance boundary; an unproved expression
+can still be rejected. Review intentional typed expressions or provider mappings
+rather than bypassing the guard or deleting native quoting blindly.
+
+Corrected capture of numeric SQL defaults can change the resulting operation-
+contract fingerprint even though its format is unchanged. Regenerate and review
+affected fingerprint-bound approvals against the immutable migration and the
+selected library version. Do not reuse an old digest to suppress a mismatch,
+rewrite historical migrations or disable fingerprint validation. Explicitly
+authored typed-expression identities are unchanged. See
+[captured SQL defaults and literal ownership](migration-authoring.md#generated-check-constraints).
+
+Binary literal inputs and the public `Value` result are defensive snapshots.
+Mutating either array no longer changes an existing expression, definition or
+fingerprint. Treat the value as data to inspect, not an API for mutating a
+previously constructed contract.
+
+- MySQL/MariaDB recognizes equivalent native nested AND/OR parentheses and
+  complete temporal/default spellings while retaining predicate order and real
+  literal drift. Functional-index comparison does not authorize unproved creation.
+- PostgreSQL resolves expression keys, partial predicates and collations against
+  native relation identity; finite temporal values cannot impersonate infinities.
+- SQLite reads quoted/depth-sensitive index, collation and constraint metadata
+  at its actual grammar positions, including rebuild and replay boundaries.
+- SQL Server renders scalar predicates without losing UNKNOWN or changing CHECK
+  semantics. Native dependency refusals and x64 qualification remain required.
+
+Report schema 4, view schema 3, diagnostic codes, relational model-fingerprint
+format and migration history remain unchanged. Updating packages alone requires
+no additional database migration. SQL layout changes retain native values,
+parameter ownership and byte/batch limits; no measured speedup is claimed.
+
+The inherited [10.7.1 table/rebuild fixes](#upgrade-to-1071) and
+[10.7.0 explicit-token requirements](#upgrade-to-1070) still apply. Required
+native, tooling, package, coverage and public-readback gates are unchanged;
+local ARM SQL Server skips never establish x64 qualification. Publication status
+and exact candidate evidence belong in the
+[release runbook](operations/release-publication.md), not product version claims.
 
 ## Upgrade to 10.7.1
 
@@ -140,7 +191,7 @@ gates remain mandatory; see the [publication runbook](operations/release-publica
 ## Upgrade to 10.6.0
 
 The 10.6.0 minor release introduced the following boundaries. They also apply
-when upgrading an older application directly to 10.7.1. Keep all installed
+when upgrading an older application directly to 10.7.2. Keep all installed
 SafeMigrations packages on the selected shared version and review newly
 scaffolded implicit index-length changes without rewriting historical migrations.
 
@@ -302,13 +353,13 @@ The SQL Server project supplies the fifth lockfile. Releases 10.4.2 through
 10.4.5 contain four package artifacts; their inventory remains unchanged.
 
 The five-package set began with stable 10.4.6, including the optional SQL Server
-provider. Version 10.7.1 retains that inventory and the SQL Server-only PKCS
+provider. Version 10.7.2 retains that inventory and the SQL Server-only PKCS
 minimum of 9.0.22. The Core API baseline includes the additive
 CASE surface introduced in 10.6.0; the diagnostic surface began in 10.5.0.
 Version 10.7.0 replaces ten optional-token declarations with required-token
 declarations in the shipped baseline; it does not add an overload or restore
-the removed defaults. Version 10.7.1 retains that shipped baseline exactly;
-its table metadata correction adds no public declaration.
+the removed defaults. Version 10.7.2 retains that shipped baseline exactly;
+its expression/catalog corrections add no public declaration.
 The current Doka
 dependency contract is the 10.6 line above. Qualification requires the blocking
 workflow, including all three native x86-64 SQL Server cells. The

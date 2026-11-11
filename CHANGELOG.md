@@ -6,6 +6,25 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [10.7.2] - 2026-11-11
+
+Version 10.7.2 corrects native expression identity, temporal values and catalog
+comparison across the existing five packages. Public APIs, dependency floors,
+.NET/EF Core 10, report schemas and fingerprint formats remain unchanged from
+10.7.1. Corrected captured numeric-default identities can change affected
+contract fingerprints; review and renew those approvals as described in the
+[upgrade notes](docs/support-and-qualification.md#upgrade-to-1072).
+Updating packages alone requires no additional database migration or history rewrite.
+
+### Changed
+
+- Render larger SQL templates as readable C# raw strings across providers,
+  tests, benchmarks and engineering consumers. Preserve literal contents,
+  interpolation order, parameter ownership, native markers and transport limits;
+  update intentional command-layout expectations without normalizing SQL values.
+  Keep C# checkouts on LF and apply scoped source cleanup. This refactor claims
+  no measured performance improvement and adds no public API or runtime dependency.
+
 ### Fixed
 
 - Recognize native MySQL parentheses for nested associative AND/OR chains in
@@ -2527,7 +2546,9 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.0...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.2...HEAD
+[10.7.2]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.1...v10.7.2
+[10.7.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.7.0...v10.7.1
 [10.7.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.6.1...v10.7.0
 [10.6.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.6.0...v10.6.1
 [10.6.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.5.0...v10.6.0

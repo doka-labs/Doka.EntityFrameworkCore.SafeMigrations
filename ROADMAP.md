@@ -121,6 +121,12 @@ Its [upgrade guidance](docs/support-and-qualification.md#upgrade-to-1071) keeps
 these internal fixes separate from 10.7.0's source-breaking exception.
 Existing native qualification, recovery and coverage gates remain blocking;
 the release does not activate .NET 11 or another release line.
+Version 10.7.2 corrects native expression/catalog identity, temporal values and
+literal ownership through existing public contracts. Its
+[upgrade guidance](docs/support-and-qualification.md#upgrade-to-1072) records
+affected numeric-default approvals and unchanged report/fingerprint formats.
+Readable raw SQL and LF-stable source retain transport and safety limits;
+the patch does not claim a measured speedup or waive native qualification.
 These releases follow changed dependency conditions and confirmed correctness
 requirements; they are not deferred initial scope.
 

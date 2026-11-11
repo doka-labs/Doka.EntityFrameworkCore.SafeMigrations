@@ -1,9 +1,10 @@
 # SQL Server behavior
 
-Version 10.7.1 retains the certified computed/CHECK contracts and ordered
-native DROP blockers introduced in 10.6.0. Review the
-[current upgrade notes](support-and-qualification.md#upgrade-to-1071) for required
-cancellation arguments and dependency floors, and the earlier
+Version 10.7.2 corrects scalar predicate rendering and CHECK dependency parsing
+while retaining UNKNOWN, certified computed/CHECK contracts and ordered native
+DROP blockers. Review the
+[current upgrade notes](support-and-qualification.md#upgrade-to-1072) for expression
+corrections, required cancellation arguments and dependency floors, and the earlier
 [10.6.0 contract changes](support-and-qualification.md#upgrade-to-1060) for
 conditional fingerprint approvals and conservative boundaries.
 

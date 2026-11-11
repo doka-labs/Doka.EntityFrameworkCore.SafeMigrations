@@ -1,10 +1,11 @@
 # MySQL and MariaDB DDL behavior
 
-Version 10.7.1 preserves explicit InnoDB table contracts through existing typed
-table callbacks and retains the certified generated/CHECK contracts
-and native independent DROP proofs introduced in 10.6.0. Review the
-[current upgrade notes](support-and-qualification.md#upgrade-to-1071) for table
-metadata, required cancellation arguments and dependency floors, and the earlier
+Version 10.7.2 corrects native nested Boolean, temporal and expression-index
+comparisons while retaining explicit InnoDB contracts, certified generated/CHECK
+boundaries and native independent DROP proofs. Review the
+[current upgrade notes](support-and-qualification.md#upgrade-to-1072) for captured
+numeric-default approvals, required cancellation arguments and dependency floors,
+and the earlier
 [10.6.0 contract changes](support-and-qualification.md#upgrade-to-1060) for
 conditional fingerprint approvals and conservative boundaries.
 

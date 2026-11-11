@@ -55,36 +55,36 @@ evidence. See [Support and qualification](docs/support-and-qualification.md).
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-examples target version 10.7.1 and select that version exactly, so
+examples target version 10.7.2 and select that version exactly, so
 restore does not move to another version implicitly. Release changes and
-compatibility notes belong in the [10.7.1 changelog](CHANGELOG.md#1071---2026-11-09)
-and [upgrade notes](docs/support-and-qualification.md#upgrade-to-1071).
+compatibility notes belong in the [10.7.2 changelog](CHANGELOG.md#1072---2026-11-11)
+and [upgrade notes](docs/support-and-qualification.md#upgrade-to-1072).
 Applications upgrading from before 10.7.0 must also review its
 [explicit cancellation-token requirement](docs/support-and-qualification.md#upgrade-to-1070).
 
 ```bash
-package_version='10.7.1'
+package_version='10.7.2'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.7.1'
+package_version='10.7.2'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.7.1'
+package_version='10.7.2'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.7.1'
+package_version='10.7.2'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.SqlServer --version "$package_version"
 ```
 

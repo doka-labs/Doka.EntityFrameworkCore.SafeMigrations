@@ -1,14 +1,14 @@
 # Documentation
 
-This is the task-oriented entry point for SafeMigrations 10.7.1 documentation
+This is the task-oriented entry point for SafeMigrations 10.7.2 documentation
 covering all five packages. Start with the task table
 below; release changes and consumer upgrade notes belong in the
 [changelog](../CHANGELOG.md). The [diagnostics guide](diagnostics.md) explains
 readable errors, affected owners, text summaries and report-schema compatibility;
 [support and qualification](support-and-qualification.md) owns dependency and
 native UUID and lossless signed-integer upgrade boundaries. Review the
-[10.7.1 upgrade](support-and-qualification.md#upgrade-to-1071) for explicit InnoDB
-capture through existing table callbacks and SQLite retirement/rebuild corrections.
+[10.7.2 upgrade](support-and-qualification.md#upgrade-to-1072) for expression/catalog
+corrections and affected captured numeric-default fingerprint approvals.
 The earlier [10.7.0 upgrade](support-and-qualification.md#upgrade-to-1070)
 retains its explicit cancellation-token source-compatibility boundary.
 Existing ordered proofs, concurrency guards and verified

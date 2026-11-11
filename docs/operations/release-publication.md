@@ -5,11 +5,12 @@ untagged authorized source-line commit first, then waits at the protected `nuget
 Only after that wait begins does the operator create the signed tag and approve
 publication. Run every command separately and stop on the first failure.
 
-The release target is stable 10.7.1 for all five package IDs, retaining the
+The release target is stable 10.7.2 for all five package IDs, retaining the
 inventory introduced in 10.4.6. Review the
-[10.7.1 compatibility notes](../../CHANGELOG.md#1071---2026-11-09) and
-[upgrade procedure](../support-and-qualification.md#upgrade-to-1071), including
-the internal InnoDB and SQLite corrections, unchanged public APIs, and the
+[10.7.2 compatibility notes](../../CHANGELOG.md#1072---2026-11-11) and
+[upgrade procedure](../support-and-qualification.md#upgrade-to-1072), including
+native expression/catalog corrections, renewed affected numeric-default
+approvals, unchanged public APIs, and the
 Doka 10.6.5, MySqlConnector 2.6.2, EF 10.0.14, SqlClient 6.1.8 and PKCS
 9.0.22 floors and retained strict release audits. Review the
 [transport rollout boundaries](../efcore-provider-upgrade-risk.md#sql-server-boundary),
@@ -25,22 +26,20 @@ evidence failures remain blocking. Do not publish a subset or treat preparation,
 earlier engine runs or native ARM skips as proof that this candidate's complete
 qualification or public readback has succeeded.
 
-As of 2026-11-09, the public NuGet version indices for all five package IDs
-list 10.7.0 and do not list 10.7.1. This checks index presence only, not package
-bytes, repository signatures or public readback. The changelog date identifies
-release notes, not completed qualification or publication.
-Local metadata, build, package and targeted native checks do not complete this
-candidate's required provider matrix, native x64 SQL Server 2019/2022/2025 cells
-or merged coverage. Earlier successful hosted engine runs and targeted MariaDB
-replay checks are not evidence for the final 10.7.1 artifacts. The observed
-[Dependabot CI #108](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/actions/runs/42566035229)
-failed with HTTP 504 while downloading SBOM Tool; its provider
-and merged-coverage jobs passed. A GitHub service outage is a plausible cause,
-not a proven product defect or a waiver of SBOM verification. The next complete
-candidate workflow must succeed with its exact source and package identities.
+As of 2026-11-11, 10.7.2 is a local release target, not a completed publication.
+The changelog date identifies release notes, not qualification or public readback.
+Functional evidence at source `5e729211a010` covers Core/SQLite, native MariaDB
+12.3.3, MySQL 8.4.13 and 9.7.4, PostgreSQL 18.6, and offline SQL Server. It
+precedes the 10.7.2 metadata/documentation changes and does not qualify the final
+stable package bytes or every supported server version. Build and qualify fresh
+10.7.2 packages, including their embedded README and isolated consumers.
+Local success does not complete the required hosted matrix, native x64 SQL Server
+2019/2022/2025, merged coverage, SBOM, attestations or public readback. No candidate
+workflow or publication is started by this preparation. The complete candidate
+workflow must succeed with its exact committed source and package identities.
 Do not publish until the final committed candidate passes those checks and
 the rest of the required workflow. Recheck unused version/tag identity at
-admission; this observation does not reserve a release. Record actual
+admission; local preparation does not reserve a release. Record actual
 qualification and publication status in the candidate run's
 release evidence, including the source commit, exact package identities,
 completed checks and public readback. Product version references describe the
