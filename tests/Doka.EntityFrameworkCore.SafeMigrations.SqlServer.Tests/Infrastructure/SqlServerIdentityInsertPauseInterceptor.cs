@@ -38,58 +38,216 @@ internal sealed class SqlServerIdentityInsertPauseInterceptor
     }
 
     /// <summary>
-    /// Places the session marker after ON inside the generator's already quoted dynamic batch.
+    /// Places readiness at the native acquisition phase without interpreting quoted caller data as SQL.
     /// </summary>
+    /// <param name="commandText">The unchanged generated command, including its execution scopes.</param>
+    /// <param name="resource">The application-lock resource whose value must survive every quoting level.</param>
+    /// <param name="beforeConfirmation">Whether to interrupt before ownership confirmation.</param>
+    /// <returns>The instrumented command, or the same string when no target acquisition exists.</returns>
     public static string BuildPausedCommand(
         string commandText,
         string resource,
         bool beforeConfirmation = false
     )
     {
-        const string identityOn = "SET IDENTITY_INSERT [dbo].[identity_roles] ON;";
-        var nestedResource = resource.Replace("'", "''''", StringComparison.Ordinal);
-        var isolatedGuard = commandText.StartsWith("EXEC sys.sp_executesql N'", StringComparison.Ordinal)
-            && commandText.Contains("DECLARE @doka_state", StringComparison.Ordinal);
-
-        // WHY: The operation guard now adds a private outer scope. Inject at
-        // the baseline's existing literal level, then re-encode that one scope
-        // so apostrophes in marker resources remain valid at both levels.
-        var guardedBody = isolatedGuard
-            ? SqlServerGuardedSqlTestContract.DecodeScope(commandText)
-            : commandText;
-
-        if (!guardedBody.Contains(identityOn, StringComparison.Ordinal))
+        if (!commandText.Contains("IDENTITY_INSERT", StringComparison.OrdinalIgnoreCase))
         {
             return commandText;
         }
 
-        // WHY: Ordinary attention tests must observe confirmed ownership, not
-        // the gap between ON and its session marker. A separate adversarial
-        // mode deliberately interrupts that uncertain acquisition gap.
-        var anchor = !beforeConfirmation
-            && guardedBody.Contains(
-                SqlServerSafeMigrationIdentityInsertScope.AcquiredMarkerComment,
-                StringComparison.Ordinal)
-                ? SqlServerSafeMigrationIdentityInsertScope.AcquiredMarkerComment
-                : identityOn;
-
         // WHY: SqlClient drains an unparameterized async batch's first response under its cancellation lock.
         // NOWAIT starts that synchronous drain, but InfoMessage is deferred until the batch finishes.
         // A session-owned lock proves ON to a separate observer without emitting the early INFO token.
-        var pausedBody = guardedBody.Replace(
-            anchor,
-            anchor
-            + " DECLARE @doka_identity_ready int; "
-            + "EXEC @doka_identity_ready = sys.sp_getapplock @Resource = N''"
-            + nestedResource
-            + "'', @LockMode = N''Exclusive'', @LockOwner = N''Session'', @LockTimeout = 0; "
-            + "IF @doka_identity_ready < 0 THROW 51006, ''identity readiness lock failed'', 1; "
-            + "WAITFOR DELAY ''00:05:00'';",
-            StringComparison.Ordinal);
+        var pause = $"""
 
-        return isolatedGuard
-            ? SqlServerGuardedSqlTestContract.EncodeScope(pausedBody)
-            : pausedBody;
+            DECLARE @doka_identity_ready int;
+            EXEC @doka_identity_ready = sys.sp_getapplock @Resource = N'{resource.Replace("'", "''",
+                StringComparison.Ordinal)}', @LockMode = N'Exclusive', @LockOwner = N'Session', @LockTimeout = 0;
+            IF @doka_identity_ready < 0 THROW 51006, 'identity readiness lock failed', 1;
+            WAITFOR DELAY '00:05:00';
+
+            """;
+
+        // WHY: A worklist follows only executable literal scopes and the generator's closed
+        // lossless carrier. Reverse composition preserves arbitrary nesting without recursion.
+        var scopes = new List<PauseScope> { new(commandText, -1, 0, 0, false) };
+
+        // WHY: Discovery appends scopes; enumeration would invalidate the growing worklist.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var index = 0; index < scopes.Count; index++)
+        {
+            DiscoverPauses(scopes, index, pause, beforeConfirmation);
+        }
+
+        // WHY: A rewritten child must reach its parent before that parent is composed.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var index = scopes.Count - 1; index > 0; index--)
+        {
+            var scope = scopes[index];
+
+            if (scope.Edits.Count == 0)
+            {
+                continue;
+            }
+
+            var rewritten = ApplyEdits(scope);
+            var replacement = scope.ProtectedCarrier
+                ? SqlServerGuardedSqlTestContract.DecodeScope(
+                    SqlServerSafeMigrationsSqlGenerator.ProtectCommandSql(
+                        rewritten, MigrationsSqlGenerationOptions.Idempotent))
+                : "'" + rewritten.Replace("'", "''", StringComparison.Ordinal) + "'";
+
+            scopes[scope.Parent].Edits.Add((scope.Start, scope.Length, replacement));
+        }
+
+        return ApplyEdits(scopes[0]);
+    }
+
+    /// <summary>Finds native acquisition and executable payload boundaries at exactly one quoting level.</summary>
+    /// <param name="scopes">The owned worklist, extended only for executable literal payloads.</param>
+    /// <param name="index">The current scope index.</param>
+    /// <param name="pause">The native pause text, before any transport escaping.</param>
+    /// <param name="beforeConfirmation">Whether to interrupt the uncertain ownership interval.</param>
+    private static void DiscoverPauses(
+        List<PauseScope> scopes,
+        int index,
+        string pause,
+        bool beforeConfirmation
+    )
+    {
+        var scope = scopes[index];
+
+        if (SqlServerGuardedSqlTestContract.DecodeProtectedPayload(scope.Sql) is { } payload)
+        {
+            scopes.Add(new PauseScope(payload, index, 0, scope.Sql.Length, true));
+
+            return;
+        }
+
+        var reader = new SqlServerTestSqlReader(scope.Sql);
+        var pendingAcquisition = -1;
+
+        while (reader.Read())
+        {
+            if (reader.IsComment)
+            {
+                if (pendingAcquisition >= 0 && reader.Token.SequenceEqual(
+                        SqlServerSafeMigrationIdentityInsertScope.AcquiredMarkerComment))
+                {
+                    scope.Edits.Add((reader.Position, 0, pause));
+                    pendingAcquisition = -1;
+                }
+
+                continue;
+            }
+
+            if (reader.Token.Equals("SET", StringComparison.OrdinalIgnoreCase))
+            {
+                var acquisition = reader;
+
+                if (acquisition.TryReadSequence("IDENTITY_INSERT [dbo].[identity_roles] ON;"))
+                {
+                    if (pendingAcquisition >= 0)
+                    {
+                        scope.Edits.Add((pendingAcquisition, 0, pause));
+                    }
+
+                    if (beforeConfirmation)
+                    {
+                        scope.Edits.Add((acquisition.Position, 0, pause));
+                    }
+                    else
+                    {
+                        pendingAcquisition = acquisition.Position;
+                    }
+
+                    reader = acquisition;
+                }
+            }
+            else if (reader.Token.Equals("EXEC", StringComparison.OrdinalIgnoreCase)
+                || reader.Token.Equals("EXECUTE", StringComparison.OrdinalIgnoreCase))
+            {
+                var execution = reader;
+
+                if (execution.TryReadSequence("sys.sp_executesql N")
+                    && execution.ReadSignificant() && execution.Token[0] == '\'')
+                {
+                    var inner = execution.Token[1..^1].ToString().Replace("''", "'", StringComparison.Ordinal);
+
+                    if (inner.Contains("IDENTITY_INSERT", StringComparison.OrdinalIgnoreCase))
+                    {
+                        scopes.Add(new PauseScope(inner, index, execution.TokenStart,
+                            execution.Position - execution.TokenStart, false));
+                    }
+
+                    reader = execution;
+                }
+            }
+        }
+
+        // WHY: Older focused fixtures have no ownership protocol marker. Only an actual
+        // native ON statement can select this fallback; caller string values cannot.
+        if (pendingAcquisition >= 0)
+        {
+            scope.Edits.Add((pendingAcquisition, 0, pause));
+        }
+    }
+
+    /// <summary>Copies unchanged ranges exactly and applies only proven scope-local edits.</summary>
+    /// <param name="scope">The original scope and its non-overlapping edits.</param>
+    /// <returns>The same string for an unchanged scope, otherwise the precisely rewritten text.</returns>
+    private static string ApplyEdits(
+        PauseScope scope
+    )
+    {
+        if (scope.Edits.Count == 0)
+        {
+            return scope.Sql;
+        }
+
+        scope.Edits.Sort(static (left, right) => left.Start.CompareTo(right.Start));
+        var result = new StringBuilder(scope.Sql.Length);
+        var copied = 0;
+
+        foreach (var edit in scope.Edits)
+        {
+            result.Append(scope.Sql.AsSpan(copied, edit.Start - copied));
+            result.Append(edit.Replacement);
+            copied = edit.Start + edit.Length;
+        }
+
+        result.Append(scope.Sql.AsSpan(copied));
+
+        return result.ToString();
+    }
+
+    /// <summary>Owns one immutable execution scope and its exact parent replacement range.</summary>
+    /// <param name="sql">The native scope at one quoting level.</param>
+    /// <param name="parent">The parent worklist index, or minus one for the root.</param>
+    /// <param name="start">The replaced range start in the parent.</param>
+    /// <param name="length">The replaced range length in the parent.</param>
+    /// <param name="protectedCarrier">Whether the parent uses the closed MAX/NCHAR transport.</param>
+    private sealed class PauseScope(string sql, int parent, int start, int length, bool protectedCarrier)
+    {
+        /// <summary>Gets the unchanged SQL at this execution level.</summary>
+        public string Sql { get; } = sql;
+
+        /// <summary>Gets the owning worklist entry, or minus one for the root.</summary>
+        public int Parent { get; } = parent;
+
+        /// <summary>Gets the exact parent replacement start.</summary>
+        public int Start { get; } = start;
+
+        /// <summary>Gets the exact parent replacement length.</summary>
+        public int Length { get; } = length;
+
+        /// <summary>Gets whether the parent must reconstruct a MAX/NCHAR payload.</summary>
+        public bool ProtectedCarrier { get; } = protectedCarrier;
+
+        /// <summary>Gets only the proven non-overlapping replacements at this execution level.</summary>
+        public List<(int Start, int Length, string Replacement)> Edits { get; } = [];
     }
 
     /// <summary>

@@ -27,6 +27,10 @@ Updating packages alone requires no additional database migration or history rew
 
 ### Fixed
 
+- Recognize SQL Server cancellation-test acquisition statements and operation
+  guards independently of SQL layout, without treating quoted values or names
+  as executable markers. Cover real generated runtime, script and idempotent
+  commands while retaining the existing native cancellation and recovery checks.
 - Recognize native MySQL parentheses for nested associative AND/OR chains in
   CHECK constraints, strict table completeness and generated-column comparisons.
   Preserve equivalent MariaDB Boolean-group spellings and required OR-group

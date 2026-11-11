@@ -646,7 +646,7 @@ public sealed class SqlServerGeneratorSafetyTests
 
             if (operations is [SqlOperation sqlOperation])
             {
-                var operationGuard = sqlOperation.Sql.Contains("DECLARE @doka_state", StringComparison.Ordinal);
+                var operationGuard = SqlServerGuardedSqlTestContract.IsOperationGuard(sqlOperation.Sql);
                 if (GuardedSqlCommands is { } guardedCommands
                     && operationGuard)
                 {
