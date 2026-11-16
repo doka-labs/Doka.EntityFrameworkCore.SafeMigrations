@@ -5,7 +5,7 @@
   </PropertyGroup>
 
   <PropertyGroup Label="Shared compatibility and qualification versions">
-    <EfCorePackageVersion Condition="'$(EfCorePackageVersion)' == ''">[10.0.14,10.1.0)</EfCorePackageVersion>
+    <EfCorePackageVersion Condition="'$(EfCorePackageVersion)' == ''">[10.0.15, 10.1.0)</EfCorePackageVersion>
     <DokaMySqlPackageVersion Condition="'$(DokaMySqlPackageVersion)' == ''">[10.6.5,10.7.0)</DokaMySqlPackageVersion>
     <NpgsqlPackageVersion Condition="'$(NpgsqlPackageVersion)' == ''">[10.0.3,11.0.0)</NpgsqlPackageVersion>
     <DependencyInjectionPackageVersion
@@ -62,7 +62,7 @@
 
   <ItemGroup Label="Test tooling">
     <PackageVersion Include="FsCheck.Xunit" Version="3.6.0" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
   </ItemGroup>
